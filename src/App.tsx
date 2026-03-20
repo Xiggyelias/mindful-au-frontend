@@ -21,7 +21,6 @@ const StudentAISupport = lazy(() => import("./pages/student/StudentAISupport"));
 const StudentVideoCall = lazy(() => import("./pages/student/StudentVideoCall"));
 const StudentHistory = lazy(() => import("./pages/student/StudentHistory"));
 const StudentWellness = lazy(() => import("./pages/student/StudentWellness"));
-const StudentIntake = lazy(() => import("./pages/student/StudentIntake"));
 const StudentReferrals = lazy(() => import("./pages/student/StudentReferrals"));
 
 const CounselorLogin = lazy(() => import("./pages/counselor/CounselorLogin"));
@@ -148,14 +147,6 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
                       <StudentWellness />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/student/intake"
-                  element={
-                    <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
-                      <StudentIntake />
                     </ProtectedRoute>
                   }
                 />

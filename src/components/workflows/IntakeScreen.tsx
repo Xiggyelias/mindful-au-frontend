@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Loader2, ShieldAlert } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-type IntakeRole = "student" | "counselor" | "admin";
+type IntakeRole = "counselor" | "admin";
 
 interface IntakeScreenProps {
   role: IntakeRole;
@@ -64,9 +64,7 @@ export const IntakeScreen = ({ role }: IntakeScreenProps) => {
   const [summary, setSummary] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [consentAcknowledged, setConsentAcknowledged] = useState(true);
-  const [submitterType, setSubmitterType] = useState<"student" | "staff">(
-    role === "student" ? "student" : "staff"
-  );
+  const [submitterType, setSubmitterType] = useState<"student" | "staff">("staff");
   const [riskAnswers, setRiskAnswers] = useState<Record<string, boolean>>({});
 
   const loadRows = useCallback(async () => {
@@ -185,7 +183,6 @@ export const IntakeScreen = ({ role }: IntakeScreenProps) => {
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"
                 value={submitterType}
                 onChange={(event) => setSubmitterType(event.target.value as "student" | "staff")}
-                disabled={role === "student"}
               >
                 <option value="student">Student</option>
                 <option value="staff">Staff</option>
@@ -427,11 +424,6 @@ export const IntakeScreen = ({ role }: IntakeScreenProps) => {
                           </div>
                         ))}
                       </div>
-                    ) : role === "student" ? (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        No risk alert attached.
-                      </p>
                     ) : openAlerts.length === 0 ? (
                       <p className="text-xs text-muted-foreground">No open risk alerts.</p>
                     ) : null}
