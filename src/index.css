@@ -1,0 +1,293 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light Mode - Africa University Colors */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Deep Red - AU Primary */
+    --primary: 351 70% 38%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 351 70% 50%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 351 60% 95%;
+    --accent-foreground: 351 70% 30%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 92%;
+    --ring: 351 70% 38%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --glass-bg: 0 0% 0% / 0.02;
+    --glass-border: 0 0% 0% / 0.08;
+    --success: 142 71% 35%;
+    --warning: 38 92% 45%;
+    --info: 217 91% 50%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(351, 70%, 38%), hsl(351, 80%, 28%));
+    --gradient-dark: linear-gradient(180deg, hsl(0, 0%, 98%), hsl(0, 0%, 94%));
+    --gradient-glass: linear-gradient(135deg, hsla(0, 0%, 0%, 0.03), hsla(0, 0%, 0%, 0.01));
+    --gradient-red-glow: radial-gradient(ellipse at center, hsla(351, 70%, 38%, 0.15), transparent 70%);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px hsla(0, 0%, 0%, 0.08);
+    --shadow-md: 0 4px 16px hsla(0, 0%, 0%, 0.1);
+    --shadow-lg: 0 8px 32px hsla(0, 0%, 0%, 0.12);
+    --shadow-glow: 0 0 40px hsla(351, 70%, 38%, 0.2);
+    --shadow-glow-sm: 0 0 20px hsla(351, 70%, 38%, 0.15);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 351 70% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 351 70% 38%;
+  }
+
+  .dark {
+    /* Dark Mode - Africa University Colors */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Deep Red - AU Primary */
+    --primary: 351 70% 38%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 351 70% 50%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 351 60% 25%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 15%;
+    --ring: 351 70% 38%;
+
+    /* Custom tokens */
+    --glass-bg: 0 0% 100% / 0.05;
+    --glass-border: 0 0% 100% / 0.1;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(351, 70%, 38%), hsl(351, 80%, 28%));
+    --gradient-dark: linear-gradient(180deg, hsl(0, 0%, 7%), hsl(0, 0%, 3%));
+    --gradient-glass: linear-gradient(135deg, hsla(0, 0%, 100%, 0.1), hsla(0, 0%, 100%, 0.05));
+    --gradient-red-glow: radial-gradient(ellipse at center, hsla(351, 70%, 38%, 0.3), transparent 70%);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px hsla(0, 0%, 0%, 0.3);
+    --shadow-md: 0 4px 16px hsla(0, 0%, 0%, 0.4);
+    --shadow-lg: 0 8px 32px hsla(0, 0%, 0%, 0.5);
+    --shadow-glow: 0 0 40px hsla(351, 70%, 38%, 0.4);
+    --shadow-glow-sm: 0 0 20px hsla(351, 70%, 38%, 0.3);
+
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 351 70% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 351 70% 38%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl border border-border/50;
+    background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.08), hsla(0, 0%, 100%, 0.02));
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl p-6 transition-all duration-300;
+  }
+
+  .glass-card:hover {
+    background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.12), hsla(0, 0%, 100%, 0.04));
+    box-shadow: var(--shadow-glow-sm);
+  }
+
+  .btn-primary-glow {
+    @apply relative overflow-hidden;
+    box-shadow: var(--shadow-glow-sm);
+  }
+
+  .btn-primary-glow::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: var(--gradient-red-glow);
+  }
+
+  .btn-primary-glow:hover::before {
+    @apply opacity-100;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(351, 70%, 55%), hsl(351, 70%, 38%));
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.6s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out forwards;
+  }
+
+  .portal-card {
+    @apply glass-card cursor-pointer transform;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .portal-card:hover {
+    @apply -translate-y-2;
+    box-shadow: var(--shadow-glow);
+  }
+
+  .input-glass {
+    @apply glass bg-secondary/50 border-border/50 focus:border-primary/50 focus:ring-primary/20;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px hsla(351, 70%, 38%, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px hsla(351, 70%, 38%, 0.6);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Stagger animations */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+
+/* Low-bandwidth mode */
+.low-bandwidth * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+.low-bandwidth .glass,
+.low-bandwidth .glass-card,
+.low-bandwidth .portal-card {
+  backdrop-filter: none !important;
+}
+
+.low-bandwidth .glass-card:hover,
+.low-bandwidth .portal-card:hover {
+  transform: none !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.low-bandwidth .btn-primary-glow::before {
+  display: none !important;
+}

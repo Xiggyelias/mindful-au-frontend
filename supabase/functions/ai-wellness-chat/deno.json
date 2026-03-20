@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.208.0/"
+  }
+}
+

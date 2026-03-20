@@ -1,0 +1,125 @@
+name: aucms
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-production}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  LOG_CHANNEL: ${LOG_CHANNEL:-errorlog}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+  FORCE_HTTPS: ${FORCE_HTTPS:-true}
+  CACHE_STORE: ${CACHE_STORE:-redis}
+  SESSION_DRIVER: ${SESSION_DRIVER:-redis}
+  SESSION_CONNECTION: ${SESSION_CONNECTION:-default}
+  SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+  SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+  QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  LARAVEL_OPTIMIZE_ON_BOOT: ${LARAVEL_OPTIMIZE_ON_BOOT:-true}
+  HEALTH_MIN_DISK_FREE_PERCENT: ${HEALTH_MIN_DISK_FREE_PERCENT:-5}
+
+x-backend-build: &backend-build
+  context: ../backend
+  dockerfile: Dockerfile
+
+services:
+  app:
+    build: *backend-build
+    image: aucms-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_storage:/var/www/html/storage
+      - backend_cache:/var/www/html/bootstrap/cache
+    networks:
+      - aucms
+
+  queue:
+    image: aucms-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      <<: *backend-env
+      LARAVEL_OPTIMIZE_ON_BOOT: "false"
+    command: ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_storage:/var/www/html/storage
+      - backend_cache:/var/www/html/bootstrap/cache
+    networks:
+      - aucms
+
+  scheduler:
+    image: aucms-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      <<: *backend-env
+      LARAVEL_OPTIMIZE_ON_BOOT: "false"
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_storage:/var/www/html/storage
+      - backend_cache:/var/www/html/bootstrap/cache
+    networks:
+      - aucms
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      app:
+        condition: service_started
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../backend/public:/var/www/html/public:ro
+      - backend_storage:/var/www/html/storage:ro
+    networks:
+      - aucms
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - aucms
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  backend_storage:
+  backend_cache:
+  redis_data:
+
+networks:
+  aucms:
+    driver: bridge
