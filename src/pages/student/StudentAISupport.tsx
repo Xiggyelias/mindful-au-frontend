@@ -11,6 +11,8 @@ import {
   Send,
   Sparkles,
   Loader2,
+  AlertTriangle,
+  Phone,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -20,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useAIChat } from "@/hooks/useAIChat";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 const navItems = [
@@ -36,11 +39,12 @@ const navItems = [
 const StudentAISupport = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, sendMessage } = useAIChat();
+  const { messages, isLoading, error, supportSignal, sendMessage } = useAIChat();
 
   const quickPrompts = [
     "I'm feeling anxious",
@@ -73,6 +77,52 @@ const StudentAISupport = () => {
   const handleQuickPrompt = async (prompt: string) => {
     if (isLoading) return;
     await sendMessage(prompt);
+  };
+
+  const handleTriggerEmergency = async () => {
+    if (!user?.id || isTriggeringEmergency) {
+      return;
+    }
+
+    setIsTriggeringEmergency(true);
+    try {
+      let location: string | undefined;
+
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+          });
+          location = `${position.coords.latitude}, ${position.coords.longitude}`;
+        } catch (geoError) {
+          console.log("Could not get location:", geoError);
+        }
+      }
+
+      await api.createPanicLog({ location });
+      toast.success("Emergency alert sent. A counselor or responder will be notified.");
+    } catch (triggerError: any) {
+      console.error("Emergency alert error:", triggerError);
+      toast.error(triggerError?.response?.data?.message || "Failed to send emergency alert. Please try again.");
+    } finally {
+      setIsTriggeringEmergency(false);
+    }
+  };
+
+  const handleCallHotline = () => {
+    const hotline = supportSignal?.crisisHotline?.trim() || "";
+    if (hotline === "") {
+      toast.info("Contact your local emergency services, campus security, or a trusted counselor now.");
+      return;
+    }
+
+    const dialTarget = hotline.replace(/[^\d+]/g, "");
+    if (dialTarget !== "") {
+      window.location.href = `tel:${dialTarget}`;
+      return;
+    }
+
+    toast.info(`Crisis contact: ${hotline}`);
   };
 
   return (
@@ -158,6 +208,49 @@ const StudentAISupport = () => {
               
               <div className="p-6 bg-background border-t border-border/50">
                 <div className="max-w-4xl mx-auto space-y-4">
+                  {supportSignal?.requiresImmediateHelp && (
+                    <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-destructive">
+                            <AlertTriangle className="h-5 w-5" />
+                            <p className="text-sm font-semibold">Immediate help recommended</p>
+                          </div>
+                          <p className="text-sm text-foreground">
+                            Move toward another person or a safer place now. Use the emergency alert if you need a counselor response quickly.
+                          </p>
+                          {supportSignal.crisisHotline && (
+                            <p className="text-xs text-muted-foreground">
+                              Crisis contact: {supportSignal.crisisHotline}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {supportSignal.showPanicButton && (
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              onClick={() => {
+                                void handleTriggerEmergency();
+                              }}
+                              disabled={isTriggeringEmergency}
+                            >
+                              {isTriggeringEmergency ? "Alerting..." : "Send emergency alert"}
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="gap-2"
+                            onClick={handleCallHotline}
+                          >
+                            <Phone className="h-4 w-4" />
+                            Call now
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {quickPrompts.map((prompt) => (
                       <Button

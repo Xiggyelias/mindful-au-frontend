@@ -8,6 +8,13 @@ interface Message {
   time: string;
 }
 
+interface SupportSignal {
+  riskLevel: string;
+  requiresImmediateHelp: boolean;
+  showPanicButton: boolean;
+  crisisHotline: string | null;
+}
+
 const AI_HISTORY_CACHE_KEY = "ai_chat_history_v1";
 
 const formatTime = (value?: string | number | Date) => {
@@ -28,6 +35,7 @@ export const useAIChat = () => {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [supportSignal, setSupportSignal] = useState<SupportSignal | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -45,6 +53,7 @@ export const useAIChat = () => {
 
       if (loadedMessages.length === 0) {
         setMessages([]);
+        setSupportSignal(null);
         return;
       }
 
@@ -71,6 +80,7 @@ export const useAIChat = () => {
       }
 
       setMessages(normalizedMessages);
+      setSupportSignal(null);
       localStorage.setItem(
         AI_HISTORY_CACHE_KEY,
         JSON.stringify({
@@ -103,6 +113,7 @@ export const useAIChat = () => {
       }
 
       setMessages([]);
+      setSupportSignal(null);
       setError(getApiErrorMessage(err, "Failed to load previous AI conversation."));
     }
   }, []);
@@ -150,6 +161,16 @@ export const useAIChat = () => {
           setConversationId(nextConversationId);
         }
 
+        setSupportSignal({
+          riskLevel: typeof data?.risk_level === "string" ? data.risk_level : "normal",
+          requiresImmediateHelp: Boolean(data?.requires_immediate_help),
+          showPanicButton: Boolean(data?.show_panic_button),
+          crisisHotline:
+            typeof data?.crisis_hotline === "string" && data.crisis_hotline.trim() !== ""
+              ? data.crisis_hotline.trim()
+              : null,
+        });
+
         const persistedUserMessageId = Number(data?.user_message_id);
         if (Number.isFinite(persistedUserMessageId) && persistedUserMessageId > 0) {
           setMessages((prev) =>
@@ -191,6 +212,7 @@ export const useAIChat = () => {
     messages,
     isLoading,
     error,
+    supportSignal,
     sendMessage,
     reloadHistory: loadHistory,
   };
