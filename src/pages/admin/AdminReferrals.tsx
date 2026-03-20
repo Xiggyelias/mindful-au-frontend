@@ -6,7 +6,6 @@ import {
   FileText,
   LayoutDashboard,
   Settings,
-  ShieldAlert,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -21,7 +20,6 @@ const navItems = [
   { label: "Students", icon: Users, path: "/admin/students" },
   { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "Intake", icon: ShieldAlert, path: "/admin/intake" },
   { label: "Referrals", icon: ArrowRightLeft, path: "/admin/referrals" },
   { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
   { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },

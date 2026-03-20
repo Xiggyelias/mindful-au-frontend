@@ -6,7 +6,6 @@ import {
   Heart,
   LayoutDashboard,
   MessageSquare,
-  ShieldAlert,
   Users,
   Video,
 } from "lucide-react";
@@ -20,7 +19,6 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
   { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
   { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Intake", icon: ShieldAlert, path: "/counselor/intake" },
   { label: "Referrals", icon: ArrowRightLeft, path: "/counselor/referrals" },
   { label: "Students", icon: Users, path: "/counselor/students" },
   { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },

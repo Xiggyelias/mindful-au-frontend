@@ -1263,40 +1263,6 @@ class ApiClient {
     return response.data;
   }
 
-  // Intake & triage
-  async getIntakeSubmissions(params?: {
-    status?: string;
-    risk_level?: string;
-    limit?: number;
-    page?: number;
-    per_page?: number;
-  }) {
-    const response = await this.client.get('/intake-submissions', { params });
-    return response.data;
-  }
-
-  async getIntakeSubmission(id: number | string) {
-    const response = await this.client.get(`/intake-submissions/${id}`);
-    return response.data;
-  }
-
-  async createIntakeSubmission(data: {
-    submitter_type?: 'student' | 'staff';
-    is_anonymous?: boolean;
-    presenting_concerns: string[];
-    risk_answers?: Record<string, unknown>;
-    consent_acknowledged: boolean;
-    summary?: string | null;
-  }) {
-    const response = await this.client.post('/intake-submissions', data);
-    return response.data;
-  }
-
-  async acknowledgeRiskAlert(id: number | string, status: 'acknowledged' | 'resolved') {
-    const response = await this.client.patch(`/risk-alerts/${id}/acknowledge`, { status });
-    return response.data;
-  }
-
   // Referrals
   async getReferrals(params?: {
     status?: string;
