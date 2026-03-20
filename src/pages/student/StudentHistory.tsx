@@ -7,7 +7,6 @@ import {
   Video,
   History,
   Heart,
-  ShieldAlert,
   ArrowRightLeft,
   Clock,
 } from "lucide-react";
@@ -23,7 +22,6 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "Intake", icon: ShieldAlert, path: "/student/intake" },
   { label: "Referrals", icon: ArrowRightLeft, path: "/student/referrals" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
