@@ -34,7 +34,6 @@ const CounselorVideo = lazy(() => import("./pages/counselor/CounselorVideo"));
 const CounselorNotes = lazy(() => import("./pages/counselor/CounselorNotes"));
 const CounselorWellness = lazy(() => import("./pages/counselor/CounselorWellness"));
 const CounselorTwoFactor = lazy(() => import("./pages/counselor/CounselorTwoFactor"));
-const CounselorIntake = lazy(() => import("./pages/counselor/CounselorIntake"));
 const CounselorReferrals = lazy(() => import("./pages/counselor/CounselorReferrals"));
 const PeerLogin = lazy(() => import("./pages/peer/PeerLogin"));
 const PeerDashboard = lazy(() => import("./pages/peer/PeerDashboard"));
@@ -52,7 +51,6 @@ const AdminAIReports = lazy(() => import("./pages/admin/AdminAIReports"));
 const AdminAlerts = lazy(() => import("./pages/admin/AdminAlerts"));
 const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
-const AdminIntake = lazy(() => import("./pages/admin/AdminIntake"));
 const AdminReferrals = lazy(() => import("./pages/admin/AdminReferrals"));
 
 const queryClient = new QueryClient({
@@ -281,17 +279,6 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/counselor/intake"
-                  element={
-                    <ProtectedRoute
-                      allowedRoles={["counselor", "peer_counselor"]}
-                      redirectTo="/counselor/login"
-                    >
-                      <CounselorIntake />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
                   path="/counselor/referrals"
                   element={
                     <ProtectedRoute
@@ -366,14 +353,6 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={["admin"]} redirectTo="/admin/login">
                       <AdminSettings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/intake"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin"]} redirectTo="/admin/login">
-                      <AdminIntake />
                     </ProtectedRoute>
                   }
                 />
