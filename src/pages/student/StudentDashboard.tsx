@@ -8,7 +8,6 @@ import {
   Video,
   History,
   Heart,
-  ArrowRightLeft,
   AlertTriangle,
   Phone,
 } from "lucide-react";
@@ -26,7 +25,6 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/student/referrals" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
@@ -43,6 +41,179 @@ const moodOptions = [
 
 type StudentMood = (typeof moodOptions)[number]["value"];
 
+const CURATED_DAILY_TIPS = [
+  "Take three slow breaths before opening social media or email this morning.",
+  "Drink a glass of water before your first class or study block.",
+  "Write down one small win from yesterday so your brain notices progress.",
+  "Choose one priority for today instead of carrying ten things at once.",
+  "Step outside for five minutes and let your eyes rest on something far away.",
+  "Stretch your shoulders and unclench your jaw whenever you switch tasks.",
+  "Put your phone down during one meal today and eat without rushing.",
+  "Use a 25-minute focus block, then stand up and reset for two minutes.",
+  "Send one honest message to a friend instead of isolating when stress rises.",
+  "If your mind feels noisy, write every worry on paper before studying.",
+  "Protect your sleep tonight by setting a screen cutoff time in advance.",
+  "Keep a snack nearby if stress makes you forget to eat during the day.",
+  "Notice one thought that sounds harsh and replace it with something fairer.",
+  "When energy is low, make the next step smaller rather than giving up on the day.",
+  "Listen to one calming song all the way through without multitasking.",
+  "Take a short walk after a heavy conversation to release tension from your body.",
+  "If you feel behind, start with five minutes instead of waiting for motivation.",
+  "Give yourself permission to rest before you become completely drained.",
+  "Tidy one small area around you to make your space feel more manageable.",
+  "Check in with your body: shoulders, breathing, hunger, thirst, and fatigue.",
+  "Say no to one non-urgent thing today if your plate already feels full.",
+  "Keep your next counseling question in your notes so you do not forget it later.",
+  "Try studying in a different spot if your current space feels mentally heavy.",
+  "Do not confuse being busy with being okay; pause and notice how you actually feel.",
+  "Celebrate consistency, even if today's effort looks smaller than usual.",
+  "If you are overwhelmed, text someone before the feeling builds in silence.",
+  "Use a gentle alarm or reminder to pause and breathe in the middle of the day.",
+  "Rest is productive when it helps you return with steadier energy.",
+  "Let one task be good enough today instead of perfect.",
+  "Keep a simple evening routine: water, shower, stretch, lights down.",
+  "If your heart feels heavy, choose connection before more scrolling.",
+  "Try a two-minute breathing reset before and after each major task.",
+  "When your mood dips, stick to basics first: food, water, movement, sleep.",
+  "Notice what is helping, not only what is hurting, and build around it.",
+  "Pick one thing you can finish in under ten minutes to create momentum.",
+  "Pause after stressful news and ask whether your nervous system needs a reset.",
+  "A slow day is still a valid day; reduce the load instead of judging yourself.",
+  "Make room for one thing that feels comforting, familiar, or grounding today.",
+  "If you are mentally stuck, switch from thinking mode to action mode for one tiny step.",
+  "Protect a short quiet window tonight so your mind can slow down before sleep.",
+];
+
+const normalizeTipText = (tip: string): string =>
+  tip
+    .replace(/^[\s\-*]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const uniqueTips = (tips: string[]): string[] => {
+  const seen = new Set<string>();
+
+  return tips.filter((tip) => {
+    const normalized = normalizeTipText(tip);
+    if (normalized.length < 12) {
+      return false;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  }).map((tip) => normalizeTipText(tip));
+};
+
+const hashString = (value: string): number => {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+};
+
+const orderTipsForDay = (tips: string[], seedKey: string): string[] =>
+  [...tips]
+    .map((tip, index) => ({
+      tip,
+      weight: hashString(`${seedKey}:${index}:${tip}`),
+    }))
+    .sort((left, right) => left.weight - right.weight)
+    .map(({ tip }) => tip);
+
+const buildContextualTips = ({
+  upcomingCount,
+  wellnessScore,
+  mood,
+}: {
+  upcomingCount: number;
+  wellnessScore: number | null;
+  mood: StudentMood | null;
+}): string[] => {
+  const contextualTips: string[] = [];
+
+  if (upcomingCount === 0) {
+    contextualTips.push("Choose a day this week to book a follow-up session before your schedule gets crowded.");
+  } else {
+    contextualTips.push("Before your next session, write down one question and one feeling you want to discuss.");
+  }
+
+  if (!mood) {
+    contextualTips.push("Take 30 seconds to name your mood honestly today. Awareness makes support easier to use.");
+  }
+
+  if (mood === "low") {
+    contextualTips.push("Keep today's goals very small and specific. Low-energy days need gentler expectations.");
+  }
+
+  if (mood === "stressed") {
+    contextualTips.push("Stress feels louder when your day has no pauses. Add one short breathing break before your next task.");
+  }
+
+  if (mood === "tired") {
+    contextualTips.push("If you are tired, protect your evening routine and avoid pushing serious decisions too late.");
+  }
+
+  if (wellnessScore !== null && wellnessScore < 50) {
+    contextualTips.push("Your recent wellness score looks strained. Keep today's workload realistic and prioritize recovery basics.");
+  } else if (wellnessScore !== null && wellnessScore >= 75) {
+    contextualTips.push("Your recent wellness score looks steady. Keep the routines that are helping you feel grounded.");
+  }
+
+  return contextualTips;
+};
+
+const buildDailyTipSet = ({
+  liveTips,
+  upcomingCount,
+  wellnessScore,
+  mood,
+  userSeed,
+}: {
+  liveTips: string[];
+  upcomingCount: number;
+  wellnessScore: number | null;
+  mood: StudentMood | null;
+  userSeed: string;
+}): string[] => {
+  const dateKey = format(new Date(), "yyyy-MM-dd");
+  const contextualTips = buildContextualTips({
+    upcomingCount,
+    wellnessScore,
+    mood,
+  });
+  const rotatingDynamicTips = orderTipsForDay(
+    uniqueTips([...liveTips, ...contextualTips]),
+    `${dateKey}:${userSeed}:dynamic`
+  );
+  const rotatingCuratedTips = orderTipsForDay(
+    CURATED_DAILY_TIPS,
+    `${dateKey}:${userSeed}:curated`
+  );
+
+  const mixedTips: string[] = [];
+  const maxLength = Math.max(rotatingDynamicTips.length, rotatingCuratedTips.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if (rotatingCuratedTips[index]) {
+      mixedTips.push(rotatingCuratedTips[index]);
+    }
+    if (rotatingDynamicTips[index]) {
+      mixedTips.push(rotatingDynamicTips[index]);
+    }
+  }
+
+  const finalTips = uniqueTips(mixedTips).slice(0, 5);
+  return finalTips.length > 0 ? finalTips : CURATED_DAILY_TIPS.slice(0, 5);
+};
+
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,7 +222,6 @@ const StudentDashboard = () => {
   const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const [wellnessSummary, setWellnessSummary] = useState<any | null>(null);
-  const [dailyTips, setDailyTips] = useState<string[]>([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState<string | null>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
@@ -59,6 +229,7 @@ const StudentDashboard = () => {
   const { user } = useAuth();
 
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+  const tipSeed = user?.id ? String(user.id) : user?.email ?? "guest";
 
   const extractTipsFromSummary = (summary: any): string[] => {
     const recommendationText =
@@ -67,12 +238,20 @@ const StudentDashboard = () => {
       return [];
     }
 
-    return recommendationText
-      .split(/[.!?]\s+/)
-      .map((part: string) => part.trim())
-      .filter((part: string) => part.length > 10)
-      .slice(0, 4);
+    return uniqueTips(
+      recommendationText
+        .split(/[.!?]\s+|\n+/)
+        .map((part: string) => part.trim())
+    ).slice(0, 6);
   };
+
+  const dailyTips = buildDailyTipSet({
+    liveTips: extractTipsFromSummary(wellnessSummary),
+    upcomingCount: upcomingAppointments.length,
+    wellnessScore: stats.wellness,
+    mood: dailyMood,
+    userSeed: tipSeed,
+  });
 
   useEffect(() => {
     const loadStats = async () => {
@@ -93,7 +272,6 @@ const StudentDashboard = () => {
         
         const wellnessScore =
           typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
-        const tips = extractTipsFromSummary(summary);
 
         setStats({
           sessions: sessions.length,
@@ -104,19 +282,15 @@ const StudentDashboard = () => {
         setUpcomingAppointments(upcomingApts);
         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
         setWellnessSummary(summary);
-        setDailyTips(tips);
         if (moodData?.log?.mood) {
           setDailyMood(moodData.log.mood as StudentMood);
         } else {
           setDailyMood(null);
         }
-        if (tips.length === 0) {
-          setTipsError("No live recommendations yet. Complete a check-in to generate them.");
-        }
+        setTipsError(null);
       } catch (error) {
         console.error('Failed to load stats:', error);
-        setDailyTips([]);
-        setTipsError("Live tips are unavailable right now.");
+        setTipsError("Showing rotating wellness tips while live insights are unavailable.");
       } finally {
         setTipsLoading(false);
       }
@@ -219,7 +393,7 @@ const StudentDashboard = () => {
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-2">
                 <h2 className="text-3xl font-display font-bold text-foreground">
-                  Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userName}! ✨
+                  Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userName}! âœ¨
             </h2>
                 <p className="text-lg text-muted-foreground max-w-xl">
                   Take a deep breath. We're here to support your journey today. How are you feeling right now?
@@ -334,7 +508,7 @@ const StudentDashboard = () => {
             />
             <StatsCard
               title="Wellness Score"
-              value={stats.wellness !== null ? `${stats.wellness}%` : "—"}
+              value={stats.wellness !== null ? `${stats.wellness}%` : "â€”"}
               change={diagnostics?.mood || (stats.wellness !== null ? "Check in today" : "No data yet")}
               trend={stats.wellness !== null && stats.wellness >= 70 ? "up" : "neutral"}
               icon={Heart}
@@ -452,6 +626,11 @@ const StudentDashboard = () => {
                   {wellnessSummary?.generated_at && (
                     <p className="text-xs text-muted-foreground">
                       Live insights updated: {new Date(wellnessSummary.generated_at).toLocaleString()}
+                    </p>
+                  )}
+                  {tipsError && (
+                    <p className="text-xs text-muted-foreground">
+                      {tipsError}
                     </p>
                   )}
                 </div>

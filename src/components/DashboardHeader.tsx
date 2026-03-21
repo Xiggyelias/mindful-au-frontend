@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, Loader2, Menu, ShieldX, Wifi, WifiOff } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Menu, ShieldX } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -10,7 +10,6 @@ import {
 } from "./ui/dropdown-menu";
 import { ScrollArea } from "./ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useBandwidthMode } from "@/hooks/useBandwidthMode";
 import { useAuth } from "@/hooks/useAuth";
 
 interface DashboardHeaderProps {
@@ -22,7 +21,6 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut } = useAuth();
-  const { lowBandwidthMode, toggleLowBandwidthMode } = useBandwidthMode();
   const {
     notifications,
     unreadCount,
@@ -85,15 +83,6 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       </div>
 
       <div className="flex items-center gap-3">
-        <Button
-          variant={lowBandwidthMode ? "default" : "ghost"}
-          size="icon"
-          onClick={toggleLowBandwidthMode}
-          title={lowBandwidthMode ? "Disable low-bandwidth mode" : "Enable low-bandwidth mode"}
-          aria-label={lowBandwidthMode ? "Disable low-bandwidth mode" : "Enable low-bandwidth mode"}
-        >
-          {lowBandwidthMode ? <WifiOff className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-        </Button>
         <Button
           variant="destructive"
           size="sm"

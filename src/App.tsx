@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const Index = lazy(() => import("./pages/Index"));
@@ -21,7 +20,6 @@ const StudentAISupport = lazy(() => import("./pages/student/StudentAISupport"));
 const StudentVideoCall = lazy(() => import("./pages/student/StudentVideoCall"));
 const StudentHistory = lazy(() => import("./pages/student/StudentHistory"));
 const StudentWellness = lazy(() => import("./pages/student/StudentWellness"));
-const StudentReferrals = lazy(() => import("./pages/student/StudentReferrals"));
 
 const CounselorLogin = lazy(() => import("./pages/counselor/CounselorLogin"));
 const CounselorRegister = lazy(() => import("./pages/counselor/CounselorRegister"));
@@ -34,7 +32,6 @@ const CounselorVideo = lazy(() => import("./pages/counselor/CounselorVideo"));
 const CounselorNotes = lazy(() => import("./pages/counselor/CounselorNotes"));
 const CounselorWellness = lazy(() => import("./pages/counselor/CounselorWellness"));
 const CounselorTwoFactor = lazy(() => import("./pages/counselor/CounselorTwoFactor"));
-const CounselorReferrals = lazy(() => import("./pages/counselor/CounselorReferrals"));
 const PeerLogin = lazy(() => import("./pages/peer/PeerLogin"));
 const PeerDashboard = lazy(() => import("./pages/peer/PeerDashboard"));
 const PeerEscalatedCases = lazy(() => import("./pages/peer/PeerEscalatedCases"));
@@ -51,7 +48,6 @@ const AdminAIReports = lazy(() => import("./pages/admin/AdminAIReports"));
 const AdminAlerts = lazy(() => import("./pages/admin/AdminAlerts"));
 const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
-const AdminReferrals = lazy(() => import("./pages/admin/AdminReferrals"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,19 +71,18 @@ const RouteLoader = () => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
-      <BandwidthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            <AuthProvider>
-              <Suspense fallback={<RouteLoader />}>
-                <Routes>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <AuthProvider>
+            <Suspense fallback={<RouteLoader />}>
+              <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
 
@@ -145,14 +140,6 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
                       <StudentWellness />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/student/referrals"
-                  element={
-                    <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
-                      <StudentReferrals />
                     </ProtectedRoute>
                   }
                 />
@@ -278,17 +265,6 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/counselor/referrals"
-                  element={
-                    <ProtectedRoute
-                      allowedRoles={["counselor", "peer_counselor"]}
-                      redirectTo="/counselor/login"
-                    >
-                      <CounselorReferrals />
-                    </ProtectedRoute>
-                  }
-                />
 
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/register" element={<AdminRegister />} />
@@ -356,22 +332,13 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/admin/referrals"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin"]} redirectTo="/admin/login">
-                      <AdminReferrals />
-                    </ProtectedRoute>
-                  }
-                />
 
                 <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
-            </AuthProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </BandwidthProvider>
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

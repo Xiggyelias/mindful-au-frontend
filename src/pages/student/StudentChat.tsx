@@ -8,18 +8,17 @@ import {
   Video,
   History,
   Heart,
-  ArrowRightLeft,
   Send,
   Paperclip,
   Shield,
   AlertTriangle,
   Loader2,
+  Mic,
   X,
   FileText,
   Image as ImageIcon,
   User,
   Search,
-  MoreVertical,
   Play,
   Pause,
   Phone,
@@ -46,7 +45,6 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/student/referrals" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
@@ -689,6 +687,10 @@ const StudentChat = () => {
   const availableCounselors = filteredCounselors.filter(
     (counselor) => !hasOpenSessionWithCounselor(counselor.id, anonymousStartMode)
   );
+  const filteredCounselorCount = filteredCounselors.length;
+  const counselorEmptyStateLabel = searchQuery.trim()
+    ? "No counselors match your search."
+    : "No counselors found right now.";
   const canGoToPrevCounselorPage = counselorPage > 1;
   const canGoToNextCounselorPage = counselorPage < counselorTotalPages;
   const counselorMap = useMemo(() => {
@@ -815,18 +817,30 @@ const StudentChat = () => {
           toast.success("Anonymous support session started.");
         }
       }}
-      className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all duration-300 hover:bg-secondary/50 text-foreground group"
+      className="group w-full rounded-[1.35rem] border border-transparent bg-background/70 p-4 text-left text-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-background hover:shadow-md"
     >
-      <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-        <User className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
+      <div className="flex items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary/70 text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+          <User className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate font-bold">{counselor.profile?.full_name || counselor.email}</p>
+            <span
+              className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${
+                counselor.is_online ? "bg-success" : "bg-muted-foreground/30"
+              }`}
+            />
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs">
+            <span className={counselor.is_online ? "text-success" : "text-muted-foreground"}>
+              {counselor.is_online ? "Online now" : "Available to message"}
+            </span>
+            <span className="text-muted-foreground/50">|</span>
+            <span className="text-muted-foreground">Tap to start a secure chat</span>
+          </div>
+        </div>
       </div>
-      <div className="flex-1 text-left min-w-0">
-        <p className="font-bold truncate">{counselor.profile?.full_name || counselor.email}</p>
-        <p className={`text-xs truncate ${counselor.is_online ? "text-success" : "text-muted-foreground"}`}>
-          {counselor.is_online ? "Online now" : "Offline"}
-        </p>
-      </div>
-      <span className={`h-2.5 w-2.5 rounded-full ${counselor.is_online ? "bg-success" : "bg-muted-foreground/40"}`} />
     </button>
   );
 
@@ -846,68 +860,109 @@ const StudentChat = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-0 lg:p-6 h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)]">
-          <Card className="h-full border-none lg:border shadow-none lg:shadow-xl rounded-none lg:rounded-[2rem] overflow-hidden flex flex-col lg:flex-row bg-background">
-            
+        <main className="h-[calc(100vh-80px)] bg-gradient-to-br from-background via-background to-primary/5 p-3 lg:h-[calc(100vh-100px)] lg:p-6">
+          <Card className="flex h-full flex-col overflow-hidden rounded-[2rem] border border-border/50 bg-background/80 shadow-[0_25px_80px_-45px_rgba(15,23,42,0.45)] backdrop-blur-sm lg:flex-row">
+
             {/* Left Sidebar: Counselor/Chat List */}
-            <div className="w-full lg:w-[350px] border-r border-border/50 flex flex-col h-full bg-secondary/10">
-              <div className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold px-2">Chats</h2>
-                  <Button variant="ghost" size="icon" className="rounded-full">
-                    <MoreVertical className="h-5 w-5" />
+            <div className="flex h-full w-full flex-col border-r border-border/50 bg-secondary/10 lg:w-[390px]">
+              <div className="border-b border-border/50 p-4 lg:p-5">
+                <div className="rounded-[1.75rem] border border-primary/15 bg-gradient-to-br from-primary/12 via-background to-background p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/80">
+                        Secure Space
+                      </p>
+                      <h2 className="mt-2 text-2xl font-display font-bold text-foreground">Chats</h2>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Resume conversations, discover counselors, or start an anonymous support thread.
+                      </p>
+                    </div>
+                    <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background/80 shadow-sm sm:flex">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
+                      {sessionTotalItems} active
+                    </div>
+                    <div className="rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
+                      {onlineCounselors.length} online
+                    </div>
+                    <div className="rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
+                      {filteredCounselorCount} visible
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search counselors..."
+                      className="h-12 rounded-2xl border-border/60 bg-background/80 pl-11 pr-4 shadow-sm focus-visible:ring-primary/20"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant={anonymousStartMode ? "default" : "outline"}
+                    className={`h-auto w-full justify-start rounded-2xl px-4 py-4 text-left shadow-sm ${
+                      anonymousStartMode
+                        ? "border-primary/30 bg-primary text-primary-foreground shadow-primary/20"
+                        : "border-border/60 bg-background/80 hover:bg-background"
+                    }`}
+                    onClick={() => setAnonymousStartMode((prev) => !prev)}
+                  >
+                    <Shield className="mr-3 h-5 w-5 shrink-0" />
+                    <div>
+                      <div className="font-semibold">
+                        {anonymousStartMode ? "Anonymous support is on" : "Start anonymous support"}
+                      </div>
+                      <div className={`text-xs ${anonymousStartMode ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        {anonymousStartMode
+                          ? "Pick a counselor or existing thread to keep your identity hidden."
+                          : "Turn this on before starting a new chat."}
+                      </div>
+                    </div>
                   </Button>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search counselors..." 
-                    className="pl-10 rounded-xl bg-background/50 border-none focus-visible:ring-primary/20"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant={anonymousStartMode ? "default" : "outline"}
-                  className="w-full rounded-xl"
-                  onClick={() => setAnonymousStartMode((prev) => !prev)}
-                >
-                  {anonymousStartMode
-                    ? "Anonymous Support: On (pick counselor/chat)"
-                    : "Start Anonymous Support Session"}
-                </Button>
               </div>
 
               <ScrollArea className="flex-1">
-                <div className="px-2 pb-4 space-y-1">
-                  <div className="px-4 py-2 mt-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Conversations</p>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                      <span>
-                        {sessionTotalItems > 0
-                          ? `${sessionTotalItems} conversation${sessionTotalItems === 1 ? "" : "s"}`
-                          : "No conversations"}
+                <div className="space-y-5 p-4">
+                  <section className="rounded-[1.75rem] border border-border/60 bg-background/80 p-3 shadow-sm">
+                    <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                          Active Conversations
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">Pick up where you left off.</p>
+                      </div>
+                      <span className="rounded-full bg-secondary/80 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                        {sessionTotalItems}
                       </span>
-                      <div className="flex items-center gap-2">
+                    </div>
+
+                    <div className="mb-3 flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
+                      <span>Page {sessionPage} of {Math.max(1, sessionTotalPages)}</span>
+                      <div className="flex items-center gap-1">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 rounded-full border-border/60 px-2 text-xs"
                           onClick={goToPrevSessionPage}
                           disabled={!canGoToPrevSessionPage || sessionLoading}
                         >
                           Prev
                         </Button>
-                        <span>
-                          Page {sessionPage} of {Math.max(1, sessionTotalPages)}
-                        </span>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 rounded-full border-border/60 px-2 text-xs"
                           onClick={goToNextSessionPage}
                           disabled={!canGoToNextSessionPage || sessionLoading}
                         >
@@ -915,99 +970,138 @@ const StudentChat = () => {
                         </Button>
                       </div>
                     </div>
-                  </div>
-                  {!sessionLoading && sessions.length === 0 && (
-                    <div className="px-4 py-4 text-center text-muted-foreground text-sm">
-                      No active conversations
+
+                    <div className="space-y-2">
+                      {!sessionLoading && sessions.length === 0 && (
+                        <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-secondary/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                          No active conversations yet.
+                        </div>
+                      )}
+                      {sessions.map((session) => (
+                        <button
+                          key={session.id}
+                          onClick={async () => {
+                            if (
+                              anonymousStartMode &&
+                              !session.is_anonymous &&
+                              Number(session.counselor_id) > 0
+                            ) {
+                              const result = await startSessionWithCounselor(Number(session.counselor_id), {
+                                isAnonymous: true,
+                              });
+                              if (result) {
+                                setAnonymousStartMode(false);
+                                toast.success("Anonymous support session started.");
+                              }
+                              return;
+                            }
+
+                            selectSession(session);
+                          }}
+                          className={`w-full rounded-[1.4rem] border p-4 text-left transition-all duration-300 ${
+                            activeSession?.id === session.id
+                              ? "border-primary/30 bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                              : "border-transparent bg-background/70 hover:border-primary/15 hover:bg-background"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                              activeSession?.id === session.id ? "bg-white/15" : "bg-primary/10"
+                            }`}>
+                              <User className={`h-5 w-5 ${activeSession?.id === session.id ? "text-white" : "text-primary"}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="truncate font-bold">{getCounselorLabel(session)}</p>
+                                <span
+                                  className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                    activeSession?.id === session.id
+                                      ? "bg-white/15 text-white/80"
+                                      : "bg-secondary/70 text-muted-foreground"
+                                  }`}
+                                >
+                                  {format(new Date(session.created_at), "h:mm a")}
+                                </span>
+                              </div>
+                              <p
+                                className={`mt-1 truncate text-xs ${
+                                  activeSession?.id === session.id
+                                    ? "text-white/75"
+                                    : isPeerAssignedSession(session)
+                                    ? "text-primary"
+                                    : getCounselorOnline(session)
+                                    ? "text-success"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {getSessionStatusText(session)}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  {sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={async () => {
-                        // If anonymous mode is armed, picking a counselor should open/create
-                        // an anonymous thread for that counselor instead of selecting the
-                        // identified conversation.
-                        if (
-                          anonymousStartMode &&
-                          !session.is_anonymous &&
-                          Number(session.counselor_id) > 0
-                        ) {
-                          const result = await startSessionWithCounselor(Number(session.counselor_id), {
-                            isAnonymous: true,
-                          });
-                          if (result) {
-                            setAnonymousStartMode(false);
-                            toast.success("Anonymous support session started.");
-                          }
-                          return;
-                        }
+                  </section>
 
-                        selectSession(session);
-                      }}
-                      className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all duration-300 ${
-                        activeSession?.id === session.id 
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[0.98]" 
-                          : "hover:bg-secondary/50 text-foreground"
-                      }`}
-                    >
-                      <div className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${
-                        activeSession?.id === session.id ? "bg-white/20" : "bg-primary/10"
-                      }`}>
-                        <User className={`h-6 w-6 ${activeSession?.id === session.id ? "text-white" : "text-primary"}`} />
-                      </div>
-                      <div className="flex-1 text-left min-w-0">
-                        <p className="font-bold truncate">
-                          {getCounselorLabel(session)}
+                  <section className="rounded-[1.75rem] border border-border/60 bg-background/80 p-3 shadow-sm">
+                    <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                          Online Counselors
                         </p>
-                        <p
-                            className={`text-xs truncate ${
-                              activeSession?.id === session.id
-                                ? "text-white/70"
-                                : isPeerAssignedSession(session)
-                                ? "text-primary"
-                                : getCounselorOnline(session)
-                                ? "text-success"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                          {getSessionStatusText(session)}
-                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">Start with someone available right now.</p>
                       </div>
-                      <div className="text-[10px] whitespace-nowrap opacity-70 font-medium">
-                        {format(new Date(session.created_at), "h:mm a")}
-                      </div>
-                    </button>
-                  ))}
-
-                  {/* Counselors Header */}
-                  <div className="px-4 py-2 mt-4">
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Counselors</div>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                      <span>
-                        {counselorTotalItems > 0
-                          ? `${counselorTotalItems} counselor${counselorTotalItems === 1 ? "" : "s"}`
-                          : "No counselors"}
+                      <span className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">
+                        {onlineCounselors.length}
                       </span>
-                      <div className="flex items-center gap-2">
+                    </div>
+
+                    <div className="space-y-2">
+                      {isCounselorsLoading ? (
+                        <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-secondary/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                          Loading counselors...
+                        </div>
+                      ) : onlineCounselors.length === 0 ? (
+                        <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-secondary/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                          No counselors are online right now.
+                        </div>
+                      ) : (
+                        onlineCounselors.map((counselor) => renderCounselorButton(counselor))
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="rounded-[1.75rem] border border-border/60 bg-background/80 p-3 shadow-sm">
+                    <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                          Available Counselors
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">Browse the current counselor directory.</p>
+                      </div>
+                      <span className="rounded-full bg-secondary/80 px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                        {counselorTotalItems}
+                      </span>
+                    </div>
+
+                    <div className="mb-3 flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
+                      <span>Page {counselorPage} of {Math.max(1, counselorTotalPages)}</span>
+                      <div className="flex items-center gap-1">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 rounded-full border-border/60 px-2 text-xs"
                           onClick={handlePrevCounselorPage}
                           disabled={!canGoToPrevCounselorPage || isCounselorsLoading}
                         >
                           Prev
                         </Button>
-                        <span>
-                          Page {counselorPage} of {Math.max(1, counselorTotalPages)}
-                        </span>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 rounded-full border-border/60 px-2 text-xs"
                           onClick={handleNextCounselorPage}
                           disabled={!canGoToNextCounselorPage || isCounselorsLoading}
                         >
@@ -1015,147 +1109,181 @@ const StudentChat = () => {
                         </Button>
                       </div>
                     </div>
-                  </div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-4 py-2 mt-4">Online Counselors</p>
-                  {isCounselorsLoading ? (
-                    <div className="px-4 py-6 text-center text-muted-foreground text-sm">Loading counselors...</div>
-                  ) : onlineCounselors.length === 0 ? (
-                    <div className="px-4 py-4 text-center text-muted-foreground text-sm">
-                      No counselors online right now
-                    </div>
-                  ) : (
-                    onlineCounselors.map((counselor) => renderCounselorButton(counselor))
-                  )}
 
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-4 py-2 mt-4">Available Counselors</p>
-                  {isCounselorsLoading ? (
-                    <div className="px-4 py-6 text-center text-muted-foreground text-sm">Loading counselors...</div>
-                  ) : availableCounselors.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-                      No counselors found
+                    <div className="space-y-2">
+                      {isCounselorsLoading ? (
+                        <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-secondary/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                          Loading counselors...
+                        </div>
+                      ) : availableCounselors.length === 0 ? (
+                        <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-secondary/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                          {counselorEmptyStateLabel}
+                        </div>
+                      ) : (
+                        availableCounselors.map((counselor) => renderCounselorButton(counselor))
+                      )}
                     </div>
-                  ) : (
-                    availableCounselors.map((counselor) => renderCounselorButton(counselor))
-                  )}
+                  </section>
                 </div>
               </ScrollArea>
             </div>
 
             {/* Right Side: Chat Window */}
-            <div className="flex-1 flex flex-col h-full bg-background relative">
+            <div className="relative flex h-full flex-1 flex-col bg-gradient-to-b from-background via-secondary/10 to-background">
               {!sessionId ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center space-y-4">
-                  <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
-                    <MessageSquare className="h-12 w-12 opacity-20" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-foreground">Africa University Counseling</h3>
-                  <p className="max-w-xs">Select a counselor from the list to start a secure, encrypted conversation.</p>
-                  <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-full text-xs">
-                    <Shield className="h-3 w-3 text-success" />
-                    <span>Your privacy is our priority</span>
+                <div className="flex h-full items-center justify-center p-6 lg:p-10">
+                  <div className="relative w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-primary/10 bg-gradient-to-br from-background via-background to-primary/5 p-8 text-center shadow-[0_30px_90px_-50px_rgba(15,23,42,0.45)] sm:p-10 lg:p-14">
+                    <div className="absolute -left-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+                    <div className="absolute -bottom-12 -right-12 h-44 w-44 rounded-full bg-info/10 blur-3xl" />
+
+                    <div className="relative">
+                      <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[1.75rem] bg-background/85 shadow-lg ring-1 ring-border/60">
+                        <MessageSquare className="h-10 w-10 text-primary" />
+                      </div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-primary/80">
+                        Private Support
+                      </p>
+                      <h3 className="mt-4 font-display text-3xl font-bold text-foreground lg:text-4xl">
+                        Start a conversation that feels safe and simple
+                      </h3>
+                      <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-muted-foreground lg:text-lg">
+                        Choose a counselor from the left panel to begin a secure chat. If you want extra privacy, switch on anonymous support before you start.
+                      </p>
+
+                      <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
+                        <div className="rounded-[1.5rem] border border-border/60 bg-background/80 p-4 shadow-sm">
+                          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+                            <Shield className="h-5 w-5 text-success" />
+                          </div>
+                          <p className="font-semibold text-foreground">End-to-end encrypted</p>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                            Your messages stay protected from the moment you send them.
+                          </p>
+                        </div>
+                        <div className="rounded-[1.5rem] border border-border/60 bg-background/80 p-4 shadow-sm">
+                          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+                            <User className="h-5 w-5 text-primary" />
+                          </div>
+                          <p className="font-semibold text-foreground">Anonymous option</p>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                            Start a support session without revealing your identity first.
+                          </p>
+                        </div>
+                        <div className="rounded-[1.5rem] border border-border/60 bg-background/80 p-4 shadow-sm">
+                          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+                            <Search className="h-5 w-5 text-primary" />
+                          </div>
+                          <p className="font-semibold text-foreground">Live counselor list</p>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                            See who is online and begin a conversation without extra steps.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <>
                   {/* Chat Header */}
-                  <div className="p-4 lg:p-6 border-b border-border/50 flex items-center justify-between bg-background/80 backdrop-blur-md sticky top-0 z-10">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shadow-lg shadow-primary/5">
-                        <User className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <h2 className="font-bold text-lg leading-none mb-1">
-                          {activeSession ? getCounselorLabel(activeSession) : "Counselor"}
-                        </h2>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              activeSessionIsPeerAssigned
-                                ? "bg-primary"
-                                : isRecipientOnline
-                                ? "bg-success animate-pulse"
-                                : "bg-muted-foreground/50"
-                            }`}
-                          />
-                          <p
-                            className={`text-xs font-medium ${
-                              activeSessionIsPeerAssigned
-                                ? "text-primary"
-                                : isRecipientOnline
-                                ? "text-success"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {activeSessionIsPeerAssigned
-                              ? "Peer support assigned"
-                              : isRecipientOnline
-                              ? "Online"
-                              : "Away"}
-                          </p>
+                  <div className="sticky top-0 z-10 border-b border-border/60 bg-background/85 px-4 py-4 backdrop-blur-md lg:px-6 lg:py-5">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.4rem] bg-primary/10 shadow-lg shadow-primary/5">
+                          <User className="h-6 w-6 text-primary" />
                         </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-bold leading-none lg:text-xl">
+                              {activeSession ? getCounselorLabel(activeSession) : "Counselor"}
+                            </h2>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                activeSessionIsPeerAssigned
+                                  ? "bg-primary/10 text-primary"
+                                  : isRecipientOnline
+                                  ? "bg-success/10 text-success"
+                                  : "bg-secondary/80 text-muted-foreground"
+                              }`}
+                            >
+                              {activeSessionIsPeerAssigned
+                                ? "Peer support assigned"
+                                : isRecipientOnline
+                                ? "Online"
+                                : "Away"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {activeSession?.is_anonymous
+                              ? "Anonymous support is enabled for this session."
+                              : "Secure counseling conversation"}
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {activeSessionIsPeerAssigned && (
+                              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-primary">
+                                <span>Peer Counselor Assigned</span>
+                              </div>
+                            )}
+                            {activeSession?.is_anonymous && (
+                              <div className="inline-flex items-center gap-2 rounded-full bg-secondary/70 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-foreground">
+                                <span>Anonymous Session</span>
+                              </div>
+                            )}
+                            <div className="inline-flex items-center gap-2 rounded-full bg-secondary/70 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                              <Shield className="h-3 w-3 text-success" />
+                              <span>{isEncryptionReady ? "Encrypted" : "Securing..."}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 rounded-2xl border-destructive/30 bg-background/70 text-destructive hover:bg-destructive/5 hover:text-destructive"
+                          onClick={handleTriggerEmergency}
+                          disabled={isTriggeringEmergency || !activeSession}
+                          title="Trigger emergency escalation"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          {isTriggeringEmergency ? "Alerting..." : "Panic"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 rounded-2xl border-border/60 bg-background/70"
+                          onClick={handleStartAudioCall}
+                          title="Start audio call"
+                          disabled={isPreparingCall}
+                        >
+                          <Phone className="h-4 w-4" />
+                          <span className="hidden sm:inline">Audio</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 rounded-2xl border-border/60 bg-background/70"
+                          onClick={handleStartVideoCall}
+                          title="Start video call"
+                          disabled={isPreparingCall}
+                        >
+                          <Video className="h-4 w-4" />
+                          <span className="hidden sm:inline">Video</span>
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      {activeSessionIsPeerAssigned && (
-                        <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-                          <span>Peer Counselor Assigned</span>
-                        </div>
-                      )}
-                      {activeSession?.is_anonymous && (
-                        <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-foreground bg-secondary/60 px-3 py-1.5 rounded-full">
-                          <span>Anonymous Session</span>
-                        </div>
-                      )}
-                      <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-3 py-1.5 rounded-full">
-                        <Shield className="h-3 w-3 text-success" />
-                        <span>{isEncryptionReady ? "Encrypted" : "Securing..."}</span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={handleTriggerEmergency}
-                        disabled={isTriggeringEmergency || !activeSession}
-                        title="Trigger emergency escalation"
-                      >
-                        <AlertTriangle className="h-4 w-4" />
-                        {isTriggeringEmergency ? "Alerting..." : "Panic"}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full"
-                        onClick={handleStartAudioCall}
-                        title="Start audio call"
-                        disabled={isPreparingCall}
-                      >
-                        <Phone className="h-5 w-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full"
-                        onClick={handleStartVideoCall}
-                        title="Start video call"
-                        disabled={isPreparingCall}
-                      >
-                        <Video className="h-5 w-5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="rounded-full">
-                        <MoreVertical className="h-5 w-5" />
-                      </Button>
-                </div>
                   </div>
 
                   {/* Message List */}
                   <ScrollArea ref={messageScrollAreaRef} className="flex-1 px-4 lg:px-6">
-                    <div className="py-6 space-y-6">
+                    <div className="mx-auto max-w-5xl space-y-6 py-6">
                       {sessionId && hasOlderMessages && (
                         <div className="flex justify-center">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
+                            className="rounded-full border-border/60 bg-background/80"
                             onClick={() => {
                               void handleLoadOlderMessages();
                             }}
@@ -1173,13 +1301,16 @@ const StudentChat = () => {
                         </div>
                       )}
                       {visibleMessages.length === 0 && !isInitialLoading && (
-                        <div className="text-center py-12">
-                          <div className="inline-flex items-center gap-2 px-4 py-2 bg-secondary/30 rounded-2xl text-xs text-muted-foreground mb-4">
+                        <div className="mx-auto max-w-md rounded-[1.75rem] border border-dashed border-primary/20 bg-background/80 px-6 py-10 text-center shadow-sm">
+                          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-secondary/50 px-4 py-2 text-xs text-muted-foreground">
                             <Shield className="h-3 w-3" />
                             Messages are end-to-end encrypted
                           </div>
-                          <p className="text-sm text-muted-foreground">Say hello to your counselor!</p>
-                  </div>
+                          <p className="text-base font-semibold text-foreground">Say hello to your counselor</p>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            This space is ready whenever you are.
+                          </p>
+                        </div>
                       )}
                       
                     {visibleMessages.map((msg) => (
@@ -1231,7 +1362,7 @@ const StudentChat = () => {
                                     aria-label={msg.seen_at ? "Seen" : "Sent"}
                                     title={msg.seen_at ? "Seen" : "Sent"}
                                   >
-                                    {msg.seen_at ? "✓✓" : "✓"}
+                                    {msg.seen_at ? "Seen" : "Sent"}
                                   </span>
                                 </div>
                               )}
@@ -1266,8 +1397,8 @@ const StudentChat = () => {
               </ScrollArea>
 
                   {/* Chat Input Area */}
-                  <div className="p-4 lg:p-6 bg-background border-t border-border/50">
-                    <div className="max-w-4xl mx-auto">
+                  <div className="border-t border-border/50 bg-background/90 p-4 lg:p-6">
+                    <div className="mx-auto max-w-5xl">
               {/* File preview */}
               {selectedFile && (
                 <div className="mb-4 animate-in slide-in-from-bottom-2 duration-300">
@@ -1305,7 +1436,7 @@ const StudentChat = () => {
                 </div>
               )}
 
-                      <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
+                      <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 rounded-[1.75rem] border border-border/60 bg-background/90 p-2 shadow-sm">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -1317,7 +1448,7 @@ const StudentChat = () => {
                     type="button" 
                     variant="ghost" 
                     size="icon"
-                    className="h-12 w-12 rounded-2xl bg-secondary/30 hover:bg-secondary/50 transition-all shrink-0"
+                    className="h-12 w-12 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-all shrink-0"
                     onClick={handleAttachClick}
                     disabled={isUploading || isRecording}
                   >
@@ -1335,7 +1466,7 @@ const StudentChat = () => {
                           notifyTyping(nextMessage.trim().length > 0);
                         }}
                         onBlur={() => notifyTyping(false)}
-                        className="h-12 pl-4 pr-20 rounded-2xl bg-secondary/30 border-none focus-visible:ring-primary/20 text-base"
+                        className="h-12 rounded-2xl border-none bg-secondary/30 pl-4 pr-20 text-base focus-visible:ring-primary/20"
                         disabled={isSending || isUploading}
                       />
                       <div className="absolute right-1 top-1 flex gap-1">
@@ -1443,4 +1574,6 @@ const StudentChat = () => {
 };
 
 export default StudentChat;
+
+
 
