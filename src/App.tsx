@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -87,6 +87,8 @@ const App = () => (
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
 
                 <Route path="/student/login" element={<StudentLogin />} />
+                <Route path="/student/referrals" element={<Navigate to="/student/dashboard" replace />} />
+                <Route path="/student/referral" element={<Navigate to="/student/dashboard" replace />} />
                 <Route
                   path="/student/dashboard"
                   element={
@@ -145,6 +147,8 @@ const App = () => (
                 />
 
                 <Route path="/counselor/login" element={<CounselorLogin />} />
+                <Route path="/counselor/referrals" element={<Navigate to="/counselor/dashboard" replace />} />
+                <Route path="/counselor/referral" element={<Navigate to="/counselor/dashboard" replace />} />
                 <Route path="/peer/login" element={<PeerLogin />} />
                 <Route
                   path="/peer/dashboard"
@@ -268,6 +272,8 @@ const App = () => (
 
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/register" element={<AdminRegister />} />
+                <Route path="/admin/referrals" element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="/admin/referral" element={<Navigate to="/admin/dashboard" replace />} />
                 <Route
                   path="/admin/dashboard"
                   element={
@@ -333,6 +339,8 @@ const App = () => (
                   }
                 />
 
+                <Route path="/referrals" element={<Navigate to="/" replace />} />
+                <Route path="/referral" element={<Navigate to="/" replace />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

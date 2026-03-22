@@ -13,6 +13,15 @@ interface SupportSignal {
   requiresImmediateHelp: boolean;
   showPanicButton: boolean;
   crisisHotline: string | null;
+  crisisResources: CrisisResource[];
+}
+
+interface CrisisResource {
+  name: string;
+  contact: string;
+  description: string;
+  action: "call" | "link";
+  value: string;
 }
 
 interface AIAvailability {
@@ -246,6 +255,17 @@ export const useAIChat = () => {
             typeof data?.crisis_hotline === "string" && data.crisis_hotline.trim() !== ""
               ? data.crisis_hotline.trim()
               : null,
+          crisisResources: Array.isArray(data?.crisis_resources)
+            ? data.crisis_resources
+                .map((entry: any) => ({
+                  name: String(entry?.name || "").trim(),
+                  contact: String(entry?.contact || "").trim(),
+                  description: String(entry?.description || "").trim(),
+                  action: entry?.action === "link" ? "link" : "call",
+                  value: String(entry?.value || "").trim(),
+                }))
+                .filter((entry: CrisisResource) => entry.name && entry.contact && entry.value)
+            : [],
         });
 
         const providerMode = typeof data?.provider_mode === "string" ? data.provider_mode.trim() : "";

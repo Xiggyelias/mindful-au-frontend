@@ -331,9 +331,8 @@ const StudentDashboard = () => {
   };
 
   const handleCallNow = () => {
-    // Open phone dialer with crisis hotline number
-    window.location.href = 'tel:988'; // National Suicide Prevention Lifeline
-    toast.info("Connecting to crisis hotline...");
+    window.location.href = "tel:112";
+    toast.info("Connecting to Zimbabwe emergency services (112)...");
   };
 
   const handleMoodSelection = async (mood: StudentMood) => {

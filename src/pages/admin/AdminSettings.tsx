@@ -5,7 +5,6 @@ import {
   UserCheck,
   BarChart3,
   Brain,
-  ArrowRightLeft,
   AlertTriangle,
   FileText,
   Settings,
@@ -34,7 +33,6 @@ const navItems = [
   { label: "Students", icon: Users, path: "/admin/students" },
   { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/admin/referrals" },
   { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
   { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
   { label: "Logs", icon: FileText, path: "/admin/logs" },
@@ -55,7 +53,7 @@ const defaultSettings: Record<string, any> = {
   auto_backup: false,
   admin_email: "",
   support_email: "",
-  crisis_hotline: "",
+  crisis_hotline: "112",
 };
 
 const settingLabels: Record<string, string> = {
@@ -376,6 +374,9 @@ const AdminSettings = () => {
                     className="mt-2"
                     disabled={isSaving}
                   />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Defaults to Zimbabwe emergency services on 112 if left blank.
+                  </p>
                 </div>
                 <Button variant="outline" className="w-full" onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? "Saving..." : "Save Changes"}

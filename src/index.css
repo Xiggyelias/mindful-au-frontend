@@ -268,26 +268,3 @@
 .stagger-3 { animation-delay: 0.3s; }
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
-
-/* Low-bandwidth mode */
-.low-bandwidth * {
-  animation-duration: 0.01ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
-}
-
-.low-bandwidth .glass,
-.low-bandwidth .glass-card,
-.low-bandwidth .portal-card {
-  backdrop-filter: none !important;
-}
-
-.low-bandwidth .glass-card:hover,
-.low-bandwidth .portal-card:hover {
-  transform: none !important;
-  box-shadow: var(--shadow-sm) !important;
-}
-
-.low-bandwidth .btn-primary-glow::before {
-  display: none !important;
-}

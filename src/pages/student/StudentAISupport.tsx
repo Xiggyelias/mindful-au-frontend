@@ -7,17 +7,18 @@ import {
   Video,
   History,
   Heart,
-  ArrowRightLeft,
   Send,
   Sparkles,
   Loader2,
   AlertTriangle,
   Phone,
+  ExternalLink,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,7 +30,6 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/student/referrals" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
@@ -44,7 +44,7 @@ const StudentAISupport = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, supportSignal, sendMessage } = useAIChat();
+  const { messages, isLoading, error, supportSignal, availability, sendMessage } = useAIChat();
 
   const quickPrompts = [
     "I'm feeling anxious",
@@ -112,7 +112,8 @@ const StudentAISupport = () => {
   const handleCallHotline = () => {
     const hotline = supportSignal?.crisisHotline?.trim() || "";
     if (hotline === "") {
-      toast.info("Contact your local emergency services, campus security, or a trusted counselor now.");
+      window.location.href = "tel:112";
+      toast.info("Connecting to Zimbabwe emergency services (112)...");
       return;
     }
 
@@ -123,6 +124,22 @@ const StudentAISupport = () => {
     }
 
     toast.info(`Crisis contact: ${hotline}`);
+  };
+
+  const handleSupportResource = (action: "call" | "link", value: string) => {
+    if (!value.trim()) {
+      return;
+    }
+
+    if (action === "link") {
+      window.open(value, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const dialTarget = value.replace(/[^\d+]/g, "");
+    if (dialTarget !== "") {
+      window.location.href = `tel:${dialTarget}`;
+    }
   };
 
   return (
@@ -151,10 +168,52 @@ const StudentAISupport = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-foreground">AI Wellness Assistant</h2>
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          availability.status === "live"
+                            ? "bg-success animate-pulse"
+                            : availability.status === "fallback"
+                            ? "bg-amber-500"
+                            : availability.status === "offline"
+                            ? "bg-destructive"
+                            : "bg-muted-foreground/50 animate-pulse"
+                        }`}
+                      />
                       <p className="text-sm font-medium text-muted-foreground">Always here for you</p>
+                      <Badge
+                        variant="outline"
+                        className={
+                          availability.status === "live"
+                            ? "border-success/30 bg-success/10 text-success"
+                            : availability.status === "fallback"
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+                            : availability.status === "offline"
+                            ? "border-destructive/30 bg-destructive/10 text-destructive"
+                            : "border-border bg-secondary/40 text-muted-foreground"
+                        }
+                      >
+                        {availability.label}
+                      </Badge>
                     </div>
+                    {availability.detail && (
+                      <p className="mt-1 text-xs text-muted-foreground">{availability.detail}</p>
+                    )}
+                    {availability.status === "offline" && (
+                      <p className="mt-1 text-xs text-destructive">
+                        Live AI is unavailable from this site until the backend `/api` route is restored.
+                      </p>
+                    )}
+                    {availability.status === "fallback" && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Messages still work, but they are using local fallback guidance instead of external AI.
+                      </p>
+                    )}
+                    {availability.status === "live" && availability.providerName && (
+                      <p className="mt-1 text-xs text-success/90">
+                        Provider: {availability.providerName}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Button variant="ghost" size="icon" className="rounded-full" onClick={() => toast.info("Your conversation is private and encrypted.")}>
@@ -224,6 +283,36 @@ const StudentAISupport = () => {
                               Crisis contact: {supportSignal.crisisHotline}
                             </p>
                           )}
+                          {supportSignal.crisisResources.length > 0 && (
+                            <div className="grid gap-2 pt-1 sm:grid-cols-2">
+                              {supportSignal.crisisResources.map((resource) => (
+                                <div
+                                  key={`${resource.name}-${resource.contact}`}
+                                  className="rounded-2xl border border-border/60 bg-background/80 p-3"
+                                >
+                                  <p className="text-sm font-semibold text-foreground">{resource.name}</p>
+                                  <p className="text-xs text-muted-foreground">{resource.contact}</p>
+                                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                    {resource.description}
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-3 gap-2"
+                                    onClick={() => handleSupportResource(resource.action, resource.value)}
+                                  >
+                                    {resource.action === "link" ? (
+                                      <ExternalLink className="h-4 w-4" />
+                                    ) : (
+                                      <Phone className="h-4 w-4" />
+                                    )}
+                                    {resource.action === "link" ? "Open support" : "Call now"}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {supportSignal.showPanicButton && (
@@ -288,7 +377,7 @@ const StudentAISupport = () => {
                     </Button>
                   </form>
                   <p className="text-[10px] text-center text-muted-foreground">
-                    I'm here to listen. Remember, I'm an AI assistant and not a replacement for professional clinical help.
+                    I&apos;m here to listen. Remember, I&apos;m an AI assistant and not a replacement for professional clinical help.
                   </p>
                 </div>
               </div>
