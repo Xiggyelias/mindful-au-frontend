@@ -8,7 +8,6 @@ import {
   Video,
   FileText,
   Heart,
-  ArrowRightLeft,
   AlertTriangle,
   TrendingUp,
   Loader2,
@@ -23,14 +22,13 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { format } from "date-fns";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
   { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
   { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/counselor/referrals" },
   { label: "Students", icon: Users, path: "/counselor/students" },
   { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },

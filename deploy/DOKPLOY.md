@@ -5,11 +5,15 @@
 Use `docker-compose.yml` as the deployment source.
 
 Services:
-- `nginx`: public entrypoint and health probe endpoint
-- `app`: Laravel PHP-FPM API runtime
+- `nginx`: public entrypoint, SPA host, and health probe endpoint (built from `frontend/Dockerfile`)
+- `app`: internal Laravel PHP-FPM runtime behind `nginx`
 - `queue`: Supervisor-managed queue workers
 - `scheduler`: Laravel scheduler process
 - `redis`: shared cache/session/queue backend
+
+Publish the `nginx` service in Dokploy. Do not expose `app` directly for this stack, because `app` only listens for FastCGI on port `9000`.
+The public `nginx` container serves the built frontend and forwards `/api`, `/health`, `/live`, and `/storage` to Laravel.
+Enable HTTPS/automatic certificate issuance on the `nginx` service. If the public domain shows an untrusted root certificate, Traefik/Dokploy is still serving a default or self-signed certificate instead of a valid issued one.
 
 ## Required Secrets / Env
 

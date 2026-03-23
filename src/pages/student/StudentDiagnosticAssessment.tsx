@@ -9,7 +9,6 @@ import {
   Video,
   History,
   Heart,
-  ArrowRightLeft,
   CheckCircle,
   AlertCircle,
   TrendingUp,
@@ -22,13 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/student/referrals" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Voice Notes", icon: Mic, path: "/student/voice-notes" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },

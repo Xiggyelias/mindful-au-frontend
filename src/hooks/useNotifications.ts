@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
+import { useNetworkProfile } from "@/hooks/useNetworkProfile";
+import { toast } from "@/components/ui/sonner";
 
 export type AppNotificationType = "info" | "warning" | "success" | "error" | "panic";
 
@@ -23,6 +24,8 @@ interface NotificationsState {
 const POLL_INTERVAL_MS = 45000;
 const DEFAULT_LIMIT = 30;
 const POLL_MIN_GAP_MS = 15000;
+const LOW_BANDWIDTH_POLL_INTERVAL_MS = 120000;
+const LOW_BANDWIDTH_MIN_GAP_MS = 45000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -83,6 +86,7 @@ const normalizeNotificationPayload = (value: unknown): NotificationsState => {
 
 export const useNotifications = () => {
   const { user } = useAuth();
+  const { lowBandwidth } = useNetworkProfile();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +95,16 @@ export const useNotifications = () => {
   const hasPrimedNotificationCacheRef = useRef(false);
   const loadInFlightRef = useRef<Promise<void> | null>(null);
   const lastLoadAtRef = useRef(0);
+  const notificationEtagRef = useRef<string | null>(null);
+  const pollIntervalMs = lowBandwidth ? LOW_BANDWIDTH_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  const pollMinGapMs = lowBandwidth ? LOW_BANDWIDTH_MIN_GAP_MS : POLL_MIN_GAP_MS;
+
+  useEffect(() => {
+    announcedNotificationIdsRef.current.clear();
+    hasPrimedNotificationCacheRef.current = false;
+    lastLoadAtRef.current = 0;
+    notificationEtagRef.current = null;
+  }, [user?.id]);
 
   const loadNotifications = useCallback(
     async (options?: { silent?: boolean; force?: boolean }) => {
@@ -102,6 +116,7 @@ export const useNotifications = () => {
         hasPrimedNotificationCacheRef.current = false;
         loadInFlightRef.current = null;
         lastLoadAtRef.current = 0;
+        notificationEtagRef.current = null;
         return;
       }
 
@@ -112,7 +127,7 @@ export const useNotifications = () => {
         return;
       }
 
-      if (!force && Date.now() - lastLoadAtRef.current < POLL_MIN_GAP_MS) {
+      if (!force && Date.now() - lastLoadAtRef.current < pollMinGapMs) {
         return;
       }
 
@@ -122,8 +137,20 @@ export const useNotifications = () => {
         }
 
         try {
-          const response = await api.getNotifications({ limit: DEFAULT_LIMIT });
-          const normalized = normalizeNotificationPayload(response);
+          const response = await api.getNotifications(
+            { limit: DEFAULT_LIMIT },
+            { ifNoneMatch: notificationEtagRef.current ?? undefined }
+          );
+          if (response.etag) {
+            notificationEtagRef.current = response.etag;
+          }
+
+          if (response.status === 304) {
+            setError(null);
+            return;
+          }
+
+          const normalized = normalizeNotificationPayload(response.data);
 
           const newUnreadNotifications = normalized.notifications.filter(
             (notification) =>
@@ -169,7 +196,7 @@ export const useNotifications = () => {
         loadInFlightRef.current = null;
       }
     },
-    [user?.id]
+    [pollMinGapMs, user?.id]
   );
 
   const refreshNotifications = useCallback(async () => {
@@ -231,7 +258,7 @@ export const useNotifications = () => {
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadNotifications({ silent: true });
-    }, POLL_INTERVAL_MS);
+    }, pollIntervalMs);
 
     window.addEventListener("focus", onVisibilityOrFocus);
     document.addEventListener("visibilitychange", onVisibilityOrFocus);
@@ -241,7 +268,7 @@ export const useNotifications = () => {
       window.removeEventListener("focus", onVisibilityOrFocus);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
-  }, [loadNotifications, user?.id]);
+  }, [loadNotifications, pollIntervalMs, user?.id]);
 
   return {
     notifications,

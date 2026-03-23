@@ -5,7 +5,6 @@ import {
   UserCheck,
   BarChart3,
   Brain,
-  ArrowRightLeft,
   AlertTriangle,
   FileText,
   Settings,
@@ -19,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -28,7 +27,6 @@ const navItems = [
   { label: "Students", icon: Users, path: "/admin/students" },
   { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/admin/referrals" },
   { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
   { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
   { label: "Logs", icon: FileText, path: "/admin/logs" },

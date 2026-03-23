@@ -29,8 +29,10 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
+import { useNetworkProfile } from "@/hooks/useNetworkProfile";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
+import { VoiceNotePlayer } from "@/components/VoiceNotePlayer";
 import { formatDistanceToNowStrict } from "date-fns";
 
 const counselorNavItems = [
@@ -178,9 +180,11 @@ const CounselorMessages = () => {
   const hasShownLoadErrorRef = useRef(false);
   const isLoadingSessionsRef = useRef(false);
   const { user, role } = useAuth();
+  const { lowBandwidth } = useNetworkProfile();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
+  const sessionPollIntervalMs = lowBandwidth ? 90000 : SESSION_POLL_INTERVAL_MS;
 
   const [searchParams] = useSearchParams();
   const targetSessionParam = searchParams.get("session");
@@ -505,7 +509,7 @@ const CounselorMessages = () => {
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadSessions(true);
-    }, SESSION_POLL_INTERVAL_MS);
+    }, sessionPollIntervalMs);
 
     window.addEventListener("focus", onVisibilityOrFocus);
     window.addEventListener("online", onVisibilityOrFocus);
@@ -519,7 +523,7 @@ const CounselorMessages = () => {
       window.removeEventListener(API_RECOVERED_EVENT, onVisibilityOrFocus as EventListener);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
-  }, [loadSessions, user?.id]);
+  }, [loadSessions, sessionPollIntervalMs, user?.id]);
 
   useEffect(() => {
     const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
@@ -738,6 +742,10 @@ const CounselorMessages = () => {
 
   const renderMessageContent = (msg: any) => {
     const content = msg.decryptedContent || msg.content || "";
+
+    if (msg.message_type === "voice") {
+      return <VoiceNotePlayer messageId={msg.id} />;
+    }
 
     if (msg.message_type === "file") {
       try {

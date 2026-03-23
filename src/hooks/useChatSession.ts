@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { useNetworkProfile } from "@/hooks/useNetworkProfile";
 
 interface Session {
   id: number;
@@ -35,12 +36,14 @@ interface Session {
 }
 
 const SESSION_POLL_INTERVAL_MS = 20000;
+const LOW_BANDWIDTH_SESSION_POLL_INTERVAL_MS = 90000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
 const SESSION_RETRY_PAGE_SIZE = 12;
 const SESSION_REFRESH_MIN_GAP_MS = 10000;
+const LOW_BANDWIDTH_SESSION_REFRESH_MIN_GAP_MS = 30000;
 type PagedMeta = {
   page?: number;
   per_page?: number;
@@ -55,6 +58,7 @@ const isPeerAssignedSession = (session: Session) =>
 const conversationKey = (session: Session) => `session:${Number(session.id)}`;
 
 export const useChatSession = (userId: number | undefined) => {
+  const { lowBandwidth } = useNetworkProfile();
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,6 +69,12 @@ export const useChatSession = (userId: number | undefined) => {
   const sessionsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const lastSessionsLoadAtRef = useRef(0);
   const sessionCacheKey = userId ? `student_chat_sessions_${userId}_${sessionPage}` : null;
+  const sessionPollIntervalMs = lowBandwidth
+    ? LOW_BANDWIDTH_SESSION_POLL_INTERVAL_MS
+    : SESSION_POLL_INTERVAL_MS;
+  const sessionRefreshMinGapMs = lowBandwidth
+    ? LOW_BANDWIDTH_SESSION_REFRESH_MIN_GAP_MS
+    : SESSION_REFRESH_MIN_GAP_MS;
 
   const hydrateCachedSessions = useCallback(() => {
     if (!sessionCacheKey) return false;
@@ -125,7 +135,7 @@ export const useChatSession = (userId: number | undefined) => {
     }
 
     const force = Boolean(options?.force);
-    if (!force && Date.now() - lastSessionsLoadAtRef.current < SESSION_REFRESH_MIN_GAP_MS) {
+    if (!force && Date.now() - lastSessionsLoadAtRef.current < sessionRefreshMinGapMs) {
       return;
     }
 
@@ -252,7 +262,7 @@ export const useChatSession = (userId: number | undefined) => {
     } finally {
       sessionsRequestInFlightRef.current = null;
     }
-  }, [sessionCacheKey, sessionPage, userId]);
+  }, [sessionCacheKey, sessionPage, sessionRefreshMinGapMs, userId]);
 
   const selectSession = (session: Session) => {
     setActiveSession(session);
@@ -340,7 +350,7 @@ export const useChatSession = (userId: number | undefined) => {
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadSessions(true);
-    }, SESSION_POLL_INTERVAL_MS);
+    }, sessionPollIntervalMs);
 
     window.addEventListener("focus", onVisibilityOrFocus);
     window.addEventListener("online", onVisibilityOrFocus);
@@ -354,7 +364,7 @@ export const useChatSession = (userId: number | undefined) => {
       window.removeEventListener(API_RECOVERED_EVENT, onVisibilityOrFocus as EventListener);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
-  }, [hydrateCachedSessions, loadSessions, userId]);
+  }, [hydrateCachedSessions, loadSessions, sessionPollIntervalMs, userId]);
 
   return {
     activeSession,

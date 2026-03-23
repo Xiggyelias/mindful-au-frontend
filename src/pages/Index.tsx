@@ -37,8 +37,8 @@ const Index = () => {
             {/* Portal Selection */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <PortalCard
-                title="Student & Staff Portal"
-                description="Students and staff can sign in with institutional accounts to access support tools."
+                title="Student Portal"
+                description="Students sign in with institutional Google accounts to access support tools."
                 icon={GraduationCap}
                 color="red"
                 onClick={() => navigate("/student/login")}

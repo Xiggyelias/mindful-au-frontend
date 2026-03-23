@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 interface ChatMessage {
@@ -22,13 +22,39 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Only allow POST requests
+  if (req.method === "GET") {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        function: "ai-wellness-chat",
+        status: "ready",
+        usage: "Send a POST request with a JSON body containing { message, history? }.",
+        example: {
+          message: "I am feeling anxious about exams",
+          history: [],
+        },
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  // Only allow POST requests for chat requests
   if (req.method !== "POST") {
     return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
+      JSON.stringify({
+        error: "Method not allowed",
+        allowed_methods: ["GET", "POST", "OPTIONS"],
+      }),
       { 
         status: 405, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: {
+          ...corsHeaders,
+          "Allow": "GET, POST, OPTIONS",
+          "Content-Type": "application/json",
+        },
       }
     );
   }

@@ -880,9 +880,25 @@ class ApiClient {
   }
 
   // Notifications
-  async getNotifications(params?: { limit?: number; unread_only?: boolean }) {
-    const response = await this.client.get('/notifications', { params });
-    return response.data;
+  async getNotifications(
+    params?: { limit?: number; unread_only?: boolean },
+    options?: { ifNoneMatch?: string }
+  ) {
+    const response = await this.client.get('/notifications', {
+      params,
+      headers: options?.ifNoneMatch
+        ? {
+            'If-None-Match': options.ifNoneMatch,
+          }
+        : undefined,
+      validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
+    });
+
+    return {
+      status: response.status,
+      data: response.status === 304 ? null : response.data,
+      etag: typeof response.headers?.etag === 'string' ? response.headers.etag : null,
+    };
   }
 
   async markNotificationRead(id: string | number) {
@@ -956,8 +972,12 @@ class ApiClient {
   }
 
   async downloadVoiceNote(messageId: string) {
-    const response = await this.client.get(`/messages/${messageId}/voice-note`);
-    return response.data;
+    const response = await this.client.get(`/messages/${messageId}/voice-note`, {
+      responseType: 'blob',
+      timeout: TIMEOUT_RETRY_MAX_MS,
+    });
+
+    return response.data instanceof Blob ? response.data : new Blob([response.data]);
   }
 
   // Video Calls

@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AccessibilityAnnouncer } from "@/components/AccessibilityAnnouncer";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -74,6 +75,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <AccessibilityAnnouncer />
         <BrowserRouter
           future={{
             v7_startTransition: true,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getApiErrorMessage } from '@/lib/api';
+import { useNetworkProfile } from '@/hooks/useNetworkProfile';
 import {
   getOrCreateDeviceKeyPair,
   importPeerPublicKey,
@@ -189,6 +190,7 @@ const normalizeMessagePayload = (payload: unknown): RawMessage[] => {
 };
 
 export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {
+  const { lowBandwidth } = useNetworkProfile();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
@@ -223,6 +225,24 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isInteger(numericUserId) && numericUserId > 0;
+  const hasRealtimeConfig = Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  );
+  const messagePollingIntervalMs = hasRealtimeConfig
+    ? lowBandwidth
+      ? 75000
+      : 45000
+    : lowBandwidth
+    ? 25000
+    : POLLING_INTERVAL_MS;
+  const typingPollingIntervalMs = hasRealtimeConfig
+    ? lowBandwidth
+      ? 30000
+      : 15000
+    : lowBandwidth
+    ? 12000
+    : TYPING_POLL_INTERVAL_MS;
   const isSessionKeyInitiator = useCallback(
     () => peerIdRef.current !== null && numericUserId < peerIdRef.current,
     [numericUserId]
@@ -1192,11 +1212,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   );
 
   useEffect(() => {
-    const hasRealtimeConfig = Boolean(
-      import.meta.env.VITE_SUPABASE_URL &&
-      import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-    );
-
     if (!sessionId || !hasValidUserId || !hasRealtimeConfig) {
       detachRealtimeChannel();
       return;
@@ -1299,6 +1314,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   }, [
     applyPeerTypingState,
     detachRealtimeChannel,
+    hasRealtimeConfig,
     hasValidUserId,
     loadMessages,
     numericUserId,
@@ -1392,7 +1408,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
 
         scheduleNextPoll();
-      }, POLLING_INTERVAL_MS);
+      }, messagePollingIntervalMs);
     };
 
     const scheduleTypingPoll = () => {
@@ -1406,7 +1422,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
 
         scheduleTypingPoll();
-      }, TYPING_POLL_INTERVAL_MS);
+      }, typingPollingIntervalMs);
     };
 
     const bootstrap = async () => {
@@ -1442,8 +1458,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     detachRealtimeChannel,
     initializeEncryption,
     loadMessages,
+    messagePollingIntervalMs,
     refreshPeerTypingStatus,
     sessionId,
+    typingPollingIntervalMs,
   ]);
 
   const refreshMessages = useCallback(async () => {

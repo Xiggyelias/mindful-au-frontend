@@ -6,7 +6,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Loader2, Send, Bot, User, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import { createOpenRouterService, ChatMessage, StreamChunk, Conversation } from '../services/openrouter';
 import { API_RECOVERED_EVENT, getApiErrorMessage } from '@/lib/api';
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 interface OpenRouterChatProps {
   model?: string;

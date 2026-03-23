@@ -119,6 +119,7 @@ php artisan schedule:work
 Production-ready container files are included:
 
 - `backend/Dockerfile`
+- `frontend/Dockerfile`
 - `frontend/docker-compose.yml`
 - `frontend/deploy/nginx/default.conf`
 - `backend/.env.production.example`
@@ -131,6 +132,9 @@ php backend/artisan key:generate
 docker compose -f frontend/docker-compose.yml up -d --build
 docker compose -f frontend/docker-compose.yml exec app php artisan migrate --force
 ```
+
+For Dokploy or any Traefik-managed deployment, publish the `nginx` service from `frontend/docker-compose.yml`. Do not attach the public domain directly to the internal `app` service.
+The `nginx` service now builds from `frontend/Dockerfile`, serves the Vite SPA, and forwards `/api`, `/health`, `/live`, and `/storage` to the Laravel app.
 
 Health endpoints (for Dokploy checks):
 

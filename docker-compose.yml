@@ -17,6 +17,13 @@ x-backend-env: &backend-env
   REDIS_PORT: ${REDIS_PORT:-6379}
   LARAVEL_OPTIMIZE_ON_BOOT: ${LARAVEL_OPTIMIZE_ON_BOOT:-true}
   HEALTH_MIN_DISK_FREE_PERCENT: ${HEALTH_MIN_DISK_FREE_PERCENT:-5}
+  SCALE_TARGET_USERS: ${SCALE_TARGET_USERS:-4000}
+  QUEUE_WORKER_PROCESSES: ${QUEUE_WORKER_PROCESSES:-8}
+  QUEUE_WORKER_SLEEP_SECONDS: ${QUEUE_WORKER_SLEEP_SECONDS:-1}
+  QUEUE_WORKER_TRIES: ${QUEUE_WORKER_TRIES:-3}
+  QUEUE_WORKER_TIMEOUT_SECONDS: ${QUEUE_WORKER_TIMEOUT_SECONDS:-120}
+  QUEUE_WORKER_MAX_TIME_SECONDS: ${QUEUE_WORKER_MAX_TIME_SECONDS:-3600}
+  QUEUE_WORKER_MEMORY_MB: ${QUEUE_WORKER_MEMORY_MB:-256}
 
 x-backend-build: &backend-build
   context: ../backend
@@ -82,7 +89,16 @@ services:
       - aucms
 
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_API_TIMEOUT_MS: ${VITE_API_TIMEOUT_MS:-45000}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PROJECT_ID: ${VITE_SUPABASE_PROJECT_ID:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+    image: aucms-frontend:latest
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:80"
@@ -90,9 +106,8 @@ services:
       app:
         condition: service_started
     volumes:
-      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - backend_public:/var/www/html/public:ro
-      - backend_storage:/var/www/html/storage:ro
+      - backend_public:/var/www/backend/public:ro
+      - backend_storage:/var/www/backend/storage:ro
     networks:
       - aucms
     healthcheck:

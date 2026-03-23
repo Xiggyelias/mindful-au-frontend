@@ -36,8 +36,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
+import { useNetworkProfile } from "@/hooks/useNetworkProfile";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
+import { VoiceNotePlayer } from "@/components/VoiceNotePlayer";
 import { format } from "date-fns";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 
@@ -106,7 +108,9 @@ const StudentChat = () => {
   const lastRenderedTailMessageIdRef = useRef<number | null>(null);
   const hasLoadedCounselorsRef = useRef(false);
   const { user } = useAuth();
+  const { lowBandwidth } = useNetworkProfile();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+  const counselorRefreshIntervalMs = lowBandwidth ? 90000 : COUNSELOR_REFRESH_INTERVAL_MS;
 
   // Voice recording functionality
   const {
@@ -285,23 +289,30 @@ const StudentChat = () => {
 
     void loadCounselors(!cacheLoaded);
 
-    const intervalId = window.setInterval(() => {
-      void loadCounselors(false);
-    }, COUNSELOR_REFRESH_INTERVAL_MS);
-
-    const onRecovery = () => {
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
       void loadCounselors(false);
     };
-    window.addEventListener("online", onRecovery);
-    window.addEventListener(API_RECOVERED_EVENT, onRecovery as EventListener);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadCounselors(false);
+    }, counselorRefreshIntervalMs);
+
+    window.addEventListener("focus", onVisibilityOrFocus);
+    window.addEventListener("online", onVisibilityOrFocus);
+    window.addEventListener(API_RECOVERED_EVENT, onVisibilityOrFocus as EventListener);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
 
     return () => {
       active = false;
       window.clearInterval(intervalId);
-      window.removeEventListener("online", onRecovery);
-      window.removeEventListener(API_RECOVERED_EVENT, onRecovery as EventListener);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      window.removeEventListener("online", onVisibilityOrFocus);
+      window.removeEventListener(API_RECOVERED_EVENT, onVisibilityOrFocus as EventListener);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
-  }, [counselorPage, user?.id]);
+  }, [counselorPage, counselorRefreshIntervalMs, user?.id]);
 
   useEffect(() => {
     const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
@@ -564,6 +575,10 @@ const StudentChat = () => {
 
   const renderMessageContent = (msg: any) => {
     const content = msg.decryptedContent || msg.content;
+
+    if (msg.message_type === "voice") {
+      return <VoiceNotePlayer messageId={msg.id} />;
+    }
     
     if (msg.message_type === 'file') {
       try {

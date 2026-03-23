@@ -7,7 +7,6 @@ import {
   BarChart3,
   Brain,
   AlertTriangle,
-  ArrowRightLeft,
   FileText,
   Settings,
   Shield,
@@ -24,14 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Students", icon: Users, path: "/admin/students" },
   { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/admin/referrals" },
   { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
   { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
   { label: "Logs", icon: FileText, path: "/admin/logs" },

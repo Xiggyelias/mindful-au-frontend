@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveApiBaseUrl } from "@/lib/runtimeConfig";
 
@@ -9,6 +9,22 @@ const OAuthCallback = () => {
   const navigate = useNavigate();
   const { completeOAuthLoginWithTicket } = useAuth();
   const hasProcessedRef = useRef(false);
+
+  const portalLoginRoute = useCallback((portal: string | null | undefined) => {
+    if (portal === "student") {
+      return "/student/login";
+    }
+
+    if (portal === "counselor") {
+      return "/counselor/login";
+    }
+
+    if (portal === "admin") {
+      return "/admin/login";
+    }
+
+    return "/";
+  }, []);
 
   const redirectByRole = useCallback((resolvedRole: string | null | undefined) => {
     if (resolvedRole === "admin") {
@@ -57,11 +73,13 @@ const OAuthCallback = () => {
 
       const error = readParam("error", "message");
       const ticket = readParam("ticket", "login_ticket", "oauth_ticket");
+      const portal = readParam("portal");
+      const fallbackRoute = portalLoginRoute(portal);
 
       if (error) {
         if (isCancelled) return;
         toast.error(error);
-        navigate("/", { replace: true });
+        navigate(fallbackRoute, { replace: true });
         return;
       }
 
@@ -74,6 +92,7 @@ const OAuthCallback = () => {
           const state = readParam("state");
           const scope = readParam("scope");
           const prompt = readParam("prompt");
+          if (portal) passthroughParams.set("portal", portal);
           if (authCode) passthroughParams.set("code", authCode);
           if (state) passthroughParams.set("state", state);
           if (scope) passthroughParams.set("scope", scope);
@@ -86,7 +105,7 @@ const OAuthCallback = () => {
 
         if (isCancelled) return;
         toast.error("Google sign-in did not return a valid login ticket.");
-        navigate("/", { replace: true });
+        navigate(fallbackRoute, { replace: true });
         return;
       }
 
@@ -95,7 +114,7 @@ const OAuthCallback = () => {
 
       if (result.error || !result.role) {
         toast.error(result.error?.message || "Unable to complete sign-in.");
-        navigate("/", { replace: true });
+        navigate(fallbackRoute, { replace: true });
         return;
       }
 
@@ -112,7 +131,7 @@ const OAuthCallback = () => {
     return () => {
       isCancelled = true;
     };
-  }, [completeOAuthLoginWithTicket, navigate, redirectByRole]);
+  }, [completeOAuthLoginWithTicket, navigate, portalLoginRoute, redirectByRole]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">

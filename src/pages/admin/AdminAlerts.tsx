@@ -6,7 +6,6 @@ import {
   UserCheck,
   BarChart3,
   Brain,
-  ArrowRightLeft,
   AlertTriangle,
   FileText,
   Settings,
@@ -21,14 +20,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Students", icon: Users, path: "/admin/students" },
   { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/admin/referrals" },
   { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
   { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
   { label: "Logs", icon: FileText, path: "/admin/logs" },

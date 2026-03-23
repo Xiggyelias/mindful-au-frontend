@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 import { BackgroundEffects } from "@/components/BackgroundEffects";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 
 const StudentLogin = () => {
@@ -84,9 +84,9 @@ const StudentLogin = () => {
                   />
                 </svg>
               </div>
-              <CardTitle className="text-2xl">Student &amp; Staff Portal</CardTitle>
+              <CardTitle className="text-2xl">Student Portal</CardTitle>
               <CardDescription>
-                Students and staff can sign in with official university Google accounts.
+                Students sign in with official university Google accounts.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
