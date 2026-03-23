@@ -3,8 +3,8 @@ import { api, AUTH_EXPIRED_EVENT, getApiErrorMessage } from "@/lib/api";
 
 type AppRole = "admin" | "counselor" | "peer_counselor" | "student";
 type LoginPortal = "student" | "counselor" | "admin";
-const PRESENCE_PING_INTERVAL_MS = 20 * 1000;
-const PRESENCE_MIN_GAP_MS = 10 * 1000;
+const PRESENCE_PING_INTERVAL_MS = 60 * 1000;
+const PRESENCE_MIN_GAP_MS = 45 * 1000;
 const DEFAULT_TWO_FACTOR_STATE = {
   enabled: false,
   required: false,

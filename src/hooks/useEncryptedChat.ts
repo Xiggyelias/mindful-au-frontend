@@ -77,7 +77,7 @@ interface RealtimeClient {
   removeChannel(channel: RealtimeBroadcastChannel): Promise<unknown> | unknown;
 }
 
-const POLLING_INTERVAL_MS = 8000;
+const POLLING_INTERVAL_MS = 12000;
 const MESSAGE_BATCH_LIMIT = 30;
 const INITIAL_SYNC_BATCH_LIMIT = 30;
 const MESSAGE_RETRY_BATCH_LIMIT = 15;
@@ -89,7 +89,7 @@ const REALTIME_SYNC_DEBOUNCE_MS = 120;
 const TYPING_HEARTBEAT_MS = 1600;
 const PEER_TYPING_IDLE_TIMEOUT_MS = 2600;
 const TYPING_STATUS_TIMEOUT_MS = 3500;
-const TYPING_POLL_INTERVAL_MS = 3000;
+const TYPING_POLL_INTERVAL_MS = 5000;
 const MAX_CLIENT_MESSAGES = 500;
 const E2E_VERSION = 'v1';
 const SESSION_KEY_PREFIX = 'chat_key_';

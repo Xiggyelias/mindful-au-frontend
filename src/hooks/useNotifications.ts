@@ -20,9 +20,9 @@ interface NotificationsState {
   unreadCount: number;
 }
 
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 45000;
 const DEFAULT_LIMIT = 30;
-const POLL_MIN_GAP_MS = 5000;
+const POLL_MIN_GAP_MS = 15000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;

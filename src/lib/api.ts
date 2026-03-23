@@ -406,6 +406,7 @@ class ApiClient {
       normalizedPath.startsWith('/users/counselors') ||
       normalizedPath === '/sessions' ||
       normalizedPath.startsWith('/sessions/chat-list') ||
+      normalizedPath.startsWith('/ai/wellness-chat/status') ||
       normalizedPath.startsWith('/ai/wellness-chat/history') ||
       normalizedPath.startsWith('/openrouter/conversations')
     );
@@ -1316,6 +1317,17 @@ class ApiClient {
     return ensureObjectPayload(
       response.data,
       'AI conversation history is unavailable because the backend API is not responding correctly.'
+    );
+  }
+
+  async getAIWellnessStatus() {
+    const response = await this.client.get('/ai/wellness-chat/status', {
+      timeout: DEFAULT_READ_TIMEOUT_MS,
+    });
+
+    return ensureObjectPayload(
+      response.data,
+      'AI status check returned an invalid response.'
     );
   }
 

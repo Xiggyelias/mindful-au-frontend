@@ -9,7 +9,6 @@ import {
   Video,
   FileText,
   Heart,
-  ArrowRightLeft,
   Search,
   Send,
   Shield,
@@ -38,7 +37,6 @@ const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
   { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
   { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Referrals", icon: ArrowRightLeft, path: "/counselor/referrals" },
   { label: "Students", icon: Users, path: "/counselor/students" },
   { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
@@ -50,7 +48,7 @@ const peerCounselorNavItems = [
   { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
 ];
 
-const SESSION_POLL_INTERVAL_MS = 10000;
+const SESSION_POLL_INTERVAL_MS = 20000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 40;
 const CHAT_LIST_RETRY_PAGE_SIZE = 20;
@@ -1030,7 +1028,7 @@ const CounselorMessages = () => {
                                   aria-label={msg.seen_at ? "Seen" : "Sent"}
                                   title={msg.seen_at ? "Seen" : "Sent"}
                                 >
-                                  {msg.seen_at ? "✓✓" : "✓"}
+                                  {msg.seen_at ? "âœ“âœ“" : "âœ“"}
                                 </span>
                               )}
                             </div>

@@ -34,13 +34,13 @@ interface Session {
   };
 }
 
-const SESSION_POLL_INTERVAL_MS = 10000;
+const SESSION_POLL_INTERVAL_MS = 20000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
 const SESSION_RETRY_PAGE_SIZE = 12;
-const SESSION_REFRESH_MIN_GAP_MS = 5000;
+const SESSION_REFRESH_MIN_GAP_MS = 10000;
 type PagedMeta = {
   page?: number;
   per_page?: number;

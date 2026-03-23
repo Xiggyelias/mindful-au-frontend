@@ -61,29 +61,20 @@ export const useAIChat = () => {
 
   const refreshAvailability = useCallback(async () => {
     try {
-      const data = await api.getReadiness();
-      const aiDetails =
-        data?.details && typeof data.details === "object"
-          ? (data.details as Record<string, unknown>).ai
-          : null;
-
-      if (!aiDetails || typeof aiDetails !== "object") {
-        throw new Error("Backend readiness payload did not include AI details.");
-      }
-
-      const mode = String((aiDetails as Record<string, unknown>).mode || "").trim();
-      const validation = String((aiDetails as Record<string, unknown>).validation || "").trim();
-      const configuredProviders = Array.isArray((aiDetails as Record<string, unknown>).configured_providers)
-        ? ((aiDetails as Record<string, unknown>).configured_providers as unknown[])
+      const data = await api.getAIWellnessStatus();
+      const mode = String(data?.mode || "").trim();
+      const validation = String(data?.validation || "").trim();
+      const configuredProviders = Array.isArray(data?.configured_providers)
+        ? (data.configured_providers as unknown[])
             .map((entry) => String(entry || "").trim())
             .filter(Boolean)
         : [];
-      const activeProvider = String((aiDetails as Record<string, unknown>).active_provider || "").trim();
+      const activeProvider = String(data?.active_provider || "").trim();
       const providerName = activeProvider || configuredProviders[0] || null;
-      const externalProviderReady = Boolean((aiDetails as Record<string, unknown>).external_provider_ready);
+      const externalProviderReady = Boolean(data?.external_provider_ready);
       const warning =
-        typeof (aiDetails as Record<string, unknown>).warning === "string"
-          ? String((aiDetails as Record<string, unknown>).warning || "").trim()
+        typeof data?.warning === "string"
+          ? String(data.warning || "").trim()
           : "";
 
       if (mode === "external") {
