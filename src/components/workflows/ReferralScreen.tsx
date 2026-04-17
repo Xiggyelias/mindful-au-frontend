@@ -50,6 +50,7 @@ export const ReferralScreen = ({ role }: ReferralScreenProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<number | null>(null);
   const [isEventId, setIsEventId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [meta, setMeta] = useState<any | null>(null);
   const [students, setStudents] = useState<any[]>([]);
@@ -73,6 +74,7 @@ export const ReferralScreen = ({ role }: ReferralScreenProps) => {
   const loadRows = useCallback(async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const payload = await api.getReferrals({
         status: statusFilter === "all" ? undefined : statusFilter,
         direction: directionFilter === "all" ? undefined : (directionFilter as "internal" | "external"),
@@ -82,11 +84,15 @@ export const ReferralScreen = ({ role }: ReferralScreenProps) => {
       setRows(toRows(payload));
       setMeta(toMeta(payload));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to load referrals."));
+      setRows([]);
+      setMeta(null);
+      if (canManage) {
+        setLoadError(getApiErrorMessage(error, "Unable to load referrals right now."));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, directionFilter, page, perPage]);
+  }, [canManage, statusFilter, directionFilter, page, perPage]);
 
   const loadStudents = useCallback(async () => {
     if (!canManage) return;
@@ -415,6 +421,8 @@ export const ReferralScreen = ({ role }: ReferralScreenProps) => {
         <CardContent>
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading referrals...</p>
+          ) : loadError ? (
+            <p className="text-sm text-muted-foreground">{loadError}</p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No referrals found.</p>
           ) : (
