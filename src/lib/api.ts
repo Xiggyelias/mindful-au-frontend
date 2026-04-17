@@ -1263,63 +1263,6 @@ class ApiClient {
     return response.data;
   }
 
-  // Referrals
-  async getReferrals(params?: {
-    status?: string;
-    direction?: 'internal' | 'external';
-    limit?: number;
-    page?: number;
-    per_page?: number;
-  }) {
-    const response = await this.client.get('/referrals', { params });
-    return response.data;
-  }
-
-  async getReferral(id: number | string) {
-    const response = await this.client.get(`/referrals/${id}`);
-    return response.data;
-  }
-
-  async createReferral(data: {
-    session_id?: number | null;
-    intake_submission_id?: number | null;
-    student_id?: number | null;
-    direction: 'internal' | 'external';
-    target_service: string;
-    destination_details?: string | null;
-    consent_granted: boolean;
-    shared_fields?: Record<string, unknown> | null;
-    notes?: string | null;
-  }) {
-    const response = await this.client.post('/referrals', data);
-    return response.data;
-  }
-
-  async updateReferral(
-    id: number | string,
-    data: {
-      status?: 'pending' | 'accepted' | 'completed' | 'declined' | 'cancelled';
-      outcome_notes?: string | null;
-      consent_granted?: boolean;
-      shared_fields?: Record<string, unknown> | null;
-    }
-  ) {
-    const response = await this.client.patch(`/referrals/${id}`, data);
-    return response.data;
-  }
-
-  async addReferralEvent(
-    id: number | string,
-    data: {
-      event_type: string;
-      notes?: string | null;
-      metadata?: Record<string, unknown> | null;
-    }
-  ) {
-    const response = await this.client.post(`/referrals/${id}/events`, data);
-    return response.data;
-  }
-
   // Panic Logs
   async createPanicLog(data: { location?: string }) {
     const response = await this.client.post('/panic-logs', data);

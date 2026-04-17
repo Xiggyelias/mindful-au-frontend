@@ -21,7 +21,6 @@ const StudentAISupport = lazy(() => import("./pages/student/StudentAISupport"));
 const StudentVideoCall = lazy(() => import("./pages/student/StudentVideoCall"));
 const StudentHistory = lazy(() => import("./pages/student/StudentHistory"));
 const StudentWellness = lazy(() => import("./pages/student/StudentWellness"));
-const StudentReferrals = lazy(() => import("./pages/student/StudentReferrals"));
 
 const CounselorLogin = lazy(() => import("./pages/counselor/CounselorLogin"));
 const CounselorRegister = lazy(() => import("./pages/counselor/CounselorRegister"));
@@ -34,7 +33,6 @@ const CounselorVideo = lazy(() => import("./pages/counselor/CounselorVideo"));
 const CounselorNotes = lazy(() => import("./pages/counselor/CounselorNotes"));
 const CounselorWellness = lazy(() => import("./pages/counselor/CounselorWellness"));
 const CounselorTwoFactor = lazy(() => import("./pages/counselor/CounselorTwoFactor"));
-const CounselorReferrals = lazy(() => import("./pages/counselor/CounselorReferrals"));
 const PeerLogin = lazy(() => import("./pages/peer/PeerLogin"));
 const PeerDashboard = lazy(() => import("./pages/peer/PeerDashboard"));
 const PeerEscalatedCases = lazy(() => import("./pages/peer/PeerEscalatedCases"));
@@ -51,7 +49,6 @@ const AdminAIReports = lazy(() => import("./pages/admin/AdminAIReports"));
 const AdminAlerts = lazy(() => import("./pages/admin/AdminAlerts"));
 const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
-const AdminReferrals = lazy(() => import("./pages/admin/AdminReferrals"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -148,15 +145,6 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/student/referrals"
-                  element={
-                    <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
-                      <StudentReferrals />
-                    </ProtectedRoute>
-                  }
-                />
-
                 <Route path="/counselor/login" element={<CounselorLogin />} />
                 <Route path="/peer/login" element={<PeerLogin />} />
                 <Route
@@ -278,18 +266,6 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/counselor/referrals"
-                  element={
-                    <ProtectedRoute
-                      allowedRoles={["counselor", "peer_counselor"]}
-                      redirectTo="/counselor/login"
-                    >
-                      <CounselorReferrals />
-                    </ProtectedRoute>
-                  }
-                />
-
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/register" element={<AdminRegister />} />
                 <Route
@@ -356,15 +332,6 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/admin/referrals"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin"]} redirectTo="/admin/login">
-                      <AdminReferrals />
-                    </ProtectedRoute>
-                  }
-                />
-
                 <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
