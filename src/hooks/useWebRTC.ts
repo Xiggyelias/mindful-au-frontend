@@ -10,10 +10,12 @@ import {
 interface WebRTCState {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
+  remoteHasVideo: boolean;
   isConnected: boolean;
   isConnecting: boolean;
   isSignalingReady: boolean;
   isAudioOnly: boolean;
+  isLocalVideoEnabled: boolean;
   error: string | null;
   isRelayError: boolean;
   notice: string | null;
@@ -136,10 +138,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const [state, setState] = useState<WebRTCState>({
     localStream: null,
     remoteStream: null,
+    remoteHasVideo: false,
     isConnected: false,
     isConnecting: false,
     isSignalingReady: false,
     isAudioOnly: false,
+    isLocalVideoEnabled: false,
     error: null,
     isRelayError: false,
     notice: null,
@@ -150,6 +154,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const cleanupInProgressRef = useRef(false);
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
@@ -190,6 +195,54 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     }));
   }, []);
 
+  const setMediaNoticeError = useCallback((message: string) => {
+    setState((prev) => ({
+      ...prev,
+      error: message,
+      isRelayError: false,
+      notice: null,
+    }));
+  }, []);
+
+  const applyVideoSenderParameters = useCallback(
+    (sender: RTCRtpSender) => {
+      if (sender.track?.kind !== "video") {
+        return;
+      }
+
+      const parameters = sender.getParameters();
+      if (!parameters.encodings) {
+        parameters.encodings = [{}];
+      }
+
+      const maxBitrate = lowBandwidthMode ? 250_000 : 1_500_000;
+      parameters.encodings[0].maxBitrate = maxBitrate;
+
+      void sender.setParameters(parameters).catch((error) => {
+        console.warn("Failed to set video bitrate parameters:", error);
+      });
+    },
+    [lowBandwidthMode]
+  );
+
+  const updateRemoteStreamState = useCallback((stream: MediaStream | null) => {
+    remoteStreamRef.current = stream;
+
+    setState((prev) => ({
+      ...prev,
+      remoteStream: stream,
+      remoteHasVideo: Boolean(stream?.getVideoTracks().length),
+      isConnecting: false,
+      error: null,
+      notice: null,
+    }));
+
+    if (stream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream;
+      playMediaElement(remoteVideoRef.current);
+    }
+  }, []);
+
   const cleanupCall = useCallback(
     (broadcastEnd = true) => {
       if (cleanupInProgressRef.current) {
@@ -200,6 +253,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       clearConnectionTimeout();
       pendingIceCandidatesRef.current = [];
       remotePeerIdRef.current = null;
+      remoteStreamRef.current = null;
       makingOfferRef.current = false;
       ignoreOfferRef.current = false;
       wasConnectedRef.current = false;
@@ -235,9 +289,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         ...prev,
         localStream: null,
         remoteStream: null,
+        remoteHasVideo: false,
         isConnected: false,
         isConnecting: false,
         isAudioOnly: false,
+        isLocalVideoEnabled: false,
         error: null,
         isRelayError: false,
         notice: null,
@@ -299,25 +355,10 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     stream.getTracks().forEach((track) => {
       if (!existingTrackIds.has(track.id)) {
         const sender = connection.addTrack(track, stream);
-        
-        // Apply bitrate limits for video
-        if (track.kind === "video") {
-          const parameters = sender.getParameters();
-          if (!parameters.encodings) {
-            parameters.encodings = [{}];
-          }
-          
-          // Limit video bitrate (Low: 250kbps, Normal: 1.5mbps)
-          const maxBitrate = lowBandwidthMode ? 250_000 : 1_500_000;
-          parameters.encodings[0].maxBitrate = maxBitrate;
-          
-          void sender.setParameters(parameters).catch(err => {
-            console.warn("Failed to set video bitrate parameters:", err);
-          });
-        }
+        applyVideoSenderParameters(sender);
       }
     });
-  }, [lowBandwidthMode]);
+  }, [applyVideoSenderParameters]);
 
   const sendOffer = useCallback(
     async (connection: RTCPeerConnection, options?: { iceRestart?: boolean }) => {
@@ -401,23 +442,23 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
 
     connection.ontrack = (event) => {
-      const [remoteStream] = event.streams;
+      let remoteStream = event.streams[0] ?? null;
+
       if (!remoteStream) {
-        return;
+        remoteStream = remoteStreamRef.current ?? new MediaStream();
+        const alreadyAdded = remoteStream
+          .getTracks()
+          .some((track) => track.id === event.track.id);
+
+        if (!alreadyAdded) {
+          remoteStream.addTrack(event.track);
+        }
       }
 
-      setState((prev) => ({
-        ...prev,
-        remoteStream,
-        isConnecting: false,
-        error: null,
-        notice: null,
-      }));
-
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        playMediaElement(remoteVideoRef.current);
-      }
+      updateRemoteStreamState(remoteStream);
+      event.track.addEventListener("ended", () => {
+        updateRemoteStreamState(remoteStreamRef.current);
+      });
     };
 
     connection.onconnectionstatechange = () => {
@@ -528,6 +569,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           ...prev,
           localStream: stream,
           isAudioOnly: stream.getVideoTracks().length === 0,
+          isLocalVideoEnabled: stream.getVideoTracks().some((track) => track.enabled),
         }));
 
         if (localVideoRef.current) {
@@ -822,18 +864,84 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, []);
 
   const toggleVideo = useCallback(() => {
-    if (localStreamRef.current) {
-      const videoTracks = localStreamRef.current.getVideoTracks();
-      if (videoTracks.length === 0) {
-        setState((prev) => ({ ...prev, isAudioOnly: true }));
-        return;
+    const toggle = async () => {
+      const stream = localStreamRef.current;
+      if (!stream) {
+        return false;
       }
 
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length === 0) {
+        try {
+          const videoStream = await navigator.mediaDevices.getUserMedia({
+            video: lowBandwidthMode
+              ? LOW_BANDWIDTH_MEDIA_CONSTRAINTS.video
+              : MEDIA_CONSTRAINTS.video,
+            audio: false,
+          });
+          const [videoTrack] = videoStream.getVideoTracks();
+
+          if (!videoTrack) {
+            videoStream.getTracks().forEach((track) => track.stop());
+            setMediaNoticeError("No camera was found. Connect a camera and try again.");
+            return false;
+          }
+
+          stream.addTrack(videoTrack);
+          setState((prev) => ({
+            ...prev,
+            localStream: stream,
+            isAudioOnly: false,
+            isLocalVideoEnabled: true,
+            error: null,
+            isRelayError: false,
+          }));
+
+          const connection = peerConnection.current;
+          if (connection) {
+            const sender = connection.addTrack(videoTrack, stream);
+            applyVideoSenderParameters(sender);
+
+            if (
+              channelRef.current &&
+              state.isSignalingReady &&
+              connection.signalingState === "stable" &&
+              !makingOfferRef.current
+            ) {
+              await sendOffer(connection);
+            }
+          }
+
+          return true;
+        } catch (error) {
+          console.error("Error enabling camera:", error);
+          setMediaNoticeError(getMediaErrorMessage(error, false));
+          return false;
+        }
+      }
+
+      const shouldEnableVideo = videoTracks.some((track) => !track.enabled);
       videoTracks.forEach((track) => {
-        track.enabled = !track.enabled;
+        track.enabled = shouldEnableVideo;
       });
-    }
-  }, []);
+
+      setState((prev) => ({
+        ...prev,
+        isLocalVideoEnabled: shouldEnableVideo,
+        error: null,
+      }));
+
+      return shouldEnableVideo;
+    };
+
+    return toggle();
+  }, [
+    applyVideoSenderParameters,
+    lowBandwidthMode,
+    sendOffer,
+    setMediaNoticeError,
+    state.isSignalingReady,
+  ]);
 
   const startAudioCall = useCallback(async () => {
     return startCall({ audioOnly: true });
@@ -845,7 +953,13 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   useEffect(() => {
     if (!sessionId) {
-      setState((prev) => ({ ...prev, isSignalingReady: false, notice: null }));
+      setState((prev) => ({
+        ...prev,
+        isSignalingReady: false,
+        notice: null,
+        remoteStream: null,
+        remoteHasVideo: false,
+      }));
       return;
     }
 
@@ -916,14 +1030,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       localVideoRef.current.srcObject = state.localStream;
       playMediaElement(localVideoRef.current);
     }
-  }, [state.localStream]);
+  }, [state.isAudioOnly, state.isLocalVideoEnabled, state.localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && state.remoteStream) {
       remoteVideoRef.current.srcObject = state.remoteStream;
       playMediaElement(remoteVideoRef.current);
     }
-  }, [state.remoteStream]);
+  }, [state.remoteHasVideo, state.remoteStream]);
 
   return {
     ...state,
