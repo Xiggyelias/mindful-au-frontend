@@ -64,6 +64,28 @@ type AnalyticsData = {
     diagnostics_this_month: number;
     risk_level_distribution: Record<string, number>;
   };
+  ml_intelligence?: {
+    model_version?: string;
+    students_needing_follow_up?: number;
+    rising_risk_students?: number;
+    chat_support_utilization_30d?: number;
+    proactive_follow_up_coverage?: number;
+    risk_forecast_distribution?: Record<string, number>;
+    top_actions?: string[];
+    validation?: {
+      diagnostic_agreement_rate?: number;
+      fairness_gap?: number;
+      fairness_status?: string;
+      inference_mode?: string;
+      response_time_budget_ms?: number;
+    };
+    ethics?: {
+      privacy?: string;
+      human_review_required?: boolean;
+      low_bandwidth_mode?: boolean;
+      auditability?: string;
+    };
+  };
 };
 
 const AdminAnalytics = () => {
@@ -100,6 +122,17 @@ const AdminAnalytics = () => {
     return Object.entries(types).map(([label, count]) => ({
       label,
       value: Math.round((count / total) * 100),
+    }));
+  }, [data]);
+
+  const mlRiskDistribution = useMemo(() => {
+    const distribution = data?.ml_intelligence?.risk_forecast_distribution || {};
+    const total = Object.values(distribution).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+
+    return Object.entries(distribution).map(([label, count]) => ({
+      label,
+      count: Number(count || 0),
+      value: Math.round((Number(count || 0) / total) * 100),
     }));
   }, [data]);
 
@@ -290,6 +323,45 @@ const AdminAnalytics = () => {
             </Card>
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card variant="glass">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Students Needing Follow-Up</p>
+                <p className="mt-2 text-3xl font-bold text-foreground">
+                  {data?.ml_intelligence?.students_needing_follow_up ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground">Forecasted high-support queue</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Rising Risk Students</p>
+                <p className="mt-2 text-3xl font-bold text-foreground">
+                  {data?.ml_intelligence?.rising_risk_students ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground">Students with worsening trend</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Chat Support Utilization</p>
+                <p className="mt-2 text-3xl font-bold text-foreground">
+                  {data?.ml_intelligence?.chat_support_utilization_30d ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground">Students using AI support in 30 days</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Follow-Up Coverage</p>
+                <p className="mt-2 text-3xl font-bold text-foreground">
+                  {Math.round(Number(data?.ml_intelligence?.proactive_follow_up_coverage ?? 0))}%
+                </p>
+                <p className="text-xs text-muted-foreground">High-risk students with upcoming appointments</p>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Session Types */}
             <Card variant="glass">
@@ -339,6 +411,73 @@ const AdminAnalytics = () => {
             </Card>
           </div>
 
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-primary" />
+                  ML Forecast Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mlRiskDistribution.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No ML forecast data available.</p>
+                ) : (
+                  mlRiskDistribution.map((item) => (
+                    <div key={item.label}>
+                      <div className="mb-2 flex justify-between text-sm">
+                        <span className="capitalize text-muted-foreground">{item.label}</span>
+                        <span className="font-medium text-foreground">
+                          {item.count} ({item.value}%)
+                        </span>
+                      </div>
+                      <Progress value={item.value} className="h-2" />
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-primary" />
+                  Model Validation
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-secondary/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Agreement</p>
+                  <p className="mt-2 text-2xl font-bold text-foreground">
+                    {Math.round(Number(data?.ml_intelligence?.validation?.diagnostic_agreement_rate ?? 0))}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">Diagnostic agreement rate</p>
+                </div>
+                <div className="rounded-xl bg-secondary/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Fairness Gap</p>
+                  <p className="mt-2 text-2xl font-bold text-foreground">
+                    {Number(data?.ml_intelligence?.validation?.fairness_gap ?? 0).toFixed(1)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Status {data?.ml_intelligence?.validation?.fairness_status || "stable"}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-secondary/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Inference Mode</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    {data?.ml_intelligence?.validation?.inference_mode || "lightweight_local_first"}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-secondary/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Latency Budget</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    {data?.ml_intelligence?.validation?.response_time_budget_ms ?? 0} ms
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Summary Stats */}
           <Card variant="glass">
             <CardHeader>
@@ -357,6 +496,45 @@ const AdminAnalytics = () => {
                 <div className="p-3 rounded-xl bg-secondary/30">
                   <p className="text-sm text-muted-foreground">Appointments</p>
                   <p className="text-2xl font-bold text-foreground">{data?.overview?.total_appointments ?? 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle className="text-lg">ML Priority Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                {(data?.ml_intelligence?.top_actions || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No ML action items available.</p>
+                ) : (
+                  (data?.ml_intelligence?.top_actions || []).map((action, index) => (
+                    <div key={`${action}-${index}`} className="rounded-xl bg-secondary/30 p-4 text-sm text-foreground">
+                      {action}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-border/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Privacy</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {data?.ml_intelligence?.ethics?.privacy || "Aggregated features only."}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Human Review</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {data?.ml_intelligence?.ethics?.human_review_required ? "Required" : "Optional"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Auditability</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {data?.ml_intelligence?.ethics?.auditability || "Explainable feature thresholds."}
+                  </p>
                 </div>
               </div>
             </CardContent>

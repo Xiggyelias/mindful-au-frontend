@@ -61,15 +61,38 @@ const StudentDashboard = () => {
   const extractTipsFromSummary = (summary: any): string[] => {
     const recommendationText =
       typeof summary?.recommendations === "string" ? summary.recommendations.trim() : "";
-    if (!recommendationText) {
-      return [];
+    const mlActions = Array.isArray(summary?.ml_insights?.recommended_actions)
+      ? summary.ml_insights.recommended_actions.filter(
+          (item: unknown) => typeof item === "string" && item.trim().length > 0
+        )
+      : [];
+
+    const tipsFromText = recommendationText
+      ? recommendationText
+          .split(/[.!?]\s+/)
+          .map((part: string) => part.trim())
+          .filter((part: string) => part.length > 10)
+      : [];
+
+    return Array.from(new Set([...tipsFromText, ...mlActions])).slice(0, 4);
+  };
+
+  const openVideoCallRoom = (appointment: any) => {
+    if (!appointment?.id) {
+      navigate("/student/video-call");
+      return;
     }
 
-    return recommendationText
-      .split(/[.!?]\s+/)
-      .map((part: string) => part.trim())
-      .filter((part: string) => part.length > 10)
-      .slice(0, 4);
+    const params = new URLSearchParams({
+      appointment_id: String(appointment.id),
+      autostart: "1",
+    });
+
+    if (appointment.counselor_id) {
+      params.set("counselor_id", String(appointment.counselor_id));
+    }
+
+    navigate(`/student/video-call?${params.toString()}`);
   };
 
   useEffect(() => {
@@ -84,8 +107,19 @@ const StudentDashboard = () => {
           api.getStudentWellnessSummary().catch(() => null),
           api.getStudentMoodToday().catch(() => null),
         ]);
+
+        const sessionItems = Array.isArray(sessions)
+          ? sessions
+          : Array.isArray((sessions as any)?.data)
+          ? (sessions as any).data
+          : [];
+        const appointmentItems = Array.isArray(appointments)
+          ? appointments
+          : Array.isArray((appointments as any)?.data)
+          ? (appointments as any).data
+          : [];
         
-        const upcomingApts = appointments
+        const upcomingApts = appointmentItems
           .filter((a: any) => new Date(a.scheduled_at) > new Date())
           .slice(0, 3);
         
@@ -94,10 +128,10 @@ const StudentDashboard = () => {
         const tips = extractTipsFromSummary(summary);
 
         setStats({
-          sessions: sessions.length,
-          appointments: appointments.filter((a: any) => a.status === 'scheduled').length,
+          sessions: sessionItems.length,
+          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
           wellness: wellnessScore,
-          chats: sessions.length,
+          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
         });
         setUpcomingAppointments(upcomingApts);
         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
@@ -194,6 +228,8 @@ const StudentDashboard = () => {
       setIsRecordingMood(false);
     }
   };
+
+  const mlInsights = wellnessSummary?.ml_insights;
 
   return (
     <div className="min-h-screen bg-background">
@@ -332,7 +368,7 @@ const StudentDashboard = () => {
             />
             <StatsCard
               title="Wellness Score"
-              value={stats.wellness !== null ? `${stats.wellness}%` : "—"}
+              value={stats.wellness !== null ? `${stats.wellness}%` : "--"}
               change={diagnostics?.mood || (stats.wellness !== null ? "Check in today" : "No data yet")}
               trend={stats.wellness !== null && stats.wellness >= 70 ? "up" : "neutral"}
               icon={Heart}
@@ -394,7 +430,7 @@ const StudentDashboard = () => {
                         <Button 
                           className="rounded-full px-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20" 
                           size="sm" 
-                          onClick={() => navigate("/student/video-call")}
+                          onClick={() => openVideoCallRoom(apt)}
                         >
                           Join
                         </Button>
@@ -430,6 +466,34 @@ const StudentDashboard = () => {
                     </div>
                   ) : (
                     <>
+                      {mlInsights && (
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-2xl bg-secondary/30 p-4">
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Forecast</p>
+                            <p className="mt-2 text-lg font-semibold capitalize text-foreground">
+                              {mlInsights?.risk_forecast?.level || "unknown"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {typeof mlInsights?.risk_forecast?.score === "number" ? `${mlInsights.risk_forecast.score}/100` : "No score"}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-secondary/30 p-4">
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Focus</p>
+                            <p className="mt-2 text-sm font-medium text-foreground">
+                              {mlInsights?.focus_area || "Routine wellbeing support"}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-secondary/30 p-4">
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Trend</p>
+                            <p className="mt-2 text-lg font-semibold capitalize text-foreground">
+                              {mlInsights?.trend?.label || "steady"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Confidence {typeof mlInsights?.risk_forecast?.confidence === "number" ? `${mlInsights.risk_forecast.confidence}%` : "n/a"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
                         <p className="text-sm font-medium text-primary mb-1 italic">Tip of the day:</p>
                         <p className="text-base text-foreground font-medium">{dailyTips[0]}</p>

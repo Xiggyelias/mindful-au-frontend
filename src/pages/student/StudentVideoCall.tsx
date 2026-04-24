@@ -204,6 +204,22 @@ const StudentVideoCall = () => {
     [activeAppointmentId, upcomingAppointments]
   );
 
+  useEffect(() => {
+    if (upcomingAppointments.length === 0) {
+      if (activeAppointmentId !== null) {
+        setActiveAppointmentId(null);
+      }
+      return;
+    }
+
+    if (
+      !activeAppointmentId ||
+      !upcomingAppointments.some((appointment) => String(appointment.id) === activeAppointmentId)
+    ) {
+      setActiveAppointmentId(String(upcomingAppointments[0].id));
+    }
+  }, [activeAppointmentId, upcomingAppointments]);
+
   const activeWindowStatus = useMemo(() => {
     if (!activeAppointment) {
       return null;
@@ -282,6 +298,44 @@ const StudentVideoCall = () => {
     remoteStream && !remoteHasVideo
       ? `${remoteParticipantName} joined without video. Ask them to allow camera access or tap the camera button.`
       : statusMessage;
+  const callStateLabel = isConnected
+    ? "Live"
+    : isStartingMode
+    ? "Starting"
+    : isConnecting
+    ? "Calling"
+    : activeWindowStatus?.canStart
+    ? "Ready"
+    : "Scheduled";
+  const connectionPillLabel = isConnected
+    ? "Encrypted call active"
+    : notice
+    ? "Reconnecting"
+    : isConnecting || isStartingMode
+    ? "Connecting securely"
+    : isSignalingReady
+    ? "Room ready"
+    : "Preparing room";
+  const connectionPillClassName = cn(
+    "rounded-full border px-3 py-1.5 text-[11px] font-medium backdrop-blur-md",
+    isConnected
+      ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-50"
+      : notice || isConnecting || isStartingMode
+      ? "border-amber-300/20 bg-amber-500/12 text-amber-50"
+      : "border-white/10 bg-white/10 text-white/80"
+  );
+  const localPreviewLabel = localStream
+    ? isAudioOnly
+      ? "Audio only"
+      : isVideoOff
+      ? "Camera off"
+      : "Preview live"
+    : isStartingMode
+    ? "Opening camera"
+    : "Preview appears here";
+  const emptyStageMessage = activeAppointment
+    ? remoteVideoStatusMessage
+    : "Choose an upcoming online session to open a proper call room.";
 
   const handleToggleMute = () => {
     toggleMute();
@@ -291,6 +345,26 @@ const StudentVideoCall = () => {
   const handleToggleVideo = () => {
     void toggleVideo();
   };
+
+  const removeAppointmentFromQueue = useCallback((appointmentIdToRemove: string) => {
+    setUpcomingAppointments((previous) =>
+      previous.filter((appointment) => String(appointment.id) !== appointmentIdToRemove)
+    );
+  }, []);
+
+  const finalizeEndedAppointment = useCallback(
+    async (appointmentIdToEnd: string) => {
+      try {
+        const result = await api.endVideoCall(appointmentIdToEnd);
+        if (result?.appointment_status === "completed") {
+          removeAppointmentFromQueue(appointmentIdToEnd);
+        }
+      } catch {
+        // Best-effort cleanup for the server-side session.
+      }
+    },
+    [removeAppointmentFromQueue]
+  );
 
   const beginCall = useCallback(
     async (mode: CallMode) => {
@@ -366,7 +440,7 @@ const StudentVideoCall = () => {
     await beginCall("audio");
   }, [beginCall]);
 
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     const appointmentIdToEnd = activeAppointmentId;
 
     endCall();
@@ -375,9 +449,7 @@ const StudentVideoCall = () => {
     setAuthorizedDurationMinutes(null);
 
     if (appointmentIdToEnd) {
-      void api.endVideoCall(appointmentIdToEnd).catch(() => {
-        // Best-effort cleanup for the server-side session.
-      });
+      await finalizeEndedAppointment(appointmentIdToEnd);
     }
 
     toast.info("Call ended");
@@ -457,9 +529,7 @@ const StudentVideoCall = () => {
         setIsStartingMode(null);
 
         if (appointmentIdToEnd) {
-          void api.endVideoCall(appointmentIdToEnd).catch(() => {
-            // Best-effort cleanup for the server-side session.
-          });
+          void finalizeEndedAppointment(appointmentIdToEnd);
         }
 
         toast.warning(
@@ -479,7 +549,7 @@ const StudentVideoCall = () => {
     }, 1_000);
 
     return () => window.clearInterval(timer);
-  }, [activeAppointment, authorizedDurationMinutes, endCall, isConnected, localStream]);
+  }, [activeAppointment, authorizedDurationMinutes, endCall, finalizeEndedAppointment, isConnected, localStream]);
 
   const canStartSelectedCall = Boolean(
     activeAppointmentId &&
@@ -556,10 +626,10 @@ const StudentVideoCall = () => {
                 )}
 
                 <div className={cn(
-                  "relative flex-1 overflow-hidden transition-all duration-500",
+                  "relative flex-1 overflow-hidden transition-all duration-500 shadow-[0_28px_90px_-48px_rgba(0,0,0,0.8)]",
                   isConnected 
-                    ? "rounded-none sm:rounded-[28px] border-none bg-black" 
-                    : "rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.18),_transparent_42%),linear-gradient(160deg,_hsl(var(--background)),_hsl(var(--secondary)/0.55))] p-3 sm:p-4"
+                    ? "rounded-none sm:rounded-[32px] border-none bg-black" 
+                    : "min-h-[72vh] rounded-[32px] border border-border/50 bg-[#071014]"
                 )}>
                   {isLoading ? (
                     <div className="flex h-full flex-col gap-4">
@@ -574,159 +644,65 @@ const StudentVideoCall = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex h-full flex-col gap-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={isConnected ? "default" : activeWindowStatus?.canStart ? "secondary" : "outline"}
-                            className="rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em]"
-                          >
-                            {isConnected
-                              ? "Live call"
-                              : isStartingMode
-                              ? "Preparing"
-                              : activeWindowStatus?.canStart
-                              ? "Ready"
-                              : "Scheduled"}
-                          </Badge>
-                          {isAudioOnly && (
-                            <Badge variant="outline" className="rounded-full px-3 py-1">
-                              Audio only
-                            </Badge>
-                          )}
-                          {activeAppointment?.scheduled_at && (
-                            <Badge variant="outline" className="rounded-full px-3 py-1">
-                              {formatScheduleLabel(activeAppointment.scheduled_at)}
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "rounded-full px-3 py-1",
-                              isConnected
-                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                                : isConnecting || isStartingMode
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
-                                : "border-border/70 bg-background/70 text-muted-foreground"
-                            )}
-                          >
-                            {isConnected
-                              ? "Connected"
-                              : notice
-                              ? "Reconnecting"
-                              : isConnecting || isStartingMode
-                              ? "Connecting"
-                              : isSignalingReady
-                              ? "Channel ready"
-                              : "Preparing channel"}
-                          </Badge>
-                          {isConnected && remainingSeconds !== null && (
-                            <Badge variant="outline" className="rounded-full px-3 py-1">
-                              <Clock className="mr-1 h-3.5 w-3.5" />
-                              {formatCallDuration(remainingSeconds)} left
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="relative flex-1 overflow-hidden rounded-[24px] border border-border/50 bg-background/90 shadow-[0_30px_80px_-50px_hsl(var(--foreground)/0.55)]">
+                    <div className="relative flex h-full min-h-[inherit] flex-col">
+                      <div
+                        className={cn(
+                          "relative flex-1 overflow-hidden",
+                          showRemoteVideo ? "bg-black" : "bg-[#0b141a]"
+                        )}
+                      >
                         {showRemoteVideo ? (
                           <video
                             ref={remoteVideoRef}
                             autoPlay
                             playsInline
-                            className="h-full w-full object-cover"
+                            className="absolute inset-0 h-full w-full object-cover"
                           />
-                        ) : (
-                          <div className="flex h-full min-h-[320px] flex-col items-center justify-center px-6 text-center">
-                            <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-primary/12 text-3xl font-semibold text-primary shadow-inner">
-                              {activeAppointment ? getInitials(remoteParticipantName) : "--"}
-                            </div>
-                            <p className="text-2xl font-semibold text-foreground">
-                              {activeAppointment ? remoteParticipantName : "No session selected"}
-                            </p>
-                            <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                              {remoteVideoStatusMessage}
-                            </p>
-                            {isConnecting || isStartingMode ? (
-                              <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-sm text-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Connecting securely
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
+                        ) : null}
 
-                        <div className="pointer-events-none absolute left-4 top-4 z-20 flex flex-col gap-2">
-                          <Badge className="w-fit rounded-full bg-black/40 backdrop-blur-md px-3 py-1.5 text-sm font-semibold text-white border-white/10 shadow-lg">
-                            {remoteParticipantName}
-                          </Badge>
-                          {isConnected && remainingSeconds !== null && (
-                            <Badge variant="outline" className="w-fit rounded-full bg-black/30 backdrop-blur-sm px-3 py-1 text-xs text-white border-white/5">
-                              <Clock className="mr-1.5 h-3.5 w-3.5" />
-                              {formatCallDuration(remainingSeconds)}
-                            </Badge>
+                        <div
+                          className={cn(
+                            "absolute inset-0",
+                            showRemoteVideo
+                              ? "bg-gradient-to-b from-black/55 via-black/10 to-black/75"
+                              : "bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.22),transparent_22%),radial-gradient(circle_at_82%_18%,rgba(34,197,94,0.14),transparent_18%),radial-gradient(circle_at_50%_82%,rgba(59,130,246,0.16),transparent_26%),linear-gradient(180deg,rgba(11,20,26,0.97),rgba(17,27,33,0.98))]"
                           )}
+                        />
+                        <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-black/45 via-black/15 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+
+                        <div className="absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-4">
+                          <div className="max-w-[60%] space-y-2">
+                            <div className="w-fit rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
+                              {remoteParticipantName}
+                            </div>
+                            {activeAppointment?.scheduled_at && (
+                              <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
+                                {formatScheduleLabel(activeAppointment.scheduled_at)}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="rounded-full border border-white/10 bg-black/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+                              {callStateLabel}
+                            </div>
+                            <div className={connectionPillClassName}>{connectionPillLabel}</div>
+                            {isConnected && remainingSeconds !== null && (
+                              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
+                                <Clock className="mr-1.5 inline h-3.5 w-3.5" />
+                                {formatCallDuration(remainingSeconds)}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
-                        {isConnected && (
-                          <div className="absolute inset-x-0 bottom-8 z-30 flex items-center justify-center pointer-events-none px-4">
-                            <div className="pointer-events-auto flex items-center gap-4 p-2 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 shadow-2xl">
-                              <Button
-                                variant={isMuted ? "destructive" : "ghost"}
-                                size="icon"
-                                className={cn(
-                                  "h-14 w-14 rounded-full transition-all duration-300",
-                                  !isMuted && "hover:bg-white/20 text-white"
-                                )}
-                                onClick={handleToggleMute}
-                              >
-                                {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                              </Button>
-
-                              <Button
-                                variant={isVideoOff ? "destructive" : "ghost"}
-                                size="icon"
-                                className={cn(
-                                  "h-14 w-14 rounded-full transition-all duration-300",
-                                  !isVideoOff && "hover:bg-white/20 text-white"
-                                )}
-                                onClick={handleToggleVideo}
-                              >
-                                {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
-                              </Button>
-
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                className="h-16 w-16 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all duration-200"
-                                onClick={handleEndCall}
-                              >
-                                <Phone className="h-7 w-7 rotate-[135deg]" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className={cn(
-                          "absolute z-20 overflow-hidden transition-all duration-500",
-                          isConnected 
-                            ? "top-4 right-4 w-32 sm:w-44 lg:w-56 rounded-2xl border-white/20 bg-slate-900/40 shadow-2xl backdrop-blur-sm" 
-                            : "bottom-3 right-3 w-28 sm:w-40 md:w-52 rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40"
-                        )}>
-                          <div className="pointer-events-none absolute left-2 top-2 z-10">
-                            <Badge
-                              variant="secondary"
-                              className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
-                            >
-                              You
-                            </Badge>
+                        <div className="absolute right-4 top-24 z-20 w-32 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-44">
+                          <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
+                            You
                           </div>
 
-                          <div className="aspect-[3/4] w-full sm:aspect-video">
+                          <div className="aspect-[3/4] overflow-hidden rounded-[20px] bg-[#111b21] sm:aspect-video">
                             {localStream && !isVideoOff && !isAudioOnly ? (
                               <video
                                 ref={localVideoRef}
@@ -737,133 +713,147 @@ const StudentVideoCall = () => {
                                 style={{ transform: "scaleX(-1)" }}
                               />
                             ) : (
-                              <div className="flex h-full flex-col items-center justify-center gap-2 bg-slate-950/80 px-3 text-center text-white/75">
+                              <div className="flex h-full flex-col items-center justify-center gap-3 px-3 text-center text-white/75">
                                 {isVideoOff ? (
                                   <VideoOff className="h-6 w-6" />
                                 ) : isAudioOnly ? (
                                   <Mic className="h-6 w-6" />
                                 ) : (
-                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold">
+                                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
                                     {getInitials(userName)}
                                   </div>
                                 )}
-                                <span className="text-[11px] font-medium sm:text-xs">
-                                  {isAudioOnly ? "Audio only" : isVideoOff ? "Camera off" : "Waiting for camera"}
+                                <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/70">
+                                  {localPreviewLabel}
                                 </span>
                               </div>
                             )}
                           </div>
                         </div>
-                      </div>
 
-                      {!isConnected && (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Session
-                            </p>
-                            <p className="mt-2 text-lg font-semibold text-foreground">
-                              {activeAppointment ? remoteParticipantName : "Choose a session"}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground text-xs">
-                              {activeAppointment
-                                ? `Scheduled ${formatScheduleLabel(activeAppointment.scheduled_at)}`
-                                : "Only online appointments inside their call window appear here."}
-                            </p>
+                        {!showRemoteVideo && (
+                          <div className="relative z-10 flex h-full min-h-[520px] flex-col items-center justify-center px-6 pb-32 pt-28 text-center">
+                            <div className="relative mb-8">
+                              {(isConnecting || isStartingMode || notice) && (
+                                <div className="absolute inset-[-18px] rounded-full border border-emerald-400/30 animate-ping" />
+                              )}
+                              <div className="absolute inset-[-26px] rounded-full bg-emerald-500/18 blur-3xl" />
+                              <div className="relative flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-white/10 text-4xl font-semibold tracking-tight text-white shadow-[0_24px_80px_-30px_rgba(16,185,129,0.45)]">
+                                {activeAppointment ? getInitials(remoteParticipantName) : "--"}
+                              </div>
+                            </div>
+
+                            <div className="max-w-xl space-y-3">
+                              <p className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                                {activeAppointment ? remoteParticipantName : "No session selected"}
+                              </p>
+                              <p className="text-sm leading-6 text-white/70 sm:text-base">
+                                {emptyStageMessage}
+                              </p>
+
+                              {isConnecting || isStartingMode ? (
+                                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-white/85 backdrop-blur-md">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Connecting
+                                </div>
+                              ) : activeWindowStatus?.canStart && !localStream ? (
+                                <p className="text-xs font-medium uppercase tracking-[0.24em] text-emerald-200/80">
+                                  Tap start video below when you are ready
+                                </p>
+                              ) : null}
+                            </div>
                           </div>
+                        )}
 
-                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Call status
-                            </p>
-                            <p className="mt-2 text-base font-medium text-foreground text-xs sm:text-sm">
-                              {statusMessage}
-                            </p>
-                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight">
-                              Your local preview stays visible so you can confirm camera, framing, and mute state before the other person joins.
-                            </p>
+                        <div className="absolute inset-x-0 bottom-0 z-30 p-4 sm:p-6">
+                          <div className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-center gap-3 rounded-[30px] border border-white/10 bg-black/45 px-4 py-3 backdrop-blur-2xl shadow-[0_24px_70px_-24px_rgba(0,0,0,0.9)]">
+                            {localStream ? (
+                              <>
+                                <Button
+                                  variant={isMuted ? "destructive" : "ghost"}
+                                  size="icon"
+                                  className={cn(
+                                    "h-14 w-14 rounded-full text-white",
+                                    isMuted
+                                      ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      : "bg-white/10 hover:bg-white/20"
+                                  )}
+                                  onClick={handleToggleMute}
+                                >
+                                  {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                                </Button>
+
+                                <Button
+                                  variant={isVideoOff ? "destructive" : "ghost"}
+                                  size="icon"
+                                  className={cn(
+                                    "h-14 w-14 rounded-full text-white",
+                                    isVideoOff
+                                      ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      : "bg-white/10 hover:bg-white/20"
+                                  )}
+                                  onClick={handleToggleVideo}
+                                >
+                                  {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
+                                </Button>
+
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="h-16 w-16 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95"
+                                  onClick={handleEndCall}
+                                >
+                                  <Phone className="h-7 w-7 rotate-[135deg]" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="default"
+                                  size="lg"
+                                  className="h-14 rounded-full bg-emerald-500 px-6 text-white shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
+                                  onClick={handleStartCall}
+                                  disabled={!canStartSelectedCall || isConnecting}
+                                >
+                                  {isStartingMode === "video" ? (
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                  ) : (
+                                    <Video className="mr-2 h-5 w-5" />
+                                  )}
+                                  {isStartingMode === "video" ? "Starting..." : "Start Video"}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="lg"
+                                  className="h-14 rounded-full border border-white/10 bg-white/10 px-6 text-white hover:bg-white/20"
+                                  onClick={handleStartAudioCall}
+                                  disabled={!canStartSelectedCall || isConnecting}
+                                >
+                                  {isStartingMode === "audio" ? (
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                  ) : (
+                                    <Mic className="mr-2 h-5 w-5" />
+                                  )}
+                                  {isStartingMode === "audio" ? "Starting..." : "Audio only"}
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {!isConnected && (
-                  <div className="flex flex-wrap items-center justify-center gap-4 mt-auto py-2">
-                    <Button
-                      variant={isMuted ? "destructive" : "outline"}
-                      size="lg"
-                      className="h-14 w-14 rounded-full shadow-lg"
-                      onClick={handleToggleMute}
-                      disabled={!localStream}
-                    >
-                      {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                    </Button>
-
-                    <Button
-                      variant={isVideoOff ? "destructive" : "outline"}
-                      size="lg"
-                      className="h-14 w-14 rounded-full shadow-lg"
-                      onClick={handleToggleVideo}
-                      disabled={!localStream}
-                    >
-                      {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
-                    </Button>
-
-                    {!localStream ? (
-                      <>
-                        <Button
-                          variant="hero"
-                          size="lg"
-                          className="h-14 rounded-full px-8 shadow-xl hover:scale-105 transition-all"
-                          onClick={handleStartCall}
-                          disabled={!canStartSelectedCall || isConnecting}
-                        >
-                          {isStartingMode === "video" ? (
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          ) : (
-                            <Video className="mr-2 h-5 w-5" />
-                          )}
-                          {isStartingMode === "video" ? "Starting..." : "Start Video"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          className="h-14 rounded-full px-8 shadow-lg"
-                          onClick={handleStartAudioCall}
-                          disabled={!canStartSelectedCall || isConnecting}
-                        >
-                          {isStartingMode === "audio" ? (
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          ) : (
-                            <Mic className="mr-2 h-5 w-5" />
-                          )}
-                          {isStartingMode === "audio" ? "Starting..." : "Start Audio"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="destructive"
-                        size="lg"
-                        className="h-14 rounded-full px-8 shadow-xl"
-                        onClick={handleEndCall}
-                      >
-                        <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
-                        End Call
-                      </Button>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
 
             {!isConnected && (
               <Card variant="glass" className="overflow-hidden h-fit">
                 <CardHeader className="space-y-2 p-4">
-                  <CardTitle className="text-lg">Upcoming Online Sessions</CardTitle>
+                  <CardTitle className="text-lg">Call Queue</CardTitle>
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    Pick the active appointment you want to join. Your preview updates immediately.
+                    Pick the session you want to open. The main panel updates like a live call room.
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-3 p-4 pt-0">
@@ -896,7 +886,7 @@ const StudentVideoCall = () => {
                         <div
                           key={appointmentId}
                           className={cn(
-                            "rounded-[22px] border p-4 transition-all cursor-pointer hover:border-primary/30",
+                            "rounded-[22px] border p-4 transition-all cursor-pointer hover:border-primary/30 hover:-translate-y-0.5",
                             isActive
                               ? "border-primary/45 bg-primary/8 shadow-[0_18px_45px_-32px_hsl(var(--primary)/0.75)]"
                               : "border-border/60 bg-background/70"

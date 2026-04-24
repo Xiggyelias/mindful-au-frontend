@@ -393,6 +393,7 @@ class ApiClient {
       normalizedPath === '/me' ||
       normalizedPath === '/analytics/overview' ||
       normalizedPath.startsWith('/appointments') ||
+      normalizedPath.startsWith('/ml/counselor-matches') ||
       normalizedPath.startsWith('/users/counselors') ||
       normalizedPath === '/sessions' ||
       normalizedPath.startsWith('/sessions/chat-list') ||
@@ -844,6 +845,35 @@ class ApiClient {
         : DEFAULT_READ_TIMEOUT_MS;
 
     const response = await this.client.get('/appointments', {
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      timeout: timeoutMs,
+    });
+    return response.data;
+  }
+
+  async getCounselorMatches(params?: {
+    student_id?: number;
+    mode?: 'online' | 'physical';
+    limit?: number;
+    timeout_ms?: number;
+  }) {
+    const queryParams: Record<string, unknown> = {};
+    if (typeof params?.student_id === 'number' && Number.isFinite(params.student_id) && params.student_id > 0) {
+      queryParams.student_id = Math.floor(params.student_id);
+    }
+    if (params?.mode) {
+      queryParams.mode = params.mode;
+    }
+    if (typeof params?.limit === 'number' && Number.isFinite(params.limit) && params.limit > 0) {
+      queryParams.limit = Math.floor(params.limit);
+    }
+
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+
+    const response = await this.client.get('/ml/counselor-matches', {
       params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
       timeout: timeoutMs,
     });

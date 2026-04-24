@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -52,8 +53,10 @@ const StudentAppointments = () => {
   const [appointmentTotalPages, setAppointmentTotalPages] = useState(1);
   const [appointmentTotalItems, setAppointmentTotalItems] = useState(0);
   const [counselors, setCounselors] = useState<any[]>([]);
+  const [counselorMatches, setCounselorMatches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any | null>(null);
@@ -71,6 +74,7 @@ const StudentAppointments = () => {
   const lastCounselorsLoadAtRef = useRef(0);
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
   useEffect(() => {
@@ -253,9 +257,80 @@ const StudentAppointments = () => {
   }, [loadAppointments, loadCounselors, user]);
 
   const availableCounselors = useMemo(() => {
-    const list = (Array.isArray(counselors) ? counselors : []).filter((c: any) => Boolean(c?.id));
-    return list.sort((a: any, b: any) => Number(Boolean(b?.is_online)) - Number(Boolean(a?.is_online)));
-  }, [counselors]);
+    const merged = new Map<string, any>();
+
+    (Array.isArray(counselors) ? counselors : [])
+      .filter((c: any) => Boolean(c?.id))
+      .forEach((counselor: any) => {
+        merged.set(String(counselor.id), {
+          ...counselor,
+          ml_match: null,
+        });
+      });
+
+    (Array.isArray(counselorMatches) ? counselorMatches : [])
+      .filter((match: any) => Boolean(match?.id))
+      .forEach((match: any) => {
+        const existing = merged.get(String(match.id));
+        merged.set(String(match.id), {
+          ...(existing || match),
+          id: match.id,
+          email: match.email ?? existing?.email,
+          is_online: Boolean(match.is_online ?? existing?.is_online),
+          profile: {
+            ...(existing?.profile || {}),
+            ...(match.profile || {}),
+          },
+          ml_match: match,
+        });
+      });
+
+    return Array.from(merged.values()).sort((a: any, b: any) => {
+      const aScore = Number(a?.ml_match?.score ?? -1);
+      const bScore = Number(b?.ml_match?.score ?? -1);
+      if (aScore !== bScore) {
+        return bScore - aScore;
+      }
+
+      return Number(Boolean(b?.is_online)) - Number(Boolean(a?.is_online));
+    });
+  }, [counselorMatches, counselors]);
+
+  const selectedCounselorMatch = useMemo(() => {
+    return availableCounselors.find((c: any) => String(c.id) === form.counselor_id)?.ml_match ?? null;
+  }, [availableCounselors, form.counselor_id]);
+
+  const loadCounselorMatches = useCallback(
+    async (mode: "online" | "physical", showErrorToast = false) => {
+      if (!user) {
+        setCounselorMatches([]);
+        return;
+      }
+
+      try {
+        setIsLoadingMatches(true);
+        const data = await api.getCounselorMatches({
+          mode,
+          limit: 6,
+          timeout_ms: 15000,
+        });
+        setCounselorMatches(Array.isArray(data?.matches) ? data.matches : []);
+      } catch (err: any) {
+        console.error("Failed to load counselor matches", err);
+        setCounselorMatches([]);
+        if (showErrorToast) {
+          toast({
+            title: "Could not load counselor matches",
+            description: getApiErrorMessage(err, "Please try again."),
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setIsLoadingMatches(false);
+      }
+    },
+    [toast, user]
+  );
 
   useEffect(() => {
     if (!openDialog) return;
@@ -267,6 +342,14 @@ const StudentAppointments = () => {
       return { ...prev, counselor_id: String(availableCounselors[0].id) };
     });
   }, [availableCounselors, openDialog]);
+
+  useEffect(() => {
+    if (!user || !openDialog) {
+      return;
+    }
+
+    void loadCounselorMatches(form.mode === "physical" ? "physical" : "online");
+  }, [form.mode, loadCounselorMatches, openDialog, user]);
 
   const handleSubmit = async () => {
     if (!form.counselor_id || !form.scheduled_at) {
@@ -382,6 +465,23 @@ const StudentAppointments = () => {
     setAppointmentPage((current) => Math.min(appointmentTotalPages, current + 1));
   };
 
+  const openVideoCallRoom = (appointment: any) => {
+    if (!appointment?.id) {
+      return;
+    }
+
+    const params = new URLSearchParams({
+      appointment_id: String(appointment.id),
+      autostart: "1",
+    });
+
+    if (appointment.counselor_id) {
+      params.set("counselor_id", String(appointment.counselor_id));
+    }
+
+    navigate(`/student/video-call?${params.toString()}`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -414,6 +514,56 @@ const StudentAppointments = () => {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Recommended counselors</Label>
+                      {isLoadingMatches && (
+                        <span className="text-xs text-muted-foreground">Ranking counselors...</span>
+                      )}
+                    </div>
+                    {counselorMatches.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                        {isLoadingMatches
+                          ? "Preparing personalized matches."
+                          : "No ranked matches yet. You can still choose from the full counselor list."}
+                      </div>
+                    ) : (
+                      <div className="grid gap-2">
+                        {counselorMatches.slice(0, 3).map((match: any) => (
+                          <button
+                            key={match.id}
+                            type="button"
+                            className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                              String(match.id) === form.counselor_id
+                                ? "border-primary bg-primary/5"
+                                : "border-border bg-secondary/20 hover:border-primary/30"
+                            }`}
+                            onClick={() => setForm((prev) => ({ ...prev, counselor_id: String(match.id) }))}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {match.profile?.full_name || match.email || "Counselor"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Match score {Number(match.score ?? 0)}/100
+                                  {match.is_online ? " • online now" : ""}
+                                </p>
+                              </div>
+                              <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                {match.fit || "match"}
+                              </span>
+                            </div>
+                            {Array.isArray(match.reasons) && match.reasons.length > 0 && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {match.reasons[0]}
+                              </p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
                     <Label>Counselor</Label>
                     <Select
                       value={form.counselor_id}
@@ -431,6 +581,7 @@ const StudentAppointments = () => {
                         ) : availableCounselors.map((c: any) => (
                           <SelectItem key={c.id} value={String(c.id)}>
                             {c.profile?.full_name || c.email}
+                            {c.ml_match?.score ? ` • ${c.ml_match.score}/100` : ""}
                             {c.is_online ? " (Online)" : ""}
                           </SelectItem>
                         ))}
@@ -439,6 +590,18 @@ const StudentAppointments = () => {
                     <p className="text-xs text-muted-foreground">
                       {availableCounselors.length} counselor{availableCounselors.length === 1 ? "" : "s"} available
                     </p>
+                    {selectedCounselorMatch && (
+                      <div className="rounded-xl bg-secondary/20 px-3 py-3 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">
+                          Why this counselor
+                        </p>
+                        <p className="mt-1">
+                          {Array.isArray(selectedCounselorMatch.reasons) && selectedCounselorMatch.reasons.length > 0
+                            ? selectedCounselorMatch.reasons.join(" ")
+                            : "Recommended from your recent support pattern and counselor availability."}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Mode</Label>
@@ -583,64 +746,76 @@ const StudentAppointments = () => {
             ) : appointments.length === 0 ? (
               <p className="text-muted-foreground text-sm">No appointments yet. Book your first session.</p>
             ) : (
-            appointments.map((apt) => (
-              <Card key={apt.id} variant="glass">
-                <CardContent className="p-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-info/20 flex items-center justify-center">
-                        <Calendar className="h-6 w-6 text-info" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">
-                          {apt.counselor?.profile?.full_name || apt.counselor?.email || "Counselor"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {apt.notes?.includes("Physical") ? "Physical" : "Online"}
-                        </p>
-                        {apt.status === "cancelled" && apt.cancellation_reason && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Reason: {apt.cancellation_reason}
+            appointments.map((apt) => {
+              const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
+
+              return (
+                <Card key={apt.id} variant="glass">
+                  <CardContent className="p-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-info/20 flex items-center justify-center">
+                          <Calendar className="h-6 w-6 text-info" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">
+                            {apt.counselor?.profile?.full_name || apt.counselor?.email || "Counselor"}
                           </p>
+                          <p className="text-sm text-muted-foreground">
+                            {isPhysical ? "Physical" : "Online"}
+                          </p>
+                          {apt.status === "cancelled" && apt.cancellation_reason && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Reason: {apt.cancellation_reason}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-medium text-foreground">
+                            {apt.scheduled_at ? new Date(apt.scheduled_at).toLocaleDateString() : ""}
+                          </p>
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {apt.scheduled_at
+                              ? new Date(apt.scheduled_at).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : ""}
+                          </p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${statusBadge(apt.status)}`}
+                        >
+                          {apt.status}
+                        </span>
+                        {(apt.status === "scheduled" || apt.status === "confirmed") && (
+                          <div className="flex items-center gap-2">
+                            {!isPhysical && (
+                              <Button size="sm" onClick={() => openVideoCallRoom(apt)}>
+                                Join
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => openCancelDialog(apt)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                        {apt.status === "completed" && (
+                          <p className="text-xs font-medium text-success">Session completed</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-medium text-foreground">
-                          {apt.scheduled_at ? new Date(apt.scheduled_at).toLocaleDateString() : ""}
-                        </p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {apt.scheduled_at ? new Date(apt.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                        </p>
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${statusBadge(apt.status)}`}
-                      >
-                        {apt.status}
-                      </span>
-                      {(apt.status === "scheduled" || apt.status === "confirmed") && (
-                        <div className="flex items-center gap-2">
-                          {apt.status === "scheduled" && (
-                            <Button size="sm">
-                              {apt.notes?.includes("Physical") ? "Details" : "Join"}
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => openCancelDialog(apt)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )))}
+                  </CardContent>
+                </Card>
+              );
+            }))}
           </div>
         </main>
       </div>

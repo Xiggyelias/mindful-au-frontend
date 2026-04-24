@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   LayoutDashboard,
@@ -66,6 +67,8 @@ const formatScheduleLabel = (scheduledAt?: string | null) =>
   scheduledAt ? format(new Date(scheduledAt), "MMM d, yyyy h:mm a") : "TBD";
 
 const CounselorVideo = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoStartedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -80,6 +83,12 @@ const CounselorVideo = () => {
   );
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
+  const requestedAppointmentId = useMemo(() => {
+    const parsed = Number(searchParams.get("appointment_id"));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+  const requestedMode = searchParams.get("mode") === "audio" ? "audio" : "video";
+  const shouldAutostart = searchParams.get("autostart") === "1";
 
   const {
     localStream,
@@ -116,50 +125,59 @@ const CounselorVideo = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const loadSessions = async () => {
-      try {
-        setIsLoading(true);
-        const appointments = await api.getAppointments();
-        const videoAppointments = appointments
-          .filter((apt: any) => {
-            if (!apt?.scheduled_at) return false;
-            if (!isVideoEnabledAppointment(apt.notes)) return false;
-            if (!(apt.status === "scheduled" || apt.status === "confirmed")) return false;
-            const callWindow = getVideoCallWindowStatus(
-              apt.scheduled_at,
-              apt.duration_minutes
-            );
-            return !callWindow.isExpired;
-          })
-          .sort(
-            (a: any, b: any) =>
-              new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
-          )
-          .slice(0, 5);
-
-        setUpcomingSessions(videoAppointments);
-
-        if (videoAppointments.length > 0) {
-          setActiveSessionId((previous) =>
-            previous &&
-            videoAppointments.some((item: any) => String(item.id) === previous)
-              ? previous
-              : String(videoAppointments[0].id)
+  const loadSessions = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const appointments = await api.getAppointments();
+      const videoAppointments = appointments
+        .filter((apt: any) => {
+          if (!apt?.scheduled_at) return false;
+          if (!isVideoEnabledAppointment(apt.notes)) return false;
+          if (!(apt.status === "scheduled" || apt.status === "confirmed")) return false;
+          const callWindow = getVideoCallWindowStatus(
+            apt.scheduled_at,
+            apt.duration_minutes
           );
-        } else {
-          setActiveSessionId(null);
-        }
-      } catch (err: any) {
-        console.error("Failed to load sessions:", err);
-        toast.error("Failed to load upcoming sessions");
-      } finally {
-        setIsLoading(false);
+          return !callWindow.isExpired;
+        })
+        .sort(
+          (a: any, b: any) =>
+            new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+        )
+        .slice(0, 5);
+
+      setUpcomingSessions(videoAppointments);
+
+      if (videoAppointments.length === 0) {
+        setActiveSessionId(null);
+        return;
       }
-    };
-    
-    if (user) loadSessions();
-  }, [user]);
+
+      const requestedSession =
+        requestedAppointmentId !== null
+          ? videoAppointments.find((item: any) => Number(item.id) === requestedAppointmentId)
+          : null;
+
+      setActiveSessionId((previous) =>
+        previous && videoAppointments.some((item: any) => String(item.id) === previous)
+          ? previous
+          : requestedSession
+          ? String(requestedSession.id)
+          : String(videoAppointments[0].id)
+      );
+    } catch (err: any) {
+      console.error("Failed to load sessions:", err);
+      toast.error("Failed to load upcoming sessions");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [requestedAppointmentId]);
+
+  useEffect(() => {
+    if (user) {
+      void loadSessions();
+    }
+  }, [loadSessions, user]);
 
   const handleToggleMute = () => {
     toggleMute();
@@ -175,6 +193,19 @@ const CounselorVideo = () => {
     [activeSessionId, upcomingSessions]
   );
 
+  useEffect(() => {
+    if (upcomingSessions.length === 0) {
+      if (activeSessionId !== null) {
+        setActiveSessionId(null);
+      }
+      return;
+    }
+
+    if (!activeSessionId || !upcomingSessions.some((session) => String(session.id) === activeSessionId)) {
+      setActiveSessionId(String(upcomingSessions[0].id));
+    }
+  }, [activeSessionId, upcomingSessions]);
+
   const activeSessionWindowStatus = useMemo(() => {
     if (!activeSession) return null;
     return getVideoCallWindowStatus(
@@ -183,39 +214,62 @@ const CounselorVideo = () => {
     );
   }, [activeSession]);
 
-  const handleStartSession = (sessionId: string, mode: "video" | "audio" = "video") => {
-    const session = upcomingSessions.find((item) => String(item.id) === sessionId);
-    if (!session) {
-      toast.error("Selected session not found.");
-      return;
-    }
+  const handleStartSession = useCallback(
+    (sessionId: string, mode: "video" | "audio" = "video") => {
+      const session = upcomingSessions.find((item) => String(item.id) === sessionId);
+      if (!session) {
+        toast.error("Selected session not found.");
+        return;
+      }
 
-    if (localStream && activeSessionId && activeSessionId !== sessionId) {
-      toast.error("End the current session before starting another one.");
-      return;
-    }
+      if (localStream && activeSessionId && activeSessionId !== sessionId) {
+        toast.error("End the current session before starting another one.");
+        return;
+      }
 
-    const callWindow = getVideoCallWindowStatus(
-      session.scheduled_at,
-      session.duration_minutes
+      const callWindow = getVideoCallWindowStatus(
+        session.scheduled_at,
+        session.duration_minutes
+      );
+
+      if (!callWindow.canStart) {
+        toast.error(callWindow.message);
+        return;
+      }
+
+      if (!isOnline) {
+        toast.error("Reconnect to the internet before starting the session.");
+        return;
+      }
+
+      setActiveSessionId(sessionId);
+      setPendingCallMode(mode);
+      setPendingSessionStartId(sessionId);
+    },
+    [activeSessionId, isOnline, localStream, upcomingSessions]
+  );
+
+  const removeSessionFromQueue = useCallback((sessionIdToRemove: string) => {
+    setUpcomingSessions((previous) =>
+      previous.filter((session) => String(session.id) !== sessionIdToRemove)
     );
+  }, []);
 
-    if (!callWindow.canStart) {
-      toast.error(callWindow.message);
-      return;
-    }
+  const finalizeEndedSession = useCallback(
+    async (sessionIdToEnd: string) => {
+      try {
+        const result = await api.endVideoCall(sessionIdToEnd);
+        if (result?.appointment_status === "completed") {
+          removeSessionFromQueue(sessionIdToEnd);
+        }
+      } catch {
+        // Best effort: the local call has already been closed.
+      }
+    },
+    [removeSessionFromQueue]
+  );
 
-    if (!isOnline) {
-      toast.error("Reconnect to the internet before starting the session.");
-      return;
-    }
-
-    setActiveSessionId(sessionId);
-    setPendingCallMode(mode);
-    setPendingSessionStartId(sessionId);
-  };
-
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     const sessionIdToEnd = activeSessionId;
     endCall();
     setIsMuted(false);
@@ -224,9 +278,7 @@ const CounselorVideo = () => {
     setAuthorizedDurationMinutes(null);
 
     if (sessionIdToEnd) {
-      void api.endVideoCall(sessionIdToEnd).catch(() => {
-        // Best effort: call already ended locally.
-      });
+      await finalizeEndedSession(sessionIdToEnd);
     }
 
     toast.info("Session ended");
@@ -288,6 +340,51 @@ const CounselorVideo = () => {
     };
   }, [activeSessionId, isOnline, isSignalingReady, pendingCallMode, pendingSessionStartId, startAudioCall, startCall]);
 
+  const isStartingActiveSession = Boolean(
+    activeSessionId && pendingSessionStartId === activeSessionId
+  );
+
+  useEffect(() => {
+    if (!shouldAutostart) {
+      autoStartedRef.current = false;
+      return;
+    }
+
+    if (autoStartedRef.current) return;
+    if (!activeSession || !activeSessionId) return;
+    if (localStream || isConnecting || isStartingActiveSession) return;
+    if (!isSignalingReady || !isOnline) return;
+
+    const callWindow = getVideoCallWindowStatus(
+      activeSession.scheduled_at,
+      activeSession.duration_minutes
+    );
+
+    if (!callWindow.canStart) {
+      return;
+    }
+
+    autoStartedRef.current = true;
+    handleStartSession(activeSessionId, requestedMode);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("autostart");
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    activeSession,
+    activeSessionId,
+    handleStartSession,
+    isConnecting,
+    isOnline,
+    isSignalingReady,
+    isStartingActiveSession,
+    localStream,
+    requestedMode,
+    searchParams,
+    setSearchParams,
+    shouldAutostart,
+  ]);
+
   useEffect(() => {
     if (!isConnected || !localStream || !activeSession) {
       setRemainingSeconds(null);
@@ -311,9 +408,7 @@ const CounselorVideo = () => {
         setAuthorizedDurationMinutes(null);
 
         if (sessionIdToEnd) {
-          void api.endVideoCall(sessionIdToEnd).catch(() => {
-            // Best effort: call already ended locally.
-          });
+          void finalizeEndedSession(sessionIdToEnd);
         }
 
         toast.warning(
@@ -333,7 +428,7 @@ const CounselorVideo = () => {
     }, 1_000);
 
     return () => window.clearInterval(timer);
-  }, [activeSession, authorizedDurationMinutes, endCall, isConnected, localStream]);
+  }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
   const remoteParticipantName = useMemo(
     () => getParticipantName(activeSession?.student, "Student"),
@@ -341,10 +436,6 @@ const CounselorVideo = () => {
   );
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo);
-
-  const isStartingActiveSession = Boolean(
-    activeSessionId && pendingSessionStartId === activeSessionId
-  );
 
   const statusMessage = useMemo(() => {
     if (!activeSession) {
@@ -407,6 +498,9 @@ const CounselorVideo = () => {
     remoteStream && !remoteHasVideo
       ? `${remoteParticipantName} joined without video. Ask them to allow camera access or tap the camera button.`
       : statusMessage;
+  const canEndActiveSession = Boolean(
+    activeSessionId && (localStream || isConnected || isConnecting || isStartingActiveSession)
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -661,7 +755,7 @@ const CounselorVideo = () => {
                   >
                     {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
                   </Button>
-                  {activeSessionId && (
+                  {canEndActiveSession && (
                     <Button
                       variant="destructive"
                       size="lg"

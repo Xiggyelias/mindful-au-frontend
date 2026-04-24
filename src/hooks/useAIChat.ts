@@ -15,6 +15,24 @@ interface SupportSignal {
   crisisHotline: string | null;
 }
 
+interface MlSignals {
+  modelVersion?: string;
+  conversationTopic?: string | null;
+  focusArea?: string | null;
+  riskForecast?: {
+    score?: number;
+    level?: string;
+    confidence?: number;
+  } | null;
+  trend?: {
+    label?: string;
+    delta?: number;
+  } | null;
+  dominantTopics?: string[];
+  recommendedActions?: string[];
+  lowBandwidthMode?: boolean;
+}
+
 const AI_HISTORY_CACHE_KEY = "ai_chat_history_v1";
 
 const formatTime = (value?: string | number | Date) => {
@@ -36,6 +54,7 @@ export const useAIChat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supportSignal, setSupportSignal] = useState<SupportSignal | null>(null);
+  const [mlSignals, setMlSignals] = useState<MlSignals | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -54,6 +73,7 @@ export const useAIChat = () => {
       if (loadedMessages.length === 0) {
         setMessages([]);
         setSupportSignal(null);
+        setMlSignals(null);
         return;
       }
 
@@ -74,6 +94,7 @@ export const useAIChat = () => {
             saved_at: Date.now(),
             conversation_id: Number.isFinite(loadedConversationId) && loadedConversationId > 0 ? loadedConversationId : null,
             messages: [],
+            ml_signals: null,
           })
         );
         return;
@@ -81,12 +102,14 @@ export const useAIChat = () => {
 
       setMessages(normalizedMessages);
       setSupportSignal(null);
+      setMlSignals(null);
       localStorage.setItem(
         AI_HISTORY_CACHE_KEY,
         JSON.stringify({
           saved_at: Date.now(),
           conversation_id: Number.isFinite(loadedConversationId) && loadedConversationId > 0 ? loadedConversationId : null,
           messages: normalizedMessages,
+          ml_signals: null,
         })
       );
     } catch (err) {
@@ -97,6 +120,7 @@ export const useAIChat = () => {
           const parsed = JSON.parse(fallbackRaw) as {
             messages?: Message[];
             conversation_id?: number | null;
+            ml_signals?: MlSignals | null;
           };
           if (Array.isArray(parsed?.messages)) {
             setMessages(parsed.messages);
@@ -104,6 +128,7 @@ export const useAIChat = () => {
             if (Number.isFinite(cachedConversationId) && cachedConversationId > 0) {
               setConversationId(cachedConversationId);
             }
+            setMlSignals(parsed?.ml_signals ?? null);
             setError(null);
             return;
           }
@@ -114,6 +139,7 @@ export const useAIChat = () => {
 
       setMessages([]);
       setSupportSignal(null);
+      setMlSignals(null);
       setError(getApiErrorMessage(err, "Failed to load previous AI conversation."));
     }
   }, []);
@@ -171,6 +197,17 @@ export const useAIChat = () => {
               : null,
         });
 
+        setMlSignals({
+          modelVersion: typeof data?.ml_signals?.model_version === "string" ? data.ml_signals.model_version : undefined,
+          conversationTopic: typeof data?.ml_signals?.conversation_topic === "string" ? data.ml_signals.conversation_topic : null,
+          focusArea: typeof data?.ml_signals?.focus_area === "string" ? data.ml_signals.focus_area : null,
+          riskForecast: data?.ml_signals?.risk_forecast ?? null,
+          trend: data?.ml_signals?.trend ?? null,
+          dominantTopics: Array.isArray(data?.ml_signals?.dominant_topics) ? data.ml_signals.dominant_topics : [],
+          recommendedActions: Array.isArray(data?.ml_signals?.recommended_actions) ? data.ml_signals.recommended_actions : [],
+          lowBandwidthMode: Boolean(data?.ml_signals?.low_bandwidth_mode),
+        });
+
         const persistedUserMessageId = Number(data?.user_message_id);
         if (Number.isFinite(persistedUserMessageId) && persistedUserMessageId > 0) {
           setMessages((prev) =>
@@ -213,6 +250,7 @@ export const useAIChat = () => {
     isLoading,
     error,
     supportSignal,
+    mlSignals,
     sendMessage,
     reloadHistory: loadHistory,
   };

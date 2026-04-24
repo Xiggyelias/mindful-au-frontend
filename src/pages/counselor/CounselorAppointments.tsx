@@ -287,6 +287,19 @@ const CounselorAppointments = () => {
     setAppointmentPage((current) => Math.min(appointmentTotalPages, current + 1));
   };
 
+  const openSessionRoom = (appointment: any) => {
+    if (!appointment?.id) {
+      return;
+    }
+
+    const params = new URLSearchParams({
+      appointment_id: String(appointment.id),
+      autostart: "1",
+    });
+
+    navigate(`/counselor/video?${params.toString()}`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -496,7 +509,7 @@ const CounselorAppointments = () => {
                             </div>
                           )}
                           {(apt.status === "confirmed" || apt.status === "scheduled") && !isPhysical && (
-                            <Button size="sm" onClick={() => navigate("/counselor/video")}>
+                            <Button size="sm" onClick={() => openSessionRoom(apt)}>
                               Start
                             </Button>
                           )}
