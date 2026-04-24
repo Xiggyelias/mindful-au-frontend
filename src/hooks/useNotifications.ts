@@ -112,6 +112,14 @@ export const useNotifications = () => {
         return;
       }
 
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setError(null);
+        if (!silent) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
       if (!force && Date.now() - lastLoadAtRef.current < POLL_MIN_GAP_MS) {
         return;
       }
@@ -228,17 +236,24 @@ export const useNotifications = () => {
       void loadNotifications({ silent: true });
     };
 
+    const onOnline = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadNotifications({ silent: true, force: true });
+    };
+
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadNotifications({ silent: true });
     }, POLL_INTERVAL_MS);
 
     window.addEventListener("focus", onVisibilityOrFocus);
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibilityOrFocus);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onVisibilityOrFocus);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
   }, [loadNotifications, user?.id]);

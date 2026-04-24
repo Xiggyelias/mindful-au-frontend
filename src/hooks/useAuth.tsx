@@ -176,6 +176,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user?.id) return;
 
     const pingPresence = async (force = false) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return;
+      }
+
       const now = Date.now();
       if (!force && now - lastPresencePingAtRef.current < PRESENCE_MIN_GAP_MS) {
         return;
@@ -211,12 +215,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       void pingPresence(true);
     };
 
+    const onOnline = () => {
+      void pingPresence(true);
+    };
+
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [user?.id]);

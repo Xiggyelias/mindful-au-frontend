@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import {
+  AlertTriangle,
   LayoutDashboard,
   MessageSquare,
   Calendar,
@@ -14,14 +15,19 @@ import {
   VideoOff,
   Phone,
   Loader2,
+  WifiOff,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
   getVideoCallWindowStatus,
@@ -42,6 +48,23 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
 ];
 
+const getParticipantName = (participant: any, fallback: string) =>
+  participant?.profile?.full_name ||
+  participant?.full_name ||
+  participant?.email?.split("@")[0] ||
+  fallback;
+
+const getInitials = (value: string) =>
+  value
+    .split(" ")
+    .map((item) => item[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+const formatScheduleLabel = (scheduledAt?: string | null) =>
+  scheduledAt ? format(new Date(scheduledAt), "MMM d, yyyy h:mm a") : "TBD";
+
 const CounselorVideo = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -53,6 +76,9 @@ const CounselorVideo = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(
+    () => (typeof navigator === "undefined" ? true : navigator.onLine)
+  );
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
 
@@ -78,6 +104,20 @@ const CounselorVideo = () => {
       toast.error(error);
     }
   }, [error]);
+
+  useEffect(() => {
+    const syncNetworkStatus = () => {
+      setIsOnline(navigator.onLine);
+    };
+
+    window.addEventListener("online", syncNetworkStatus);
+    window.addEventListener("offline", syncNetworkStatus);
+
+    return () => {
+      window.removeEventListener("online", syncNetworkStatus);
+      window.removeEventListener("offline", syncNetworkStatus);
+    };
+  }, []);
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -126,12 +166,12 @@ const CounselorVideo = () => {
 
   const handleToggleMute = () => {
     toggleMute();
-    setIsMuted(!isMuted);
+    setIsMuted((previous) => !previous);
   };
 
   const handleToggleVideo = () => {
     toggleVideo();
-    setIsVideoOff(!isVideoOff);
+    setIsVideoOff((previous) => !previous);
   };
 
   const activeSession = useMemo(
@@ -169,6 +209,11 @@ const CounselorVideo = () => {
       return;
     }
 
+    if (!isOnline) {
+      toast.error("Reconnect to the internet before starting the session.");
+      return;
+    }
+
     setActiveSessionId(sessionId);
     setPendingCallMode(mode);
     setPendingSessionStartId(sessionId);
@@ -182,7 +227,6 @@ const CounselorVideo = () => {
     setPendingSessionStartId(null);
     setPendingCallMode("video");
     setAuthorizedDurationMinutes(null);
-    setActiveSessionId(null);
 
     if (sessionIdToEnd) {
       void api.endVideoCall(sessionIdToEnd).catch(() => {
@@ -199,9 +243,16 @@ const CounselorVideo = () => {
   }, [activeSessionId]);
 
   useEffect(() => {
+    if (!isOnline && pendingSessionStartId) {
+      setPendingSessionStartId(null);
+    }
+  }, [isOnline, pendingSessionStartId]);
+
+  useEffect(() => {
     if (!pendingSessionStartId) return;
     if (!activeSessionId || pendingSessionStartId !== activeSessionId) return;
     if (!isSignalingReady) return;
+    if (!isOnline) return;
 
     let cancelled = false;
 
@@ -240,7 +291,7 @@ const CounselorVideo = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, isSignalingReady, pendingCallMode, pendingSessionStartId, startAudioCall, startCall]);
+  }, [activeSessionId, isOnline, isSignalingReady, pendingCallMode, pendingSessionStartId, startAudioCall, startCall]);
 
   useEffect(() => {
     if (!isConnected || !localStream || !activeSession) {
@@ -264,7 +315,6 @@ const CounselorVideo = () => {
         setIsVideoOff(false);
         setPendingSessionStartId(null);
         setAuthorizedDurationMinutes(null);
-        setActiveSessionId(null);
 
         if (sessionIdToEnd) {
           void api.endVideoCall(sessionIdToEnd).catch(() => {
@@ -291,6 +341,60 @@ const CounselorVideo = () => {
     return () => window.clearInterval(timer);
   }, [activeSession, authorizedDurationMinutes, endCall, isConnected, localStream]);
 
+  const remoteParticipantName = useMemo(
+    () => getParticipantName(activeSession?.student, "Student"),
+    [activeSession]
+  );
+
+  const isStartingActiveSession = Boolean(
+    activeSessionId && pendingSessionStartId === activeSessionId
+  );
+
+  const statusMessage = useMemo(() => {
+    if (!activeSession) {
+      return "Choose a scheduled online session to open the room.";
+    }
+    if (!isOnline) {
+      return "You are offline. Reconnect to continue the session.";
+    }
+    if (isStartingActiveSession) {
+      return pendingCallMode === "audio"
+        ? "Preparing an audio-only session..."
+        : "Preparing camera, microphone, and secure call channel...";
+    }
+    if (isConnecting) {
+      return localStream
+        ? "Waiting for the student to answer..."
+        : "Connecting to the session...";
+    }
+    if (isConnected) {
+      return remoteStream
+        ? isAudioOnly
+          ? "Connected. Video is unavailable, but audio is live."
+          : "Connected. You and the student are live."
+        : "Connected. Waiting for the student video feed to appear.";
+    }
+    if (localStream) {
+      return "Your preview is ready. Waiting for the student to join.";
+    }
+    if (activeSessionWindowStatus?.canStart) {
+      return "The session window is open. Start when you are ready.";
+    }
+    return activeSessionWindowStatus?.message || "This session is not available yet.";
+  }, [
+    activeSession,
+    activeSessionWindowStatus?.canStart,
+    activeSessionWindowStatus?.message,
+    isAudioOnly,
+    isConnected,
+    isConnecting,
+    isOnline,
+    isStartingActiveSession,
+    localStream,
+    pendingCallMode,
+    remoteStream,
+  ]);
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -308,227 +412,369 @@ const CounselorVideo = () => {
         />
 
         <main className="p-4 lg:p-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Main Video Area */}
-            <Card variant="glass" className="lg:col-span-2 h-[calc(100vh-200px)]">
-              <CardContent className="h-full p-4 flex flex-col">
-                <div className="flex-1 bg-secondary/30 rounded-xl flex items-center justify-center relative overflow-hidden">
-                  {remoteStream ? (
-                    <video
-                      ref={remoteVideoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
+            <Card
+              variant="glass"
+              className="min-h-[68vh] overflow-hidden xl:h-[calc(100vh-200px)]"
+            >
+              <CardContent className="flex h-full flex-col gap-4 p-4">
+                {!isOnline && (
+                  <Alert variant="destructive" className="border-destructive/60 bg-destructive/5">
+                    <WifiOff className="h-4 w-4" />
+                    <AlertTitle>You are offline</AlertTitle>
+                    <AlertDescription>
+                      Presence, notifications, and video signaling are paused until your device reconnects.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {error && isOnline && (
+                  <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground [&>svg]:text-amber-600">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Session attention needed</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="relative flex-1 overflow-hidden rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.18),_transparent_42%),linear-gradient(160deg,_hsl(var(--background)),_hsl(var(--secondary)/0.55))] p-3 sm:p-4">
+                  {isLoading ? (
+                    <div className="flex h-full flex-col gap-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <Skeleton className="h-7 w-32 rounded-full" />
+                        <Skeleton className="h-7 w-24 rounded-full" />
+                      </div>
+                      <Skeleton className="min-h-[320px] flex-1 rounded-[24px]" />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Skeleton className="h-28 rounded-[20px]" />
+                        <Skeleton className="h-28 rounded-[20px]" />
+                      </div>
+                    </div>
                   ) : (
-                    <div className="text-center">
-                      {isConnecting ? (
-                        <Loader2 className="h-16 w-16 mx-auto text-primary mb-4 animate-spin" />
-                      ) : (
-                        <Video className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                      )}
-                      <p className="text-xl font-medium text-foreground">
-                        {activeSessionId
-                          ? isConnecting
-                            ? "Connecting..."
-                            : isConnected
-                            ? isAudioOnly
-                              ? "Connected (audio only)"
-                              : "Connected"
-                            : "Waiting for student..."
-                          : "No Active Session"}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {activeSessionId
-                          ? activeSessionWindowStatus?.canStart
-                            ? "Student will appear here once connected"
-                            : activeSessionWindowStatus?.message || "Session unavailable"
-                          : "Start a session from the upcoming list"}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Self view */}
-                  <div className="absolute bottom-4 right-4 h-32 w-44 bg-secondary rounded-lg flex items-center justify-center overflow-hidden shadow-lg border border-border">
-                    {localStream && !isVideoOff && !isAudioOnly ? (
-                      <video
-                        ref={localVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                        style={{ transform: 'scaleX(-1)' }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center">
-                        {isVideoOff ? (
-                          <VideoOff className="h-8 w-8 text-muted-foreground" />
+                    <div className="flex h-full flex-col gap-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={isConnected ? "default" : activeSessionWindowStatus?.canStart ? "secondary" : "outline"}
+                            className="rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em]"
+                          >
+                            {isConnected
+                              ? "Live session"
+                              : isStartingActiveSession
+                              ? "Preparing"
+                              : activeSessionWindowStatus?.canStart
+                              ? "Ready"
+                              : "Scheduled"}
+                          </Badge>
+                          {isAudioOnly && (
+                            <Badge variant="outline" className="rounded-full px-3 py-1">
+                              Audio only
+                            </Badge>
+                          )}
+                          {activeSession?.scheduled_at && (
+                            <Badge variant="outline" className="rounded-full px-3 py-1">
+                              {formatScheduleLabel(activeSession.scheduled_at)}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "rounded-full px-3 py-1",
+                              isConnected
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                                : isConnecting || isStartingActiveSession
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+                                : "border-border/70 bg-background/70 text-muted-foreground"
+                            )}
+                          >
+                            {isConnected
+                              ? "Connected"
+                              : isConnecting || isStartingActiveSession
+                              ? "Connecting"
+                              : isSignalingReady
+                              ? "Channel ready"
+                              : "Preparing channel"}
+                          </Badge>
+                          {isConnected && remainingSeconds !== null && (
+                            <Badge variant="outline" className="rounded-full px-3 py-1">
+                              <Clock className="mr-1 h-3.5 w-3.5" />
+                              {formatCallDuration(remainingSeconds)} left
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="relative flex-1 overflow-hidden rounded-[24px] border border-border/50 bg-background/90 shadow-[0_30px_80px_-50px_hsl(var(--foreground)/0.55)]">
+                        {remoteStream ? (
+                          <video
+                            ref={remoteVideoRef}
+                            autoPlay
+                            playsInline
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          <span className="text-muted-foreground text-sm">Your camera</span>
+                          <div className="flex h-full min-h-[320px] flex-col items-center justify-center px-6 text-center">
+                            <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-primary/12 text-3xl font-semibold text-primary shadow-inner">
+                              {activeSession ? getInitials(remoteParticipantName) : "--"}
+                            </div>
+                            <p className="text-2xl font-semibold text-foreground">
+                              {activeSession ? remoteParticipantName : "No session selected"}
+                            </p>
+                            <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+                              {statusMessage}
+                            </p>
+                            {isConnecting || isStartingActiveSession ? (
+                              <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-sm text-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Connecting securely
+                              </div>
+                            ) : null}
+                          </div>
                         )}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Connection status */}
-                  {activeSessionId && (
-                    <div className="absolute top-4 left-4">
-                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
-                        isConnected ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'
-                      }`}>
-                        <div className={`h-2 w-2 rounded-full ${
-                          isConnected ? 'bg-success' : 'bg-warning animate-pulse'
-                        }`} />
-                        <span className="text-sm font-medium">
-                          {isConnected
-                            ? isAudioOnly
-                              ? "Connected (audio)"
-                              : "Connected"
-                            : isSignalingReady
-                            ? "Waiting..."
-                            : "Preparing..."}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                        <div className="pointer-events-none absolute left-3 top-3">
+                          <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
+                            {remoteParticipantName}
+                          </Badge>
+                        </div>
 
-                  {isConnected && remainingSeconds !== null && (
-                    <div className="absolute top-4 right-4">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/80 text-foreground border border-border">
-                        <Clock className="h-4 w-4" />
-                        <span className="text-sm font-medium">
-                          {formatCallDuration(remainingSeconds)} left
-                        </span>
+                        <div className="absolute bottom-3 right-3 w-28 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-40 md:w-52">
+                          <div className="pointer-events-none absolute left-2 top-2 z-10">
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
+                            >
+                              You
+                            </Badge>
+                          </div>
+
+                          <div className="aspect-[3/4] w-full sm:aspect-video">
+                            {localStream && !isVideoOff && !isAudioOnly ? (
+                              <video
+                                ref={localVideoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="h-full w-full object-cover"
+                                style={{ transform: "scaleX(-1)" }}
+                              />
+                            ) : (
+                              <div className="flex h-full flex-col items-center justify-center gap-2 bg-slate-950/80 px-3 text-center text-white/75">
+                                {isVideoOff ? (
+                                  <VideoOff className="h-6 w-6" />
+                                ) : isAudioOnly ? (
+                                  <Mic className="h-6 w-6" />
+                                ) : (
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold">
+                                    {getInitials(userName)}
+                                  </div>
+                                )}
+                                <span className="text-[11px] font-medium sm:text-xs">
+                                  {isAudioOnly ? "Audio only" : isVideoOff ? "Camera off" : "Waiting for camera"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            Session
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">
+                            {activeSession ? remoteParticipantName : "Choose a session"}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {activeSession
+                              ? `Scheduled ${formatScheduleLabel(activeSession.scheduled_at)}`
+                              : "Only online sessions inside their call window appear here."}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            Session status
+                          </p>
+                          <p className="mt-2 text-base font-medium text-foreground">
+                            {statusMessage}
+                          </p>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Your local preview stays visible so you can confirm camera, framing, and mute state before the student joins.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
-                
-                {/* Controls */}
-                <div className="flex items-center justify-center gap-4 mt-4">
+
+                <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button
                     variant={isMuted ? "destructive" : "outline"}
                     size="lg"
-                    className="rounded-full h-14 w-14"
+                    className="h-14 w-14 rounded-full"
                     onClick={handleToggleMute}
                     disabled={!localStream}
                   >
-                    {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                   </Button>
                   <Button
                     variant={isVideoOff ? "destructive" : "outline"}
                     size="lg"
-                    className="rounded-full h-14 w-14"
+                    className="h-14 w-14 rounded-full"
                     onClick={handleToggleVideo}
                     disabled={!localStream}
                   >
-                    {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
+                    {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
                   </Button>
                   {activeSessionId && (
                     <Button
                       variant="destructive"
                       size="lg"
-                      className="rounded-full h-14 w-14"
+                      className="h-14 rounded-full px-6"
                       onClick={handleEndCall}
                     >
-                      <Phone className="h-6 w-6 rotate-[135deg]" />
+                      <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
+                      End session
                     </Button>
                   )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Upcoming Sessions */}
-            <Card variant="glass">
-              <CardHeader>
+            <Card variant="glass" className="overflow-hidden">
+              <CardHeader className="space-y-2">
                 <CardTitle className="text-lg">Upcoming Online Sessions</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Start the room from the session you want to host. The student appears in the main stage as soon as they answer.
+                </p>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {isLoading ? (
-                    <p className="text-sm text-muted-foreground">Loading sessions...</p>
-                  ) : upcomingSessions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No upcoming online session was found.
+              <CardContent className="space-y-3">
+                {isLoading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="rounded-[22px] border border-border/60 bg-background/70 p-4">
+                      <Skeleton className="h-5 w-36" />
+                      <Skeleton className="mt-3 h-4 w-40" />
+                      <Skeleton className="mt-3 h-10 w-full rounded-xl" />
+                    </div>
+                  ))
+                ) : upcomingSessions.length === 0 ? (
+                  <div className="rounded-[22px] border border-dashed border-border/70 bg-background/60 p-6 text-center">
+                    <p className="text-base font-medium text-foreground">No active online sessions</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Online sessions appear here up to 15 minutes before the appointment time and disappear after the window closes.
                     </p>
-                  ) : (
-                    upcomingSessions.map((session) => {
-                      const sessionId = String(session.id);
-                      const isActive = activeSessionId === sessionId;
-                      const callWindow = getVideoCallWindowStatus(
-                        session.scheduled_at,
-                        session.duration_minutes
-                      );
-                      const isBusyWithOtherCall = Boolean(
-                        localStream && activeSessionId && activeSessionId !== sessionId
-                      );
-                      const isStarting =
-                        pendingSessionStartId === sessionId ||
-                        (isActive && isConnecting);
+                  </div>
+                ) : (
+                  upcomingSessions.map((session) => {
+                    const sessionId = String(session.id);
+                    const isActive = activeSessionId === sessionId;
+                    const callWindow = getVideoCallWindowStatus(
+                      session.scheduled_at,
+                      session.duration_minutes
+                    );
+                    const isBusyWithOtherCall = Boolean(
+                      localStream && activeSessionId && activeSessionId !== sessionId
+                    );
+                    const isStarting =
+                      pendingSessionStartId === sessionId ||
+                      (isActive && isConnecting);
 
-                      return (
-                        <div
-                          key={session.id}
-                          className="p-4 rounded-xl bg-secondary/30 space-y-2"
-                        >
-                          <p className="font-medium text-foreground">
-                            {session.student?.profile?.full_name ||
-                              session.student?.email?.split("@")[0] ||
-                              `Student #${String(session.id).slice(-4)}`}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {session.scheduled_at
-                              ? `${format(new Date(session.scheduled_at), "MMM d, yyyy")} at ${format(new Date(session.scheduled_at), "h:mm a")}`
-                              : "TBD"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {callWindow.canStart
-                              ? "Call ready"
-                              : callWindow.message}
-                          </p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              size="sm"
-                              className="w-full gap-2"
-                              onClick={() => handleStartSession(sessionId, "video")}
-                              disabled={
-                                isBusyWithOtherCall ||
-                                isStarting ||
-                                !callWindow.canStart
-                              }
-                            >
-                              {isStarting || (isActive && isConnected) ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  {isConnected ? "In Session" : "Starting..."}
-                                </>
-                              ) : (
-                                <>
-                                  <Video className="h-4 w-4" />
-                                  Video
-                                </>
+                    return (
+                      <div
+                        key={session.id}
+                        className={cn(
+                          "rounded-[22px] border p-4 transition-all",
+                          isActive
+                            ? "border-primary/45 bg-primary/8 shadow-[0_18px_45px_-32px_hsl(var(--primary)/0.75)]"
+                            : "border-border/60 bg-background/70"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-base font-semibold text-foreground">
+                              {getParticipantName(
+                                session.student,
+                                `Student #${String(session.id).slice(-4)}`
                               )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full gap-2"
-                              onClick={() => handleStartSession(sessionId, "audio")}
-                              disabled={
-                                isBusyWithOtherCall ||
-                                isStarting ||
-                                !callWindow.canStart
-                              }
-                            >
-                              <Mic className="h-4 w-4" />
-                              Audio
-                            </Button>
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {formatScheduleLabel(session.scheduled_at)}
+                            </p>
                           </div>
+                          <Badge
+                            variant={callWindow.canStart ? "secondary" : "outline"}
+                            className="rounded-full px-3 py-1"
+                          >
+                            {callWindow.canStart ? "Ready" : "Scheduled"}
+                          </Badge>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {callWindow.message}
+                        </p>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Button
+                            size="sm"
+                            className="w-full gap-2"
+                            onClick={() => handleStartSession(sessionId, "video")}
+                            disabled={
+                              isBusyWithOtherCall ||
+                              isStarting ||
+                              !callWindow.canStart ||
+                              !isOnline
+                            }
+                          >
+                            {isStarting && pendingCallMode === "video" ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Starting...
+                              </>
+                            ) : isActive && isConnected ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Live
+                              </>
+                            ) : (
+                              <>
+                                <Video className="h-4 w-4" />
+                                Video
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full gap-2"
+                            onClick={() => handleStartSession(sessionId, "audio")}
+                            disabled={
+                              isBusyWithOtherCall ||
+                              isStarting ||
+                              !callWindow.canStart ||
+                              !isOnline
+                            }
+                          >
+                            {isStarting && pendingCallMode === "audio" ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Starting...
+                              </>
+                            ) : (
+                              <>
+                                <Mic className="h-4 w-4" />
+                                Audio
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </CardContent>
             </Card>
           </div>

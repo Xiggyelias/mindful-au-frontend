@@ -16,6 +16,7 @@ import {
   X,
   FileText,
   Image as ImageIcon,
+  Mic,
   User,
   Search,
   MoreVertical,

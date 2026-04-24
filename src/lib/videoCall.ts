@@ -7,6 +7,105 @@ export const VIDEO_CALL_LIMITS = {
   connectionTimeoutMs: 45_000,
 } as const;
 
+const DEFAULT_STUN_SERVERS = [
+  "stun:stun.l.google.com:19302",
+  "stun:stun1.l.google.com:19302",
+] as const;
+
+const normalizeIceServer = (value: unknown): RTCIceServer | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as RTCIceServer;
+  const rawUrls = candidate.urls;
+  const urls = Array.isArray(rawUrls)
+    ? rawUrls.map((item) => String(item).trim()).filter(Boolean)
+    : typeof rawUrls === "string"
+    ? rawUrls.trim()
+    : "";
+
+  if (
+    (Array.isArray(urls) && urls.length === 0) ||
+    (!Array.isArray(urls) && !urls)
+  ) {
+    return null;
+  }
+
+  return {
+    urls,
+    username:
+      typeof candidate.username === "string" && candidate.username.trim()
+        ? candidate.username.trim()
+        : undefined,
+    credential:
+      typeof candidate.credential === "string" && candidate.credential.trim()
+        ? candidate.credential.trim()
+        : undefined,
+  };
+};
+
+const parseCsvUrls = (value?: string) =>
+  (value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const getFallbackIceServers = (): RTCIceServer[] => {
+  const stunUrls = parseCsvUrls(import.meta.env.VITE_WEBRTC_STUN_URLS);
+  const turnUrls = parseCsvUrls(import.meta.env.VITE_WEBRTC_TURN_URLS);
+  const turnUsername = import.meta.env.VITE_WEBRTC_TURN_USERNAME?.trim();
+  const turnCredential = import.meta.env.VITE_WEBRTC_TURN_CREDENTIAL?.trim();
+
+  const servers: RTCIceServer[] = [
+    {
+      urls: stunUrls.length > 0 ? stunUrls : [...DEFAULT_STUN_SERVERS],
+    },
+  ];
+
+  if (turnUrls.length > 0 && turnUsername && turnCredential) {
+    servers.push({
+      urls: turnUrls,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return servers;
+};
+
+export const getWebRtcIceServers = (): RTCIceServer[] => {
+  const rawIceServers = import.meta.env.VITE_WEBRTC_ICE_SERVERS;
+  if (!rawIceServers) {
+    return getFallbackIceServers();
+  }
+
+  try {
+    const parsed = JSON.parse(rawIceServers);
+    if (!Array.isArray(parsed)) {
+      return getFallbackIceServers();
+    }
+
+    const validServers = parsed
+      .map((server) => normalizeIceServer(server))
+      .filter((server): server is RTCIceServer => server !== null);
+
+    return validServers.length > 0 ? validServers : getFallbackIceServers();
+  } catch (error) {
+    console.warn("Invalid VITE_WEBRTC_ICE_SERVERS value. Falling back to default ICE servers.", error);
+    return getFallbackIceServers();
+  }
+};
+
+export const hasRelayIceServer = (iceServers: RTCIceServer[]): boolean =>
+  iceServers.some((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((url) => {
+      const normalized = String(url || "").trim().toLowerCase();
+      return normalized.startsWith("turn:") || normalized.startsWith("turns:");
+    });
+  });
+
 export interface VideoCallWindowStatus {
   canStart: boolean;
   isUpcoming: boolean;

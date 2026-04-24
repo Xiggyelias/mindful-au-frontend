@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { VIDEO_CALL_LIMITS } from "@/lib/videoCall";
+import {
+  VIDEO_CALL_LIMITS,
+  getWebRtcIceServers,
+  hasRelayIceServer,
+} from "@/lib/videoCall";
 
 interface WebRTCState {
   localStream: MediaStream | null;
@@ -12,11 +16,16 @@ interface WebRTCState {
   error: string | null;
 }
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
+interface StartCallOptions {
+  audioOnly?: boolean;
+}
+
+const ICE_SERVERS = getWebRtcIceServers();
+const HAS_RELAY_ICE_SERVER = hasRelayIceServer(ICE_SERVERS);
+const RTC_CONFIGURATION: RTCConfiguration = {
+  iceServers: ICE_SERVERS,
+  bundlePolicy: "balanced",
+  iceCandidatePoolSize: 4,
 };
 
 const MEDIA_CONSTRAINTS: MediaStreamConstraints = {
@@ -42,9 +51,68 @@ const AUDIO_ONLY_CONSTRAINTS: MediaStreamConstraints = {
   video: false,
 };
 
-interface StartCallOptions {
-  audioOnly?: boolean;
-}
+const playMediaElement = (element: HTMLVideoElement | null) => {
+  if (!element) {
+    return;
+  }
+
+  const playPromise = element.play();
+  if (playPromise && typeof playPromise.catch === "function") {
+    playPromise.catch(() => {
+      // Playback can be deferred until the browser has a user gesture.
+    });
+  }
+};
+
+const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): string => {
+  const errorName =
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    typeof (error as { name?: unknown }).name === "string"
+      ? (error as { name: string }).name
+      : "";
+
+  if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+    return audioOnlyRequested
+      ? "Microphone permission is blocked. Allow access to join the call."
+      : "Camera or microphone permission is blocked. Allow access to start the call.";
+  }
+
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return audioOnlyRequested
+      ? "No microphone was found on this device."
+      : "No camera was found. The call can continue in audio-only mode if a microphone is available.";
+  }
+
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return "Your camera or microphone is busy in another app. Close the other app and try again.";
+  }
+
+  return "Could not access camera or microphone. Check device permissions and try again.";
+};
+
+const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
+  const normalizedLocalId = String(localUserId || "");
+  const normalizedRemoteId = String(remoteUserId || "");
+
+  if (!normalizedLocalId || !normalizedRemoteId || normalizedLocalId === normalizedRemoteId) {
+    return false;
+  }
+
+  const localNumericId = Number(normalizedLocalId);
+  const remoteNumericId = Number(normalizedRemoteId);
+
+  if (
+    Number.isFinite(localNumericId) &&
+    Number.isFinite(remoteNumericId) &&
+    localNumericId !== remoteNumericId
+  ) {
+    return localNumericId > remoteNumericId;
+  }
+
+  return normalizedLocalId.localeCompare(normalizedRemoteId) > 0;
+};
 
 export const useWebRTC = (sessionId: string, userId: string) => {
   const [state, setState] = useState<WebRTCState>({
@@ -66,12 +134,27 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const remotePeerIdRef = useRef<string | null>(null);
+  const makingOfferRef = useRef(false);
+  const ignoreOfferRef = useRef(false);
 
   const clearConnectionTimeout = useCallback(() => {
     if (connectionTimeoutRef.current) {
       clearTimeout(connectionTimeoutRef.current);
       connectionTimeoutRef.current = null;
     }
+  }, []);
+
+  const closePeerConnection = useCallback((connection: RTCPeerConnection | null) => {
+    if (!connection) {
+      return;
+    }
+
+    connection.onicecandidate = null;
+    connection.onicecandidateerror = null;
+    connection.ontrack = null;
+    connection.onconnectionstatechange = null;
+    connection.oniceconnectionstatechange = null;
+    connection.close();
   }, []);
 
   const setConnectionError = useCallback((message: string) => {
@@ -85,12 +168,16 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   const cleanupCall = useCallback(
     (broadcastEnd = true) => {
-      if (cleanupInProgressRef.current) return;
-      cleanupInProgressRef.current = true;
+      if (cleanupInProgressRef.current) {
+        return;
+      }
 
+      cleanupInProgressRef.current = true;
       clearConnectionTimeout();
       pendingIceCandidatesRef.current = [];
       remotePeerIdRef.current = null;
+      makingOfferRef.current = false;
+      ignoreOfferRef.current = false;
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -98,10 +185,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
 
       if (peerConnection.current) {
-        peerConnection.current.onicecandidate = null;
-        peerConnection.current.ontrack = null;
-        peerConnection.current.onconnectionstatechange = null;
-        peerConnection.current.close();
+        closePeerConnection(peerConnection.current);
         peerConnection.current = null;
       }
 
@@ -133,7 +217,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       cleanupInProgressRef.current = false;
     },
-    [clearConnectionTimeout, userId]
+    [clearConnectionTimeout, closePeerConnection, userId]
   );
 
   const startConnectionTimeout = useCallback(() => {
@@ -144,8 +228,18 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     }, VIDEO_CALL_LIMITS.connectionTimeoutMs);
   }, [clearConnectionTimeout, cleanupCall, setConnectionError]);
 
-  const flushPendingIceCandidates = useCallback(async (pc: RTCPeerConnection) => {
-    if (!pc.remoteDescription || pendingIceCandidatesRef.current.length === 0) {
+  const handleConnectionFailure = useCallback(() => {
+    clearConnectionTimeout();
+    cleanupCall(false);
+    setConnectionError(
+      HAS_RELAY_ICE_SERVER
+        ? "Connection failed. Please try again on a stable network."
+        : "Connection failed. Please try again on a stable network. TURN relay servers are also required for some mobile and office networks."
+    );
+  }, [clearConnectionTimeout, cleanupCall, setConnectionError]);
+
+  const flushPendingIceCandidates = useCallback(async (connection: RTCPeerConnection) => {
+    if (!connection.remoteDescription || pendingIceCandidatesRef.current.length === 0) {
       return;
     }
 
@@ -154,17 +248,32 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
     for (const candidate of queuedCandidates) {
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await connection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (error) {
         console.error("Error applying queued ICE candidate:", error);
       }
     }
   }, []);
 
-  const createPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+  const attachLocalTracks = useCallback((connection: RTCPeerConnection, stream: MediaStream) => {
+    const existingTrackIds = new Set(
+      connection
+        .getSenders()
+        .map((sender) => sender.track?.id)
+        .filter((trackId): trackId is string => Boolean(trackId))
+    );
 
-    pc.onicecandidate = async (event) => {
+    stream.getTracks().forEach((track) => {
+      if (!existingTrackIds.has(track.id)) {
+        connection.addTrack(track, stream);
+      }
+    });
+  }, []);
+
+  const createPeerConnection = useCallback(() => {
+    const connection = new RTCPeerConnection(RTC_CONFIGURATION);
+
+    connection.onicecandidate = async (event) => {
       if (event.candidate && channelRef.current) {
         await channelRef.current.send({
           type: "broadcast",
@@ -177,16 +286,31 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
     };
 
-    pc.ontrack = (event) => {
+    connection.onicecandidateerror = (event) => {
+      console.warn("ICE candidate error:", event);
+    };
+
+    connection.ontrack = (event) => {
       const [remoteStream] = event.streams;
-      setState((prev) => ({ ...prev, remoteStream }));
+      if (!remoteStream) {
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        remoteStream,
+        isConnecting: false,
+        error: null,
+      }));
+
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
+        playMediaElement(remoteVideoRef.current);
       }
     };
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "connected") {
+    connection.onconnectionstatechange = () => {
+      if (connection.connectionState === "connected") {
         clearConnectionTimeout();
         setState((prev) => ({
           ...prev,
@@ -194,14 +318,35 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           isConnecting: false,
           error: null,
         }));
-      } else if (
-        pc.connectionState === "disconnected" ||
-        pc.connectionState === "failed"
-      ) {
-        clearConnectionTimeout();
-        cleanupCall(false);
-        setConnectionError("Connection lost.");
-      } else if (pc.connectionState === "closed") {
+        return;
+      }
+
+      if (connection.connectionState === "connecting") {
+        setState((prev) => ({
+          ...prev,
+          isConnecting: true,
+          error: null,
+        }));
+        return;
+      }
+
+      if (connection.connectionState === "disconnected") {
+        startConnectionTimeout();
+        setState((prev) => ({
+          ...prev,
+          isConnected: false,
+          isConnecting: true,
+          error: "Connection interrupted. Trying to reconnect...",
+        }));
+        return;
+      }
+
+      if (connection.connectionState === "failed") {
+        handleConnectionFailure();
+        return;
+      }
+
+      if (connection.connectionState === "closed") {
         clearConnectionTimeout();
         setState((prev) => ({
           ...prev,
@@ -211,136 +356,187 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
     };
 
-    return pc;
-  }, [cleanupCall, clearConnectionTimeout, setConnectionError, userId]);
-
-  const initializeMedia = useCallback(async (audioOnlyRequested = false) => {
-    if (localStreamRef.current) {
-      return localStreamRef.current;
-    }
-
-    const tryGetMedia = async (constraints: MediaStreamConstraints) => {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = stream;
-      setState((prev) => ({
-        ...prev,
-        localStream: stream,
-        isAudioOnly: stream.getVideoTracks().length === 0,
-      }));
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
+    connection.oniceconnectionstatechange = () => {
+      if (connection.iceConnectionState === "failed") {
+        handleConnectionFailure();
       }
-
-      return stream;
     };
 
-    try {
-      if (audioOnlyRequested) {
-        return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+    return connection;
+  }, [
+    clearConnectionTimeout,
+    handleConnectionFailure,
+    startConnectionTimeout,
+    userId,
+  ]);
+
+  const createFreshPeerConnection = useCallback(() => {
+    if (peerConnection.current) {
+      closePeerConnection(peerConnection.current);
+    }
+
+    const connection = createPeerConnection();
+    peerConnection.current = connection;
+    pendingIceCandidatesRef.current = [];
+    remotePeerIdRef.current = null;
+    return connection;
+  }, [closePeerConnection, createPeerConnection]);
+
+  const initializeMedia = useCallback(
+    async (audioOnlyRequested = false) => {
+      if (localStreamRef.current) {
+        return localStreamRef.current;
+      }
+
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices?.getUserMedia ||
+        typeof RTCPeerConnection === "undefined"
+      ) {
+        setConnectionError("This device or browser does not support secure in-browser calls.");
+        return null;
+      }
+
+      const tryGetMedia = async (constraints: MediaStreamConstraints) => {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStreamRef.current = stream;
+        setState((prev) => ({
+          ...prev,
+          localStream: stream,
+          isAudioOnly: stream.getVideoTracks().length === 0,
+        }));
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          playMediaElement(localVideoRef.current);
+        }
+
+        return stream;
+      };
+
+      try {
+        if (audioOnlyRequested) {
+          return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+        }
+
+        try {
+          return await tryGetMedia(MEDIA_CONSTRAINTS);
+        } catch (videoError) {
+          console.warn("Falling back to audio-only media:", videoError);
+          return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+        }
+      } catch (error) {
+        console.error("Error accessing media devices:", error);
+        setConnectionError(getMediaErrorMessage(error, audioOnlyRequested));
+        return null;
+      }
+    },
+    [setConnectionError]
+  );
+
+  const rollbackConnectionIfNeeded = useCallback(
+    async (connection: RTCPeerConnection, stream: MediaStream) => {
+      if (connection.signalingState === "stable") {
+        return connection;
       }
 
       try {
-        return await tryGetMedia(MEDIA_CONSTRAINTS);
-      } catch (videoError) {
-        console.warn("Falling back to audio-only media:", videoError);
-        return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+        await connection.setLocalDescription({ type: "rollback" });
+        return connection;
+      } catch (rollbackError) {
+        console.warn("Rollback failed, replacing peer connection:", rollbackError);
+        const replacement = createFreshPeerConnection();
+        attachLocalTracks(replacement, stream);
+        return replacement;
       }
-    } catch (error) {
-      console.error("Error accessing media devices:", error);
-      setConnectionError(
-        "Could not access camera/microphone. Please check permissions."
-      );
-      return null;
-    }
-  }, [setConnectionError]);
+    },
+    [attachLocalTracks, createFreshPeerConnection]
+  );
 
-  const startCall = useCallback(async (options: StartCallOptions = {}) => {
-    if (!sessionId) {
-      setConnectionError("Select a session before starting a call.");
-      return false;
-    }
-
-    if (!String(userId || "")) {
-      setConnectionError("Sign in before starting a call.");
-      return false;
-    }
-
-    if (!channelRef.current || !state.isSignalingReady) {
-      setConnectionError("Call channel is not ready yet. Please try again.");
-      return false;
-    }
-
-    if (state.isConnected) {
-      return true;
-    }
-
-    if (state.isConnecting) {
-      return false;
-    }
-
-    setState((prev) => ({ ...prev, isConnecting: true, error: null }));
-    startConnectionTimeout();
-
-    try {
-      const stream = await initializeMedia(Boolean(options.audioOnly));
-      if (!stream) {
-        clearConnectionTimeout();
-        setState((prev) => ({ ...prev, isConnecting: false }));
+  const startCall = useCallback(
+    async (options: StartCallOptions = {}) => {
+      if (!sessionId) {
+        setConnectionError("Select a session before starting a call.");
         return false;
       }
 
-      if (peerConnection.current) {
-        peerConnection.current.close();
-        peerConnection.current = null;
+      if (!String(userId || "")) {
+        setConnectionError("Sign in before starting a call.");
+        return false;
       }
 
-      const pc = createPeerConnection();
-      peerConnection.current = pc;
-      pendingIceCandidatesRef.current = [];
-      remotePeerIdRef.current = null;
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setConnectionError("You are offline. Reconnect to start the call.");
+        return false;
+      }
 
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-      });
+      if (!channelRef.current || !state.isSignalingReady) {
+        setConnectionError("Call channel is not ready yet. Please try again.");
+        return false;
+      }
 
-      const isAudioOnlyOffer = stream.getVideoTracks().length === 0;
+      if (state.isConnected) {
+        return true;
+      }
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      if (state.isConnecting) {
+        return false;
+      }
 
-      if (channelRef.current) {
+      setState((prev) => ({ ...prev, isConnecting: true, error: null }));
+      startConnectionTimeout();
+
+      try {
+        const stream = await initializeMedia(Boolean(options.audioOnly));
+        if (!stream) {
+          clearConnectionTimeout();
+          setState((prev) => ({ ...prev, isConnecting: false }));
+          return false;
+        }
+
+        const connection = createFreshPeerConnection();
+        attachLocalTracks(connection, stream);
+        ignoreOfferRef.current = false;
+        makingOfferRef.current = true;
+
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        makingOfferRef.current = false;
+
         await channelRef.current.send({
           type: "broadcast",
           event: "offer",
           payload: {
             offer,
             senderId: String(userId || ""),
-            audioOnly: isAudioOnlyOffer,
+            audioOnly: stream.getVideoTracks().length === 0,
           },
         });
-      }
 
-      return true;
-    } catch (error) {
-      console.error("Error starting call:", error);
-      cleanupCall(false);
-      setConnectionError("Failed to start call.");
-      return false;
-    }
-  }, [
-    cleanupCall,
-    clearConnectionTimeout,
-    initializeMedia,
-    createPeerConnection,
-    sessionId,
-    startConnectionTimeout,
-    state.isConnected,
-    state.isConnecting,
-    state.isSignalingReady,
-    setConnectionError,
-    userId,
-  ]);
+        return true;
+      } catch (error) {
+        makingOfferRef.current = false;
+        console.error("Error starting call:", error);
+        cleanupCall(false);
+        setConnectionError("Failed to start the call.");
+        return false;
+      }
+    },
+    [
+      attachLocalTracks,
+      cleanupCall,
+      clearConnectionTimeout,
+      createFreshPeerConnection,
+      initializeMedia,
+      sessionId,
+      startConnectionTimeout,
+      state.isConnected,
+      state.isConnecting,
+      state.isSignalingReady,
+      setConnectionError,
+      userId,
+    ]
+  );
 
   const handleOffer = useCallback(
     async (
@@ -351,13 +547,20 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       const normalizedSenderId = String(senderId || "");
       const normalizedUserId = String(userId || "");
 
-      if (!normalizedSenderId || normalizedSenderId === normalizedUserId) return;
+      if (!normalizedSenderId || normalizedSenderId === normalizedUserId) {
+        return;
+      }
 
       if (
         remotePeerIdRef.current &&
         remotePeerIdRef.current !== normalizedSenderId
       ) {
         setConnectionError("Participant limit reached (max 2 users per call).");
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setConnectionError("You are offline. Reconnect to join the call.");
         return;
       }
 
@@ -372,51 +575,59 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           return;
         }
 
-        if (peerConnection.current) {
-          peerConnection.current.close();
-          peerConnection.current = null;
+        let connection =
+          peerConnection.current && peerConnection.current.signalingState !== "closed"
+            ? peerConnection.current
+            : createFreshPeerConnection();
+
+        attachLocalTracks(connection, stream);
+
+        const offerCollision =
+          makingOfferRef.current || connection.signalingState !== "stable";
+        const politePeer = isPolitePeer(normalizedUserId, normalizedSenderId);
+
+        ignoreOfferRef.current = !politePeer && offerCollision;
+        if (ignoreOfferRef.current) {
+          return;
         }
 
-        const pc = createPeerConnection();
-        peerConnection.current = pc;
-        pendingIceCandidatesRef.current = [];
-        remotePeerIdRef.current = normalizedSenderId;
+        if (offerCollision) {
+          connection = await rollbackConnectionIfNeeded(connection, stream);
+        }
 
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream);
+        await connection.setRemoteDescription(new RTCSessionDescription(offer));
+        remotePeerIdRef.current = normalizedSenderId;
+        ignoreOfferRef.current = false;
+
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
+
+        await channelRef.current?.send({
+          type: "broadcast",
+          event: "answer",
+          payload: {
+            answer,
+            senderId: normalizedUserId,
+          },
         });
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        if (channelRef.current) {
-          await channelRef.current.send({
-            type: "broadcast",
-            event: "answer",
-            payload: {
-              answer,
-              senderId: normalizedUserId,
-            },
-          });
-        }
-
-        await flushPendingIceCandidates(pc);
+        await flushPendingIceCandidates(connection);
       } catch (error) {
         console.error("Error handling offer:", error);
         cleanupCall(false);
-        setConnectionError("Failed to process incoming call offer.");
+        setConnectionError("Failed to join the incoming call.");
       }
     },
     [
+      attachLocalTracks,
       cleanupCall,
       clearConnectionTimeout,
-      initializeMedia,
-      createPeerConnection,
+      createFreshPeerConnection,
       flushPendingIceCandidates,
-      startConnectionTimeout,
+      initializeMedia,
+      rollbackConnectionIfNeeded,
       setConnectionError,
+      startConnectionTimeout,
       userId,
     ]
   );
@@ -425,9 +636,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     async (answer: RTCSessionDescriptionInit, senderId: string) => {
       const normalizedSenderId = String(senderId || "");
       const normalizedUserId = String(userId || "");
+      const connection = peerConnection.current;
 
-      if (!normalizedSenderId || normalizedSenderId === normalizedUserId) return;
-      if (!peerConnection.current) return;
+      if (!normalizedSenderId || normalizedSenderId === normalizedUserId || !connection) {
+        return;
+      }
 
       if (
         remotePeerIdRef.current &&
@@ -437,14 +650,13 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
 
       try {
-        await peerConnection.current.setRemoteDescription(
-          new RTCSessionDescription(answer)
-        );
+        await connection.setRemoteDescription(new RTCSessionDescription(answer));
         remotePeerIdRef.current = normalizedSenderId;
-        await flushPendingIceCandidates(peerConnection.current);
+        ignoreOfferRef.current = false;
+        await flushPendingIceCandidates(connection);
       } catch (error) {
         console.error("Error handling answer:", error);
-        setConnectionError("Failed to establish call connection.");
+        setConnectionError("Failed to establish the call connection.");
       }
     },
     [flushPendingIceCandidates, setConnectionError, userId]
@@ -466,15 +678,18 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return;
       }
 
-      const pc = peerConnection.current;
+      if (ignoreOfferRef.current && !remotePeerIdRef.current) {
+        return;
+      }
 
-      if (!pc || !pc.remoteDescription) {
+      const connection = peerConnection.current;
+      if (!connection || !connection.remoteDescription) {
         pendingIceCandidatesRef.current.push(candidate);
         return;
       }
 
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await connection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (error) {
         console.error("Error adding ICE candidate:", error);
       }
@@ -542,7 +757,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           setState((prev) => ({ ...prev, isSignalingReady: true, error: null }));
         }
 
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
           setState((prev) => ({ ...prev, isSignalingReady: false }));
           setConnectionError("Call signaling channel unavailable.");
         }
@@ -558,9 +777,9 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
   }, [
     cleanupCall,
-    handleOffer,
     handleAnswer,
     handleIceCandidate,
+    handleOffer,
     sessionId,
     setConnectionError,
     userId,
@@ -579,12 +798,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   useEffect(() => {
     if (localVideoRef.current && state.localStream) {
       localVideoRef.current.srcObject = state.localStream;
+      playMediaElement(localVideoRef.current);
     }
   }, [state.localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && state.remoteStream) {
       remoteVideoRef.current.srcObject = state.remoteStream;
+      playMediaElement(remoteVideoRef.current);
     }
   }, [state.remoteStream]);
 
