@@ -10,6 +10,9 @@ export const VIDEO_CALL_LIMITS = {
 const DEFAULT_STUN_SERVERS = [
   "stun:stun.l.google.com:19302",
   "stun:stun1.l.google.com:19302",
+  "stun:stun2.l.google.com:19302",
+  "stun:stun3.l.google.com:19302",
+  "stun:stun4.l.google.com:19302",
 ] as const;
 
 const normalizeIceServer = (value: unknown): RTCIceServer | null => {
@@ -69,6 +72,8 @@ const getFallbackIceServers = (): RTCIceServer[] => {
       username: turnUsername,
       credential: turnCredential,
     });
+  } else if (turnUrls.length > 0) {
+    console.warn("Relay (TURN) URLs provided but username or credential missing. Relay will be unavailable.");
   }
 
   return servers;

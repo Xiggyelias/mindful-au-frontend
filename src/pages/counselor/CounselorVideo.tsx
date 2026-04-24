@@ -90,6 +90,8 @@ const CounselorVideo = () => {
     isSignalingReady,
     isAudioOnly,
     error,
+    isRelayError,
+    notice,
     localVideoRef,
     remoteVideoRef,
     startCall,
@@ -98,12 +100,6 @@ const CounselorVideo = () => {
     toggleMute,
     toggleVideo,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-    }
-  }, [error]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -357,6 +353,12 @@ const CounselorVideo = () => {
     if (!isOnline) {
       return "You are offline. Reconnect to continue the session.";
     }
+    if (notice) {
+      return notice;
+    }
+    if (error) {
+      return error;
+    }
     if (isStartingActiveSession) {
       return pendingCallMode === "audio"
         ? "Preparing an audio-only session..."
@@ -388,9 +390,11 @@ const CounselorVideo = () => {
     isAudioOnly,
     isConnected,
     isConnecting,
+    error,
     isOnline,
     isStartingActiveSession,
     localStream,
+    notice,
     pendingCallMode,
     remoteStream,
   ]);
@@ -429,9 +433,15 @@ const CounselorVideo = () => {
                 )}
 
                 {error && isOnline && (
-                  <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground [&>svg]:text-amber-600">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Session attention needed</AlertTitle>
+                  <Alert className={cn(
+                    isRelayError 
+                      ? "border-destructive/50 bg-destructive/5 text-destructive-foreground" 
+                      : "border-amber-500/40 bg-amber-500/5 text-foreground"
+                  )}>
+                    <AlertTriangle className={cn("h-4 w-4", isRelayError && "text-destructive")} />
+                    <AlertTitle className="font-bold">
+                      {isRelayError ? "Session attention needed" : "Session issue"}
+                    </AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
@@ -491,6 +501,8 @@ const CounselorVideo = () => {
                           >
                             {isConnected
                               ? "Connected"
+                              : notice
+                              ? "Reconnecting"
                               : isConnecting || isStartingActiveSession
                               ? "Connecting"
                               : isSignalingReady

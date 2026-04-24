@@ -107,6 +107,8 @@ const StudentVideoCall = () => {
     isSignalingReady,
     isAudioOnly,
     error,
+    isRelayError,
+    notice,
     localVideoRef,
     remoteVideoRef,
     startCall,
@@ -115,12 +117,6 @@ const StudentVideoCall = () => {
     toggleMute,
     toggleVideo,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-    }
-  }, [error]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -230,6 +226,12 @@ const StudentVideoCall = () => {
     if (!isOnline) {
       return "You are offline. Reconnect to continue the call.";
     }
+    if (notice) {
+      return notice;
+    }
+    if (error) {
+      return error;
+    }
     if (isStartingMode) {
       return isStartingMode === "audio"
         ? "Preparing an audio-only connection..."
@@ -260,10 +262,12 @@ const StudentVideoCall = () => {
     activeWindowStatus?.message,
     isConnected,
     isConnecting,
+    error,
     isOnline,
     isStartingMode,
     isAudioOnly,
     localStream,
+    notice,
     remoteStream,
   ]);
 
@@ -513,9 +517,15 @@ const StudentVideoCall = () => {
                 )}
 
                 {error && isOnline && (
-                  <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground [&>svg]:text-amber-600">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Call attention needed</AlertTitle>
+                  <Alert className={cn(
+                    isRelayError 
+                      ? "border-destructive/50 bg-destructive/5 text-destructive-foreground" 
+                      : "border-amber-500/40 bg-amber-500/5 text-foreground"
+                  )}>
+                    <AlertTriangle className={cn("h-4 w-4", isRelayError && "text-destructive")} />
+                    <AlertTitle className="font-bold">
+                      {isRelayError ? "Call attention needed" : "Call issue"}
+                    </AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
@@ -575,6 +585,8 @@ const StudentVideoCall = () => {
                           >
                             {isConnected
                               ? "Connected"
+                              : notice
+                              ? "Reconnecting"
                               : isConnecting || isStartingMode
                               ? "Connecting"
                               : isSignalingReady
