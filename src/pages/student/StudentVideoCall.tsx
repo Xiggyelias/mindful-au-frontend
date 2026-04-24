@@ -508,9 +508,12 @@ const StudentVideoCall = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6 max-w-full mx-auto">
+        <main className={cn(
+          "transition-all duration-500",
+          isConnected ? "p-0 h-[calc(100vh-80px)]" : "p-4 lg:p-6 max-w-full mx-auto"
+        )}>
           <div className={cn(
-            "grid gap-6 transition-all duration-500",
+            "grid gap-6 transition-all duration-500 h-full",
             isConnected 
               ? "grid-cols-1" 
               : localStream 
@@ -520,11 +523,14 @@ const StudentVideoCall = () => {
             <Card
               variant="glass"
               className={cn(
-                "min-h-[72vh] overflow-hidden transition-all duration-500",
-                isConnected ? "xl:h-[calc(100vh-120px)]" : "xl:h-[calc(100vh-160px)]"
+                "overflow-hidden transition-all duration-500 border-none",
+                isConnected ? "h-full rounded-none sm:rounded-3xl shadow-2xl" : "min-h-[72vh] xl:h-[calc(100vh-160px)]"
               )}
             >
-              <CardContent className="flex h-full flex-col gap-4 p-4">
+              <CardContent className={cn(
+                "flex h-full flex-col transition-all duration-500",
+                isConnected ? "p-0" : "gap-4 p-4"
+              )}>
                 {!isOnline && (
                   <Alert variant="destructive" className="border-destructive/60 bg-destructive/5">
                     <WifiOff className="h-4 w-4" />
@@ -549,7 +555,12 @@ const StudentVideoCall = () => {
                   </Alert>
                 )}
 
-                <div className="relative flex-1 overflow-hidden rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.18),_transparent_42%),linear-gradient(160deg,_hsl(var(--background)),_hsl(var(--secondary)/0.55))] p-3 sm:p-4">
+                <div className={cn(
+                  "relative flex-1 overflow-hidden transition-all duration-500",
+                  isConnected 
+                    ? "rounded-none sm:rounded-[28px] border-none bg-black" 
+                    : "rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.18),_transparent_42%),linear-gradient(160deg,_hsl(var(--background)),_hsl(var(--secondary)/0.55))] p-3 sm:p-4"
+                )}>
                   {isLoading ? (
                     <div className="flex h-full flex-col gap-4">
                       <div className="flex items-center justify-between gap-3">
@@ -649,13 +660,63 @@ const StudentVideoCall = () => {
                           </div>
                         )}
 
-                        <div className="pointer-events-none absolute left-3 top-3">
-                          <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
+                        <div className="pointer-events-none absolute left-4 top-4 z-20 flex flex-col gap-2">
+                          <Badge className="w-fit rounded-full bg-black/40 backdrop-blur-md px-3 py-1.5 text-sm font-semibold text-white border-white/10 shadow-lg">
                             {remoteParticipantName}
                           </Badge>
+                          {isConnected && remainingSeconds !== null && (
+                            <Badge variant="outline" className="w-fit rounded-full bg-black/30 backdrop-blur-sm px-3 py-1 text-xs text-white border-white/5">
+                              <Clock className="mr-1.5 h-3.5 w-3.5" />
+                              {formatCallDuration(remainingSeconds)}
+                            </Badge>
+                          )}
                         </div>
 
-                        <div className="absolute bottom-3 right-3 w-28 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-40 md:w-52">
+                        {isConnected && (
+                          <div className="absolute inset-x-0 bottom-8 z-30 flex items-center justify-center pointer-events-none px-4">
+                            <div className="pointer-events-auto flex items-center gap-4 p-2 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 shadow-2xl">
+                              <Button
+                                variant={isMuted ? "destructive" : "ghost"}
+                                size="icon"
+                                className={cn(
+                                  "h-14 w-14 rounded-full transition-all duration-300",
+                                  !isMuted && "hover:bg-white/20 text-white"
+                                )}
+                                onClick={handleToggleMute}
+                              >
+                                {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                              </Button>
+
+                              <Button
+                                variant={isVideoOff ? "destructive" : "ghost"}
+                                size="icon"
+                                className={cn(
+                                  "h-14 w-14 rounded-full transition-all duration-300",
+                                  !isVideoOff && "hover:bg-white/20 text-white"
+                                )}
+                                onClick={handleToggleVideo}
+                              >
+                                {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
+                              </Button>
+
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="h-16 w-16 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all duration-200"
+                                onClick={handleEndCall}
+                              >
+                                <Phone className="h-7 w-7 rotate-[135deg]" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className={cn(
+                          "absolute z-20 overflow-hidden transition-all duration-500",
+                          isConnected 
+                            ? "top-4 right-4 w-32 sm:w-44 lg:w-56 rounded-2xl border-white/20 bg-slate-900/40 shadow-2xl backdrop-blur-sm" 
+                            : "bottom-3 right-3 w-28 sm:w-40 md:w-52 rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40"
+                        )}>
                           <div className="pointer-events-none absolute left-2 top-2 z-10">
                             <Badge
                               variant="secondary"
@@ -695,101 +756,105 @@ const StudentVideoCall = () => {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Session
-                          </p>
-                          <p className="mt-2 text-lg font-semibold text-foreground">
-                            {activeAppointment ? remoteParticipantName : "Choose a session"}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {activeAppointment
-                              ? `Scheduled ${formatScheduleLabel(activeAppointment.scheduled_at)}`
-                              : "Only online appointments inside their call window appear here."}
-                          </p>
-                        </div>
+                      {!isConnected && (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Session
+                            </p>
+                            <p className="mt-2 text-lg font-semibold text-foreground">
+                              {activeAppointment ? remoteParticipantName : "Choose a session"}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground text-xs">
+                              {activeAppointment
+                                ? `Scheduled ${formatScheduleLabel(activeAppointment.scheduled_at)}`
+                                : "Only online appointments inside their call window appear here."}
+                            </p>
+                          </div>
 
-                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Call status
-                          </p>
-                          <p className="mt-2 text-base font-medium text-foreground">
-                            {statusMessage}
-                          </p>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Your local preview stays visible so you can confirm camera, framing, and mute state before the other person joins.
-                          </p>
+                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Call status
+                            </p>
+                            <p className="mt-2 text-base font-medium text-foreground text-xs sm:text-sm">
+                              {statusMessage}
+                            </p>
+                            <p className="mt-1 text-[10px] text-muted-foreground leading-tight">
+                              Your local preview stays visible so you can confirm camera, framing, and mute state before the other person joins.
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Button
-                    variant={isMuted ? "destructive" : "outline"}
-                    size="lg"
-                    className="h-14 w-14 rounded-full"
-                    onClick={handleToggleMute}
-                    disabled={!localStream}
-                  >
-                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                  </Button>
-
-                  <Button
-                    variant={isVideoOff ? "destructive" : "outline"}
-                    size="lg"
-                    className="h-14 w-14 rounded-full"
-                    onClick={handleToggleVideo}
-                    disabled={!localStream}
-                  >
-                    {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
-                  </Button>
-
-                  {!localStream ? (
-                    <>
-                      <Button
-                        variant="hero"
-                        size="lg"
-                        className="h-14 rounded-full px-6"
-                        onClick={handleStartCall}
-                        disabled={!canStartSelectedCall || isConnecting}
-                      >
-                        {isStartingMode === "video" ? (
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        ) : (
-                          <Video className="mr-2 h-5 w-5" />
-                        )}
-                        {isStartingMode === "video" ? "Starting video..." : "Start video"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="h-14 rounded-full px-6"
-                        onClick={handleStartAudioCall}
-                        disabled={!canStartSelectedCall || isConnecting}
-                      >
-                        {isStartingMode === "audio" ? (
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        ) : (
-                          <Mic className="mr-2 h-5 w-5" />
-                        )}
-                        {isStartingMode === "audio" ? "Starting audio..." : "Start audio"}
-                      </Button>
-                    </>
-                  ) : (
+                {!isConnected && (
+                  <div className="flex flex-wrap items-center justify-center gap-4 mt-auto py-2">
                     <Button
-                      variant="destructive"
+                      variant={isMuted ? "destructive" : "outline"}
                       size="lg"
-                      className="h-14 rounded-full px-6"
-                      onClick={handleEndCall}
+                      className="h-14 w-14 rounded-full shadow-lg"
+                      onClick={handleToggleMute}
+                      disabled={!localStream}
                     >
-                      <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
-                      End call
+                      {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                     </Button>
-                  )}
-                </div>
+
+                    <Button
+                      variant={isVideoOff ? "destructive" : "outline"}
+                      size="lg"
+                      className="h-14 w-14 rounded-full shadow-lg"
+                      onClick={handleToggleVideo}
+                      disabled={!localStream}
+                    >
+                      {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+                    </Button>
+
+                    {!localStream ? (
+                      <>
+                        <Button
+                          variant="hero"
+                          size="lg"
+                          className="h-14 rounded-full px-8 shadow-xl hover:scale-105 transition-all"
+                          onClick={handleStartCall}
+                          disabled={!canStartSelectedCall || isConnecting}
+                        >
+                          {isStartingMode === "video" ? (
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          ) : (
+                            <Video className="mr-2 h-5 w-5" />
+                          )}
+                          {isStartingMode === "video" ? "Starting..." : "Start Video"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          className="h-14 rounded-full px-8 shadow-lg"
+                          onClick={handleStartAudioCall}
+                          disabled={!canStartSelectedCall || isConnecting}
+                        >
+                          {isStartingMode === "audio" ? (
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          ) : (
+                            <Mic className="mr-2 h-5 w-5" />
+                          )}
+                          {isStartingMode === "audio" ? "Starting..." : "Start Audio"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        size="lg"
+                        className="h-14 rounded-full px-8 shadow-xl"
+                        onClick={handleEndCall}
+                      >
+                        <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
+                        End Call
+                      </Button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
