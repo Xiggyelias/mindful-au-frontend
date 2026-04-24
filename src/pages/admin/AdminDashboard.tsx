@@ -42,27 +42,66 @@ const formatDateTime = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? "Never" : date.toLocaleString();
 };
 
-const DASHBOARD_COUNSELOR_PAGE_SIZE = 80;
-const DASHBOARD_APPOINTMENT_PAGE_SIZE = 120;
-const DASHBOARD_SESSION_PAGE_SIZE = 160;
-const DASHBOARD_SESSION_RETRY_PAGE_SIZE = 80;
-const DASHBOARD_SESSION_TIMEOUT_MS = 20000;
-const DASHBOARD_SESSION_RETRY_TIMEOUT_MS = 45000;
-
-const toList = <T,>(payload: unknown): T[] => {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-  if (payload && typeof payload === "object" && Array.isArray((payload as any).data)) {
-    return (payload as any).data as T[];
-  }
-  return [];
+type DashboardCounselorPresenceItem = {
+  id: number;
+  name: string;
+  status: "Offline" | "Available" | "In Session";
+  sessions: number;
 };
 
-const toMetaTotal = (payload: unknown, fallback: number): number => {
-  if (!payload || typeof payload !== "object") return fallback;
-  const total = Number((payload as any)?.meta?.total);
-  return Number.isFinite(total) && total >= 0 ? Math.floor(total) : fallback;
+type DashboardPendingAppointment = {
+  id: number;
+  student_id: number;
+  counselor_id: number;
+  scheduled_at?: string | null;
+  student?: {
+    id?: number | null;
+    email?: string | null;
+    profile?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+  counselor?: {
+    id?: number | null;
+    email?: string | null;
+    profile?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+};
+
+type AdminDashboardData = {
+  overview?: {
+    total_students?: number;
+    total_counselors?: number;
+    active_sessions?: number;
+    pending_appointments?: number;
+  };
+  sessions?: {
+    total_sessions?: number;
+    sessions_this_week?: number;
+    sessions_by_status?: Record<string, number>;
+  };
+  appointments?: {
+    total_appointments?: number;
+    appointments_today?: number;
+    appointments_this_week?: number;
+  };
+  ai_diagnostics?: {
+    diagnostics_this_month?: number;
+    high_risk_alerts?: number;
+  };
+  alerts?: {
+    open_total?: number;
+  };
+  counselor_presence?: {
+    summary?: {
+      total?: number;
+      available?: number;
+    };
+    items?: DashboardCounselorPresenceItem[];
+  };
+  pending_appointments?: DashboardPendingAppointment[];
 };
 
 const AdminDashboard = () => {
@@ -71,11 +110,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
 
-  const [stats, setStats] = useState({ students: 0, counselors: 0, sessions: 0, alerts: 0 });
-  const [activeCounselors, setActiveCounselors] = useState<any[]>([]);
-  const [counselorStatusSummary, setCounselorStatusSummary] = useState({ total: 0, available: 0 });
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [analytics, setAnalytics] = useState<any | null>(null);
+  const [dashboardData, setDashboardData] = useState<AdminDashboardData | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingAppointmentId, setConfirmingAppointmentId] = useState<number | null>(null);
@@ -91,161 +126,20 @@ const AdminDashboard = () => {
 
     try {
       setIsLoading(true);
-      const loadSessionSnapshot = async () => {
-        try {
-          return await api.getSessions({
-            lightweight: true,
-            open_only: true,
-            page: 1,
-            per_page: DASHBOARD_SESSION_PAGE_SIZE,
-            timeout_ms: DASHBOARD_SESSION_TIMEOUT_MS,
-          });
-        } catch (err) {
-          const isTimeout = (err as { code?: string })?.code === "ECONNABORTED";
-          if (!isTimeout) {
-            throw err;
-          }
-
-          return api.getSessions({
-            lightweight: true,
-            open_only: true,
-            page: 1,
-            per_page: DASHBOARD_SESSION_RETRY_PAGE_SIZE,
-            timeout_ms: DASHBOARD_SESSION_RETRY_TIMEOUT_MS,
-          });
-        }
-      };
-
-      const [analyticsResult, counselorsResult, appointmentsResult, sessionsResult] = await Promise.allSettled([
-        api.getAnalytics(),
-        api.getCounselors({
-          lightweight: true,
-          page: 1,
-          per_page: DASHBOARD_COUNSELOR_PAGE_SIZE,
-          timeout_ms: 15000,
-        }),
-        api.getAppointments({
-          page: 1,
-          per_page: DASHBOARD_APPOINTMENT_PAGE_SIZE,
-          timeout_ms: 15000,
-        }),
-        loadSessionSnapshot(),
-      ]);
+      const response = await api.getAdminDashboardOverview({ timeout_ms: 15000 });
 
       if (loadRequestRef.current !== requestId) {
         return;
       }
 
-      const analyticsRes = analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
-      const counselorPayload = counselorsResult.status === "fulfilled" ? counselorsResult.value : [];
-      const appointmentPayload = appointmentsResult.status === "fulfilled" ? appointmentsResult.value : [];
-      const sessionPayload = sessionsResult.status === "fulfilled" ? sessionsResult.value : [];
-      const counselors = toList<any>(counselorPayload);
-      const appointmentsRes = toList<any>(appointmentPayload);
-      const sessionsRes = toList<any>(sessionPayload);
-
-      const hasStageOneData =
-        analyticsRes !== null ||
-        counselors.length > 0 ||
-        appointmentsRes.length > 0 ||
-        sessionsRes.length > 0;
-      if (!hasStageOneData) {
+      if (!response || typeof response !== "object") {
         throw new Error("Unable to load dashboard data");
       }
 
-      const today = new Date().toDateString();
-      const studentCount = Number(analyticsRes?.overview?.total_students ?? 0);
-      const counselorCountFromAnalytics = Number(analyticsRes?.overview?.total_counselors);
-      const counselorCount =
-        Number.isFinite(counselorCountFromAnalytics) && counselorCountFromAnalytics >= 0
-          ? Math.floor(counselorCountFromAnalytics)
-          : toMetaTotal(counselorPayload, counselors.length);
-      const sessionsTodayFromAnalytics = Number(analyticsRes?.appointments?.appointments_today);
-      const sessionsTodayFallback = appointmentsRes.filter((apt: any) => {
-        const aptDate = new Date(apt.scheduled_at).toDateString();
-        return aptDate === today;
-      }).length;
-      const todaysSessions =
-        Number.isFinite(sessionsTodayFromAnalytics) && sessionsTodayFromAnalytics >= 0
-          ? Math.floor(sessionsTodayFromAnalytics)
-          : sessionsTodayFallback;
-      const stageOneHighRiskAlerts = Number(analyticsRes?.ai_diagnostics?.high_risk_alerts ?? 0);
-
-      const counselorData = counselors.map((counselor: any) => {
-        const todayAppointments = appointmentsRes.filter((apt: any) => {
-          const aptDate = new Date(apt.scheduled_at).toDateString();
-          const isToday = aptDate === today;
-          return isToday && apt.counselor_id === counselor.id;
-        }).length;
-
-        const activeSession = sessionsRes.find(
-          (session: any) => session.counselor_id === counselor.id && session.status === "active"
-        );
-
-        let status = "Offline";
-        if (counselor.is_online) {
-          status = activeSession ? "In Session" : "Available";
-        }
-
-        return {
-          id: counselor.id,
-          name: counselor.profile?.full_name || counselor.email?.split("@")[0] || "Unknown",
-          status,
-          sessions: todayAppointments,
-        };
-      });
-
       applyIfCurrent(() => {
-        setStats({
-          students: studentCount,
-          counselors: counselorCount,
-          sessions: todaysSessions,
-          alerts:
-            Number.isFinite(stageOneHighRiskAlerts) && stageOneHighRiskAlerts >= 0
-              ? Math.floor(stageOneHighRiskAlerts)
-              : 0,
-        });
-        setCounselorStatusSummary({
-          total: counselorData.length,
-          available: counselorData.filter((c) => c.status === "Available").length,
-        });
-        setActiveCounselors(counselorData.slice(0, 5));
-        setAppointments(appointmentsRes);
-        if (analyticsRes !== null) {
-          setAnalytics(analyticsRes);
-        }
+        setDashboardData(response as AdminDashboardData);
         setLastSyncedAt(new Date().toISOString());
       });
-
-      // Stage 2: load alert enrichment without blocking first paint.
-      void (async () => {
-        const [panicLogsResult, diagnosticsSummaryResult] = await Promise.allSettled([
-          api.getPanicLogs(),
-          api.getAIDiagnosticsSummary({ days: 30 }),
-        ]);
-
-        if (loadRequestRef.current !== requestId) {
-          return;
-        }
-
-        const panicLogs =
-          panicLogsResult.status === "fulfilled" && Array.isArray(panicLogsResult.value)
-            ? panicLogsResult.value
-            : [];
-        const diagnosticsSummary =
-          diagnosticsSummaryResult.status === "fulfilled" ? diagnosticsSummaryResult.value : null;
-        const activePanicAlerts = panicLogs.filter((log: any) => !log.resolved).length;
-        const highRiskAlerts = Number(
-          diagnosticsSummary?.high_or_critical ?? analyticsRes?.ai_diagnostics?.high_risk_alerts ?? 0
-        );
-
-        setStats((prev) => ({
-          ...prev,
-          alerts:
-            activePanicAlerts +
-            (Number.isFinite(highRiskAlerts) && highRiskAlerts >= 0 ? Math.floor(highRiskAlerts) : 0),
-        }));
-      })();
     } catch (error) {
       console.error("Failed to load admin dashboard:", error);
       if (loadRequestRef.current === requestId) {
@@ -264,14 +158,31 @@ const AdminDashboard = () => {
     }
   }, [user, loadDashboardData]);
 
-  const pendingAppointments = useMemo(() => {
-    return appointments
-      .filter((apt: any) => apt.status === "scheduled")
-      .sort(
-        (a: any, b: any) =>
-          new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
-      );
-  }, [appointments]);
+  const analytics = dashboardData;
+
+  const stats = useMemo(() => {
+    return {
+      students: Number(analytics?.overview?.total_students ?? 0),
+      counselors: Number(analytics?.overview?.total_counselors ?? 0),
+      sessions: Number(analytics?.appointments?.appointments_today ?? 0),
+      alerts: Number(analytics?.alerts?.open_total ?? 0),
+    };
+  }, [analytics]);
+
+  const activeCounselors = useMemo<DashboardCounselorPresenceItem[]>(() => {
+    return analytics?.counselor_presence?.items ?? [];
+  }, [analytics]);
+
+  const counselorStatusSummary = useMemo(() => {
+    return {
+      total: Number(analytics?.counselor_presence?.summary?.total ?? 0),
+      available: Number(analytics?.counselor_presence?.summary?.available ?? 0),
+    };
+  }, [analytics]);
+
+  const pendingAppointments = useMemo<DashboardPendingAppointment[]>(() => {
+    return analytics?.pending_appointments ?? [];
+  }, [analytics]);
 
   const studentActivity = (() => {
     const totalStudents = analytics?.overview?.total_students || 0;
@@ -516,7 +427,7 @@ const AdminDashboard = () => {
                   {isLoading ? (
                     <p className="text-sm text-muted-foreground">Loading pending items...</p>
                   ) : (
-                    pendingAppointments.slice(0, 5).map((apt: any) => (
+                    pendingAppointments.map((apt) => (
                       <div
                         key={apt.id}
                         className="flex items-center justify-between p-4 rounded-xl bg-secondary/30"

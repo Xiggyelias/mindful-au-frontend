@@ -391,6 +391,7 @@ class ApiClient {
 
     return (
       normalizedPath === '/me' ||
+      normalizedPath === '/analytics/overview' ||
       normalizedPath.startsWith('/appointments') ||
       normalizedPath.startsWith('/users/counselors') ||
       normalizedPath === '/sessions' ||
@@ -900,6 +901,16 @@ class ApiClient {
   }
 
   // Analytics (Admin only)
+  async getAdminDashboardOverview(params?: { timeout_ms?: number }) {
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+
+    const response = await this.client.get('/analytics/overview', { timeout: timeoutMs });
+    return response.data;
+  }
+
   async getAnalytics() {
     const response = await this.client.get('/analytics/dashboard');
     return response.data;
