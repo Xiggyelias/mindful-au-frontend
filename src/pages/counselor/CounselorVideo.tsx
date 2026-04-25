@@ -15,6 +15,7 @@ import {
   MicOff,
   VideoOff,
   Phone,
+  PhoneIncoming,
   Loader2,
   WifiOff,
 } from "lucide-react";
@@ -83,6 +84,7 @@ const CounselorVideo = () => {
   );
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
+  const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
   const requestedAppointmentId = useMemo(() => {
     const parsed = Number(searchParams.get("appointment_id"));
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -102,6 +104,12 @@ const CounselorVideo = () => {
     error,
     isRelayError,
     notice,
+    isIncomingCall,
+    incomingAudioOnly,
+    localSpeaking,
+    remoteSpeaking,
+    voiceFilter,
+    callQuality,
     localVideoRef,
     remoteVideoRef,
     startCall,
@@ -109,6 +117,9 @@ const CounselorVideo = () => {
     endCall,
     toggleMute,
     toggleVideo,
+    acceptIncomingCall,
+    rejectIncomingCall,
+    setVoiceFilter,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
   useEffect(() => {
@@ -186,6 +197,14 @@ const CounselorVideo = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
+  };
+
+  const handleAcceptIncomingCall = () => {
+    void acceptIncomingCall();
+  };
+
+  const handleRejectIncomingCall = () => {
+    void rejectIncomingCall();
   };
 
   const activeSession = useMemo(
@@ -430,10 +449,13 @@ const CounselorVideo = () => {
     return () => window.clearInterval(timer);
   }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
-  const remoteParticipantName = useMemo(
-    () => getParticipantName(activeSession?.student, "Student"),
-    [activeSession]
-  );
+  const remoteParticipantName = useMemo(() => {
+    if (activeSession?.is_anonymous) {
+      const fallbackId = String(activeSession?.id || "").slice(-4) || "----";
+      return `Anonymous Student #${fallbackId}`;
+    }
+    return getParticipantName(activeSession?.student, "Student");
+  }, [activeSession]);
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo);
 
@@ -443,6 +465,9 @@ const CounselorVideo = () => {
     }
     if (!isOnline) {
       return "You are offline. Reconnect to continue the session.";
+    }
+    if (isIncomingCall) {
+      return `Incoming ${incomingAudioOnly ? "audio" : "video"} call. Accept or reject to continue.`;
     }
     if (notice) {
       return notice;
@@ -483,6 +508,8 @@ const CounselorVideo = () => {
     isAudioOnly,
     isConnected,
     isConnecting,
+    isIncomingCall,
+    incomingAudioOnly,
     error,
     isOnline,
     isStartingActiveSession,
@@ -541,6 +568,21 @@ const CounselorVideo = () => {
                     <AlertTitle>You are offline</AlertTitle>
                     <AlertDescription>
                       Presence, notifications, and video signaling are paused until your device reconnects.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {isIncomingCall && (
+                  <Alert className="border-emerald-500/40 bg-emerald-500/5 text-foreground">
+                    <PhoneIncoming className="h-4 w-4 text-emerald-500" />
+                    <AlertTitle>Incoming {incomingAudioOnly ? "audio" : "video"} call</AlertTitle>
+                    <AlertDescription className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button size="sm" onClick={handleAcceptIncomingCall}>
+                        Accept
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleRejectIncomingCall}>
+                        Reject
+                      </Button>
                     </AlertDescription>
                   </Alert>
                 )}
@@ -628,6 +670,11 @@ const CounselorVideo = () => {
                               {formatCallDuration(remainingSeconds)} left
                             </Badge>
                           )}
+                          {isConnected && (
+                            <Badge variant="outline" className="rounded-full px-3 py-1">
+                              {`Latency ${callQuality.latencyMs ?? "--"}ms • Jitter ${callQuality.jitterMs ?? "--"}ms • Loss ${callQuality.packetLossPercent ?? "--"}%`}
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
@@ -661,7 +708,7 @@ const CounselorVideo = () => {
 
                         <div className="pointer-events-none absolute left-3 top-3">
                           <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
-                            {remoteParticipantName}
+                            {remoteParticipantName}{remoteSpeaking ? " • speaking" : ""}
                           </Badge>
                         </div>
 
@@ -671,7 +718,8 @@ const CounselorVideo = () => {
                               variant="secondary"
                               className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
                             >
-                              You
+                              {isAnonymousMode ? "You (Anonymous)" : "You"}
+                              {localSpeaking ? " • speaking" : ""}
                             </Badge>
                           </div>
 
@@ -765,6 +813,22 @@ const CounselorVideo = () => {
                       <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
                       End session
                     </Button>
+                  )}
+                  {localStream && (
+                    <select
+                      value={voiceFilter}
+                      onChange={(event) => {
+                        void setVoiceFilter(event.target.value as any);
+                      }}
+                      className="h-11 rounded-full border border-border/60 bg-background px-4 text-xs text-foreground outline-none"
+                      aria-label="Voice anonymization filter"
+                    >
+                      <option value="none">Voice: Natural</option>
+                      <option value="neutral-mask">Voice: Neutral Mask</option>
+                      <option value="pitch-shift">Voice: Pitch Shift</option>
+                      <option value="tone-mod">Voice: Tone Mod</option>
+                      <option value="robotic">Voice: Robotic</option>
+                    </select>
                   )}
                 </div>
               </CardContent>

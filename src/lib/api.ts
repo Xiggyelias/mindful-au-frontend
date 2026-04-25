@@ -24,8 +24,39 @@ const RESPONSE_CACHE_STALE_IF_ERROR_MS = 10 * 60 * 1000;
 export const API_RECOVERED_EVENT = 'api:recovered';
 export const AUTH_EXPIRED_EVENT = 'auth:expired';
 const AUTH_TOKEN_STORAGE_KEY = 'auth_token';
+const AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY = 'auth_token_expires_at';
+const AUTH_DEVICE_ID_STORAGE_KEY = 'auth_device_id';
 const LOCAL_HOST_PATTERN = /^(localhost|127\.0\.0\.1|::1)$/i;
 const VITE_DEV_SERVER_PORTS = new Set(['5173', '4173']);
+const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
+
+export type AuthDeviceSession = {
+  id: number;
+  device_id: string;
+  device_name: string;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at?: string | null;
+  last_activity_at?: string | null;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+  is_current: boolean;
+  two_factor_verified?: boolean;
+};
+
+export type DailyTip = {
+  id: number;
+  title: string;
+  content: string;
+  category: string;
+  audience: string;
+  mood_tags?: string[];
+  priority?: number;
+  is_active?: boolean;
+  personalized?: boolean;
+  mood?: string | null;
+  served_for_date?: string | null;
+};
 
 type ApiRequestConfig = Record<string, unknown> & {
   method?: string;
@@ -192,10 +223,12 @@ export const getApiErrorMessage = (
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
+  private tokenExpiresAt: number | null = null;
   private activeBaseUrl: string;
   private readonly apiBaseCandidates: string[];
   private readonly responseCache = new Map<string, { savedAt: number; data: unknown }>();
   private wasApiUnreachable = false;
+  private refreshPromise: Promise<unknown> | null = null;
 
   constructor() {
     this.activeBaseUrl = API_BASE_URL;
@@ -212,14 +245,25 @@ class ApiClient {
 
     // Load token from session storage and migrate legacy localStorage tokens.
     this.token = this.loadPersistedToken();
+    this.tokenExpiresAt = this.loadPersistedTokenExpiry();
     if (this.token) {
       this.setToken(this.token);
     }
 
     // Intercept requests to add token
     this.client.interceptors.request.use((config) => {
+      config.headers = config.headers ?? {};
+
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
+      }
+
+      const deviceContext = this.getDeviceContext();
+      if (deviceContext.deviceId) {
+        config.headers['X-Device-ID'] = deviceContext.deviceId;
+      }
+      if (deviceContext.deviceName) {
+        config.headers['X-Device-Name'] = deviceContext.deviceName;
       }
 
       if (!config.baseURL) {
@@ -501,6 +545,97 @@ class ApiClient {
     return null;
   }
 
+  private loadPersistedTokenExpiry(): number | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const raw = window.sessionStorage.getItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private persistTokenExpiry(expiresInSeconds: unknown): void {
+    const seconds = Number(expiresInSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      this.clearPersistedTokenExpiry();
+      return;
+    }
+
+    this.tokenExpiresAt = Date.now() + Math.floor(seconds * 1000);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY, String(this.tokenExpiresAt));
+    }
+  }
+
+  private clearPersistedTokenExpiry(): void {
+    this.tokenExpiresAt = null;
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY);
+    }
+  }
+
+  private getOrCreateDeviceId(): string {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+
+    const existing = window.localStorage.getItem(AUTH_DEVICE_ID_STORAGE_KEY);
+    if (existing && existing.trim() !== '') {
+      return existing;
+    }
+
+    const generated = typeof window.crypto?.randomUUID === 'function'
+      ? window.crypto.randomUUID()
+      : `web-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+
+    window.localStorage.setItem(AUTH_DEVICE_ID_STORAGE_KEY, generated);
+    return generated;
+  }
+
+  private inferBrowserName(): string {
+    if (typeof navigator === 'undefined') {
+      return 'Browser';
+    }
+
+    const userAgent = navigator.userAgent || '';
+    if (/edg/i.test(userAgent)) return 'Edge';
+    if (/opr|opera/i.test(userAgent)) return 'Opera';
+    if (/chrome|crios/i.test(userAgent)) return 'Chrome';
+    if (/firefox|fxios/i.test(userAgent)) return 'Firefox';
+    if (/safari/i.test(userAgent)) return 'Safari';
+    return 'Browser';
+  }
+
+  private inferPlatformName(): string {
+    if (typeof navigator === 'undefined') {
+      return 'device';
+    }
+
+    const platform = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
+    if (platform.includes('iphone') || platform.includes('ipad') || platform.includes('ios')) return 'iPhone';
+    if (platform.includes('android')) return 'Android';
+    if (platform.includes('mac')) return 'Mac';
+    if (platform.includes('win')) return 'Windows';
+    if (platform.includes('linux')) return 'Linux';
+    return 'device';
+  }
+
+  private getDeviceName(): string {
+    return `${this.inferBrowserName()} on ${this.inferPlatformName()}`;
+  }
+
+  private getDeviceContext(): { deviceId: string; deviceName: string } {
+    return {
+      deviceId: this.getOrCreateDeviceId(),
+      deviceName: this.getDeviceName(),
+    };
+  }
+
   setToken(token: string) {
     this.token = token;
     if (typeof window !== 'undefined') {
@@ -516,6 +651,7 @@ class ApiClient {
       window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
+    this.clearPersistedTokenExpiry();
     delete this.client.defaults.headers.common['Authorization'];
   }
 
@@ -531,11 +667,46 @@ class ApiClient {
     return this.activeBaseUrl;
   }
 
+  getTokenExpiresAt() {
+    return this.tokenExpiresAt;
+  }
+
+  isTokenExpiringSoon(minRemainingMs: number = TOKEN_REFRESH_WINDOW_MS) {
+    if (!this.token || !this.tokenExpiresAt) {
+      return false;
+    }
+
+    return Date.now() + minRemainingMs >= this.tokenExpiresAt;
+  }
+
+  async ensureFreshToken(minRemainingMs: number = TOKEN_REFRESH_WINDOW_MS) {
+    if (!this.isTokenExpiringSoon(minRemainingMs)) {
+      return false;
+    }
+
+    if (this.refreshPromise) {
+      await this.refreshPromise;
+      return true;
+    }
+
+    this.refreshPromise = this.refreshToken()
+      .catch((error) => {
+        throw error;
+      })
+      .finally(() => {
+        this.refreshPromise = null;
+      });
+
+    await this.refreshPromise;
+    return true;
+  }
+
   // Auth endpoints
   async register(data: { email: string; password: string; full_name: string; id_number?: string; role: string }) {
     const response = await this.client.post('/register', data);
     if (response.data.access_token) {
       this.setToken(response.data.access_token);
+      this.persistTokenExpiry(response.data.expires_in);
     }
     return response.data;
   }
@@ -544,12 +715,17 @@ class ApiClient {
     const response = await this.client.post('/login', { email, password });
     if (response.data.access_token) {
       this.setToken(response.data.access_token);
+      this.persistTokenExpiry(response.data.expires_in);
     }
     return response.data;
   }
 
   async exchangeGoogleLoginTicket(ticket: string) {
     const response = await this.client.post('/auth/google/exchange-ticket', { ticket });
+    if (response.data.access_token) {
+      this.setToken(response.data.access_token);
+      this.persistTokenExpiry(response.data.expires_in);
+    }
     return response.data;
   }
 
@@ -562,6 +738,7 @@ class ApiClient {
     const response = await this.client.post('/refresh');
     if (response.data.access_token) {
       this.setToken(response.data.access_token);
+      this.persistTokenExpiry(response.data.expires_in);
     }
     return response.data;
   }
@@ -597,6 +774,62 @@ class ApiClient {
 
   async updatePresence() {
     const response = await this.client.post('/me/presence');
+    return response.data;
+  }
+
+  async getAuthSessions() {
+    const response = await this.client.get('/auth/sessions');
+    return (response.data?.sessions ?? []) as AuthDeviceSession[];
+  }
+
+  async revokeAuthSession(sessionId: number) {
+    const response = await this.client.delete(`/auth/sessions/${sessionId}`);
+    return (response.data?.sessions ?? []) as AuthDeviceSession[];
+  }
+
+  async logoutOtherAuthSessions() {
+    const response = await this.client.post('/auth/sessions/logout-others');
+    return (response.data?.sessions ?? []) as AuthDeviceSession[];
+  }
+
+  async getTodayTip() {
+    const response = await this.client.get('/tips/today');
+    return (response.data?.tip ?? null) as DailyTip | null;
+  }
+
+  async getTips() {
+    const response = await this.client.get('/tips');
+    return (response.data?.tips ?? []) as DailyTip[];
+  }
+
+  async createTip(data: {
+    title: string;
+    content: string;
+    category: string;
+    audience: 'all' | 'student' | 'counselor' | 'peer_counselor' | 'admin';
+    mood_tags?: string[];
+    priority?: number;
+    is_active?: boolean;
+  }) {
+    const response = await this.client.post('/tips', data);
+    return response.data?.tip as DailyTip;
+  }
+
+  async updateTip(id: number, data: {
+    title: string;
+    content: string;
+    category: string;
+    audience: 'all' | 'student' | 'counselor' | 'peer_counselor' | 'admin';
+    mood_tags?: string[];
+    priority?: number;
+    is_active?: boolean;
+  }) {
+    const response = await this.client.put(`/tips/${id}`, data);
+    return response.data?.tip as DailyTip;
+  }
+
+  async deleteTip(id: number) {
+    const response = await this.client.delete(`/tips/${id}`);
     return response.data;
   }
 
@@ -1000,6 +1233,13 @@ class ApiClient {
   async endVideoCall(appointmentId: number | string) {
     const response = await this.client.post('/video-calls/end', {
       appointment_id: Number(appointmentId),
+    });
+    return response.data;
+  }
+
+  async revealAnonymousIdentity(sessionId: number | string, reason: string) {
+    const response = await this.client.post(`/sessions/${sessionId}/reveal-identity`, {
+      reason,
     });
     return response.data;
   }

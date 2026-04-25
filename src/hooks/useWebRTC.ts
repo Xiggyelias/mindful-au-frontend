@@ -19,11 +19,29 @@ interface WebRTCState {
   error: string | null;
   isRelayError: boolean;
   notice: string | null;
+  isIncomingCall: boolean;
+  incomingCallerId: string | null;
+  incomingAudioOnly: boolean;
+  localSpeaking: boolean;
+  remoteSpeaking: boolean;
+  voiceFilter: VoiceFilterPreset;
+  callQuality: {
+    latencyMs: number | null;
+    jitterMs: number | null;
+    packetLossPercent: number | null;
+  };
 }
 
 interface StartCallOptions {
   audioOnly?: boolean;
 }
+
+export type VoiceFilterPreset =
+  | "none"
+  | "neutral-mask"
+  | "pitch-shift"
+  | "tone-mod"
+  | "robotic";
 
 const ICE_SERVERS = getWebRtcIceServers();
 const HAS_RELAY_ICE_SERVER = hasRelayIceServer(ICE_SERVERS);
@@ -70,6 +88,14 @@ const AUDIO_ONLY_CONSTRAINTS: MediaStreamConstraints = {
   video: false,
 };
 
+const SPEAKING_THRESHOLD = 0.06;
+const SPEAKING_HOLD_MS = 300;
+
+type VoiceProcessingChain = {
+  track: MediaStreamTrack;
+  stop: () => void;
+};
+
 const playMediaElement = (element: HTMLVideoElement | null) => {
   if (!element) {
     return;
@@ -111,6 +137,76 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
   return "Could not access camera or microphone. Check device permissions and try again.";
 };
 
+const applyVoiceFilterToSource = (
+  source: MediaStreamAudioSourceNode,
+  destination: MediaStreamAudioDestinationNode,
+  filter: VoiceFilterPreset
+) => {
+  const context = source.context;
+
+  switch (filter) {
+    case "pitch-shift": {
+      const highpass = context.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = 180;
+      const peaking = context.createBiquadFilter();
+      peaking.type = "peaking";
+      peaking.frequency.value = 2500;
+      peaking.gain.value = 5;
+      source.connect(highpass);
+      highpass.connect(peaking);
+      peaking.connect(destination);
+      return;
+    }
+    case "tone-mod": {
+      const lowpass = context.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = 1300;
+      const ringModGain = context.createGain();
+      ringModGain.gain.value = 0.55;
+      const dryGain = context.createGain();
+      dryGain.gain.value = 0.45;
+      source.connect(lowpass);
+      lowpass.connect(ringModGain);
+      source.connect(dryGain);
+      ringModGain.connect(destination);
+      dryGain.connect(destination);
+      return;
+    }
+    case "robotic": {
+      const bandpass = context.createBiquadFilter();
+      bandpass.type = "bandpass";
+      bandpass.frequency.value = 750;
+      bandpass.Q.value = 1.4;
+      const compressor = context.createDynamicsCompressor();
+      compressor.threshold.value = -30;
+      compressor.ratio.value = 12;
+      source.connect(bandpass);
+      bandpass.connect(compressor);
+      compressor.connect(destination);
+      return;
+    }
+    case "neutral-mask": {
+      const highpass = context.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = 130;
+      const lowpass = context.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = 3400;
+      const compressor = context.createDynamicsCompressor();
+      compressor.threshold.value = -28;
+      compressor.ratio.value = 8;
+      source.connect(highpass);
+      highpass.connect(lowpass);
+      lowpass.connect(compressor);
+      compressor.connect(destination);
+      return;
+    }
+    default:
+      source.connect(destination);
+  }
+};
+
 const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
   const normalizedLocalId = String(localUserId || "");
   const normalizedRemoteId = String(remoteUserId || "");
@@ -147,6 +243,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     error: null,
     isRelayError: false,
     notice: null,
+    isIncomingCall: false,
+    incomingCallerId: null,
+    incomingAudioOnly: false,
+    localSpeaking: false,
+    remoteSpeaking: false,
+    voiceFilter: "none",
+    callQuality: {
+      latencyMs: null,
+      jitterMs: null,
+      packetLossPercent: null,
+    },
   });
 
   const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -163,6 +270,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const ignoreOfferRef = useRef(false);
   const wasConnectedRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
+  const pendingCallRequestRef = useRef<{ audioOnly: boolean } | null>(null);
+  const voiceProcessingRef = useRef<VoiceProcessingChain | null>(null);
+  const rawAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localSpeakingSinceRef = useRef<number | null>(null);
+  const remoteSpeakingSinceRef = useRef<number | null>(null);
 
   const clearConnectionTimeout = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -182,6 +294,52 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     connection.onconnectionstatechange = null;
     connection.oniceconnectionstatechange = null;
     connection.close();
+  }, []);
+
+  const stopVoiceProcessing = useCallback(() => {
+    if (voiceProcessingRef.current) {
+      voiceProcessingRef.current.stop();
+      voiceProcessingRef.current = null;
+    }
+  }, []);
+
+  const createVoiceProcessedTrack = useCallback(
+    (sourceTrack: MediaStreamTrack, filter: VoiceFilterPreset): MediaStreamTrack => {
+      if (typeof AudioContext === "undefined") {
+        return sourceTrack;
+      }
+
+      const context = new AudioContext();
+      const sourceStream = new MediaStream([sourceTrack]);
+      const source = context.createMediaStreamSource(sourceStream);
+      const destination = context.createMediaStreamDestination();
+      applyVoiceFilterToSource(source, destination, filter);
+      const [processedTrack] = destination.stream.getAudioTracks();
+
+      if (!processedTrack) {
+        context.close().catch(() => undefined);
+        return sourceTrack;
+      }
+
+      voiceProcessingRef.current = {
+        track: processedTrack,
+        stop: () => {
+          processedTrack.stop();
+          void context.close();
+        },
+      };
+
+      return processedTrack;
+    },
+    []
+  );
+
+  const setLocalSpeakingState = useCallback((value: boolean) => {
+    setState((prev) => (prev.localSpeaking === value ? prev : { ...prev, localSpeaking: value }));
+  }, []);
+
+  const setRemoteSpeakingState = useCallback((value: boolean) => {
+    setState((prev) => (prev.remoteSpeaking === value ? prev : { ...prev, remoteSpeaking: value }));
   }, []);
 
   const setConnectionError = useCallback((message: string, isRelay = false) => {
@@ -254,10 +412,19 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       pendingIceCandidatesRef.current = [];
       remotePeerIdRef.current = null;
       remoteStreamRef.current = null;
+      pendingCallRequestRef.current = null;
       makingOfferRef.current = false;
       ignoreOfferRef.current = false;
       wasConnectedRef.current = false;
       reconnectAttemptsRef.current = 0;
+      localSpeakingSinceRef.current = null;
+      remoteSpeakingSinceRef.current = null;
+
+      if (rawAudioTrackRef.current) {
+        rawAudioTrackRef.current.stop();
+        rawAudioTrackRef.current = null;
+      }
+      stopVoiceProcessing();
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -297,11 +464,21 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         error: null,
         isRelayError: false,
         notice: null,
+        isIncomingCall: false,
+        incomingCallerId: null,
+        incomingAudioOnly: false,
+        localSpeaking: false,
+        remoteSpeaking: false,
+        callQuality: {
+          latencyMs: null,
+          jitterMs: null,
+          packetLossPercent: null,
+        },
       }));
 
       cleanupInProgressRef.current = false;
     },
-    [clearConnectionTimeout, closePeerConnection, userId]
+    [clearConnectionTimeout, closePeerConnection, stopVoiceProcessing, userId]
   );
 
   const startConnectionTimeout = useCallback(() => {
@@ -532,6 +709,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     clearConnectionTimeout,
     handleConnectionFailure,
     startConnectionTimeout,
+    updateRemoteStreamState,
     userId,
   ]);
 
@@ -564,6 +742,21 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       const tryGetMedia = async (constraints: MediaStreamConstraints) => {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const [audioTrack] = stream.getAudioTracks();
+        if (audioTrack) {
+          if (rawAudioTrackRef.current && rawAudioTrackRef.current !== audioTrack) {
+            rawAudioTrackRef.current.stop();
+          }
+          rawAudioTrackRef.current = audioTrack;
+          stopVoiceProcessing();
+          const filteredTrack = createVoiceProcessedTrack(audioTrack, state.voiceFilter);
+          if (filteredTrack !== audioTrack) {
+            stream.removeTrack(audioTrack);
+            stream.addTrack(filteredTrack);
+            audioTrack.enabled = true;
+          }
+        }
+
         localStreamRef.current = stream;
         setState((prev) => ({
           ...prev,
@@ -599,7 +792,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return null;
       }
     },
-    [lowBandwidthMode, setConnectionError]
+    [createVoiceProcessedTrack, lowBandwidthMode, setConnectionError, state.voiceFilter, stopVoiceProcessing]
   );
 
   const rollbackConnectionIfNeeded = useCallback(
@@ -655,19 +848,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       startConnectionTimeout();
 
       try {
-        const stream = await initializeMedia(Boolean(options.audioOnly));
-        if (!stream) {
-          clearConnectionTimeout();
-          setState((prev) => ({ ...prev, isConnecting: false }));
-          return false;
-        }
-
-        const connection = createFreshPeerConnection();
-        attachLocalTracks(connection, stream);
+        pendingCallRequestRef.current = { audioOnly: Boolean(options.audioOnly) };
         ignoreOfferRef.current = false;
         reconnectAttemptsRef.current = 0;
-
-        await sendOffer(connection);
+        await channelRef.current.send({
+          type: "broadcast",
+          event: "call-request",
+          payload: {
+            senderId: String(userId || ""),
+            audioOnly: Boolean(options.audioOnly),
+          },
+        });
 
         return true;
       } catch (error) {
@@ -678,13 +869,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
     },
     [
-      attachLocalTracks,
       cleanupCall,
-      clearConnectionTimeout,
-      createFreshPeerConnection,
-      initializeMedia,
       sessionId,
-      sendOffer,
       startConnectionTimeout,
       state.isConnected,
       state.isConnecting,
@@ -755,6 +941,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         remotePeerIdRef.current = normalizedSenderId;
         ignoreOfferRef.current = false;
         reconnectAttemptsRef.current = 0;
+        setState((prev) => ({
+          ...prev,
+          isIncomingCall: false,
+          incomingCallerId: null,
+          incomingAudioOnly: false,
+        }));
 
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
@@ -855,7 +1047,165 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     [userId]
   );
 
+  const handleCallRequest = useCallback(
+    (senderId: string, audioOnly = false) => {
+      const normalizedSenderId = String(senderId || "");
+      const normalizedUserId = String(userId || "");
+      if (!normalizedSenderId || normalizedSenderId === normalizedUserId) {
+        return;
+      }
+      if (state.isConnected || state.isConnecting || localStreamRef.current) {
+        void channelRef.current?.send({
+          type: "broadcast",
+          event: "call-rejected",
+          payload: {
+            senderId: normalizedUserId,
+            targetId: normalizedSenderId,
+            reason: "busy",
+          },
+        });
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        isIncomingCall: true,
+        incomingCallerId: normalizedSenderId,
+        incomingAudioOnly: Boolean(audioOnly),
+        error: null,
+        notice: null,
+      }));
+    },
+    [state.isConnected, state.isConnecting, userId]
+  );
+
+  const acceptIncomingCall = useCallback(async () => {
+    const incomingCallerId = state.incomingCallerId;
+    if (!incomingCallerId || !channelRef.current) {
+      return false;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      isIncomingCall: false,
+      incomingCallerId: null,
+      incomingAudioOnly: false,
+      isConnecting: true,
+    }));
+    await channelRef.current.send({
+      type: "broadcast",
+      event: "call-accepted",
+      payload: {
+        senderId: String(userId || ""),
+        targetId: incomingCallerId,
+      },
+    });
+    return true;
+  }, [state.incomingCallerId, userId]);
+
+  const rejectIncomingCall = useCallback(async () => {
+    const incomingCallerId = state.incomingCallerId;
+    setState((prev) => ({
+      ...prev,
+      isIncomingCall: false,
+      incomingCallerId: null,
+      incomingAudioOnly: false,
+      isConnecting: false,
+    }));
+
+    if (!incomingCallerId || !channelRef.current) {
+      return false;
+    }
+
+    await channelRef.current.send({
+      type: "broadcast",
+      event: "call-rejected",
+      payload: {
+        senderId: String(userId || ""),
+        targetId: incomingCallerId,
+        reason: "declined",
+      },
+    });
+    return true;
+  }, [state.incomingCallerId, userId]);
+
+  const handleCallAccepted = useCallback(
+    async (senderId: string, targetId?: string) => {
+      const normalizedSenderId = String(senderId || "");
+      const normalizedUserId = String(userId || "");
+      const normalizedTargetId = String(targetId || "");
+      if (
+        !normalizedSenderId ||
+        normalizedSenderId === normalizedUserId ||
+        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
+      ) {
+        return;
+      }
+
+      const pendingRequest = pendingCallRequestRef.current;
+      if (!pendingRequest) {
+        return;
+      }
+
+      try {
+        const stream = await initializeMedia(pendingRequest.audioOnly);
+        if (!stream) {
+          clearConnectionTimeout();
+          setState((prev) => ({ ...prev, isConnecting: false }));
+          return;
+        }
+
+        const connection = createFreshPeerConnection();
+        attachLocalTracks(connection, stream);
+        remotePeerIdRef.current = normalizedSenderId;
+        pendingCallRequestRef.current = null;
+        await sendOffer(connection);
+      } catch (error) {
+        console.error("Error handling accepted call:", error);
+        cleanupCall(false);
+        setConnectionError("Call could not be started after acceptance.");
+      }
+    },
+    [
+      attachLocalTracks,
+      cleanupCall,
+      clearConnectionTimeout,
+      createFreshPeerConnection,
+      initializeMedia,
+      sendOffer,
+      setConnectionError,
+      userId,
+    ]
+  );
+
+  const handleCallRejected = useCallback(
+    (senderId: string, targetId?: string, reason?: string) => {
+      const normalizedSenderId = String(senderId || "");
+      const normalizedUserId = String(userId || "");
+      const normalizedTargetId = String(targetId || "");
+      if (
+        !normalizedSenderId ||
+        normalizedSenderId === normalizedUserId ||
+        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
+      ) {
+        return;
+      }
+
+      pendingCallRequestRef.current = null;
+      clearConnectionTimeout();
+      setState((prev) => ({
+        ...prev,
+        isConnecting: false,
+        error: reason === "busy" ? "Participant is currently in another call." : "Call was declined.",
+      }));
+    },
+    [clearConnectionTimeout, userId]
+  );
+
   const toggleMute = useCallback(() => {
+    if (rawAudioTrackRef.current) {
+      rawAudioTrackRef.current.enabled = !rawAudioTrackRef.current.enabled;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !track.enabled;
@@ -943,6 +1293,43 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     state.isSignalingReady,
   ]);
 
+  const setVoiceFilter = useCallback(
+    async (filter: VoiceFilterPreset) => {
+      setState((prev) => ({ ...prev, voiceFilter: filter }));
+
+      const stream = localStreamRef.current;
+      const sourceTrack = rawAudioTrackRef.current;
+      if (!stream || !sourceTrack) {
+        return true;
+      }
+
+      stopVoiceProcessing();
+      const nextTrack = createVoiceProcessedTrack(sourceTrack, filter);
+      const currentAudioTracks = stream.getAudioTracks();
+      currentAudioTracks.forEach((track) => {
+        stream.removeTrack(track);
+        if (track !== sourceTrack) {
+          track.stop();
+        }
+      });
+      stream.addTrack(nextTrack);
+      setState((prev) => ({ ...prev, localStream: stream }));
+
+      const connection = peerConnection.current;
+      const audioSender = connection
+        ?.getSenders()
+        .find((sender) => sender.track?.kind === "audio");
+      if (audioSender) {
+        await audioSender.replaceTrack(nextTrack).catch((error) => {
+          console.warn("Failed to update audio sender track:", error);
+        });
+      }
+
+      return true;
+    },
+    [createVoiceProcessedTrack, stopVoiceProcessing]
+  );
+
   const startAudioCall = useCallback(async () => {
     return startCall({ audioOnly: true });
   }, [startCall]);
@@ -968,6 +1355,15 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     setState((prev) => ({ ...prev, isSignalingReady: false, error: null, notice: null }));
 
     channel
+      .on("broadcast", { event: "call-request" }, ({ payload }) => {
+        handleCallRequest(payload.senderId, Boolean(payload.audioOnly));
+      })
+      .on("broadcast", { event: "call-accepted" }, ({ payload }) => {
+        void handleCallAccepted(payload.senderId, payload.targetId);
+      })
+      .on("broadcast", { event: "call-rejected" }, ({ payload }) => {
+        handleCallRejected(payload.senderId, payload.targetId, payload.reason);
+      })
       .on("broadcast", { event: "offer" }, ({ payload }) => {
         void handleOffer(payload.offer, payload.senderId, Boolean(payload.audioOnly));
       })
@@ -1007,6 +1403,9 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
   }, [
     cleanupCall,
+    handleCallAccepted,
+    handleCallRejected,
+    handleCallRequest,
     handleAnswer,
     handleIceCandidate,
     handleOffer,
@@ -1039,6 +1438,168 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     }
   }, [state.remoteHasVideo, state.remoteStream]);
 
+  useEffect(() => {
+    if (typeof AudioContext === "undefined") {
+      return;
+    }
+
+    const localTrack = localStreamRef.current?.getAudioTracks()[0];
+    const remoteTrack = remoteStreamRef.current?.getAudioTracks()[0];
+    if (!localTrack && !remoteTrack) {
+      setLocalSpeakingState(false);
+      setRemoteSpeakingState(false);
+      return;
+    }
+
+    const context = new AudioContext();
+    const localAnalyser = localTrack ? context.createAnalyser() : null;
+    const remoteAnalyser = remoteTrack ? context.createAnalyser() : null;
+    if (localAnalyser) {
+      localAnalyser.fftSize = 2048;
+    }
+    if (remoteAnalyser) {
+      remoteAnalyser.fftSize = 2048;
+    }
+
+    const connectTrack = (track: MediaStreamTrack, analyser: AnalyserNode | null) => {
+      if (!analyser) {
+        return;
+      }
+      const source = context.createMediaStreamSource(new MediaStream([track]));
+      source.connect(analyser);
+    };
+
+    if (localTrack) {
+      connectTrack(localTrack, localAnalyser);
+    }
+    if (remoteTrack) {
+      connectTrack(remoteTrack, remoteAnalyser);
+    }
+
+    const sample = (analyser: AnalyserNode | null) => {
+      if (!analyser) {
+        return 0;
+      }
+      const data = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let index = 0; index < data.length; index += 1) {
+        const value = (data[index] - 128) / 128;
+        sum += value * value;
+      }
+      return Math.sqrt(sum / data.length);
+    };
+
+    let animationFrameId = 0;
+    const tick = () => {
+      const now = Date.now();
+      const localLevel = sample(localAnalyser);
+      const remoteLevel = sample(remoteAnalyser);
+
+      if (localLevel >= SPEAKING_THRESHOLD) {
+        localSpeakingSinceRef.current = now;
+        setLocalSpeakingState(true);
+      } else if (
+        localSpeakingSinceRef.current &&
+        now - localSpeakingSinceRef.current > SPEAKING_HOLD_MS
+      ) {
+        setLocalSpeakingState(false);
+      }
+
+      if (remoteLevel >= SPEAKING_THRESHOLD) {
+        remoteSpeakingSinceRef.current = now;
+        setRemoteSpeakingState(true);
+      } else if (
+        remoteSpeakingSinceRef.current &&
+        now - remoteSpeakingSinceRef.current > SPEAKING_HOLD_MS
+      ) {
+        setRemoteSpeakingState(false);
+      }
+
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      void context.close();
+      setLocalSpeakingState(false);
+      setRemoteSpeakingState(false);
+    };
+  }, [
+    state.localStream,
+    state.remoteStream,
+    setLocalSpeakingState,
+    setRemoteSpeakingState,
+  ]);
+
+  useEffect(() => {
+    const connection = peerConnection.current;
+    if (!connection || !state.isConnected) {
+      setState((prev) => ({
+        ...prev,
+        callQuality: {
+          latencyMs: null,
+          jitterMs: null,
+          packetLossPercent: null,
+        },
+      }));
+      return;
+    }
+
+    let cancelled = false;
+    const updateStats = async () => {
+      try {
+        const stats = await connection.getStats();
+        let latencyMs: number | null = null;
+        let jitterMs: number | null = null;
+        let packetsLost = 0;
+        let packetsReceived = 0;
+
+        stats.forEach((report) => {
+          if (report.type === "candidate-pair" && (report as any).state === "succeeded" && (report as any).currentRoundTripTime) {
+            latencyMs = Math.round(Number((report as any).currentRoundTripTime) * 1000);
+          }
+          if (report.type === "inbound-rtp" && (report as any).kind === "audio") {
+            const inbound = report as any;
+            jitterMs = Number.isFinite(inbound.jitter)
+              ? Math.round(Number(inbound.jitter) * 1000)
+              : jitterMs;
+            packetsLost += Number(inbound.packetsLost || 0);
+            packetsReceived += Number(inbound.packetsReceived || 0);
+          }
+        });
+
+        const totalPackets = packetsLost + packetsReceived;
+        const packetLossPercent =
+          totalPackets > 0 ? Number(((packetsLost / totalPackets) * 100).toFixed(1)) : null;
+
+        if (!cancelled) {
+          setState((prev) => ({
+            ...prev,
+            callQuality: {
+              latencyMs,
+              jitterMs,
+              packetLossPercent,
+            },
+          }));
+        }
+      } catch {
+        // Ignore transient stats failures.
+      }
+    };
+
+    void updateStats();
+    const intervalId = window.setInterval(() => {
+      void updateStats();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [state.isConnected]);
+
   return {
     ...state,
     localVideoRef,
@@ -1048,5 +1609,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     endCall,
     toggleMute,
     toggleVideo,
+    acceptIncomingCall,
+    rejectIncomingCall,
+    setVoiceFilter,
   };
 };

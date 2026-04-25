@@ -13,10 +13,14 @@ Mindful AU is a counseling platform with role-based access for students, staff, 
 - Institutional Google OAuth with domain restrictions.
 - Email/password login for approved non-student roles.
 - Peer counselor assignment with notification flow.
-- Anonymous support mode for protected student identity in chat.
+- Anonymous support mode for protected student identity in chat, appointments, and calls.
 - End-to-end encrypted messaging with delivery/seen receipts.
 - Server-backed chat message deletion (sender/admin authorized, synced across devices).
+- Secure real-time call flow with call-request/accept/reject, reconnect handling, and quality telemetry.
 - Appointment-based video call access windows.
+- Optional real-time voice anonymization filters during calls (neutral mask, pitch shift, tone modulation, robotic).
+- Speaking-activity indicators and low-bandwidth call handling.
+- Screen-capture deterrence on sensitive routes (watermark, blur-on-inactive, copy/context restrictions, warning overlay).
 - Daily student mood check-in enforcement (once per day).
 - API resilience: retry on transient failures, base URL failover, and stale-if-error cache fallback.
 
@@ -160,6 +164,33 @@ npm run build
 - Behavior:
   - deletes from backend storage (not device-local hide)
   - deletion is reflected on subsequent sync/poll and realtime hints
+
+## Privacy and Anonymity Controls
+
+- Anonymous aliases use the `User_XXXX` format.
+- Student identity is hidden by default in anonymous sessions.
+- Controlled identity reveal is restricted and audited:
+  - `POST /api/sessions/{id}/reveal-identity` (authorized counselor/admin + required reason)
+- Anonymous sessions have TTL-based expiry for misuse prevention (`ANONYMOUS_SESSION_TTL_HOURS` on backend).
+- Privacy deterrence for capture risk is active on sensitive web routes:
+  - right-click/copy/cut/drag blocking
+  - shortcut-triggered warning shield
+  - auto-obscure when tab/app loses focus
+  - timestamped watermark overlay
+
+## ML Readiness and Monitoring
+
+- ML integration is lightweight and explainable (local-first scoring + optional external providers).
+- AI chat includes provider fallback logic and deterministic local wellness fallback.
+- Admin ML operational health endpoint:
+  - `GET /api/ml/health`
+  - includes fallback rate, provider distribution, inference volume, average/p95 latency, and risk monitoring indicators.
+- Admin analytics includes `ml_intelligence` payload for validation, fairness status, and readiness signals.
+
+Additional ML docs:
+
+- `backend/docs/ml-integration.md`
+- `backend/docs/screen-capture-privacy-protection.md`
 
 ## Quality Checks
 

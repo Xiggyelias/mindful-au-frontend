@@ -11,10 +11,12 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
+import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
+import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { peerNavItems } from "./navItems";
@@ -45,6 +47,7 @@ const PeerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [savingAvailability, setSavingAvailability] = useState(false);
   const [data, setData] = useState<PeerDashboardResponse | null>(null);
+  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
 
   const load = async () => {
     try {
@@ -131,6 +134,15 @@ const PeerDashboard = () => {
               <StatsCard key={item.title} title={item.title} value={item.value} icon={item.icon} />
             ))}
           </div>
+
+          <DailyTipCard
+            tip={dailyTip}
+            isLoading={tipLoading}
+            error={tipError}
+            title="Peer Support Tip of the Day"
+            actionLabel="Open Ethics Guidelines"
+            onAction={() => navigate("/peer/ethics")}
+          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card variant="glass" className="lg:col-span-2">

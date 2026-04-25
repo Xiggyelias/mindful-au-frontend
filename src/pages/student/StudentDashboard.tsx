@@ -14,9 +14,11 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
+import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -48,34 +50,12 @@ const StudentDashboard = () => {
   const [stats, setStats] = useState({ sessions: 0, appointments: 0, wellness: null as number | null, chats: 0 });
   const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
   const [diagnostics, setDiagnostics] = useState<any>(null);
-  const [wellnessSummary, setWellnessSummary] = useState<any | null>(null);
-  const [dailyTips, setDailyTips] = useState<string[]>([]);
-  const [tipsLoading, setTipsLoading] = useState(false);
-  const [tipsError, setTipsError] = useState<string | null>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const { user } = useAuth();
+  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
 
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
-
-  const extractTipsFromSummary = (summary: any): string[] => {
-    const recommendationText =
-      typeof summary?.recommendations === "string" ? summary.recommendations.trim() : "";
-    const mlActions = Array.isArray(summary?.ml_insights?.recommended_actions)
-      ? summary.ml_insights.recommended_actions.filter(
-          (item: unknown) => typeof item === "string" && item.trim().length > 0
-        )
-      : [];
-
-    const tipsFromText = recommendationText
-      ? recommendationText
-          .split(/[.!?]\s+/)
-          .map((part: string) => part.trim())
-          .filter((part: string) => part.length > 10)
-      : [];
-
-    return Array.from(new Set([...tipsFromText, ...mlActions])).slice(0, 4);
-  };
 
   const openVideoCallRoom = (appointment: any) => {
     if (!appointment?.id) {
@@ -98,9 +78,6 @@ const StudentDashboard = () => {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        setTipsLoading(true);
-        setTipsError(null);
-
         const [sessions, appointments, summary, moodData] = await Promise.all([
           api.getSessions({ lightweight: true }),
           api.getAppointments(),
@@ -125,7 +102,6 @@ const StudentDashboard = () => {
         
         const wellnessScore =
           typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
-        const tips = extractTipsFromSummary(summary);
 
         setStats({
           sessions: sessionItems.length,
@@ -135,22 +111,13 @@ const StudentDashboard = () => {
         });
         setUpcomingAppointments(upcomingApts);
         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
-        setWellnessSummary(summary);
-        setDailyTips(tips);
         if (moodData?.log?.mood) {
           setDailyMood(moodData.log.mood as StudentMood);
         } else {
           setDailyMood(null);
         }
-        if (tips.length === 0) {
-          setTipsError("No live recommendations yet. Complete a check-in to generate them.");
-        }
       } catch (error) {
         console.error('Failed to load stats:', error);
-        setDailyTips([]);
-        setTipsError("Live tips are unavailable right now.");
-      } finally {
-        setTipsLoading(false);
       }
     };
     if (user) loadStats();
@@ -228,8 +195,6 @@ const StudentDashboard = () => {
       setIsRecordingMood(false);
     }
   };
-
-  const mlInsights = wellnessSummary?.ml_insights;
 
   return (
     <div className="min-h-screen bg-background">
@@ -442,83 +407,15 @@ const StudentDashboard = () => {
             </Card>
 
             {/* Wellness Tips & Mood Analytics */}
-            <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
-              <CardHeader className="bg-secondary/10 border-b border-border/50">
-                <CardTitle className="text-xl font-bold flex items-center gap-2">
-                  <Heart className="h-5 w-5 text-primary" />
-                  Your Wellness Corner
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  {tipsLoading ? (
-                    <div className="p-6 rounded-2xl bg-secondary/20 text-center text-muted-foreground">
-                      Loading daily tips...
-                    </div>
-                  ) : dailyTips.length === 0 ? (
-                    <div className="p-6 rounded-2xl bg-secondary/20 text-center">
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {tipsError || "Daily tips are unavailable right now."}
-                      </p>
-                      <Button variant="outline" size="sm" onClick={() => navigate("/student/ai-support")}>
-                        Ask AI Support
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      {mlInsights && (
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-2xl bg-secondary/30 p-4">
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Forecast</p>
-                            <p className="mt-2 text-lg font-semibold capitalize text-foreground">
-                              {mlInsights?.risk_forecast?.level || "unknown"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {typeof mlInsights?.risk_forecast?.score === "number" ? `${mlInsights.risk_forecast.score}/100` : "No score"}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-secondary/30 p-4">
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Focus</p>
-                            <p className="mt-2 text-sm font-medium text-foreground">
-                              {mlInsights?.focus_area || "Routine wellbeing support"}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-secondary/30 p-4">
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Trend</p>
-                            <p className="mt-2 text-lg font-semibold capitalize text-foreground">
-                              {mlInsights?.trend?.label || "steady"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Confidence {typeof mlInsights?.risk_forecast?.confidence === "number" ? `${mlInsights.risk_forecast.confidence}%` : "n/a"}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
-                        <p className="text-sm font-medium text-primary mb-1 italic">Tip of the day:</p>
-                        <p className="text-base text-foreground font-medium">{dailyTips[0]}</p>
-                      </div>
-                      <div className="grid gap-3">
-                        {dailyTips.slice(1).map((tip, i) => (
-                          <div
-                            key={i}
-                            className="flex items-start gap-3 p-4 rounded-2xl bg-secondary/30 border border-transparent hover:border-primary/20 transition-all duration-300"
-                          >
-                            <div className="mt-1 h-2 w-2 rounded-full bg-primary/40 shrink-0" />
-                            <p className="text-sm text-foreground/80">{tip}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  {wellnessSummary?.generated_at && (
-                    <p className="text-xs text-muted-foreground">
-                      Live insights updated: {new Date(wellnessSummary.generated_at).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <DailyTipCard
+              className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background"
+              title="Your Wellness Corner"
+              tip={dailyTip}
+              isLoading={tipLoading}
+              error={tipError}
+              actionLabel="Open AI Support"
+              onAction={() => navigate("/student/ai-support")}
+            />
           </div>
 
           {/* Panic Button Section - Reimagined as Support Center */}

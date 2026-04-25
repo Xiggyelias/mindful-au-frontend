@@ -152,6 +152,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
+      try {
+        await api.ensureFreshToken();
+      } catch {
+        // Let refreshUser handle invalid or expired tokens consistently.
+      }
+
       await refreshUser();
       setIsLoading(false);
     };
@@ -227,6 +233,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!api.hasToken()) {
+      return;
+    }
+
+    const refreshIfNeeded = async (minRemainingMs?: number) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return;
+      }
+
+      try {
+        await api.ensureFreshToken(minRemainingMs);
+      } catch {
+        // Expired-session handling is centralized in the API client.
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshIfNeeded();
+    }, 60 * 1000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshIfNeeded(15 * 60 * 1000);
+      }
+    };
+
+    const onFocus = () => {
+      void refreshIfNeeded(15 * 60 * 1000);
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [user?.id]);

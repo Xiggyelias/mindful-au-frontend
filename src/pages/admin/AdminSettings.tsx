@@ -23,8 +23,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { api, getApiErrorMessage } from "@/lib/api";
+import { DailyTip, api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { CardDescription } from "@/components/ui/card";
 
@@ -73,6 +82,26 @@ const settingLabels: Record<string, string> = {
   crisis_hotline: "Crisis Hotline",
 };
 
+type TipDraft = {
+  title: string;
+  content: string;
+  category: string;
+  audience: "all" | "student" | "counselor" | "peer_counselor" | "admin";
+  mood_tags: string;
+  priority: number;
+  is_active: boolean;
+};
+
+const defaultTipDraft = (): TipDraft => ({
+  title: "",
+  content: "",
+  category: "Wellness",
+  audience: "all",
+  mood_tags: "",
+  priority: 0,
+  is_active: true,
+});
+
 const AdminSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
@@ -87,6 +116,11 @@ const AdminSettings = () => {
   const [isVerifyingBackup, setIsVerifyingBackup] = useState(false);
   const [isRunningDrill, setIsRunningDrill] = useState(false);
   const [drillPath, setDrillPath] = useState("");
+  const [tips, setTips] = useState<DailyTip[]>([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const [isSavingTip, setIsSavingTip] = useState(false);
+  const [editingTipId, setEditingTipId] = useState<number | null>(null);
+  const [tipDraft, setTipDraft] = useState<TipDraft>(defaultTipDraft);
 
   const loadBackupRuns = async () => {
     try {
@@ -100,6 +134,18 @@ const AdminSettings = () => {
     }
   };
 
+  const loadTips = async () => {
+    try {
+      setTipsLoading(true);
+      const nextTips = await api.getTips();
+      setTips(Array.isArray(nextTips) ? nextTips : []);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to load tip library"));
+    } finally {
+      setTipsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -107,6 +153,7 @@ const AdminSettings = () => {
         const [data] = await Promise.all([
           api.getSettings(),
           loadBackupRuns(),
+          loadTips(),
         ]);
         setSettings({
           ...defaultSettings,
@@ -201,6 +248,85 @@ const AdminSettings = () => {
       toast.error(getApiErrorMessage(error, "Backup restore drill failed"));
     } finally {
       setIsRunningDrill(false);
+    }
+  };
+
+  const resetTipEditor = () => {
+    setEditingTipId(null);
+    setTipDraft(defaultTipDraft());
+  };
+
+  const updateTipDraft = <K extends keyof TipDraft>(key: K, value: TipDraft[K]) => {
+    setTipDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleEditTip = (tip: DailyTip) => {
+    setEditingTipId(tip.id);
+    setTipDraft({
+      title: tip.title ?? "",
+      content: tip.content ?? "",
+      category: tip.category ?? "Wellness",
+      audience: (tip.audience as TipDraft["audience"]) ?? "all",
+      mood_tags: Array.isArray(tip.mood_tags) ? tip.mood_tags.join(", ") : "",
+      priority: Number(tip.priority ?? 0),
+      is_active: tip.is_active !== false,
+    });
+  };
+
+  const handleSaveTip = async () => {
+    const payload = {
+      title: tipDraft.title.trim(),
+      content: tipDraft.content.trim(),
+      category: tipDraft.category.trim(),
+      audience: tipDraft.audience,
+      mood_tags: tipDraft.mood_tags
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      priority: Number.isFinite(Number(tipDraft.priority)) ? Number(tipDraft.priority) : 0,
+      is_active: tipDraft.is_active,
+    };
+
+    if (!payload.title || !payload.content || !payload.category) {
+      toast.error("Title, content, and category are required.");
+      return;
+    }
+
+    try {
+      setIsSavingTip(true);
+      const savedTip = editingTipId
+        ? await api.updateTip(editingTipId, payload)
+        : await api.createTip(payload);
+
+      setTips((prev) => {
+        const next = editingTipId
+          ? prev.map((tip) => (tip.id === savedTip.id ? savedTip : tip))
+          : [savedTip, ...prev];
+        return next;
+      });
+
+      toast.success(editingTipId ? "Tip updated." : "Tip created.");
+      resetTipEditor();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to save tip"));
+    } finally {
+      setIsSavingTip(false);
+    }
+  };
+
+  const handleDeleteTip = async (tipId: number) => {
+    try {
+      setIsSavingTip(true);
+      await api.deleteTip(tipId);
+      setTips((prev) => prev.filter((tip) => tip.id !== tipId));
+      if (editingTipId === tipId) {
+        resetTipEditor();
+      }
+      toast.success("Tip deleted.");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete tip"));
+    } finally {
+      setIsSavingTip(false);
     }
   };
 
@@ -533,6 +659,201 @@ const AdminSettings = () => {
               </CardContent>
             </Card>
           </div>
+
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                Tip of the Day Library
+              </CardTitle>
+              <CardDescription>
+                Manage the daily engagement tips shown across student, counselor, admin, and peer dashboards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                <div className="space-y-4 rounded-2xl border border-border/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {editingTipId ? "Edit Tip" : "Create New Tip"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Tips rotate automatically by day and audience.
+                      </p>
+                    </div>
+                    {editingTipId ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={resetTipEditor}>
+                        Reset
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <Label>Title</Label>
+                      <Input
+                        value={tipDraft.title}
+                        onChange={(event) => updateTipDraft("title", event.target.value)}
+                        className="mt-2"
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                    <div>
+                      <Label>Category</Label>
+                      <Input
+                        value={tipDraft.category}
+                        onChange={(event) => updateTipDraft("category", event.target.value)}
+                        className="mt-2"
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                    <div>
+                      <Label>Audience</Label>
+                      <Select
+                        value={tipDraft.audience}
+                        onValueChange={(value) => updateTipDraft("audience", value as TipDraft["audience"])}
+                        disabled={isSavingTip}
+                      >
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Select audience" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All users</SelectItem>
+                          <SelectItem value="student">Students</SelectItem>
+                          <SelectItem value="counselor">Counselors</SelectItem>
+                          <SelectItem value="peer_counselor">Peer counselors</SelectItem>
+                          <SelectItem value="admin">Admins</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label>Tip Content</Label>
+                      <Textarea
+                        value={tipDraft.content}
+                        onChange={(event) => updateTipDraft("content", event.target.value)}
+                        className="mt-2 min-h-[120px]"
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                    <div>
+                      <Label>Mood Tags</Label>
+                      <Input
+                        value={tipDraft.mood_tags}
+                        onChange={(event) => updateTipDraft("mood_tags", event.target.value)}
+                        placeholder="stressed, tired, low"
+                        className="mt-2"
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                    <div>
+                      <Label>Priority</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={String(tipDraft.priority)}
+                        onChange={(event) => updateTipDraft("priority", Number(event.target.value || 0))}
+                        className="mt-2"
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex items-center justify-between rounded-xl border border-border/60 px-4 py-3">
+                      <div>
+                        <Label>Active</Label>
+                        <p className="text-sm text-muted-foreground">Inactive tips stay in the library but stop rotating.</p>
+                      </div>
+                      <Switch
+                        checked={tipDraft.is_active}
+                        onCheckedChange={(value) => updateTipDraft("is_active", value)}
+                        disabled={isSavingTip}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="button" onClick={() => void handleSaveTip()} disabled={isSavingTip}>
+                      {isSavingTip ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving
+                        </>
+                      ) : editingTipId ? (
+                        "Update Tip"
+                      ) : (
+                        "Create Tip"
+                      )}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => void loadTips()} disabled={tipsLoading || isSavingTip}>
+                      {tipsLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Refreshing
+                        </>
+                      ) : (
+                        "Refresh Library"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-border/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">Stored Tips</p>
+                      <p className="text-sm text-muted-foreground">{tips.length} tip entries available.</p>
+                    </div>
+                  </div>
+
+                  {tipsLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading tip library...</p>
+                  ) : tips.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No tips have been created yet.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-1">
+                      {tips.map((tip) => (
+                        <div key={tip.id} className="rounded-xl border border-border/60 bg-secondary/20 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant={tip.is_active === false ? "outline" : "secondary"}>
+                                  {tip.is_active === false ? "Inactive" : "Active"}
+                                </Badge>
+                                <Badge variant="outline">{tip.audience}</Badge>
+                                <Badge variant="outline">{tip.category}</Badge>
+                              </div>
+                              <p className="font-medium text-foreground">{tip.title}</p>
+                              <p className="text-sm text-muted-foreground line-clamp-3">{tip.content}</p>
+                              {Array.isArray(tip.mood_tags) && tip.mood_tags.length > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Mood tags: {tip.mood_tags.join(", ")}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={() => handleEditTip(tip)} disabled={isSavingTip}>
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => void handleDeleteTip(tip.id)}
+                                disabled={isSavingTip}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </main>
       </div>
     </div>

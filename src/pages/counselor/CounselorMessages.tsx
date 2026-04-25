@@ -154,7 +154,7 @@ const getInitials = (name: string) => {
 const resolveAnonymousLabel = (session: RawSession) => {
   const candidate = String(session.anonymous_id || "").trim();
   if (candidate) return candidate;
-  return `ANON-${String(session.id).padStart(4, "0")}`;
+  return `User_${String(Number(session.id) % 10000).padStart(4, "0")}`;
 };
 
 const CounselorMessages = () => {
@@ -171,6 +171,7 @@ const CounselorMessages = () => {
   const [chatTotalItems, setChatTotalItems] = useState(0);
   const [isEscalating, setIsEscalating] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
+  const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -652,6 +653,31 @@ const CounselorMessages = () => {
     }
   };
 
+  const handleRevealIdentity = async () => {
+    if (!selectedSessionId || !selectedChat?.isAnonymous || isRevealingIdentity) {
+      return;
+    }
+    const reason = window.prompt(
+      "Provide reason for identity reveal (required for audit):",
+      "Emergency safeguarding assessment"
+    );
+    if (!reason || reason.trim().length < 5) {
+      toast.error("A detailed reason is required (minimum 5 characters).");
+      return;
+    }
+
+    setIsRevealingIdentity(true);
+    try {
+      await api.revealAnonymousIdentity(selectedSessionId, reason.trim());
+      toast.success("Identity revealed and logged.");
+      await loadSessions(true);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to reveal identity."));
+    } finally {
+      setIsRevealingIdentity(false);
+    }
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -941,6 +967,18 @@ const CounselorMessages = () => {
                       >
                         <AlertTriangle className="h-4 w-4" />
                         {isTriggeringEmergency ? "Alerting..." : "Emergency"}
+                      </Button>
+                    )}
+                    {selectedSessionId && selectedChat?.isAnonymous && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={handleRevealIdentity}
+                        disabled={isRevealingIdentity}
+                      >
+                        <Shield className="h-4 w-4" />
+                        {isRevealingIdentity ? "Revealing..." : "Reveal Identity"}
                       </Button>
                     )}
                     {isPeerCounselor && selectedSessionId && (

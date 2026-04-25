@@ -13,6 +13,7 @@ import {
   Mic,
   MicOff,
   Phone,
+  PhoneIncoming,
   Video,
   VideoOff,
   WifiOff,
@@ -77,11 +78,13 @@ const StudentVideoCall = () => {
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
   const [isStartingMode, setIsStartingMode] = useState<CallMode | null>(null);
+  const [isUpdatingAnonymousMode, setIsUpdatingAnonymousMode] = useState(false);
   const [isOnline, setIsOnline] = useState(
     () => (typeof navigator === "undefined" ? true : navigator.onLine)
   );
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
+  const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
 
   const requestedAppointmentId = useMemo(() => {
     const parsed = Number(searchParams.get("appointment_id"));
@@ -110,6 +113,12 @@ const StudentVideoCall = () => {
     error,
     isRelayError,
     notice,
+    isIncomingCall,
+    incomingAudioOnly,
+    localSpeaking,
+    remoteSpeaking,
+    voiceFilter,
+    callQuality,
     localVideoRef,
     remoteVideoRef,
     startCall,
@@ -117,6 +126,9 @@ const StudentVideoCall = () => {
     endCall,
     toggleMute,
     toggleVideo,
+    acceptIncomingCall,
+    rejectIncomingCall,
+    setVoiceFilter,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
 
   useEffect(() => {
@@ -231,10 +243,12 @@ const StudentVideoCall = () => {
     );
   }, [activeAppointment]);
 
-  const remoteParticipantName = useMemo(
-    () => getParticipantName(activeAppointment?.counselor, "Counselor"),
-    [activeAppointment]
-  );
+  const remoteParticipantName = useMemo(() => {
+    if (activeAppointment?.is_anonymous) {
+      return "Counselor (Private Session)";
+    }
+    return getParticipantName(activeAppointment?.counselor, "Counselor");
+  }, [activeAppointment]);
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo);
 
@@ -244,6 +258,9 @@ const StudentVideoCall = () => {
     }
     if (!isOnline) {
       return "You are offline. Reconnect to continue the call.";
+    }
+    if (isIncomingCall) {
+      return `Incoming ${incomingAudioOnly ? "audio" : "video"} call. Accept or reject to continue.`;
     }
     if (notice) {
       return notice;
@@ -283,6 +300,8 @@ const StudentVideoCall = () => {
     activeWindowStatus?.message,
     isConnected,
     isConnecting,
+    isIncomingCall,
+    incomingAudioOnly,
     error,
     isOnline,
     isStartingMode,
@@ -344,6 +363,31 @@ const StudentVideoCall = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
+  };
+
+  const handleToggleAnonymousMode = async () => {
+    if (isUpdatingAnonymousMode) {
+      return;
+    }
+    const nextMode = !isAnonymousMode;
+    setIsUpdatingAnonymousMode(true);
+    try {
+      await api.updateProfile({ anonymous_mode: nextMode });
+      await refreshUser();
+      toast.success(nextMode ? "Anonymous mode enabled." : "Identified mode enabled.");
+    } catch {
+      toast.error("Could not update anonymous mode.");
+    } finally {
+      setIsUpdatingAnonymousMode(false);
+    }
+  };
+
+  const handleAcceptIncomingCall = () => {
+    void acceptIncomingCall();
+  };
+
+  const handleRejectIncomingCall = () => {
+    void rejectIncomingCall();
   };
 
   const removeAppointmentFromQueue = useCallback((appointmentIdToRemove: string) => {
@@ -611,6 +655,21 @@ const StudentVideoCall = () => {
                   </Alert>
                 )}
 
+                {isIncomingCall && (
+                  <Alert className="border-emerald-500/40 bg-emerald-500/5 text-foreground">
+                    <PhoneIncoming className="h-4 w-4 text-emerald-500" />
+                    <AlertTitle>Incoming {incomingAudioOnly ? "audio" : "video"} call</AlertTitle>
+                    <AlertDescription className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button size="sm" onClick={handleAcceptIncomingCall}>
+                        Accept
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleRejectIncomingCall}>
+                        Reject
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {error && isOnline && (
                   <Alert className={cn(
                     isRelayError 
@@ -675,6 +734,7 @@ const StudentVideoCall = () => {
                           <div className="max-w-[60%] space-y-2">
                             <div className="w-fit rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
                               {remoteParticipantName}
+                              {remoteSpeaking ? " • speaking" : ""}
                             </div>
                             {activeAppointment?.scheduled_at && (
                               <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
@@ -688,6 +748,11 @@ const StudentVideoCall = () => {
                               {callStateLabel}
                             </div>
                             <div className={connectionPillClassName}>{connectionPillLabel}</div>
+                            {isConnected && (
+                              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white/90 backdrop-blur-md">
+                                {`Latency ${callQuality.latencyMs ?? "--"}ms • Jitter ${callQuality.jitterMs ?? "--"}ms • Loss ${callQuality.packetLossPercent ?? "--"}%`}
+                              </div>
+                            )}
                             {isConnected && remainingSeconds !== null && (
                               <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
                                 <Clock className="mr-1.5 inline h-3.5 w-3.5" />
@@ -699,7 +764,8 @@ const StudentVideoCall = () => {
 
                         <div className="absolute right-4 top-24 z-20 w-32 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-44">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
-                            You
+                            {isAnonymousMode ? "You (Anonymous)" : "You"}
+                            {localSpeaking ? " • speaking" : ""}
                           </div>
 
                           <div className="aspect-[3/4] overflow-hidden rounded-[20px] bg-[#111b21] sm:aspect-video">
@@ -805,6 +871,20 @@ const StudentVideoCall = () => {
                                 >
                                   <Phone className="h-7 w-7 rotate-[135deg]" />
                                 </Button>
+                                <select
+                                  value={voiceFilter}
+                                  onChange={(event) => {
+                                    void setVoiceFilter(event.target.value as any);
+                                  }}
+                                  className="h-11 rounded-full border border-white/15 bg-black/40 px-4 text-xs text-white outline-none"
+                                  aria-label="Voice anonymization filter"
+                                >
+                                  <option value="none">Voice: Natural</option>
+                                  <option value="neutral-mask">Voice: Neutral Mask</option>
+                                  <option value="pitch-shift">Voice: Pitch Shift</option>
+                                  <option value="tone-mod">Voice: Tone Mod</option>
+                                  <option value="robotic">Voice: Robotic</option>
+                                </select>
                               </>
                             ) : (
                               <>
@@ -851,7 +931,21 @@ const StudentVideoCall = () => {
             {!isConnected && (
               <Card variant="glass" className="overflow-hidden h-fit">
                 <CardHeader className="space-y-2 p-4">
-                  <CardTitle className="text-lg">Call Queue</CardTitle>
+                  <CardTitle className="text-lg flex items-center justify-between gap-2">
+                    <span>Call Queue</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleToggleAnonymousMode}
+                      disabled={isUpdatingAnonymousMode}
+                    >
+                      {isUpdatingAnonymousMode
+                        ? "Updating..."
+                        : isAnonymousMode
+                        ? "Anonymous Mode"
+                        : "Identified Mode"}
+                    </Button>
+                  </CardTitle>
                   <p className="text-sm text-muted-foreground line-clamp-2">
                     Pick the session you want to open. The main panel updates like a live call room.
                   </p>

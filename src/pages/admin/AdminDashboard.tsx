@@ -18,10 +18,12 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
+import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
+import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -115,6 +117,7 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingAppointmentId, setConfirmingAppointmentId] = useState<number | null>(null);
   const loadRequestRef = useRef(0);
+  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -317,6 +320,15 @@ const AdminDashboard = () => {
               icon={AlertTriangle}
             />
           </div>
+
+          <DailyTipCard
+            tip={dailyTip}
+            isLoading={tipLoading}
+            error={tipError}
+            title="Admin Tip of the Day"
+            actionLabel="Manage Tips"
+            onAction={() => navigate("/admin/settings")}
+          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card variant="glass" className="lg:col-span-2">

@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ScreenshotShield } from "@/components/ScreenshotShield";
 
 const Index = lazy(() => import("./pages/Index"));
 const OAuthCallback = lazy(() => import("./pages/auth/OAuthCallback"));
@@ -83,6 +84,7 @@ const App = () => (
             }}
           >
             <AuthProvider>
+              <ScreenshotShield />
               <Suspense fallback={<RouteLoader />}>
                 <Routes>
                 <Route path="/" element={<Index />} />

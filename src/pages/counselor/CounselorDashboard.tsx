@@ -15,10 +15,12 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
+import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
+import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle } from "lucide-react";
@@ -61,8 +63,14 @@ const CounselorDashboard = () => {
   const loadRequestRef = useRef(0);
   const { user } = useAuth();
   const { toast } = useToast();
+  const toastRef = useRef(toast);
+  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isApprovedCounselor = user?.roles?.some((r: any) => r.role === "counselor" && r.approved);
+
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -146,7 +154,7 @@ const CounselorDashboard = () => {
     } catch (err: any) {
       console.error("Failed to load counselor dashboard data", err);
       if (loadRequestRef.current === requestId) {
-        toast({
+        toastRef.current({
           title: "Could not load dashboard data",
           description: err?.response?.data?.message || "Please try again.",
           variant: "destructive",
@@ -157,15 +165,15 @@ const CounselorDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [isApprovedCounselor, toast]);
+  }, [isApprovedCounselor]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setIsLoading(false);
       return;
     }
     void loadDashboardData();
-  }, [loadDashboardData, user]);
+  }, [loadDashboardData, user?.id]);
 
   const today = useMemo(() => new Date(), []);
   const isSameDay = useCallback((dateStr?: string) => {
@@ -320,6 +328,15 @@ const CounselorDashboard = () => {
               />
             ))}
           </div>
+
+          <DailyTipCard
+            tip={dailyTip}
+            isLoading={tipLoading}
+            error={tipError}
+            title="Counselor Tip of the Day"
+            actionLabel="Open Wellness"
+            onAction={() => navigate("/counselor/wellness")}
+          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Today's Schedule */}

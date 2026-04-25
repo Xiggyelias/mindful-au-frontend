@@ -11,6 +11,7 @@ import {
 import { ScrollArea } from "./ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
+import { SessionManagerDialog } from "./SessionManagerDialog";
 
 interface DashboardHeaderProps {
   title: string;
@@ -101,6 +102,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
         >
           <ShieldX className="h-4 w-4" />
         </Button>
+        <SessionManagerDialog />
         <ThemeToggle />
         <DropdownMenu onOpenChange={(open) => {
           if (open) {

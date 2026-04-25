@@ -42,7 +42,7 @@ const StudentAISupport = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, supportSignal, mlSignals, sendMessage } = useAIChat();
+  const { messages, isLoading, error, supportSignal, sendMessage } = useAIChat();
 
   const quickPrompts = [
     "I'm feeling anxious",
@@ -246,37 +246,6 @@ const StudentAISupport = () => {
                             Call now
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                  )}
-                  {!supportSignal?.requiresImmediateHelp && mlSignals && (
-                    <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-2">
-                          <p className="text-sm font-semibold text-primary">
-                            Personalized support guidance
-                          </p>
-                          {mlSignals.focusArea && (
-                            <p className="text-sm text-foreground">
-                              Focus area: {mlSignals.focusArea}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            Forecast: {mlSignals.riskForecast?.level || "unknown"}
-                            {typeof mlSignals.riskForecast?.score === "number" ? ` (${mlSignals.riskForecast.score}/100)` : ""}
-                            {mlSignals.trend?.label ? `, trend ${mlSignals.trend.label}` : ""}
-                          </p>
-                          {Array.isArray(mlSignals.dominantTopics) && mlSignals.dominantTopics.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              Themes: {mlSignals.dominantTopics.slice(0, 2).join(", ")}
-                            </p>
-                          )}
-                        </div>
-                        {Array.isArray(mlSignals.recommendedActions) && mlSignals.recommendedActions[0] && (
-                          <div className="max-w-sm rounded-xl bg-background/80 px-3 py-2 text-xs text-foreground shadow-sm">
-                            {mlSignals.recommendedActions[0]}
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
