@@ -257,6 +257,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   });
 
   const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const stateRef = useRef(state);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -266,6 +267,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const remotePeerIdRef = useRef<string | null>(null);
+  const observedRemoteTrackIdsRef = useRef<Set<string>>(new Set());
   const makingOfferRef = useRef(false);
   const ignoreOfferRef = useRef(false);
   const wasConnectedRef = useRef(false);
@@ -275,6 +277,31 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const rawAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const localSpeakingSinceRef = useRef<number | null>(null);
   const remoteSpeakingSinceRef = useRef<number | null>(null);
+  const handleCallRequestRef = useRef<(senderId: string, audioOnly?: boolean) => void>(() => undefined);
+  const handleCallAcceptedRef = useRef<(senderId: string, targetId?: string) => Promise<void>>(
+    async () => undefined
+  );
+  const handleCallRejectedRef = useRef<(senderId: string, targetId?: string, reason?: string) => void>(
+    () => undefined
+  );
+  const handleOfferRef = useRef<
+    (
+      offer: RTCSessionDescriptionInit,
+      senderId: string,
+      audioOnly?: boolean
+    ) => Promise<void>
+  >(async () => undefined);
+  const handleAnswerRef = useRef<
+    (answer: RTCSessionDescriptionInit, senderId: string) => Promise<void>
+  >(async () => undefined);
+  const handleIceCandidateRef = useRef<
+    (candidate: RTCIceCandidateInit, senderId: string) => Promise<void>
+  >(async () => undefined);
+  const cleanupCallRef = useRef<(broadcastEnd?: boolean) => void>(() => undefined);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const clearConnectionTimeout = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -412,6 +439,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       pendingIceCandidatesRef.current = [];
       remotePeerIdRef.current = null;
       remoteStreamRef.current = null;
+      observedRemoteTrackIdsRef.current.clear();
       pendingCallRequestRef.current = null;
       makingOfferRef.current = false;
       ignoreOfferRef.current = false;
@@ -632,10 +660,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         }
       }
 
+      if (!observedRemoteTrackIdsRef.current.has(event.track.id)) {
+        observedRemoteTrackIdsRef.current.add(event.track.id);
+        const syncRemoteState = () => {
+          updateRemoteStreamState(remoteStreamRef.current);
+        };
+        event.track.addEventListener("mute", syncRemoteState);
+        event.track.addEventListener("unmute", syncRemoteState);
+        event.track.addEventListener("ended", syncRemoteState);
+      }
+
       updateRemoteStreamState(remoteStream);
-      event.track.addEventListener("ended", () => {
-        updateRemoteStreamState(remoteStreamRef.current);
-      });
     };
 
     connection.onconnectionstatechange = () => {
@@ -749,7 +784,10 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           }
           rawAudioTrackRef.current = audioTrack;
           stopVoiceProcessing();
-          const filteredTrack = createVoiceProcessedTrack(audioTrack, state.voiceFilter);
+          const filteredTrack = createVoiceProcessedTrack(
+            audioTrack,
+            stateRef.current.voiceFilter
+          );
           if (filteredTrack !== audioTrack) {
             stream.removeTrack(audioTrack);
             stream.addTrack(filteredTrack);
@@ -792,7 +830,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return null;
       }
     },
-    [createVoiceProcessedTrack, lowBandwidthMode, setConnectionError, state.voiceFilter, stopVoiceProcessing]
+    [createVoiceProcessedTrack, lowBandwidthMode, setConnectionError, stopVoiceProcessing]
   );
 
   const rollbackConnectionIfNeeded = useCallback(
@@ -816,6 +854,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   const startCall = useCallback(
     async (options: StartCallOptions = {}) => {
+      const currentState = stateRef.current;
+
       if (!sessionId) {
         setConnectionError("Select a session before starting a call.");
         return false;
@@ -831,16 +871,16 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return false;
       }
 
-      if (!channelRef.current || !state.isSignalingReady) {
+      if (!channelRef.current || !currentState.isSignalingReady) {
         setConnectionError("Call channel is not ready yet. Please try again.");
         return false;
       }
 
-      if (state.isConnected) {
+      if (currentState.isConnected) {
         return true;
       }
 
-      if (state.isConnecting) {
+      if (currentState.isConnecting) {
         return false;
       }
 
@@ -872,9 +912,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       cleanupCall,
       sessionId,
       startConnectionTimeout,
-      state.isConnected,
-      state.isConnecting,
-      state.isSignalingReady,
       setConnectionError,
       userId,
     ]
@@ -1051,10 +1088,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     (senderId: string, audioOnly = false) => {
       const normalizedSenderId = String(senderId || "");
       const normalizedUserId = String(userId || "");
+      const currentState = stateRef.current;
       if (!normalizedSenderId || normalizedSenderId === normalizedUserId) {
         return;
       }
-      if (state.isConnected || state.isConnecting || localStreamRef.current) {
+      if (currentState.isConnected || currentState.isConnecting || localStreamRef.current) {
         void channelRef.current?.send({
           type: "broadcast",
           event: "call-rejected",
@@ -1076,11 +1114,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         notice: null,
       }));
     },
-    [state.isConnected, state.isConnecting, userId]
+    [userId]
   );
 
   const acceptIncomingCall = useCallback(async () => {
-    const incomingCallerId = state.incomingCallerId;
+    const incomingCallerId = stateRef.current.incomingCallerId;
+    const incomingAudioOnly = Boolean(stateRef.current.incomingAudioOnly);
     if (!incomingCallerId || !channelRef.current) {
       return false;
     }
@@ -1092,6 +1131,28 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       incomingAudioOnly: false,
       isConnecting: true,
     }));
+
+    const stream = await initializeMedia(incomingAudioOnly);
+    if (!stream) {
+      setState((prev) => ({
+        ...prev,
+        isConnecting: false,
+        isIncomingCall: false,
+        incomingCallerId: null,
+        incomingAudioOnly: false,
+      }));
+      await channelRef.current.send({
+        type: "broadcast",
+        event: "call-rejected",
+        payload: {
+          senderId: String(userId || ""),
+          targetId: incomingCallerId,
+          reason: "media-unavailable",
+        },
+      });
+      return false;
+    }
+
     await channelRef.current.send({
       type: "broadcast",
       event: "call-accepted",
@@ -1101,10 +1162,10 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       },
     });
     return true;
-  }, [state.incomingCallerId, userId]);
+  }, [initializeMedia, userId]);
 
   const rejectIncomingCall = useCallback(async () => {
-    const incomingCallerId = state.incomingCallerId;
+    const incomingCallerId = stateRef.current.incomingCallerId;
     setState((prev) => ({
       ...prev,
       isIncomingCall: false,
@@ -1127,7 +1188,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       },
     });
     return true;
-  }, [state.incomingCallerId, userId]);
+  }, [userId]);
 
   const handleCallAccepted = useCallback(
     async (senderId: string, targetId?: string) => {
@@ -1196,7 +1257,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       setState((prev) => ({
         ...prev,
         isConnecting: false,
-        error: reason === "busy" ? "Participant is currently in another call." : "Call was declined.",
+        error:
+          reason === "busy"
+            ? "Participant is currently in another call."
+            : reason === "media-unavailable"
+            ? "Participant could not access their camera or microphone."
+            : "Call was declined.",
       }));
     },
     [clearConnectionTimeout, userId]
@@ -1254,7 +1320,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
             if (
               channelRef.current &&
-              state.isSignalingReady &&
+              stateRef.current.isSignalingReady &&
               connection.signalingState === "stable" &&
               !makingOfferRef.current
             ) {
@@ -1290,7 +1356,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     lowBandwidthMode,
     sendOffer,
     setMediaNoticeError,
-    state.isSignalingReady,
   ]);
 
   const setVoiceFilter = useCallback(
@@ -1339,6 +1404,24 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, [cleanupCall]);
 
   useEffect(() => {
+    handleCallRequestRef.current = handleCallRequest;
+    handleCallAcceptedRef.current = handleCallAccepted;
+    handleCallRejectedRef.current = handleCallRejected;
+    handleOfferRef.current = handleOffer;
+    handleAnswerRef.current = handleAnswer;
+    handleIceCandidateRef.current = handleIceCandidate;
+    cleanupCallRef.current = cleanupCall;
+  }, [
+    cleanupCall,
+    handleCallAccepted,
+    handleCallRejected,
+    handleCallRequest,
+    handleAnswer,
+    handleIceCandidate,
+    handleOffer,
+  ]);
+
+  useEffect(() => {
     if (!sessionId) {
       setState((prev) => ({
         ...prev,
@@ -1350,32 +1433,33 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return;
     }
 
+    const normalizedUserId = String(userId || "");
     const channel = supabase.channel(`video-call-${sessionId}`);
     channelRef.current = channel;
     setState((prev) => ({ ...prev, isSignalingReady: false, error: null, notice: null }));
 
     channel
       .on("broadcast", { event: "call-request" }, ({ payload }) => {
-        handleCallRequest(payload.senderId, Boolean(payload.audioOnly));
+        handleCallRequestRef.current(payload.senderId, Boolean(payload.audioOnly));
       })
       .on("broadcast", { event: "call-accepted" }, ({ payload }) => {
-        void handleCallAccepted(payload.senderId, payload.targetId);
+        void handleCallAcceptedRef.current(payload.senderId, payload.targetId);
       })
       .on("broadcast", { event: "call-rejected" }, ({ payload }) => {
-        handleCallRejected(payload.senderId, payload.targetId, payload.reason);
+        handleCallRejectedRef.current(payload.senderId, payload.targetId, payload.reason);
       })
       .on("broadcast", { event: "offer" }, ({ payload }) => {
-        void handleOffer(payload.offer, payload.senderId, Boolean(payload.audioOnly));
+        void handleOfferRef.current(payload.offer, payload.senderId, Boolean(payload.audioOnly));
       })
       .on("broadcast", { event: "answer" }, ({ payload }) => {
-        void handleAnswer(payload.answer, payload.senderId);
+        void handleAnswerRef.current(payload.answer, payload.senderId);
       })
       .on("broadcast", { event: "ice-candidate" }, ({ payload }) => {
-        void handleIceCandidate(payload.candidate, payload.senderId);
+        void handleIceCandidateRef.current(payload.candidate, payload.senderId);
       })
       .on("broadcast", { event: "call-ended" }, ({ payload }) => {
-        if (String(payload?.senderId || "") !== String(userId || "")) {
-          cleanupCall(false);
+        if (String(payload?.senderId || "") !== normalizedUserId) {
+          cleanupCallRef.current(false);
         }
       })
       .subscribe((status) => {
@@ -1394,7 +1478,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       });
 
     return () => {
-      cleanupCall(false);
+      cleanupCallRef.current(false);
       setState((prev) => ({ ...prev, isSignalingReady: false }));
       channel.unsubscribe();
       if (channelRef.current === channel) {
@@ -1402,13 +1486,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
     };
   }, [
-    cleanupCall,
-    handleCallAccepted,
-    handleCallRejected,
-    handleCallRequest,
-    handleAnswer,
-    handleIceCandidate,
-    handleOffer,
     sessionId,
     setConnectionError,
     userId,
