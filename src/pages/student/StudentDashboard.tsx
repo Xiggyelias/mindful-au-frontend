@@ -423,8 +423,6 @@ const StudentDashboard = () => {
               onRefresh={() => void refreshDailyTip()}
               onToggleFavorite={() => void toggleFavorite()}
               isSavingFavorite={isSavingFavorite}
-              actionLabel="Open AI Support"
-              onAction={() => navigate("/student/ai-support")}
             />
           </div>
 

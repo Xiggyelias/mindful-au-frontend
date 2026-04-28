@@ -14,6 +14,8 @@ interface WebRTCState {
   isConnected: boolean;
   isConnecting: boolean;
   isReconnecting: boolean;
+  isDisconnected: boolean;
+  rejoinDeadline: number | null;
   isSignalingReady: boolean;
   isAudioOnly: boolean;
   isLocalVideoEnabled: boolean;
@@ -122,6 +124,8 @@ const DEFAULT_ENGINE_STATE: WebRTCState = {
   isConnected: false,
   isConnecting: false,
   isReconnecting: false,
+  isDisconnected: false,
+  rejoinDeadline: null,
   isSignalingReady: false,
   isAudioOnly: false,
   isLocalVideoEnabled: false,
@@ -337,14 +341,14 @@ const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
   engine.remoteStream = nextStream;
 
   const videoTracks = nextStream?.getVideoTracks() || [];
-  const hasActiveVideoTrack = Boolean(
-    videoTracks.some((track) => track.readyState === "live" && track.enabled)
+  const hasLiveVideoTrack = Boolean(
+    videoTracks.some((track) => track.readyState === "live")
   );
 
   setEngineState((prev) => ({
     ...prev,
     remoteStream: nextStream,
-    remoteHasVideo: hasActiveVideoTrack,
+    remoteHasVideo: hasLiveVideoTrack,
     isConnecting: false,
     error: null,
     notice: null,
@@ -463,27 +467,6 @@ const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRes
   }
 };
 
-const attemptEngineIceRestart = async (connection: RTCPeerConnection) => {
-  if (
-    engine.reconnectAttempts >= 2 ||
-    !engine.wasConnected ||
-    !engine.remotePeerId ||
-    !engine.localStream ||
-    !engine.channel ||
-    engine.makingOffer
-  ) {
-    return;
-  }
-
-  engine.reconnectAttempts += 1;
-
-  try {
-    await sendEngineOffer(connection, { iceRestart: true });
-  } catch (error) {
-    console.warn("ICE restart attempt failed:", error);
-  }
-};
-
 const handleEngineConnectionFailure = () => {
   clearEngineConnectionTimeout();
   cleanupEngineCall(false);
@@ -584,33 +567,23 @@ const createEnginePeerConnection = () => {
       return;
     }
 
-    if (connection.connectionState === "disconnected") {
-      startEngineConnectionTimeout();
+    if (connection.connectionState === "disconnected" || connection.connectionState === "failed") {
+      clearEngineConnectionTimeout();
+      const deadline = Date.now() + RECONNECT_WINDOW_MS;
+      engine.reconnectDeadlineMs = deadline;
+      if (engine.sessionId && engine.userId) {
+        persistActiveCall(engine.sessionId, engine.userId, deadline);
+      }
       setEngineState((prev) => ({
         ...prev,
         isConnected: false,
-        isConnecting: true,
-        isReconnecting: true,
+        isConnecting: false,
+        isReconnecting: false,
+        isDisconnected: true,
+        rejoinDeadline: deadline,
         error: null,
-        notice: engine.wasConnected
-          ? "Connection interrupted. Trying to reconnect..."
-          : prev.notice,
+        notice: null,
       }));
-      void attemptEngineIceRestart(connection);
-      void beginEngineReconnectLoop("disconnected");
-      return;
-    }
-
-    if (connection.connectionState === "failed") {
-      setEngineState((prev) => ({
-        ...prev,
-        isConnected: false,
-        isConnecting: true,
-        isReconnecting: true,
-        error: null,
-        notice: "Connection failed. Trying to reconnect...",
-      }));
-      void beginEngineReconnectLoop("failed");
       return;
     }
 
@@ -713,7 +686,14 @@ const rollbackEngineConnectionIfNeeded = async (connection: RTCPeerConnection, s
   }
 };
 
-const cleanupEngineCall = (broadcastEnd = true) => {
+const clearEngineMedia = () => {
+  if (engine.localStream) {
+    engine.localStream.getTracks().forEach((track) => track.stop());
+    engine.localStream = null;
+  }
+};
+
+const cleanupEngineCall = (broadcastEnd = true, clearMedia = true) => {
   if (engine.cleanupInProgress) {
     return;
   }
@@ -733,9 +713,8 @@ const cleanupEngineCall = (broadcastEnd = true) => {
   engine.localSpeakingSince = null;
   engine.remoteSpeakingSince = null;
 
-  if (engine.localStream) {
-    engine.localStream.getTracks().forEach((track) => track.stop());
-    engine.localStream = null;
+  if (clearMedia) {
+    clearEngineMedia();
   }
 
   if (engine.peerConnection) {
@@ -781,6 +760,8 @@ const cleanupEngineCall = (broadcastEnd = true) => {
     incomingAudioOnly: false,
     localSpeaking: false,
     remoteSpeaking: false,
+    isDisconnected: false,
+    rejoinDeadline: null,
     callQuality: {
       latencyMs: null,
       jitterMs: null,
@@ -1066,78 +1047,68 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
     });
 };
 
-const beginEngineReconnectLoop = async (reason: "disconnected" | "failed" | "recovery") => {
-  if (engine.reconnectIntervalId) {
-    return;
-  }
-
+const performEngineRejoin = async (): Promise<boolean> => {
   if (!engine.sessionId || !engine.userId) {
-    return;
+    return false;
   }
 
-  const deadline = Date.now() + RECONNECT_WINDOW_MS;
-  engine.reconnectDeadlineMs = deadline;
-  persistActiveCall(engine.sessionId, engine.userId, deadline);
+  if (!engine.reconnectDeadlineMs || Date.now() > engine.reconnectDeadlineMs) {
+    cleanupEngineCall(true);
+    setEngineConnectionError("Rejoin window has expired. Please start a new call.");
+    return false;
+  }
 
   setEngineState((prev) => ({
     ...prev,
-    isConnected: false,
+    isDisconnected: false,
     isConnecting: true,
     isReconnecting: true,
     error: null,
-    notice: reason === "recovery" ? "Rejoining call..." : "Reconnecting...",
+    notice: "Rejoining call...",
   }));
 
-  const attempt = async () => {
-    if (!engine.reconnectDeadlineMs || Date.now() > engine.reconnectDeadlineMs) {
-      clearEngineReconnectLoop();
-      cleanupEngineCall(true);
-      setEngineConnectionError("Reconnection timed out. Please start the call again.");
-      return;
-    }
-
+  try {
     ensureEngineChannel(engine.sessionId, engine.userId);
     if (!engine.channel) {
-      return;
+      throw new Error("Call channel not available");
     }
 
-    const stream = engine.localStream ?? (await initializeEngineMedia(engine.state.isAudioOnly));
+    const stream = await initializeEngineMedia(engine.state.isAudioOnly);
     if (!stream) {
-      return;
+      setEngineState((prev) => ({
+        ...prev,
+        isConnecting: false,
+        isReconnecting: false,
+        isDisconnected: true,
+      }));
+      return false;
     }
 
-    if (!engine.peerConnection || engine.peerConnection.signalingState === "closed") {
-      const connection = createEngineFreshPeerConnection();
-      attachEngineLocalTracks(connection, stream);
-    }
+    const connection = createEngineFreshPeerConnection();
+    attachEngineLocalTracks(connection, stream);
 
-    const connection = engine.peerConnection;
-    if (!connection) {
-      return;
-    }
+    await sendEngineOffer(connection);
+    await engine.channel.send({
+      type: "broadcast",
+      event: "call-recover",
+      payload: {
+        senderId: String(engine.userId || ""),
+      },
+    });
 
-    try {
-      if (engine.wasConnected) {
-        await sendEngineOffer(connection, { iceRestart: true });
-      } else {
-        await sendEngineOffer(connection);
-      }
-      await engine.channel.send({
-        type: "broadcast",
-        event: "call-recover",
-        payload: {
-          senderId: String(engine.userId || ""),
-        },
-      });
-    } catch {
-      // Swallow and retry.
-    }
-  };
-
-  await attempt();
-  engine.reconnectIntervalId = window.setInterval(() => {
-    void attempt();
-  }, RECONNECT_RETRY_INTERVAL_MS);
+    startEngineConnectionTimeout();
+    return true;
+  } catch (error) {
+    console.error("Failed to rejoin call:", error);
+    setEngineState((prev) => ({
+      ...prev,
+      isConnecting: false,
+      isReconnecting: false,
+      isDisconnected: true,
+      error: "Failed to rejoin call. You can try again.",
+    }));
+    return false;
+  }
 };
 
 export const useWebRTC = (sessionId: string, userId: string) => {
@@ -1402,6 +1373,10 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     cleanupEngineCall(true);
   }, []);
 
+  const rejoinCall = useCallback(async () => {
+    return performEngineRejoin();
+  }, []);
+
   useEffect(() => {
     if (!sessionId) {
       setEngineState((prev) => ({
@@ -1441,7 +1416,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
     engine.sessionId = sessionId;
     engine.userId = String(userId || "");
-    void beginEngineReconnectLoop("recovery");
+    engine.reconnectDeadlineMs = persisted.reconnectUntil;
+
+    setEngineState((prev) => ({
+      ...prev,
+      isDisconnected: true,
+      rejoinDeadline: persisted.reconnectUntil,
+      notice: "You can rejoin the ongoing call.",
+    }));
   }, [sessionId, userId]);
 
   useEffect(() => {
@@ -1643,6 +1625,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     startCall,
     startAudioCall,
     endCall,
+    rejoinCall,
     toggleMute,
     toggleVideo,
     acceptIncomingCall,

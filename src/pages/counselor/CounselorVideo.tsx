@@ -16,6 +16,7 @@ import {
   VideoOff,
   Phone,
   PhoneIncoming,
+  RefreshCw,
   Loader2,
   WifiOff,
 } from "lucide-react";
@@ -82,6 +83,8 @@ const CounselorVideo = () => {
   const [isOnline, setIsOnline] = useState(
     () => (typeof navigator === "undefined" ? true : navigator.onLine)
   );
+  const [rejoinSecondsLeft, setRejoinSecondsLeft] = useState<number | null>(null);
+  const [isRejoining, setIsRejoining] = useState(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
@@ -109,11 +112,14 @@ const CounselorVideo = () => {
     localSpeaking,
     remoteSpeaking,
     callQuality,
+    isDisconnected,
+    rejoinDeadline,
     localVideoRef,
     remoteVideoRef,
     startCall,
     startAudioCall,
     endCall,
+    rejoinCall,
     toggleMute,
     toggleVideo,
     acceptIncomingCall,
@@ -204,6 +210,24 @@ const CounselorVideo = () => {
   const handleRejectIncomingCall = () => {
     void rejectIncomingCall();
   };
+
+  const handleRejoinCall = useCallback(async () => {
+    if (!rejoinDeadline || Date.now() > rejoinDeadline) {
+      toast.error("Rejoin window has expired. Please start a new session.");
+      return;
+    }
+    setIsRejoining(true);
+    try {
+      const success = await rejoinCall();
+      if (success) {
+        toast.success("Rejoined the session successfully");
+      }
+    } catch {
+      toast.error("Failed to rejoin session. You can try again.");
+    } finally {
+      setIsRejoining(false);
+    }
+  }, [rejoinCall, rejoinDeadline]);
 
   const activeSession = useMemo(
     () => upcomingSessions.find((session) => String(session.id) === activeSessionId),
@@ -305,6 +329,32 @@ const CounselorVideo = () => {
     setAuthorizedDurationMinutes(null);
     setPendingCallMode("video");
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!isDisconnected || !rejoinDeadline) {
+      setRejoinSecondsLeft(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const secondsLeft = Math.max(0, Math.ceil((rejoinDeadline - Date.now()) / 1000));
+      setRejoinSecondsLeft(secondsLeft);
+
+      if (secondsLeft === 0) {
+        return true;
+      }
+      return false;
+    };
+
+    updateTimer();
+    const timer = window.setInterval(() => {
+      if (updateTimer()) {
+        window.clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isDisconnected, rejoinDeadline]);
 
   useEffect(() => {
     if (!isOnline && pendingSessionStartId) {
@@ -603,6 +653,37 @@ const CounselorVideo = () => {
                       {isRelayError ? "Session attention needed" : "Session issue"}
                     </AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                {isDisconnected && (
+                  <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground">
+                    <WifiOff className="h-4 w-4 text-amber-500" />
+                    <AlertTitle>Connection lost</AlertTitle>
+                    <AlertDescription className="mt-2 flex flex-wrap items-center gap-3">
+                      <span className="text-sm">
+                        {rejoinSecondsLeft !== null && rejoinSecondsLeft > 0
+                          ? `You can rejoin within ${formatCallDuration(rejoinSecondsLeft)}`
+                          : "Rejoin window has expired"}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={handleRejoinCall}
+                        disabled={isRejoining || !rejoinSecondsLeft || rejoinSecondsLeft <= 0}
+                      >
+                        {isRejoining ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Rejoining...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Rejoin Session
+                          </>
+                        )}
+                      </Button>
+                    </AlertDescription>
                   </Alert>
                 )}
 
