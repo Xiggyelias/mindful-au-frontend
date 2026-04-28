@@ -300,12 +300,29 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
     remoteStreamRef.current = nextStream;
 
+    const videoTracks = nextStream?.getVideoTracks() || [];
+    const hasActiveVideoTrack = Boolean(
+      videoTracks.some((track) =>
+        track.readyState === "live" && track.enabled && !track.muted
+      )
+    );
+
+    console.log("Remote video state:", {
+      hasStream: !!nextStream,
+      videoTrackCount: videoTracks.length,
+      hasActiveVideoTrack,
+      tracks: videoTracks.map((t) => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+      })),
+    });
+
     setState((prev) => ({
       ...prev,
       remoteStream: nextStream,
-      remoteHasVideo: Boolean(
-        nextStream?.getVideoTracks().some((track) => track.readyState === "live")
-      ),
+      remoteHasVideo: hasActiveVideoTrack,
       isConnecting: false,
       error: null,
       notice: null,
@@ -537,6 +554,13 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       if (!alreadyAdded) {
         remoteStream.addTrack(event.track);
+        console.log("Remote track received:", {
+          kind: event.track.kind,
+          id: event.track.id,
+          enabled: event.track.enabled,
+          muted: event.track.muted,
+          readyState: event.track.readyState,
+        });
       }
 
       if (!observedRemoteTrackIdsRef.current.has(event.track.id)) {
@@ -1135,9 +1159,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   );
 
   const toggleMute = useCallback(() => {
-    if (rawAudioTrackRef.current) {
-      rawAudioTrackRef.current.enabled = !rawAudioTrackRef.current.enabled;
-    }
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !track.enabled;
