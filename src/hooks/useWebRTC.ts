@@ -13,6 +13,7 @@ interface WebRTCState {
   remoteHasVideo: boolean;
   isConnected: boolean;
   isConnecting: boolean;
+  isReconnecting: boolean;
   isSignalingReady: boolean;
   isAudioOnly: boolean;
   isLocalVideoEnabled: boolean;
@@ -83,6 +84,142 @@ const AUDIO_ONLY_CONSTRAINTS: MediaStreamConstraints = {
 const SPEAKING_THRESHOLD = 0.06;
 const SPEAKING_HOLD_MS = 300;
 
+type WebRTCEngineListener = (state: WebRTCState) => void;
+
+type WebRTCEngine = {
+  sessionId: string;
+  userId: string;
+  lowBandwidthMode: boolean;
+  state: WebRTCState;
+  peerConnection: RTCPeerConnection | null;
+  channel: ReturnType<typeof supabase.channel> | null;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  pendingIceCandidates: RTCIceCandidateInit[];
+  remotePeerId: string | null;
+  observedRemoteTrackIds: Set<string>;
+  makingOffer: boolean;
+  ignoreOffer: boolean;
+  wasConnected: boolean;
+  reconnectAttempts: number;
+  cleanupInProgress: boolean;
+  connectionTimeout: ReturnType<typeof setTimeout> | null;
+  pendingCallRequest: { audioOnly: boolean } | null;
+  localSpeakingSince: number | null;
+  remoteSpeakingSince: number | null;
+  localVideoElements: Set<HTMLVideoElement>;
+  remoteVideoElements: Set<HTMLVideoElement>;
+  listeners: Set<WebRTCEngineListener>;
+
+  reconnectDeadlineMs: number | null;
+  reconnectIntervalId: number | null;
+};
+
+const DEFAULT_ENGINE_STATE: WebRTCState = {
+  localStream: null,
+  remoteStream: null,
+  remoteHasVideo: false,
+  isConnected: false,
+  isConnecting: false,
+  isReconnecting: false,
+  isSignalingReady: false,
+  isAudioOnly: false,
+  isLocalVideoEnabled: false,
+  error: null,
+  isRelayError: false,
+  notice: null,
+  isIncomingCall: false,
+  incomingCallerId: null,
+  incomingAudioOnly: false,
+  localSpeaking: false,
+  remoteSpeaking: false,
+  callQuality: {
+    latencyMs: null,
+    jitterMs: null,
+    packetLossPercent: null,
+  },
+};
+
+const engine: WebRTCEngine = {
+  sessionId: "",
+  userId: "",
+  lowBandwidthMode: false,
+  state: { ...DEFAULT_ENGINE_STATE },
+  peerConnection: null,
+  channel: null,
+  localStream: null,
+  remoteStream: null,
+  pendingIceCandidates: [],
+  remotePeerId: null,
+  observedRemoteTrackIds: new Set(),
+  makingOffer: false,
+  ignoreOffer: false,
+  wasConnected: false,
+  reconnectAttempts: 0,
+  cleanupInProgress: false,
+  connectionTimeout: null,
+  pendingCallRequest: null,
+  localSpeakingSince: null,
+  remoteSpeakingSince: null,
+  localVideoElements: new Set(),
+  remoteVideoElements: new Set(),
+  listeners: new Set(),
+
+  reconnectDeadlineMs: null,
+  reconnectIntervalId: null,
+};
+
+const ACTIVE_CALL_STORAGE_KEY = "mindful.activeCall";
+const RECONNECT_WINDOW_MS = 5 * 60 * 1000;
+const RECONNECT_RETRY_INTERVAL_MS = 3000;
+
+type PersistedActiveCall = {
+  sessionId: string;
+  userId: string;
+  reconnectUntil: number;
+};
+
+const readPersistedActiveCall = (): PersistedActiveCall | null => {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CALL_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<PersistedActiveCall>;
+    if (!parsed?.sessionId || !parsed?.userId || typeof parsed.reconnectUntil !== "number") {
+      return null;
+    }
+    return {
+      sessionId: String(parsed.sessionId),
+      userId: String(parsed.userId),
+      reconnectUntil: parsed.reconnectUntil,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const persistActiveCall = (sessionId: string, userId: string, reconnectUntil: number) => {
+  try {
+    const payload: PersistedActiveCall = {
+      sessionId: String(sessionId || ""),
+      userId: String(userId || ""),
+      reconnectUntil,
+    };
+    localStorage.setItem(ACTIVE_CALL_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const clearPersistedActiveCall = () => {
+  try {
+    localStorage.removeItem(ACTIVE_CALL_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 const playMediaElement = (element: HTMLVideoElement | null) => {
   if (!element) {
     return;
@@ -146,15 +283,494 @@ const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
   return normalizedLocalId.localeCompare(normalizedRemoteId) > 0;
 };
 
-export const useWebRTC = (sessionId: string, userId: string) => {
-  const { lowBandwidthMode } = useBandwidthMode();
-  const [state, setState] = useState<WebRTCState>({
+const notifyEngineState = () => {
+  for (const listener of engine.listeners) {
+    listener(engine.state);
+  }
+};
+
+const setEngineState = (updater: (prev: WebRTCState) => WebRTCState) => {
+  engine.state = updater(engine.state);
+  notifyEngineState();
+};
+
+const clearEngineConnectionTimeout = () => {
+  if (engine.connectionTimeout) {
+    clearTimeout(engine.connectionTimeout);
+    engine.connectionTimeout = null;
+  }
+};
+
+const clearEngineReconnectLoop = () => {
+  if (engine.reconnectIntervalId) {
+    window.clearInterval(engine.reconnectIntervalId);
+    engine.reconnectIntervalId = null;
+  }
+  engine.reconnectDeadlineMs = null;
+};
+
+const closeEnginePeerConnection = (connection: RTCPeerConnection | null) => {
+  if (!connection) {
+    return;
+  }
+
+  connection.onicecandidate = null;
+  connection.onicecandidateerror = null;
+  connection.ontrack = null;
+  connection.onconnectionstatechange = null;
+  connection.oniceconnectionstatechange = null;
+  connection.close();
+};
+
+const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
+  const nextStream = stream
+    ? (() => {
+        stream.getTracks().forEach((track) => {
+          if (track.readyState === "ended") {
+            stream.removeTrack(track);
+          }
+        });
+        return stream;
+      })()
+    : null;
+
+  engine.remoteStream = nextStream;
+
+  const videoTracks = nextStream?.getVideoTracks() || [];
+  const hasActiveVideoTrack = Boolean(
+    videoTracks.some((track) => track.readyState === "live" && track.enabled)
+  );
+
+  setEngineState((prev) => ({
+    ...prev,
+    remoteStream: nextStream,
+    remoteHasVideo: hasActiveVideoTrack,
+    isConnecting: false,
+    error: null,
+    notice: null,
+  }));
+
+  if (nextStream) {
+    for (const element of engine.remoteVideoElements) {
+      element.srcObject = nextStream;
+      playMediaElement(element);
+    }
+  }
+};
+
+const setEngineConnectionError = (message: string, isRelay = false) => {
+  setEngineState((prev) => ({
+    ...prev,
+    isConnected: false,
+    isConnecting: false,
+    isReconnecting: false,
+    error: message,
+    isRelayError: isRelay,
+    notice: null,
+  }));
+};
+
+const startEngineConnectionTimeout = () => {
+  clearEngineConnectionTimeout();
+  engine.connectionTimeout = setTimeout(() => {
+    cleanupEngineCall(false);
+    setEngineConnectionError(
+      "We couldn't connect the call in time. Check your connection and try again."
+    );
+  }, VIDEO_CALL_LIMITS.connectionTimeoutMs);
+};
+
+const flushEnginePendingIceCandidates = async (connection: RTCPeerConnection) => {
+  if (!connection.remoteDescription || engine.pendingIceCandidates.length === 0) {
+    return;
+  }
+
+  const queuedCandidates = [...engine.pendingIceCandidates];
+  engine.pendingIceCandidates = [];
+
+  for (const candidate of queuedCandidates) {
+    try {
+      await connection.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+      console.error("Error applying queued ICE candidate:", error);
+    }
+  }
+};
+
+const applyEngineVideoSenderParameters = (sender: RTCRtpSender) => {
+  if (sender.track?.kind !== "video") {
+    return;
+  }
+
+  const parameters = sender.getParameters();
+  if (!parameters.encodings) {
+    parameters.encodings = [{}];
+  }
+
+  const maxBitrate = engine.lowBandwidthMode ? 250_000 : 1_500_000;
+  parameters.encodings[0].maxBitrate = maxBitrate;
+
+  void sender.setParameters(parameters).catch((error) => {
+    console.warn("Failed to set video bitrate parameters:", error);
+  });
+};
+
+const attachEngineLocalTracks = (connection: RTCPeerConnection, stream: MediaStream) => {
+  const existingTrackIds = new Set(
+    connection
+      .getSenders()
+      .map((sender) => sender.track?.id)
+      .filter((trackId): trackId is string => Boolean(trackId))
+  );
+
+  stream.getTracks().forEach((track) => {
+    if (!existingTrackIds.has(track.id)) {
+      const sender = connection.addTrack(track, stream);
+      applyEngineVideoSenderParameters(sender);
+    }
+  });
+};
+
+const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRestart?: boolean }) => {
+  const stream = engine.localStream;
+  if (!stream || !engine.channel) {
+    return false;
+  }
+
+  engine.makingOffer = true;
+
+  try {
+    if (options?.iceRestart && typeof connection.restartIce === "function") {
+      connection.restartIce();
+    }
+
+    const offer = await connection.createOffer(options?.iceRestart ? { iceRestart: true } : undefined);
+    await connection.setLocalDescription(offer);
+
+    await engine.channel.send({
+      type: "broadcast",
+      event: "offer",
+      payload: {
+        offer,
+        senderId: String(engine.userId || ""),
+        audioOnly: stream.getVideoTracks().length === 0,
+      },
+    });
+
+    return true;
+  } finally {
+    engine.makingOffer = false;
+  }
+};
+
+const attemptEngineIceRestart = async (connection: RTCPeerConnection) => {
+  if (
+    engine.reconnectAttempts >= 2 ||
+    !engine.wasConnected ||
+    !engine.remotePeerId ||
+    !engine.localStream ||
+    !engine.channel ||
+    engine.makingOffer
+  ) {
+    return;
+  }
+
+  engine.reconnectAttempts += 1;
+
+  try {
+    await sendEngineOffer(connection, { iceRestart: true });
+  } catch (error) {
+    console.warn("ICE restart attempt failed:", error);
+  }
+};
+
+const handleEngineConnectionFailure = () => {
+  clearEngineConnectionTimeout();
+  cleanupEngineCall(false);
+
+  let errorMessage = "Connection failed. Please try again on a stable network.";
+  if (!HAS_RELAY_ICE_SERVER) {
+    errorMessage += " TURN relay servers are also required for some mobile and office networks.";
+    console.warn(
+      "WebRTC relay (TURN) servers are not configured. Calls may fail on carrier, office, or NAT-restricted networks."
+    );
+  }
+
+  setEngineConnectionError(errorMessage, !HAS_RELAY_ICE_SERVER);
+};
+
+const createEnginePeerConnection = () => {
+  const connection = new RTCPeerConnection(RTC_CONFIGURATION);
+
+  connection.onicecandidate = async (event) => {
+    if (event.candidate && engine.channel) {
+      await engine.channel.send({
+        type: "broadcast",
+        event: "ice-candidate",
+        payload: {
+          candidate: event.candidate,
+          senderId: String(engine.userId || ""),
+        },
+      });
+    }
+  };
+
+  connection.onicecandidateerror = (event) => {
+    console.warn("ICE candidate error:", event);
+  };
+
+  connection.ontrack = (event) => {
+    const remoteStream = engine.remoteStream ?? new MediaStream();
+    const alreadyAdded = remoteStream.getTracks().some((track) => track.id === event.track.id);
+
+    if (!alreadyAdded) {
+      remoteStream.addTrack(event.track);
+      console.log("Remote track received:", {
+        kind: event.track.kind,
+        id: event.track.id,
+        enabled: event.track.enabled,
+        muted: event.track.muted,
+        readyState: event.track.readyState,
+      });
+    }
+
+    if (!engine.observedRemoteTrackIds.has(event.track.id)) {
+      engine.observedRemoteTrackIds.add(event.track.id);
+      const syncRemoteState = () => {
+        if (event.track.readyState === "ended") {
+          remoteStream.removeTrack(event.track);
+        }
+        updateEngineRemoteStreamState(engine.remoteStream);
+      };
+      event.track.addEventListener("mute", syncRemoteState);
+      event.track.addEventListener("unmute", syncRemoteState);
+      event.track.addEventListener("ended", syncRemoteState);
+    }
+
+    engine.remoteStream = remoteStream;
+    updateEngineRemoteStreamState(remoteStream);
+  };
+
+  connection.onconnectionstatechange = () => {
+    if (connection.connectionState === "connected") {
+      engine.wasConnected = true;
+      engine.reconnectAttempts = 0;
+      clearEngineConnectionTimeout();
+      clearEngineReconnectLoop();
+      if (engine.sessionId && engine.userId) {
+        persistActiveCall(engine.sessionId, engine.userId, Date.now() + RECONNECT_WINDOW_MS);
+      }
+      setEngineState((prev) => ({
+        ...prev,
+        isConnected: true,
+        isConnecting: false,
+        isReconnecting: false,
+        error: null,
+        notice: null,
+      }));
+      return;
+    }
+
+    if (connection.connectionState === "connecting") {
+      setEngineState((prev) => ({
+        ...prev,
+        isConnecting: true,
+        error: null,
+        notice:
+          engine.wasConnected && engine.reconnectAttempts > 0
+            ? "Connection interrupted. Trying to reconnect..."
+            : null,
+      }));
+      return;
+    }
+
+    if (connection.connectionState === "disconnected") {
+      startEngineConnectionTimeout();
+      setEngineState((prev) => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: true,
+        isReconnecting: true,
+        error: null,
+        notice: engine.wasConnected
+          ? "Connection interrupted. Trying to reconnect..."
+          : prev.notice,
+      }));
+      void attemptEngineIceRestart(connection);
+      void beginEngineReconnectLoop("disconnected");
+      return;
+    }
+
+    if (connection.connectionState === "failed") {
+      setEngineState((prev) => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: true,
+        isReconnecting: true,
+        error: null,
+        notice: "Connection failed. Trying to reconnect...",
+      }));
+      void beginEngineReconnectLoop("failed");
+      return;
+    }
+
+    if (connection.connectionState === "closed") {
+      clearEngineConnectionTimeout();
+      setEngineState((prev) => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        notice: null,
+      }));
+    }
+  };
+
+  connection.oniceconnectionstatechange = () => {
+    if (connection.iceConnectionState === "failed") {
+      handleEngineConnectionFailure();
+    }
+  };
+
+  return connection;
+};
+
+const createEngineFreshPeerConnection = () => {
+  if (engine.peerConnection) {
+    closeEnginePeerConnection(engine.peerConnection);
+  }
+
+  const connection = createEnginePeerConnection();
+  engine.peerConnection = connection;
+  engine.pendingIceCandidates = [];
+  engine.remotePeerId = null;
+  return connection;
+};
+
+const initializeEngineMedia = async (audioOnlyRequested = false) => {
+  if (engine.localStream) {
+    return engine.localStream;
+  }
+
+  if (
+    typeof navigator === "undefined" ||
+    !navigator.mediaDevices?.getUserMedia ||
+    typeof RTCPeerConnection === "undefined"
+  ) {
+    setEngineConnectionError("This device or browser does not support secure in-browser calls.");
+    return null;
+  }
+
+  const tryGetMedia = async (constraints: MediaStreamConstraints) => {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    engine.localStream = stream;
+    setEngineState((prev) => ({
+      ...prev,
+      localStream: stream,
+      isAudioOnly: stream.getVideoTracks().length === 0,
+      isLocalVideoEnabled: stream.getVideoTracks().some((track) => track.enabled),
+    }));
+
+    for (const element of engine.localVideoElements) {
+      element.srcObject = stream;
+      playMediaElement(element);
+    }
+
+    return stream;
+  };
+
+  try {
+    if (audioOnlyRequested) {
+      return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+    }
+
+    try {
+      return await tryGetMedia(engine.lowBandwidthMode ? LOW_BANDWIDTH_MEDIA_CONSTRAINTS : MEDIA_CONSTRAINTS);
+    } catch (videoError) {
+      console.warn("Falling back to audio-only media:", videoError);
+      return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+    }
+  } catch (error) {
+    console.error("Error accessing media devices:", error);
+    setEngineConnectionError(getMediaErrorMessage(error, audioOnlyRequested));
+    return null;
+  }
+};
+
+const rollbackEngineConnectionIfNeeded = async (connection: RTCPeerConnection, stream: MediaStream) => {
+  if (connection.signalingState === "stable") {
+    return connection;
+  }
+
+  try {
+    await connection.setLocalDescription({ type: "rollback" });
+    return connection;
+  } catch (rollbackError) {
+    console.warn("Rollback failed, replacing peer connection:", rollbackError);
+    const replacement = createEngineFreshPeerConnection();
+    attachEngineLocalTracks(replacement, stream);
+    return replacement;
+  }
+};
+
+const cleanupEngineCall = (broadcastEnd = true) => {
+  if (engine.cleanupInProgress) {
+    return;
+  }
+
+  engine.cleanupInProgress = true;
+  clearEngineConnectionTimeout();
+  clearEngineReconnectLoop();
+  engine.pendingIceCandidates = [];
+  engine.remotePeerId = null;
+  engine.remoteStream = null;
+  engine.observedRemoteTrackIds.clear();
+  engine.pendingCallRequest = null;
+  engine.makingOffer = false;
+  engine.ignoreOffer = false;
+  engine.wasConnected = false;
+  engine.reconnectAttempts = 0;
+  engine.localSpeakingSince = null;
+  engine.remoteSpeakingSince = null;
+
+  if (engine.localStream) {
+    engine.localStream.getTracks().forEach((track) => track.stop());
+    engine.localStream = null;
+  }
+
+  if (engine.peerConnection) {
+    closeEnginePeerConnection(engine.peerConnection);
+    engine.peerConnection = null;
+  }
+
+  for (const element of engine.localVideoElements) {
+    element.srcObject = null;
+  }
+
+  for (const element of engine.remoteVideoElements) {
+    element.srcObject = null;
+  }
+
+  if (broadcastEnd && engine.channel) {
+    void engine.channel.send({
+      type: "broadcast",
+      event: "call-ended",
+      payload: { senderId: String(engine.userId || "") },
+    });
+  }
+
+  if (broadcastEnd) {
+    clearPersistedActiveCall();
+  }
+
+  setEngineState((prev) => ({
+    ...prev,
     localStream: null,
     remoteStream: null,
     remoteHasVideo: false,
     isConnected: false,
     isConnecting: false,
-    isSignalingReady: false,
+    isReconnecting: false,
     isAudioOnly: false,
     isLocalVideoEnabled: false,
     error: null,
@@ -170,820 +786,42 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       jitterMs: null,
       packetLossPercent: null,
     },
-  });
-
-  const peerConnection = useRef<RTCPeerConnection | null>(null);
-  const stateRef = useRef(state);
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
-  const cleanupInProgressRef = useRef(false);
-  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-  const remotePeerIdRef = useRef<string | null>(null);
-  const observedRemoteTrackIdsRef = useRef<Set<string>>(new Set());
-  const makingOfferRef = useRef(false);
-  const ignoreOfferRef = useRef(false);
-  const wasConnectedRef = useRef(false);
-  const reconnectAttemptsRef = useRef(0);
-  const pendingCallRequestRef = useRef<{ audioOnly: boolean } | null>(null);
-  const localSpeakingSinceRef = useRef<number | null>(null);
-  const remoteSpeakingSinceRef = useRef<number | null>(null);
-  const handleCallRequestRef = useRef<(senderId: string, audioOnly?: boolean) => void>(() => undefined);
-  const handleCallAcceptedRef = useRef<(senderId: string, targetId?: string) => Promise<void>>(
-    async () => undefined
-  );
-  const handleCallRejectedRef = useRef<(senderId: string, targetId?: string, reason?: string) => void>(
-    () => undefined
-  );
-  const handleOfferRef = useRef<
-    (
-      offer: RTCSessionDescriptionInit,
-      senderId: string,
-      audioOnly?: boolean
-    ) => Promise<void>
-  >(async () => undefined);
-  const handleAnswerRef = useRef<
-    (answer: RTCSessionDescriptionInit, senderId: string) => Promise<void>
-  >(async () => undefined);
-  const handleIceCandidateRef = useRef<
-    (candidate: RTCIceCandidateInit, senderId: string) => Promise<void>
-  >(async () => undefined);
-  const cleanupCallRef = useRef<(broadcastEnd?: boolean) => void>(() => undefined);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  const clearConnectionTimeout = useCallback(() => {
-    if (connectionTimeoutRef.current) {
-      clearTimeout(connectionTimeoutRef.current);
-      connectionTimeoutRef.current = null;
-    }
-  }, []);
-
-  const closePeerConnection = useCallback((connection: RTCPeerConnection | null) => {
-    if (!connection) {
-      return;
-    }
-
-    connection.onicecandidate = null;
-    connection.onicecandidateerror = null;
-    connection.ontrack = null;
-    connection.onconnectionstatechange = null;
-    connection.oniceconnectionstatechange = null;
-    connection.close();
-  }, []);
-
-  const setLocalSpeakingState = useCallback((value: boolean) => {
-    setState((prev) => (prev.localSpeaking === value ? prev : { ...prev, localSpeaking: value }));
-  }, []);
-
-  const setRemoteSpeakingState = useCallback((value: boolean) => {
-    setState((prev) => (prev.remoteSpeaking === value ? prev : { ...prev, remoteSpeaking: value }));
-  }, []);
-
-  const setConnectionError = useCallback((message: string, isRelay = false) => {
-    setState((prev) => ({
-      ...prev,
-      isConnected: false,
-      isConnecting: false,
-      error: message,
-      isRelayError: isRelay,
-      notice: null,
-    }));
-  }, []);
-
-  const setMediaNoticeError = useCallback((message: string) => {
-    setState((prev) => ({
-      ...prev,
-      error: message,
-      isRelayError: false,
-      notice: null,
-    }));
-  }, []);
-
-  const applyVideoSenderParameters = useCallback(
-    (sender: RTCRtpSender) => {
-      if (sender.track?.kind !== "video") {
-        return;
-      }
-
-      const parameters = sender.getParameters();
-      if (!parameters.encodings) {
-        parameters.encodings = [{}];
-      }
-
-      const maxBitrate = lowBandwidthMode ? 250_000 : 1_500_000;
-      parameters.encodings[0].maxBitrate = maxBitrate;
-
-      void sender.setParameters(parameters).catch((error) => {
-        console.warn("Failed to set video bitrate parameters:", error);
-      });
-    },
-    [lowBandwidthMode]
-  );
-
-  const updateRemoteStreamState = useCallback((stream: MediaStream | null) => {
-    const nextStream = stream
-      ? (() => {
-          stream.getTracks().forEach((track) => {
-            if (track.readyState === "ended") {
-              stream.removeTrack(track);
-            }
-          });
-          return stream;
-        })()
-      : null;
-
-    remoteStreamRef.current = nextStream;
-
-    const videoTracks = nextStream?.getVideoTracks() || [];
-    const hasActiveVideoTrack = Boolean(
-      videoTracks.some((track) =>
-        track.readyState === "live" && track.enabled && !track.muted
-      )
-    );
-
-    console.log("Remote video state:", {
-      hasStream: !!nextStream,
-      videoTrackCount: videoTracks.length,
-      hasActiveVideoTrack,
-      tracks: videoTracks.map((t) => ({
-        kind: t.kind,
-        enabled: t.enabled,
-        muted: t.muted,
-        readyState: t.readyState,
-      })),
-    });
-
-    setState((prev) => ({
-      ...prev,
-      remoteStream: nextStream,
-      remoteHasVideo: hasActiveVideoTrack,
-      isConnecting: false,
-      error: null,
-      notice: null,
-    }));
-
-    if (nextStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = nextStream;
-      playMediaElement(remoteVideoRef.current);
-    }
-  }, []);
-
-  const cleanupCall = useCallback(
-    (broadcastEnd = true) => {
-      if (cleanupInProgressRef.current) {
-        return;
-      }
-
-      cleanupInProgressRef.current = true;
-      clearConnectionTimeout();
-      pendingIceCandidatesRef.current = [];
-      remotePeerIdRef.current = null;
-      remoteStreamRef.current = null;
-      observedRemoteTrackIdsRef.current.clear();
-      pendingCallRequestRef.current = null;
-      makingOfferRef.current = false;
-      ignoreOfferRef.current = false;
-      wasConnectedRef.current = false;
-      reconnectAttemptsRef.current = 0;
-      localSpeakingSinceRef.current = null;
-      remoteSpeakingSinceRef.current = null;
-
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
-
-      if (peerConnection.current) {
-        closePeerConnection(peerConnection.current);
-        peerConnection.current = null;
-      }
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = null;
-      }
-
-      if (broadcastEnd && channelRef.current) {
-        void channelRef.current.send({
-          type: "broadcast",
-          event: "call-ended",
-          payload: { senderId: String(userId || "") },
-        });
-      }
-
-      setState((prev) => ({
-        ...prev,
-        localStream: null,
-        remoteStream: null,
-        remoteHasVideo: false,
-        isConnected: false,
-        isConnecting: false,
-        isAudioOnly: false,
-        isLocalVideoEnabled: false,
-        error: null,
-        isRelayError: false,
-        notice: null,
-        isIncomingCall: false,
-        incomingCallerId: null,
-        incomingAudioOnly: false,
-        localSpeaking: false,
-        remoteSpeaking: false,
-        callQuality: {
-          latencyMs: null,
-          jitterMs: null,
-          packetLossPercent: null,
-        },
-      }));
-
-      cleanupInProgressRef.current = false;
-    },
-    [clearConnectionTimeout, closePeerConnection, userId]
-  );
-
-  const startConnectionTimeout = useCallback(() => {
-    clearConnectionTimeout();
-    connectionTimeoutRef.current = setTimeout(() => {
-      cleanupCall(false);
-      setConnectionError("We couldn't connect the call in time. Check your connection and try again.");
-    }, VIDEO_CALL_LIMITS.connectionTimeoutMs);
-  }, [clearConnectionTimeout, cleanupCall, setConnectionError]);
-
-  const handleConnectionFailure = useCallback(() => {
-    clearConnectionTimeout();
-    cleanupCall(false);
-    
-    let errorMessage = "Connection failed. Please try again on a stable network.";
-    if (!HAS_RELAY_ICE_SERVER) {
-      errorMessage += " TURN relay servers are also required for some mobile and office networks.";
-      console.warn(
-        "WebRTC relay (TURN) servers are not configured. Calls may fail on carrier, office, or NAT-restricted networks."
-      );
-    }
-    
-    setConnectionError(errorMessage, !HAS_RELAY_ICE_SERVER);
-  }, [clearConnectionTimeout, cleanupCall, setConnectionError]);
-
-  const flushPendingIceCandidates = useCallback(async (connection: RTCPeerConnection) => {
-    if (!connection.remoteDescription || pendingIceCandidatesRef.current.length === 0) {
-      return;
-    }
-
-    const queuedCandidates = [...pendingIceCandidatesRef.current];
-    pendingIceCandidatesRef.current = [];
-
-    for (const candidate of queuedCandidates) {
-      try {
-        await connection.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (error) {
-        console.error("Error applying queued ICE candidate:", error);
-      }
-    }
-  }, []);
-
-  const attachLocalTracks = useCallback((connection: RTCPeerConnection, stream: MediaStream) => {
-    const existingTrackIds = new Set(
-      connection
-        .getSenders()
-        .map((sender) => sender.track?.id)
-        .filter((trackId): trackId is string => Boolean(trackId))
-    );
-
-    stream.getTracks().forEach((track) => {
-      if (!existingTrackIds.has(track.id)) {
-        const sender = connection.addTrack(track, stream);
-        applyVideoSenderParameters(sender);
-      }
-    });
-  }, [applyVideoSenderParameters]);
-
-  const sendOffer = useCallback(
-    async (connection: RTCPeerConnection, options?: { iceRestart?: boolean }) => {
-      const stream = localStreamRef.current;
-      if (!stream || !channelRef.current) {
-        return false;
-      }
-
-      makingOfferRef.current = true;
-
-      try {
-        if (options?.iceRestart && typeof connection.restartIce === "function") {
-          connection.restartIce();
-        }
-
-        const offer = await connection.createOffer(
-          options?.iceRestart ? { iceRestart: true } : undefined
-        );
-        await connection.setLocalDescription(offer);
-
-        await channelRef.current.send({
-          type: "broadcast",
-          event: "offer",
-          payload: {
-            offer,
-            senderId: String(userId || ""),
-            audioOnly: stream.getVideoTracks().length === 0,
-          },
-        });
-
-        return true;
-      } finally {
-        makingOfferRef.current = false;
-      }
-    },
-    [userId]
-  );
-
-  const attemptIceRestart = useCallback(
-    async (connection: RTCPeerConnection) => {
-      if (
-        reconnectAttemptsRef.current >= 2 ||
-        !wasConnectedRef.current ||
-        !remotePeerIdRef.current ||
-        !localStreamRef.current ||
-        !channelRef.current ||
-        makingOfferRef.current
-      ) {
-        return;
-      }
-
-      reconnectAttemptsRef.current += 1;
-
-      try {
-        await sendOffer(connection, { iceRestart: true });
-      } catch (error) {
-        console.warn("ICE restart attempt failed:", error);
-      }
-    },
-    [sendOffer]
-  );
-
-  const createPeerConnection = useCallback(() => {
-    const connection = new RTCPeerConnection(RTC_CONFIGURATION);
-
-    connection.onicecandidate = async (event) => {
-      if (event.candidate && channelRef.current) {
-        await channelRef.current.send({
-          type: "broadcast",
-          event: "ice-candidate",
-          payload: {
-            candidate: event.candidate,
-            senderId: String(userId || ""),
-          },
-        });
-      }
-    };
-
-    connection.onicecandidateerror = (event) => {
-      console.warn("ICE candidate error:", event);
-    };
-
-    connection.ontrack = (event) => {
-      const remoteStream = remoteStreamRef.current ?? new MediaStream();
-      const alreadyAdded = remoteStream
-        .getTracks()
-        .some((track) => track.id === event.track.id);
-
-      if (!alreadyAdded) {
-        remoteStream.addTrack(event.track);
-        console.log("Remote track received:", {
-          kind: event.track.kind,
-          id: event.track.id,
-          enabled: event.track.enabled,
-          muted: event.track.muted,
-          readyState: event.track.readyState,
-        });
-      }
-
-      if (!observedRemoteTrackIdsRef.current.has(event.track.id)) {
-        observedRemoteTrackIdsRef.current.add(event.track.id);
-        const syncRemoteState = () => {
-          if (event.track.readyState === "ended") {
-            remoteStream.removeTrack(event.track);
-          }
-          updateRemoteStreamState(remoteStreamRef.current);
-        };
-        event.track.addEventListener("mute", syncRemoteState);
-        event.track.addEventListener("unmute", syncRemoteState);
-        event.track.addEventListener("ended", syncRemoteState);
-      }
-
-      remoteStreamRef.current = remoteStream;
-      updateRemoteStreamState(remoteStream);
-    };
-
-    connection.onconnectionstatechange = () => {
-      if (connection.connectionState === "connected") {
-        wasConnectedRef.current = true;
-        reconnectAttemptsRef.current = 0;
-        clearConnectionTimeout();
-        setState((prev) => ({
-          ...prev,
-          isConnected: true,
-          isConnecting: false,
-          error: null,
-          notice: null,
-        }));
-        return;
-      }
-
-      if (connection.connectionState === "connecting") {
-        setState((prev) => ({
-          ...prev,
-          isConnecting: true,
-          error: null,
-          notice:
-            wasConnectedRef.current && reconnectAttemptsRef.current > 0
-              ? "Connection interrupted. Trying to reconnect..."
-              : null,
-        }));
-        return;
-      }
-
-      if (connection.connectionState === "disconnected") {
-        startConnectionTimeout();
-        setState((prev) => ({
-          ...prev,
-          isConnected: false,
-          isConnecting: true,
-          error: null,
-          notice: wasConnectedRef.current
-            ? "Connection interrupted. Trying to reconnect..."
-            : prev.notice,
-        }));
-        void attemptIceRestart(connection);
-        return;
-      }
-
-      if (connection.connectionState === "failed") {
-        handleConnectionFailure();
-        return;
-      }
-
-      if (connection.connectionState === "closed") {
-        clearConnectionTimeout();
-        setState((prev) => ({
-          ...prev,
-          isConnected: false,
-          isConnecting: false,
-          notice: null,
-        }));
-      }
-    };
-
-    connection.oniceconnectionstatechange = () => {
-      if (connection.iceConnectionState === "failed") {
-        handleConnectionFailure();
-      }
-    };
-
-    return connection;
-  }, [
-    attemptIceRestart,
-    clearConnectionTimeout,
-    handleConnectionFailure,
-    startConnectionTimeout,
-    updateRemoteStreamState,
-    userId,
-  ]);
-
-  const createFreshPeerConnection = useCallback(() => {
-    if (peerConnection.current) {
-      closePeerConnection(peerConnection.current);
-    }
-
-    const connection = createPeerConnection();
-    peerConnection.current = connection;
-    pendingIceCandidatesRef.current = [];
-    remotePeerIdRef.current = null;
-    return connection;
-  }, [closePeerConnection, createPeerConnection]);
-
-  const initializeMedia = useCallback(
-    async (audioOnlyRequested = false) => {
-      if (localStreamRef.current) {
-        return localStreamRef.current;
-      }
-
-      if (
-        typeof navigator === "undefined" ||
-        !navigator.mediaDevices?.getUserMedia ||
-        typeof RTCPeerConnection === "undefined"
-      ) {
-        setConnectionError("This device or browser does not support secure in-browser calls.");
-        return null;
-      }
-
-      const tryGetMedia = async (constraints: MediaStreamConstraints) => {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        localStreamRef.current = stream;
-        setState((prev) => ({
-          ...prev,
-          localStream: stream,
-          isAudioOnly: stream.getVideoTracks().length === 0,
-          isLocalVideoEnabled: stream.getVideoTracks().some((track) => track.enabled),
-        }));
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          playMediaElement(localVideoRef.current);
-        }
-
-        return stream;
-      };
-
-      try {
-        if (audioOnlyRequested) {
-          return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
-        }
-
-        try {
-          return await tryGetMedia(
-            lowBandwidthMode ? LOW_BANDWIDTH_MEDIA_CONSTRAINTS : MEDIA_CONSTRAINTS
-          );
-        } catch (videoError) {
-          console.warn("Falling back to audio-only media:", videoError);
-          return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
-        }
-      } catch (error) {
-        console.error("Error accessing media devices:", error);
-        setConnectionError(getMediaErrorMessage(error, audioOnlyRequested));
-        return null;
-      }
-    },
-    [lowBandwidthMode, setConnectionError]
-  );
-
-  const rollbackConnectionIfNeeded = useCallback(
-    async (connection: RTCPeerConnection, stream: MediaStream) => {
-      if (connection.signalingState === "stable") {
-        return connection;
-      }
-
-      try {
-        await connection.setLocalDescription({ type: "rollback" });
-        return connection;
-      } catch (rollbackError) {
-        console.warn("Rollback failed, replacing peer connection:", rollbackError);
-        const replacement = createFreshPeerConnection();
-        attachLocalTracks(replacement, stream);
-        return replacement;
-      }
-    },
-    [attachLocalTracks, createFreshPeerConnection]
-  );
-
-  const startCall = useCallback(
-    async (options: StartCallOptions = {}) => {
-      const currentState = stateRef.current;
-
-      if (!sessionId) {
-        setConnectionError("Select a session before starting a call.");
-        return false;
-      }
-
-      if (!String(userId || "")) {
-        setConnectionError("Sign in before starting a call.");
-        return false;
-      }
-
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        setConnectionError("You are offline. Reconnect to start the call.");
-        return false;
-      }
-
-      if (!channelRef.current || !currentState.isSignalingReady) {
-        setConnectionError("Call channel is not ready yet. Please try again.");
-        return false;
-      }
-
-      if (currentState.isConnected) {
-        return true;
-      }
-
-      if (currentState.isConnecting) {
-        return false;
-      }
-
-      setState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
-      startConnectionTimeout();
-
-      try {
-        pendingCallRequestRef.current = { audioOnly: Boolean(options.audioOnly) };
-        ignoreOfferRef.current = false;
-        reconnectAttemptsRef.current = 0;
-        await channelRef.current.send({
-          type: "broadcast",
-          event: "call-request",
-          payload: {
-            senderId: String(userId || ""),
-            audioOnly: Boolean(options.audioOnly),
-          },
-        });
-
-        return true;
-      } catch (error) {
-        console.error("Error starting call:", error);
-        cleanupCall(false);
-        setConnectionError("Failed to start the call.");
-        return false;
-      }
-    },
-    [
-      cleanupCall,
-      sessionId,
-      startConnectionTimeout,
-      setConnectionError,
-      userId,
-    ]
-  );
-
-  const handleOffer = useCallback(
-    async (
-      offer: RTCSessionDescriptionInit,
-      senderId: string,
-      audioOnly = false
-    ) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-
+  }));
+
+  engine.cleanupInProgress = false;
+};
+
+const ensureEngineChannel = (sessionId: string, userId: string) => {
+  if (!sessionId) {
+    return;
+  }
+
+  const normalizedUserId = String(userId || "");
+  if (engine.channel && engine.sessionId === sessionId) {
+    return;
+  }
+
+  if (engine.channel) {
+    engine.channel.unsubscribe();
+    engine.channel = null;
+  }
+
+  engine.sessionId = sessionId;
+  engine.userId = normalizedUserId;
+
+  const channel = supabase.channel(`video-call-${sessionId}`);
+  engine.channel = channel;
+  setEngineState((prev) => ({ ...prev, isSignalingReady: false, error: null, notice: null }));
+
+  channel
+    .on("broadcast", { event: "call-request" }, ({ payload }) => {
+      const normalizedSenderId = String(payload?.senderId || "");
       if (!normalizedSenderId || normalizedSenderId === normalizedUserId) {
         return;
       }
-
-      if (
-        remotePeerIdRef.current &&
-        remotePeerIdRef.current !== normalizedSenderId
-      ) {
-        setConnectionError("Participant limit reached (max 2 users per call).");
-        return;
-      }
-
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        setConnectionError("You are offline. Reconnect to join the call.");
-        return;
-      }
-
-      setState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
-      startConnectionTimeout();
-
-      try {
-        const stream = await initializeMedia(audioOnly);
-        if (!stream) {
-          clearConnectionTimeout();
-          setState((prev) => ({ ...prev, isConnecting: false }));
-          return;
-        }
-
-        let connection =
-          peerConnection.current && peerConnection.current.signalingState !== "closed"
-            ? peerConnection.current
-            : createFreshPeerConnection();
-
-        attachLocalTracks(connection, stream);
-
-        const offerCollision =
-          makingOfferRef.current || connection.signalingState !== "stable";
-        const politePeer = isPolitePeer(normalizedUserId, normalizedSenderId);
-
-        ignoreOfferRef.current = !politePeer && offerCollision;
-        if (ignoreOfferRef.current) {
-          return;
-        }
-
-        if (offerCollision) {
-          connection = await rollbackConnectionIfNeeded(connection, stream);
-        }
-
-        await connection.setRemoteDescription(new RTCSessionDescription(offer));
-        remotePeerIdRef.current = normalizedSenderId;
-        ignoreOfferRef.current = false;
-        reconnectAttemptsRef.current = 0;
-        setState((prev) => ({
-          ...prev,
-          isIncomingCall: false,
-          incomingCallerId: null,
-          incomingAudioOnly: false,
-        }));
-
-        const answer = await connection.createAnswer();
-        await connection.setLocalDescription(answer);
-
-        await channelRef.current?.send({
-          type: "broadcast",
-          event: "answer",
-          payload: {
-            answer,
-            senderId: normalizedUserId,
-          },
-        });
-
-        await flushPendingIceCandidates(connection);
-      } catch (error) {
-        console.error("Error handling offer:", error);
-        cleanupCall(false);
-        setConnectionError("Failed to join the incoming call.");
-      }
-    },
-    [
-      attachLocalTracks,
-      cleanupCall,
-      clearConnectionTimeout,
-      createFreshPeerConnection,
-      flushPendingIceCandidates,
-      initializeMedia,
-      rollbackConnectionIfNeeded,
-      setConnectionError,
-      startConnectionTimeout,
-      userId,
-    ]
-  );
-
-  const handleAnswer = useCallback(
-    async (answer: RTCSessionDescriptionInit, senderId: string) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-      const connection = peerConnection.current;
-
-      if (!normalizedSenderId || normalizedSenderId === normalizedUserId || !connection) {
-        return;
-      }
-
-      if (
-        remotePeerIdRef.current &&
-        remotePeerIdRef.current !== normalizedSenderId
-      ) {
-        return;
-      }
-
-      try {
-        await connection.setRemoteDescription(new RTCSessionDescription(answer));
-        remotePeerIdRef.current = normalizedSenderId;
-        ignoreOfferRef.current = false;
-        reconnectAttemptsRef.current = 0;
-        await flushPendingIceCandidates(connection);
-      } catch (error) {
-        console.error("Error handling answer:", error);
-        setConnectionError("Failed to establish the call connection.");
-      }
-    },
-    [flushPendingIceCandidates, setConnectionError, userId]
-  );
-
-  const handleIceCandidate = useCallback(
-    async (candidate: RTCIceCandidateInit, senderId: string) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-
-      if (!candidate || !normalizedSenderId || normalizedSenderId === normalizedUserId) {
-        return;
-      }
-
-      if (
-        remotePeerIdRef.current &&
-        remotePeerIdRef.current !== normalizedSenderId
-      ) {
-        return;
-      }
-
-      if (ignoreOfferRef.current && !remotePeerIdRef.current) {
-        return;
-      }
-
-      const connection = peerConnection.current;
-      if (!connection || !connection.remoteDescription) {
-        pendingIceCandidatesRef.current.push(candidate);
-        return;
-      }
-
-      try {
-        await connection.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (error) {
-        console.error("Error adding ICE candidate:", error);
-      }
-    },
-    [userId]
-  );
-
-  const handleCallRequest = useCallback(
-    (senderId: string, audioOnly = false) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-      const currentState = stateRef.current;
-      if (!normalizedSenderId || normalizedSenderId === normalizedUserId) {
-        return;
-      }
-      if (currentState.isConnected || currentState.isConnecting || localStreamRef.current) {
-        void channelRef.current?.send({
+      const currentState = engine.state;
+      if (currentState.isConnected || currentState.isConnecting || engine.localStream) {
+        void engine.channel?.send({
           type: "broadcast",
           event: "call-rejected",
           payload: {
@@ -995,26 +833,407 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return;
       }
 
-      setState((prev) => ({
+      setEngineState((prev) => ({
         ...prev,
         isIncomingCall: true,
         incomingCallerId: normalizedSenderId,
-        incomingAudioOnly: Boolean(audioOnly),
+        incomingAudioOnly: Boolean(payload?.audioOnly),
         error: null,
         notice: null,
       }));
+    })
+    .on("broadcast", { event: "call-accepted" }, ({ payload }) => {
+      const normalizedSenderId = String(payload?.senderId || "");
+      const normalizedTargetId = String(payload?.targetId || "");
+      if (
+        !normalizedSenderId ||
+        normalizedSenderId === normalizedUserId ||
+        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
+      ) {
+        return;
+      }
+
+      const pendingRequest = engine.pendingCallRequest;
+      if (!pendingRequest) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const stream = await initializeEngineMedia(pendingRequest.audioOnly);
+          if (!stream) {
+            clearEngineConnectionTimeout();
+            setEngineState((prev) => ({ ...prev, isConnecting: false }));
+            return;
+          }
+
+          const connection = createEngineFreshPeerConnection();
+          attachEngineLocalTracks(connection, stream);
+          engine.remotePeerId = normalizedSenderId;
+          engine.pendingCallRequest = null;
+          await sendEngineOffer(connection);
+        } catch (error) {
+          console.error("Error handling accepted call:", error);
+          cleanupEngineCall(false);
+          setEngineConnectionError("Call could not be started after acceptance.");
+        }
+      })();
+    })
+    .on("broadcast", { event: "call-rejected" }, ({ payload }) => {
+      const normalizedSenderId = String(payload?.senderId || "");
+      const normalizedTargetId = String(payload?.targetId || "");
+      if (
+        !normalizedSenderId ||
+        normalizedSenderId === normalizedUserId ||
+        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
+      ) {
+        return;
+      }
+
+      engine.pendingCallRequest = null;
+      clearEngineConnectionTimeout();
+      setEngineState((prev) => ({
+        ...prev,
+        isConnecting: false,
+        error:
+          payload?.reason === "busy"
+            ? "Participant is currently in another call."
+            : payload?.reason === "media-unavailable"
+            ? "Participant could not access their camera or microphone."
+            : "Call was declined.",
+      }));
+    })
+    .on("broadcast", { event: "offer" }, ({ payload }) => {
+      const offer = payload?.offer as RTCSessionDescriptionInit | undefined;
+      const senderId = String(payload?.senderId || "");
+      const audioOnly = Boolean(payload?.audioOnly);
+      if (!offer || !senderId || senderId === normalizedUserId) {
+        return;
+      }
+
+      void (async () => {
+        if (engine.remotePeerId && engine.remotePeerId !== senderId) {
+          setEngineConnectionError("Participant limit reached (max 2 users per call).");
+          return;
+        }
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          setEngineConnectionError("You are offline. Reconnect to join the call.");
+          return;
+        }
+
+        setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
+        startEngineConnectionTimeout();
+
+        try {
+          const stream = await initializeEngineMedia(audioOnly);
+          if (!stream) {
+            clearEngineConnectionTimeout();
+            setEngineState((prev) => ({ ...prev, isConnecting: false }));
+            return;
+          }
+
+          let connection =
+            engine.peerConnection && engine.peerConnection.signalingState !== "closed"
+              ? engine.peerConnection
+              : createEngineFreshPeerConnection();
+
+          attachEngineLocalTracks(connection, stream);
+
+          const offerCollision = engine.makingOffer || connection.signalingState !== "stable";
+          const politePeer = isPolitePeer(normalizedUserId, senderId);
+          engine.ignoreOffer = !politePeer && offerCollision;
+          if (engine.ignoreOffer) {
+            return;
+          }
+
+          if (offerCollision) {
+            connection = await rollbackEngineConnectionIfNeeded(connection, stream);
+          }
+
+          await connection.setRemoteDescription(new RTCSessionDescription(offer));
+          engine.remotePeerId = senderId;
+          engine.ignoreOffer = false;
+          engine.reconnectAttempts = 0;
+          setEngineState((prev) => ({
+            ...prev,
+            isIncomingCall: false,
+            incomingCallerId: null,
+            incomingAudioOnly: false,
+          }));
+
+          const answer = await connection.createAnswer();
+          await connection.setLocalDescription(answer);
+
+          await engine.channel?.send({
+            type: "broadcast",
+            event: "answer",
+            payload: {
+              answer,
+              senderId: normalizedUserId,
+            },
+          });
+
+          await flushEnginePendingIceCandidates(connection);
+        } catch (error) {
+          console.error("Error handling offer:", error);
+          cleanupEngineCall(false);
+          setEngineConnectionError("Failed to join the incoming call.");
+        }
+      })();
+    })
+    .on("broadcast", { event: "answer" }, ({ payload }) => {
+      const answer = payload?.answer as RTCSessionDescriptionInit | undefined;
+      const senderId = String(payload?.senderId || "");
+      if (!answer || !senderId || senderId === normalizedUserId || !engine.peerConnection) {
+        return;
+      }
+
+      if (engine.remotePeerId && engine.remotePeerId !== senderId) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await engine.peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
+          engine.remotePeerId = senderId;
+          engine.ignoreOffer = false;
+          engine.reconnectAttempts = 0;
+          if (engine.peerConnection) {
+            await flushEnginePendingIceCandidates(engine.peerConnection);
+          }
+        } catch (error) {
+          console.error("Error handling answer:", error);
+          setEngineConnectionError("Failed to establish the call connection.");
+        }
+      })();
+    })
+    .on("broadcast", { event: "ice-candidate" }, ({ payload }) => {
+      const candidate = payload?.candidate as RTCIceCandidateInit | undefined;
+      const senderId = String(payload?.senderId || "");
+      if (!candidate || !senderId || senderId === normalizedUserId) {
+        return;
+      }
+
+      if (engine.remotePeerId && engine.remotePeerId !== senderId) {
+        return;
+      }
+
+      if (engine.ignoreOffer && !engine.remotePeerId) {
+        return;
+      }
+
+      const connection = engine.peerConnection;
+      if (!connection || !connection.remoteDescription) {
+        engine.pendingIceCandidates.push(candidate);
+        return;
+      }
+
+      void connection.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+        console.error("Error adding ICE candidate:", error);
+      });
+    })
+    .on("broadcast", { event: "call-ended" }, ({ payload }) => {
+      if (String(payload?.senderId || "") !== normalizedUserId) {
+        cleanupEngineCall(false);
+      }
+    })
+    .on("broadcast", { event: "call-recover" }, ({ payload }) => {
+      const senderId = String(payload?.senderId || "");
+      if (!senderId || senderId === normalizedUserId) {
+        return;
+      }
+      if (engine.remotePeerId && engine.remotePeerId !== senderId) {
+        return;
+      }
+      if (!engine.localStream) {
+        return;
+      }
+      if (!engine.peerConnection || engine.peerConnection.signalingState === "closed") {
+        const connection = createEngineFreshPeerConnection();
+        attachEngineLocalTracks(connection, engine.localStream);
+      }
+    })
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setEngineState((prev) => ({ ...prev, isSignalingReady: true, error: null, notice: null }));
+      }
+
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setEngineState((prev) => ({ ...prev, isSignalingReady: false }));
+        setEngineConnectionError("Call signaling channel unavailable.");
+      }
+    });
+};
+
+const beginEngineReconnectLoop = async (reason: "disconnected" | "failed" | "recovery") => {
+  if (engine.reconnectIntervalId) {
+    return;
+  }
+
+  if (!engine.sessionId || !engine.userId) {
+    return;
+  }
+
+  const deadline = Date.now() + RECONNECT_WINDOW_MS;
+  engine.reconnectDeadlineMs = deadline;
+  persistActiveCall(engine.sessionId, engine.userId, deadline);
+
+  setEngineState((prev) => ({
+    ...prev,
+    isConnected: false,
+    isConnecting: true,
+    isReconnecting: true,
+    error: null,
+    notice: reason === "recovery" ? "Rejoining call..." : "Reconnecting...",
+  }));
+
+  const attempt = async () => {
+    if (!engine.reconnectDeadlineMs || Date.now() > engine.reconnectDeadlineMs) {
+      clearEngineReconnectLoop();
+      cleanupEngineCall(true);
+      setEngineConnectionError("Reconnection timed out. Please start the call again.");
+      return;
+    }
+
+    ensureEngineChannel(engine.sessionId, engine.userId);
+    if (!engine.channel) {
+      return;
+    }
+
+    const stream = engine.localStream ?? (await initializeEngineMedia(engine.state.isAudioOnly));
+    if (!stream) {
+      return;
+    }
+
+    if (!engine.peerConnection || engine.peerConnection.signalingState === "closed") {
+      const connection = createEngineFreshPeerConnection();
+      attachEngineLocalTracks(connection, stream);
+    }
+
+    const connection = engine.peerConnection;
+    if (!connection) {
+      return;
+    }
+
+    try {
+      if (engine.wasConnected) {
+        await sendEngineOffer(connection, { iceRestart: true });
+      } else {
+        await sendEngineOffer(connection);
+      }
+      await engine.channel.send({
+        type: "broadcast",
+        event: "call-recover",
+        payload: {
+          senderId: String(engine.userId || ""),
+        },
+      });
+    } catch {
+      // Swallow and retry.
+    }
+  };
+
+  await attempt();
+  engine.reconnectIntervalId = window.setInterval(() => {
+    void attempt();
+  }, RECONNECT_RETRY_INTERVAL_MS);
+};
+
+export const useWebRTC = (sessionId: string, userId: string) => {
+  const { lowBandwidthMode } = useBandwidthMode();
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [state, setState] = useState<WebRTCState>(() => engine.state);
+
+  useEffect(() => {
+    engine.lowBandwidthMode = lowBandwidthMode;
+  }, [lowBandwidthMode]);
+
+  useEffect(() => {
+    const listener: WebRTCEngineListener = (nextState) => {
+      setState(nextState);
+    };
+
+    engine.listeners.add(listener);
+    setState(engine.state);
+    return () => {
+      engine.listeners.delete(listener);
+    };
+  }, []);
+
+  const startCall = useCallback(
+    async (options: StartCallOptions = {}) => {
+      const currentState = engine.state;
+
+      if (!sessionId) {
+        setEngineConnectionError("Select a session before starting a call.");
+        return false;
+      }
+
+      if (!String(userId || "")) {
+        setEngineConnectionError("Sign in before starting a call.");
+        return false;
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setEngineConnectionError("You are offline. Reconnect to start the call.");
+        return false;
+      }
+
+      ensureEngineChannel(sessionId, userId);
+      if (!engine.channel || !currentState.isSignalingReady) {
+        setEngineConnectionError("Call channel is not ready yet. Please try again.");
+        return false;
+      }
+
+      if (currentState.isConnected) {
+        return true;
+      }
+
+      if (currentState.isConnecting) {
+        return false;
+      }
+
+      setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
+      startEngineConnectionTimeout();
+
+      try {
+        engine.pendingCallRequest = { audioOnly: Boolean(options.audioOnly) };
+        engine.ignoreOffer = false;
+        engine.reconnectAttempts = 0;
+        await engine.channel.send({
+          type: "broadcast",
+          event: "call-request",
+          payload: {
+            senderId: String(userId || ""),
+            audioOnly: Boolean(options.audioOnly),
+          },
+        });
+
+        return true;
+      } catch (error) {
+        console.error("Error starting call:", error);
+        cleanupEngineCall(false);
+        setEngineConnectionError("Failed to start the call.");
+        return false;
+      }
     },
-    [userId]
+    [
+      sessionId,
+      userId,
+    ]
   );
 
   const acceptIncomingCall = useCallback(async () => {
-    const incomingCallerId = stateRef.current.incomingCallerId;
-    const incomingAudioOnly = Boolean(stateRef.current.incomingAudioOnly);
-    if (!incomingCallerId || !channelRef.current) {
+    const incomingCallerId = engine.state.incomingCallerId;
+    const incomingAudioOnly = Boolean(engine.state.incomingAudioOnly);
+    ensureEngineChannel(sessionId, userId);
+    if (!incomingCallerId || !engine.channel) {
       return false;
     }
 
-    setState((prev) => ({
+    setEngineState((prev) => ({
       ...prev,
       isIncomingCall: false,
       incomingCallerId: null,
@@ -1022,16 +1241,16 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       isConnecting: true,
     }));
 
-    const stream = await initializeMedia(incomingAudioOnly);
+    const stream = await initializeEngineMedia(incomingAudioOnly);
     if (!stream) {
-      setState((prev) => ({
+      setEngineState((prev) => ({
         ...prev,
         isConnecting: false,
         isIncomingCall: false,
         incomingCallerId: null,
         incomingAudioOnly: false,
       }));
-      await channelRef.current.send({
+      await engine.channel.send({
         type: "broadcast",
         event: "call-rejected",
         payload: {
@@ -1043,7 +1262,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return false;
     }
 
-    await channelRef.current.send({
+    await engine.channel.send({
       type: "broadcast",
       event: "call-accepted",
       payload: {
@@ -1052,11 +1271,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       },
     });
     return true;
-  }, [initializeMedia, userId]);
+  }, [sessionId, userId]);
 
   const rejectIncomingCall = useCallback(async () => {
-    const incomingCallerId = stateRef.current.incomingCallerId;
-    setState((prev) => ({
+    const incomingCallerId = engine.state.incomingCallerId;
+    setEngineState((prev) => ({
       ...prev,
       isIncomingCall: false,
       incomingCallerId: null,
@@ -1064,11 +1283,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       isConnecting: false,
     }));
 
-    if (!incomingCallerId || !channelRef.current) {
+    ensureEngineChannel(sessionId, userId);
+    if (!incomingCallerId || !engine.channel) {
       return false;
     }
 
-    await channelRef.current.send({
+    await engine.channel.send({
       type: "broadcast",
       event: "call-rejected",
       payload: {
@@ -1078,89 +1298,11 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       },
     });
     return true;
-  }, [userId]);
-
-  const handleCallAccepted = useCallback(
-    async (senderId: string, targetId?: string) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-      const normalizedTargetId = String(targetId || "");
-      if (
-        !normalizedSenderId ||
-        normalizedSenderId === normalizedUserId ||
-        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
-      ) {
-        return;
-      }
-
-      const pendingRequest = pendingCallRequestRef.current;
-      if (!pendingRequest) {
-        return;
-      }
-
-      try {
-        const stream = await initializeMedia(pendingRequest.audioOnly);
-        if (!stream) {
-          clearConnectionTimeout();
-          setState((prev) => ({ ...prev, isConnecting: false }));
-          return;
-        }
-
-        const connection = createFreshPeerConnection();
-        attachLocalTracks(connection, stream);
-        remotePeerIdRef.current = normalizedSenderId;
-        pendingCallRequestRef.current = null;
-        await sendOffer(connection);
-      } catch (error) {
-        console.error("Error handling accepted call:", error);
-        cleanupCall(false);
-        setConnectionError("Call could not be started after acceptance.");
-      }
-    },
-    [
-      attachLocalTracks,
-      cleanupCall,
-      clearConnectionTimeout,
-      createFreshPeerConnection,
-      initializeMedia,
-      sendOffer,
-      setConnectionError,
-      userId,
-    ]
-  );
-
-  const handleCallRejected = useCallback(
-    (senderId: string, targetId?: string, reason?: string) => {
-      const normalizedSenderId = String(senderId || "");
-      const normalizedUserId = String(userId || "");
-      const normalizedTargetId = String(targetId || "");
-      if (
-        !normalizedSenderId ||
-        normalizedSenderId === normalizedUserId ||
-        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
-      ) {
-        return;
-      }
-
-      pendingCallRequestRef.current = null;
-      clearConnectionTimeout();
-      setState((prev) => ({
-        ...prev,
-        isConnecting: false,
-        error:
-          reason === "busy"
-            ? "Participant is currently in another call."
-            : reason === "media-unavailable"
-            ? "Participant could not access their camera or microphone."
-            : "Call was declined.",
-      }));
-    },
-    [clearConnectionTimeout, userId]
-  );
+  }, [sessionId, userId]);
 
   const toggleMute = useCallback(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
+    if (engine.localStream) {
+      engine.localStream.getAudioTracks().forEach((track) => {
         track.enabled = !track.enabled;
       });
     }
@@ -1168,7 +1310,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   const toggleVideo = useCallback(() => {
     const toggle = async () => {
-      const stream = localStreamRef.current;
+      const stream = engine.localStream;
       if (!stream) {
         return false;
       }
@@ -1186,12 +1328,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
           if (!videoTrack) {
             videoStream.getTracks().forEach((track) => track.stop());
-            setMediaNoticeError("No camera was found. Connect a camera and try again.");
+            setEngineState((prev) => ({
+              ...prev,
+              error: "No camera was found. Connect a camera and try again.",
+              isRelayError: false,
+              notice: null,
+            }));
             return false;
           }
 
           stream.addTrack(videoTrack);
-          setState((prev) => ({
+          setEngineState((prev) => ({
             ...prev,
             localStream: stream,
             isAudioOnly: false,
@@ -1200,25 +1347,30 @@ export const useWebRTC = (sessionId: string, userId: string) => {
             isRelayError: false,
           }));
 
-          const connection = peerConnection.current;
+          const connection = engine.peerConnection;
           if (connection) {
             const sender = connection.addTrack(videoTrack, stream);
-            applyVideoSenderParameters(sender);
+            applyEngineVideoSenderParameters(sender);
 
             if (
-              channelRef.current &&
-              stateRef.current.isSignalingReady &&
+              engine.channel &&
+              engine.state.isSignalingReady &&
               connection.signalingState === "stable" &&
-              !makingOfferRef.current
+              !engine.makingOffer
             ) {
-              await sendOffer(connection);
+              await sendEngineOffer(connection);
             }
           }
 
           return true;
         } catch (error) {
           console.error("Error enabling camera:", error);
-          setMediaNoticeError(getMediaErrorMessage(error, false));
+          setEngineState((prev) => ({
+            ...prev,
+            error: getMediaErrorMessage(error, false),
+            isRelayError: false,
+            notice: null,
+          }));
           return false;
         }
       }
@@ -1239,10 +1391,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
     return toggle();
   }, [
-    applyVideoSenderParameters,
     lowBandwidthMode,
-    sendOffer,
-    setMediaNoticeError,
   ]);
 
   const startAudioCall = useCallback(async () => {
@@ -1250,30 +1399,12 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, [startCall]);
 
   const endCall = useCallback(() => {
-    cleanupCall(true);
-  }, [cleanupCall]);
-
-  useEffect(() => {
-    handleCallRequestRef.current = handleCallRequest;
-    handleCallAcceptedRef.current = handleCallAccepted;
-    handleCallRejectedRef.current = handleCallRejected;
-    handleOfferRef.current = handleOffer;
-    handleAnswerRef.current = handleAnswer;
-    handleIceCandidateRef.current = handleIceCandidate;
-    cleanupCallRef.current = cleanupCall;
-  }, [
-    cleanupCall,
-    handleCallAccepted,
-    handleCallRejected,
-    handleCallRequest,
-    handleAnswer,
-    handleIceCandidate,
-    handleOffer,
-  ]);
+    cleanupEngineCall(true);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {
-      setState((prev) => ({
+      setEngineState((prev) => ({
         ...prev,
         isSignalingReady: false,
         notice: null,
@@ -1283,86 +1414,60 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return;
     }
 
-    const normalizedUserId = String(userId || "");
-    const channel = supabase.channel(`video-call-${sessionId}`);
-    channelRef.current = channel;
-    setState((prev) => ({ ...prev, isSignalingReady: false, error: null, notice: null }));
-
-    channel
-      .on("broadcast", { event: "call-request" }, ({ payload }) => {
-        handleCallRequestRef.current(payload.senderId, Boolean(payload.audioOnly));
-      })
-      .on("broadcast", { event: "call-accepted" }, ({ payload }) => {
-        void handleCallAcceptedRef.current(payload.senderId, payload.targetId);
-      })
-      .on("broadcast", { event: "call-rejected" }, ({ payload }) => {
-        handleCallRejectedRef.current(payload.senderId, payload.targetId, payload.reason);
-      })
-      .on("broadcast", { event: "offer" }, ({ payload }) => {
-        void handleOfferRef.current(payload.offer, payload.senderId, Boolean(payload.audioOnly));
-      })
-      .on("broadcast", { event: "answer" }, ({ payload }) => {
-        void handleAnswerRef.current(payload.answer, payload.senderId);
-      })
-      .on("broadcast", { event: "ice-candidate" }, ({ payload }) => {
-        void handleIceCandidateRef.current(payload.candidate, payload.senderId);
-      })
-      .on("broadcast", { event: "call-ended" }, ({ payload }) => {
-        if (String(payload?.senderId || "") !== normalizedUserId) {
-          cleanupCallRef.current(false);
-        }
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setState((prev) => ({ ...prev, isSignalingReady: true, error: null, notice: null }));
-        }
-
-        if (
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT" ||
-          status === "CLOSED"
-        ) {
-          setState((prev) => ({ ...prev, isSignalingReady: false }));
-          setConnectionError("Call signaling channel unavailable.");
-        }
-      });
-
-    return () => {
-      cleanupCallRef.current(false);
-      setState((prev) => ({ ...prev, isSignalingReady: false }));
-      channel.unsubscribe();
-      if (channelRef.current === channel) {
-        channelRef.current = null;
-      }
-    };
-  }, [
-    sessionId,
-    setConnectionError,
-    userId,
-  ]);
+    ensureEngineChannel(sessionId, userId);
+  }, [sessionId, userId]);
 
   useEffect(() => {
-    return () => {
-      cleanupCall(false);
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-        channelRef.current = null;
-      }
-    };
-  }, [cleanupCall]);
+    if (!sessionId || !String(userId || "")) {
+      return;
+    }
+
+    const persisted = readPersistedActiveCall();
+    if (!persisted) {
+      return;
+    }
+
+    if (
+      persisted.sessionId !== sessionId ||
+      persisted.userId !== String(userId || "") ||
+      Date.now() > persisted.reconnectUntil
+    ) {
+      return;
+    }
+
+    if (engine.state.isConnected || engine.state.isConnecting) {
+      return;
+    }
+
+    engine.sessionId = sessionId;
+    engine.userId = String(userId || "");
+    void beginEngineReconnectLoop("recovery");
+  }, [sessionId, userId]);
 
   useEffect(() => {
     if (localVideoRef.current && state.localStream) {
+      engine.localVideoElements.add(localVideoRef.current);
       localVideoRef.current.srcObject = state.localStream;
       playMediaElement(localVideoRef.current);
     }
+    return () => {
+      if (localVideoRef.current) {
+        engine.localVideoElements.delete(localVideoRef.current);
+      }
+    };
   }, [state.isAudioOnly, state.isLocalVideoEnabled, state.localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && state.remoteStream) {
+      engine.remoteVideoElements.add(remoteVideoRef.current);
       remoteVideoRef.current.srcObject = state.remoteStream;
       playMediaElement(remoteVideoRef.current);
     }
+    return () => {
+      if (remoteVideoRef.current) {
+        engine.remoteVideoElements.delete(remoteVideoRef.current);
+      }
+    };
   }, [state.remoteHasVideo, state.remoteStream]);
 
   useEffect(() => {
@@ -1370,11 +1475,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return;
     }
 
-    const localTrack = localStreamRef.current?.getAudioTracks()[0];
-    const remoteTrack = remoteStreamRef.current?.getAudioTracks()[0];
+    const localTrack = engine.localStream?.getAudioTracks()[0];
+    const remoteTrack = engine.remoteStream?.getAudioTracks()[0];
     if (!localTrack && !remoteTrack) {
-      setLocalSpeakingState(false);
-      setRemoteSpeakingState(false);
+      setEngineState((prev) => ({
+        ...prev,
+        localSpeaking: false,
+        remoteSpeaking: false,
+      }));
       return;
     }
 
@@ -1424,23 +1532,23 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       const remoteLevel = sample(remoteAnalyser);
 
       if (localLevel >= SPEAKING_THRESHOLD) {
-        localSpeakingSinceRef.current = now;
-        setLocalSpeakingState(true);
+        engine.localSpeakingSince = now;
+        setEngineState((prev) => (prev.localSpeaking ? prev : { ...prev, localSpeaking: true }));
       } else if (
-        localSpeakingSinceRef.current &&
-        now - localSpeakingSinceRef.current > SPEAKING_HOLD_MS
+        engine.localSpeakingSince &&
+        now - engine.localSpeakingSince > SPEAKING_HOLD_MS
       ) {
-        setLocalSpeakingState(false);
+        setEngineState((prev) => (prev.localSpeaking ? { ...prev, localSpeaking: false } : prev));
       }
 
       if (remoteLevel >= SPEAKING_THRESHOLD) {
-        remoteSpeakingSinceRef.current = now;
-        setRemoteSpeakingState(true);
+        engine.remoteSpeakingSince = now;
+        setEngineState((prev) => (prev.remoteSpeaking ? prev : { ...prev, remoteSpeaking: true }));
       } else if (
-        remoteSpeakingSinceRef.current &&
-        now - remoteSpeakingSinceRef.current > SPEAKING_HOLD_MS
+        engine.remoteSpeakingSince &&
+        now - engine.remoteSpeakingSince > SPEAKING_HOLD_MS
       ) {
-        setRemoteSpeakingState(false);
+        setEngineState((prev) => (prev.remoteSpeaking ? { ...prev, remoteSpeaking: false } : prev));
       }
 
       animationFrameId = window.requestAnimationFrame(tick);
@@ -1450,18 +1558,19 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       void context.close();
-      setLocalSpeakingState(false);
-      setRemoteSpeakingState(false);
+      setEngineState((prev) => ({
+        ...prev,
+        localSpeaking: false,
+        remoteSpeaking: false,
+      }));
     };
   }, [
     state.localStream,
     state.remoteStream,
-    setLocalSpeakingState,
-    setRemoteSpeakingState,
   ]);
 
   useEffect(() => {
-    const connection = peerConnection.current;
+    const connection = engine.peerConnection;
     if (!connection || !state.isConnected) {
       setState((prev) => ({
         ...prev,
