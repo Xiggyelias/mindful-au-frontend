@@ -756,11 +756,6 @@ const CounselorVideo = () => {
                               {formatCallDuration(remainingSeconds)} left
                             </Badge>
                           )}
-                          {isConnected && (
-                            <Badge variant="outline" className="rounded-full px-3 py-1">
-                              {`Latency ${callQuality.latencyMs ?? "--"}ms • Jitter ${callQuality.jitterMs ?? "--"}ms • Loss ${callQuality.packetLossPercent ?? "--"}%`}
-                            </Badge>
-                          )}
                         </div>
                       </div>
 

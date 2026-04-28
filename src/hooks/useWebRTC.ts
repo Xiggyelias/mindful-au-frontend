@@ -427,17 +427,30 @@ const attachEngineLocalTracks = (connection: RTCPeerConnection, stream: MediaStr
       .filter((trackId): trackId is string => Boolean(trackId))
   );
 
+  console.log("[WebRTC] Attaching local tracks:", {
+    audioTracks: stream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+    videoTracks: stream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+    existingSenders: connection.getSenders().length,
+  });
+
   stream.getTracks().forEach((track) => {
     if (!existingTrackIds.has(track.id)) {
       const sender = connection.addTrack(track, stream);
       applyEngineVideoSenderParameters(sender);
+      console.log("[WebRTC] Added track:", track.kind, track.id);
+    } else {
+      console.log("[WebRTC] Track already added:", track.kind, track.id);
     }
   });
+
+  // Log final state
+  console.log("[WebRTC] After attaching, senders:", connection.getSenders().map(s => ({ trackKind: s.track?.kind, trackId: s.track?.id })));
 };
 
 const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRestart?: boolean }) => {
   const stream = engine.localStream;
   if (!stream || !engine.channel) {
+    console.error("[WebRTC] Cannot send offer: missing stream or channel");
     return false;
   }
 
@@ -449,7 +462,17 @@ const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRes
     }
 
     const offer = await connection.createOffer(options?.iceRestart ? { iceRestart: true } : undefined);
+
+    console.log("[WebRTC] Created offer:", {
+      type: offer.type,
+      sdpLength: offer.sdp?.length,
+      hasVideo: offer.sdp?.includes("m=video"),
+      hasAudio: offer.sdp?.includes("m=audio"),
+    });
+
     await connection.setLocalDescription(offer);
+
+    console.log("[WebRTC] Sending offer, signaling state:", connection.signalingState);
 
     await engine.channel.send({
       type: "broadcast",
@@ -462,6 +485,9 @@ const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRes
     });
 
     return true;
+  } catch (error) {
+    console.error("[WebRTC] Error sending offer:", error);
+    return false;
   } finally {
     engine.makingOffer = false;
   }
@@ -503,18 +529,27 @@ const createEnginePeerConnection = () => {
   };
 
   connection.ontrack = (event) => {
+    console.log("[WebRTC] ontrack event:", {
+      trackKind: event.track?.kind,
+      trackId: event.track?.id,
+      streams: event.streams?.length,
+      streamIds: event.streams?.map(s => s.id),
+    });
+
     const remoteStream = engine.remoteStream ?? new MediaStream();
     const alreadyAdded = remoteStream.getTracks().some((track) => track.id === event.track.id);
 
     if (!alreadyAdded) {
       remoteStream.addTrack(event.track);
-      console.log("Remote track received:", {
+      console.log("[WebRTC] Remote track received and added:", {
         kind: event.track.kind,
         id: event.track.id,
         enabled: event.track.enabled,
         muted: event.track.muted,
         readyState: event.track.readyState,
       });
+    } else {
+      console.log("[WebRTC] Remote track already exists:", event.track.id);
     }
 
     if (!engine.observedRemoteTrackIds.has(event.track.id)) {
@@ -535,7 +570,11 @@ const createEnginePeerConnection = () => {
   };
 
   connection.onconnectionstatechange = () => {
+    console.log("[WebRTC] Connection state changed:", connection.connectionState, "signaling:", connection.signalingState);
+
     if (connection.connectionState === "connected") {
+      console.log("[WebRTC] Peer connection established, local senders:", connection.getSenders().map(s => s.track?.kind));
+      console.log("[WebRTC] Remote receivers:", connection.getReceivers().map(r => r.track?.kind));
       engine.wasConnected = true;
       engine.reconnectAttempts = 0;
       clearEngineConnectionTimeout();
@@ -568,6 +607,7 @@ const createEnginePeerConnection = () => {
     }
 
     if (connection.connectionState === "disconnected" || connection.connectionState === "failed") {
+      console.log("[WebRTC] Connection lost:", connection.connectionState);
       clearEngineConnectionTimeout();
       const deadline = Date.now() + RECONNECT_WINDOW_MS;
       engine.reconnectDeadlineMs = deadline;
@@ -892,6 +932,14 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
         return;
       }
 
+      console.log("[WebRTC] Received offer:", {
+        senderId,
+        audioOnly,
+        sdpLength: offer.sdp?.length,
+        hasVideo: offer.sdp?.includes("m=video"),
+        hasAudio: offer.sdp?.includes("m=audio"),
+      });
+
       void (async () => {
         if (engine.remotePeerId && engine.remotePeerId !== senderId) {
           setEngineConnectionError("Participant limit reached (max 2 users per call).");
@@ -944,7 +992,17 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
           }));
 
           const answer = await connection.createAnswer();
+
+          console.log("[WebRTC] Created answer:", {
+            type: answer.type,
+            sdpLength: answer.sdp?.length,
+            hasVideo: answer.sdp?.includes("m=video"),
+            hasAudio: answer.sdp?.includes("m=audio"),
+          });
+
           await connection.setLocalDescription(answer);
+
+          console.log("[WebRTC] Sending answer, signaling state:", connection.signalingState);
 
           await engine.channel?.send({
             type: "broadcast",
@@ -975,16 +1033,36 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
       }
 
       void (async () => {
+        const connection = engine.peerConnection;
+        if (!connection) {
+          return;
+        }
+
+        // Check signaling state - if stable, we already have a connection
+        if (connection.signalingState === "stable") {
+          // Already connected, just update remote peer ID if needed
+          if (!engine.remotePeerId) {
+            engine.remotePeerId = senderId;
+          }
+          return;
+        }
+
+        // Only process answer if we're expecting one (have local offer)
+        if (connection.signalingState !== "have-local-offer") {
+          console.warn("Ignoring answer: wrong signaling state", connection.signalingState);
+          return;
+        }
+
         try {
-          await engine.peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("[WebRTC] Setting remote answer, signaling state:", connection.signalingState);
+          await connection.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("[WebRTC] Remote answer set successfully, connection state:", connection.connectionState);
           engine.remotePeerId = senderId;
           engine.ignoreOffer = false;
           engine.reconnectAttempts = 0;
-          if (engine.peerConnection) {
-            await flushEnginePendingIceCandidates(engine.peerConnection);
-          }
+          await flushEnginePendingIceCandidates(connection);
         } catch (error) {
-          console.error("Error handling answer:", error);
+          console.error("[WebRTC] Error handling answer:", error);
           setEngineConnectionError("Failed to establish the call connection.");
         }
       })();

@@ -832,11 +832,6 @@ const StudentVideoCall = () => {
                               {callStateLabel}
                             </div>
                             <div className={connectionPillClassName}>{connectionPillLabel}</div>
-                            {isConnected && (
-                              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white/90 backdrop-blur-md">
-                                {`Latency ${callQuality.latencyMs ?? "--"}ms • Jitter ${callQuality.jitterMs ?? "--"}ms • Loss ${callQuality.packetLossPercent ?? "--"}%`}
-                              </div>
-                            )}
                             {isConnected && remainingSeconds !== null && (
                               <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
                                 <Clock className="mr-1.5 inline h-3.5 w-3.5" />
