@@ -24,8 +24,6 @@ interface WebRTCState {
   incomingAudioOnly: boolean;
   localSpeaking: boolean;
   remoteSpeaking: boolean;
-  voiceChangerEnabled: boolean;
-  voiceFilter: VoiceFilterPreset;
   callQuality: {
     latencyMs: number | null;
     jitterMs: number | null;
@@ -36,12 +34,6 @@ interface WebRTCState {
 interface StartCallOptions {
   audioOnly?: boolean;
 }
-
-export type VoiceFilterPreset =
-  | "normal"
-  | "deep"
-  | "soft"
-  | "neutralized";
 
 const ICE_SERVERS = getWebRtcIceServers();
 const HAS_RELAY_ICE_SERVER = hasRelayIceServer(ICE_SERVERS);
@@ -91,12 +83,6 @@ const AUDIO_ONLY_CONSTRAINTS: MediaStreamConstraints = {
 const SPEAKING_THRESHOLD = 0.06;
 const SPEAKING_HOLD_MS = 300;
 
-type VoiceProcessingChain = {
-  track: MediaStreamTrack;
-  update: (enabled: boolean, filter: VoiceFilterPreset) => void;
-  stop: () => void;
-};
-
 const playMediaElement = (element: HTMLVideoElement | null) => {
   if (!element) {
     return;
@@ -136,144 +122,6 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
   }
 
   return "Could not access camera or microphone. Check device permissions and try again.";
-};
-
-const createVoiceProcessingChain = (
-  sourceTrack: MediaStreamTrack,
-  initialEnabled: boolean,
-  initialFilter: VoiceFilterPreset
-): VoiceProcessingChain | null => {
-  if (typeof AudioContext === "undefined") {
-    return null;
-  }
-
-  const context = new AudioContext();
-  const sourceStream = new MediaStream([sourceTrack]);
-  const source = context.createMediaStreamSource(sourceStream);
-  const destination = context.createMediaStreamDestination();
-  const dryGain = context.createGain();
-  const wetGain = context.createGain();
-  const inputGain = context.createGain();
-  const highpass = context.createBiquadFilter();
-  const lowShelf = context.createBiquadFilter();
-  const presence = context.createBiquadFilter();
-  const lowpass = context.createBiquadFilter();
-  const compressor = context.createDynamicsCompressor();
-
-  highpass.type = "highpass";
-  lowShelf.type = "lowshelf";
-  presence.type = "peaking";
-  lowpass.type = "lowpass";
-
-  source.connect(dryGain);
-  dryGain.connect(destination);
-
-  source.connect(inputGain);
-  inputGain.connect(highpass);
-  highpass.connect(lowShelf);
-  lowShelf.connect(presence);
-  presence.connect(lowpass);
-  lowpass.connect(compressor);
-  compressor.connect(wetGain);
-  wetGain.connect(destination);
-
-  const applyProfile = (enabled: boolean, filter: VoiceFilterPreset) => {
-    inputGain.gain.value = 1;
-    compressor.knee.value = 20;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.18;
-
-    if (!enabled) {
-      dryGain.gain.value = 1;
-      wetGain.gain.value = 0;
-      highpass.frequency.value = 80;
-      lowShelf.frequency.value = 180;
-      lowShelf.gain.value = 0;
-      presence.frequency.value = 2600;
-      presence.Q.value = 0.9;
-      presence.gain.value = 0;
-      lowpass.frequency.value = 10000;
-      compressor.threshold.value = -20;
-      compressor.ratio.value = 2;
-      return;
-    }
-
-    switch (filter) {
-      case "deep":
-        dryGain.gain.value = 0.18;
-        wetGain.gain.value = 0.95;
-        highpass.frequency.value = 70;
-        lowShelf.frequency.value = 170;
-        lowShelf.gain.value = 6;
-        presence.frequency.value = 2400;
-        presence.Q.value = 1.1;
-        presence.gain.value = -3;
-        lowpass.frequency.value = 4300;
-        compressor.threshold.value = -26;
-        compressor.ratio.value = 5;
-        break;
-      case "soft":
-        dryGain.gain.value = 0.4;
-        wetGain.gain.value = 0.72;
-        highpass.frequency.value = 95;
-        lowShelf.frequency.value = 220;
-        lowShelf.gain.value = 1.5;
-        presence.frequency.value = 2800;
-        presence.Q.value = 0.8;
-        presence.gain.value = -2;
-        lowpass.frequency.value = 5200;
-        compressor.threshold.value = -30;
-        compressor.ratio.value = 3;
-        break;
-      case "neutralized":
-        dryGain.gain.value = 0.08;
-        wetGain.gain.value = 0.98;
-        highpass.frequency.value = 140;
-        lowShelf.frequency.value = 200;
-        lowShelf.gain.value = -1.5;
-        presence.frequency.value = 2500;
-        presence.Q.value = 1.4;
-        presence.gain.value = -4;
-        lowpass.frequency.value = 3400;
-        compressor.threshold.value = -32;
-        compressor.ratio.value = 8;
-        break;
-      default:
-        dryGain.gain.value = 0.78;
-        wetGain.gain.value = 0.28;
-        highpass.frequency.value = 85;
-        lowShelf.frequency.value = 180;
-        lowShelf.gain.value = 1;
-        presence.frequency.value = 3000;
-        presence.Q.value = 0.9;
-        presence.gain.value = 1.5;
-        lowpass.frequency.value = 8500;
-        compressor.threshold.value = -22;
-        compressor.ratio.value = 2.5;
-        break;
-    }
-  };
-
-  applyProfile(initialEnabled, initialFilter);
-  void context.resume().catch(() => undefined);
-
-  const [processedTrack] = destination.stream.getAudioTracks();
-  if (!processedTrack) {
-    void context.close();
-    return null;
-  }
-
-  return {
-    track: processedTrack,
-    update: (enabled, filter) => {
-      applyProfile(enabled, filter);
-      void context.resume().catch(() => undefined);
-    },
-    stop: () => {
-      processedTrack.stop();
-      void context.close();
-    },
-  };
 };
 
 const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
@@ -317,8 +165,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     incomingAudioOnly: false,
     localSpeaking: false,
     remoteSpeaking: false,
-    voiceChangerEnabled: false,
-    voiceFilter: "normal",
     callQuality: {
       latencyMs: null,
       jitterMs: null,
@@ -343,8 +189,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const wasConnectedRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const pendingCallRequestRef = useRef<{ audioOnly: boolean } | null>(null);
-  const voiceProcessingRef = useRef<VoiceProcessingChain | null>(null);
-  const rawAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const localSpeakingSinceRef = useRef<number | null>(null);
   const remoteSpeakingSinceRef = useRef<number | null>(null);
   const handleCallRequestRef = useRef<(senderId: string, audioOnly?: boolean) => void>(() => undefined);
@@ -392,35 +236,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     connection.oniceconnectionstatechange = null;
     connection.close();
   }, []);
-
-  const stopVoiceProcessing = useCallback(() => {
-    if (voiceProcessingRef.current) {
-      voiceProcessingRef.current.stop();
-      voiceProcessingRef.current = null;
-    }
-  }, []);
-
-  const createVoiceProcessedTrack = useCallback(
-    (
-      sourceTrack: MediaStreamTrack,
-      voiceChangerEnabled: boolean,
-      filter: VoiceFilterPreset
-    ): MediaStreamTrack => {
-      const chain = createVoiceProcessingChain(
-        sourceTrack,
-        voiceChangerEnabled,
-        filter
-      );
-
-      if (!chain) {
-        return sourceTrack;
-      }
-
-      voiceProcessingRef.current = chain;
-      return chain.track;
-    },
-    []
-  );
 
   const setLocalSpeakingState = useCallback((value: boolean) => {
     setState((prev) => (prev.localSpeaking === value ? prev : { ...prev, localSpeaking: value }));
@@ -522,12 +337,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       localSpeakingSinceRef.current = null;
       remoteSpeakingSinceRef.current = null;
 
-      if (rawAudioTrackRef.current) {
-        rawAudioTrackRef.current.stop();
-        rawAudioTrackRef.current = null;
-      }
-      stopVoiceProcessing();
-
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
         localStreamRef.current = null;
@@ -580,7 +389,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       cleanupInProgressRef.current = false;
     },
-    [clearConnectionTimeout, closePeerConnection, stopVoiceProcessing, userId]
+    [clearConnectionTimeout, closePeerConnection, userId]
   );
 
   const startConnectionTimeout = useCallback(() => {
@@ -851,25 +660,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       const tryGetMedia = async (constraints: MediaStreamConstraints) => {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const [audioTrack] = stream.getAudioTracks();
-        if (audioTrack) {
-          if (rawAudioTrackRef.current && rawAudioTrackRef.current !== audioTrack) {
-            rawAudioTrackRef.current.stop();
-          }
-          rawAudioTrackRef.current = audioTrack;
-          stopVoiceProcessing();
-          const filteredTrack = createVoiceProcessedTrack(
-            audioTrack,
-            stateRef.current.voiceChangerEnabled,
-            stateRef.current.voiceFilter
-          );
-          if (filteredTrack !== audioTrack) {
-            stream.removeTrack(audioTrack);
-            stream.addTrack(filteredTrack);
-            filteredTrack.enabled = audioTrack.enabled;
-            audioTrack.enabled = true;
-          }
-        }
 
         localStreamRef.current = stream;
         setState((prev) => ({
@@ -906,7 +696,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return null;
       }
     },
-    [createVoiceProcessedTrack, lowBandwidthMode, setConnectionError, stopVoiceProcessing]
+    [lowBandwidthMode, setConnectionError]
   );
 
   const rollbackConnectionIfNeeded = useCallback(
@@ -1434,25 +1224,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     setMediaNoticeError,
   ]);
 
-  const setVoiceFilter = useCallback(
-    async (filter: VoiceFilterPreset) => {
-      setState((prev) => ({ ...prev, voiceFilter: filter }));
-      voiceProcessingRef.current?.update(stateRef.current.voiceChangerEnabled, filter);
-
-      return true;
-    },
-    []
-  );
-
-  const setVoiceChangerEnabled = useCallback(
-    async (enabled: boolean) => {
-      setState((prev) => ({ ...prev, voiceChangerEnabled: enabled }));
-      voiceProcessingRef.current?.update(enabled, stateRef.current.voiceFilter);
-      return true;
-    },
-    []
-  );
-
   const startAudioCall = useCallback(async () => {
     return startCall({ audioOnly: true });
   }, [startCall]);
@@ -1746,7 +1517,5 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
-    setVoiceChangerEnabled,
-    setVoiceFilter,
   };
 };

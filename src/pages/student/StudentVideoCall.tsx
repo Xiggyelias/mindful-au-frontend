@@ -50,13 +50,6 @@ const navItems = [
 
 type CallMode = "video" | "audio";
 
-const VOICE_PROFILE_OPTIONS = [
-  { value: "normal", label: "Normal" },
-  { value: "deep", label: "Deep" },
-  { value: "soft", label: "Soft" },
-  { value: "neutralized", label: "Neutralized" },
-] as const;
-
 const getParticipantName = (participant: any, fallback: string) =>
   participant?.profile?.full_name ||
   participant?.full_name ||
@@ -124,8 +117,6 @@ const StudentVideoCall = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
-    voiceChangerEnabled,
-    voiceFilter,
     callQuality,
     localVideoRef,
     remoteVideoRef,
@@ -136,8 +127,6 @@ const StudentVideoCall = () => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
-    setVoiceChangerEnabled,
-    setVoiceFilter,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
 
   useEffect(() => {
@@ -372,10 +361,6 @@ const StudentVideoCall = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
-  };
-
-  const handleToggleVoiceChanger = () => {
-    void setVoiceChangerEnabled(!voiceChangerEnabled);
   };
 
   const handleToggleAnonymousMode = async () => {
@@ -889,33 +874,6 @@ const StudentVideoCall = () => {
                                 >
                                   <Phone className="h-7 w-7 rotate-[135deg]" />
                                 </Button>
-                                <Button
-                                  variant={voiceChangerEnabled ? "secondary" : "ghost"}
-                                  className={cn(
-                                    "h-11 rounded-full px-4 text-xs text-white",
-                                    voiceChangerEnabled
-                                      ? "bg-emerald-500/85 hover:bg-emerald-400"
-                                      : "bg-white/10 hover:bg-white/20"
-                                  )}
-                                  onClick={handleToggleVoiceChanger}
-                                >
-                                  {voiceChangerEnabled ? "Voice Changer On" : "Enable Voice Changer"}
-                                </Button>
-                                <select
-                                  value={voiceFilter}
-                                  onChange={(event) => {
-                                    void setVoiceFilter(event.target.value as typeof voiceFilter);
-                                  }}
-                                  disabled={!voiceChangerEnabled}
-                                  className="h-11 rounded-full border border-white/15 bg-black/40 px-4 text-xs text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                                  aria-label="Voice changer profile"
-                                >
-                                  {VOICE_PROFILE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
                               </>
                             ) : (
                               <>

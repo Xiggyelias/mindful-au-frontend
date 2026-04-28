@@ -50,13 +50,6 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
 ];
 
-const VOICE_PROFILE_OPTIONS = [
-  { value: "normal", label: "Normal" },
-  { value: "deep", label: "Deep" },
-  { value: "soft", label: "Soft" },
-  { value: "neutralized", label: "Neutralized" },
-] as const;
-
 const getParticipantName = (participant: any, fallback: string) =>
   participant?.profile?.full_name ||
   participant?.full_name ||
@@ -115,8 +108,6 @@ const CounselorVideo = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
-    voiceChangerEnabled,
-    voiceFilter,
     callQuality,
     localVideoRef,
     remoteVideoRef,
@@ -127,8 +118,6 @@ const CounselorVideo = () => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
-    setVoiceChangerEnabled,
-    setVoiceFilter,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
   useEffect(() => {
@@ -206,10 +195,6 @@ const CounselorVideo = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
-  };
-
-  const handleToggleVoiceChanger = () => {
-    void setVoiceChangerEnabled(!voiceChangerEnabled);
   };
 
   const handleAcceptIncomingCall = () => {
@@ -841,32 +826,6 @@ const CounselorVideo = () => {
                       <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
                       End session
                     </Button>
-                  )}
-                  {localStream && (
-                    <>
-                      <Button
-                        variant={voiceChangerEnabled ? "default" : "outline"}
-                        className="h-11 rounded-full px-4 text-xs"
-                        onClick={handleToggleVoiceChanger}
-                      >
-                        {voiceChangerEnabled ? "Voice Changer On" : "Enable Voice Changer"}
-                      </Button>
-                      <select
-                        value={voiceFilter}
-                        onChange={(event) => {
-                          void setVoiceFilter(event.target.value as typeof voiceFilter);
-                        }}
-                        disabled={!voiceChangerEnabled}
-                        className="h-11 rounded-full border border-border/60 bg-background px-4 text-xs text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                        aria-label="Voice changer profile"
-                      >
-                        {VOICE_PROFILE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
                   )}
                 </div>
               </CardContent>
