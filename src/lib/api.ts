@@ -56,6 +56,8 @@ export type DailyTip = {
   personalized?: boolean;
   mood?: string | null;
   served_for_date?: string | null;
+  delivered_at?: string | null;
+  is_favorite?: boolean;
 };
 
 type ApiRequestConfig = Record<string, unknown> & {
@@ -792,14 +794,33 @@ class ApiClient {
     return (response.data?.sessions ?? []) as AuthDeviceSession[];
   }
 
-  async getTodayTip() {
-    const response = await this.client.get('/tips/today');
+  async getWellnessTip() {
+    const response = await this.client.get('/wellness/tip');
     return (response.data?.tip ?? null) as DailyTip | null;
+  }
+
+  async getTodayTip() {
+    return this.getWellnessTip();
   }
 
   async getTips() {
     const response = await this.client.get('/tips');
     return (response.data?.tips ?? []) as DailyTip[];
+  }
+
+  async getFavoriteTips() {
+    const response = await this.client.get('/wellness/tips/favorites');
+    return (response.data?.tips ?? []) as DailyTip[];
+  }
+
+  async favoriteTip(id: number) {
+    const response = await this.client.post(`/wellness/tips/${id}/favorite`);
+    return (response.data?.tip ?? null) as DailyTip | null;
+  }
+
+  async unfavoriteTip(id: number) {
+    const response = await this.client.delete(`/wellness/tips/${id}/favorite`);
+    return (response.data?.tip ?? null) as DailyTip | null;
   }
 
   async createTip(data: {
@@ -1007,6 +1028,42 @@ class ApiClient {
 
   async sendMessage(sessionId: string, data: { content: string; message_type?: string; file_url?: string; is_encrypted?: boolean }) {
     const response = await this.client.post(`/sessions/${sessionId}/messages`, data);
+    return response.data;
+  }
+
+  async uploadChatFile(
+    sessionId: string,
+    file: File,
+    options?: {
+      message_type?: 'file' | 'voice';
+      onUploadProgress?: (progress: number) => void;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('session_id', sessionId);
+    formData.append('file', file, file.name);
+    if (options?.message_type) {
+      formData.append('message_type', options.message_type);
+    }
+
+    const response = await this.client.post('/chat/upload-file', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (event) => {
+        if (!options?.onUploadProgress) {
+          return;
+        }
+
+        if (typeof event.total === 'number' && event.total > 0) {
+          options.onUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+          return;
+        }
+
+        if (event.loaded > 0) {
+          options.onUploadProgress(65);
+        }
+      },
+    });
+
     return response.data;
   }
 

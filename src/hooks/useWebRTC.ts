@@ -24,6 +24,7 @@ interface WebRTCState {
   incomingAudioOnly: boolean;
   localSpeaking: boolean;
   remoteSpeaking: boolean;
+  voiceChangerEnabled: boolean;
   voiceFilter: VoiceFilterPreset;
   callQuality: {
     latencyMs: number | null;
@@ -37,11 +38,10 @@ interface StartCallOptions {
 }
 
 export type VoiceFilterPreset =
-  | "none"
-  | "neutral-mask"
-  | "pitch-shift"
-  | "tone-mod"
-  | "robotic";
+  | "normal"
+  | "deep"
+  | "soft"
+  | "neutralized";
 
 const ICE_SERVERS = getWebRtcIceServers();
 const HAS_RELAY_ICE_SERVER = hasRelayIceServer(ICE_SERVERS);
@@ -93,6 +93,7 @@ const SPEAKING_HOLD_MS = 300;
 
 type VoiceProcessingChain = {
   track: MediaStreamTrack;
+  update: (enabled: boolean, filter: VoiceFilterPreset) => void;
   stop: () => void;
 };
 
@@ -137,74 +138,142 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
   return "Could not access camera or microphone. Check device permissions and try again.";
 };
 
-const applyVoiceFilterToSource = (
-  source: MediaStreamAudioSourceNode,
-  destination: MediaStreamAudioDestinationNode,
-  filter: VoiceFilterPreset
-) => {
-  const context = source.context;
-
-  switch (filter) {
-    case "pitch-shift": {
-      const highpass = context.createBiquadFilter();
-      highpass.type = "highpass";
-      highpass.frequency.value = 180;
-      const peaking = context.createBiquadFilter();
-      peaking.type = "peaking";
-      peaking.frequency.value = 2500;
-      peaking.gain.value = 5;
-      source.connect(highpass);
-      highpass.connect(peaking);
-      peaking.connect(destination);
-      return;
-    }
-    case "tone-mod": {
-      const lowpass = context.createBiquadFilter();
-      lowpass.type = "lowpass";
-      lowpass.frequency.value = 1300;
-      const ringModGain = context.createGain();
-      ringModGain.gain.value = 0.55;
-      const dryGain = context.createGain();
-      dryGain.gain.value = 0.45;
-      source.connect(lowpass);
-      lowpass.connect(ringModGain);
-      source.connect(dryGain);
-      ringModGain.connect(destination);
-      dryGain.connect(destination);
-      return;
-    }
-    case "robotic": {
-      const bandpass = context.createBiquadFilter();
-      bandpass.type = "bandpass";
-      bandpass.frequency.value = 750;
-      bandpass.Q.value = 1.4;
-      const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = -30;
-      compressor.ratio.value = 12;
-      source.connect(bandpass);
-      bandpass.connect(compressor);
-      compressor.connect(destination);
-      return;
-    }
-    case "neutral-mask": {
-      const highpass = context.createBiquadFilter();
-      highpass.type = "highpass";
-      highpass.frequency.value = 130;
-      const lowpass = context.createBiquadFilter();
-      lowpass.type = "lowpass";
-      lowpass.frequency.value = 3400;
-      const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = -28;
-      compressor.ratio.value = 8;
-      source.connect(highpass);
-      highpass.connect(lowpass);
-      lowpass.connect(compressor);
-      compressor.connect(destination);
-      return;
-    }
-    default:
-      source.connect(destination);
+const createVoiceProcessingChain = (
+  sourceTrack: MediaStreamTrack,
+  initialEnabled: boolean,
+  initialFilter: VoiceFilterPreset
+): VoiceProcessingChain | null => {
+  if (typeof AudioContext === "undefined") {
+    return null;
   }
+
+  const context = new AudioContext();
+  const sourceStream = new MediaStream([sourceTrack]);
+  const source = context.createMediaStreamSource(sourceStream);
+  const destination = context.createMediaStreamDestination();
+  const dryGain = context.createGain();
+  const wetGain = context.createGain();
+  const inputGain = context.createGain();
+  const highpass = context.createBiquadFilter();
+  const lowShelf = context.createBiquadFilter();
+  const presence = context.createBiquadFilter();
+  const lowpass = context.createBiquadFilter();
+  const compressor = context.createDynamicsCompressor();
+
+  highpass.type = "highpass";
+  lowShelf.type = "lowshelf";
+  presence.type = "peaking";
+  lowpass.type = "lowpass";
+
+  source.connect(dryGain);
+  dryGain.connect(destination);
+
+  source.connect(inputGain);
+  inputGain.connect(highpass);
+  highpass.connect(lowShelf);
+  lowShelf.connect(presence);
+  presence.connect(lowpass);
+  lowpass.connect(compressor);
+  compressor.connect(wetGain);
+  wetGain.connect(destination);
+
+  const applyProfile = (enabled: boolean, filter: VoiceFilterPreset) => {
+    inputGain.gain.value = 1;
+    compressor.knee.value = 20;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.18;
+
+    if (!enabled) {
+      dryGain.gain.value = 1;
+      wetGain.gain.value = 0;
+      highpass.frequency.value = 80;
+      lowShelf.frequency.value = 180;
+      lowShelf.gain.value = 0;
+      presence.frequency.value = 2600;
+      presence.Q.value = 0.9;
+      presence.gain.value = 0;
+      lowpass.frequency.value = 10000;
+      compressor.threshold.value = -20;
+      compressor.ratio.value = 2;
+      return;
+    }
+
+    switch (filter) {
+      case "deep":
+        dryGain.gain.value = 0.18;
+        wetGain.gain.value = 0.95;
+        highpass.frequency.value = 70;
+        lowShelf.frequency.value = 170;
+        lowShelf.gain.value = 6;
+        presence.frequency.value = 2400;
+        presence.Q.value = 1.1;
+        presence.gain.value = -3;
+        lowpass.frequency.value = 4300;
+        compressor.threshold.value = -26;
+        compressor.ratio.value = 5;
+        break;
+      case "soft":
+        dryGain.gain.value = 0.4;
+        wetGain.gain.value = 0.72;
+        highpass.frequency.value = 95;
+        lowShelf.frequency.value = 220;
+        lowShelf.gain.value = 1.5;
+        presence.frequency.value = 2800;
+        presence.Q.value = 0.8;
+        presence.gain.value = -2;
+        lowpass.frequency.value = 5200;
+        compressor.threshold.value = -30;
+        compressor.ratio.value = 3;
+        break;
+      case "neutralized":
+        dryGain.gain.value = 0.08;
+        wetGain.gain.value = 0.98;
+        highpass.frequency.value = 140;
+        lowShelf.frequency.value = 200;
+        lowShelf.gain.value = -1.5;
+        presence.frequency.value = 2500;
+        presence.Q.value = 1.4;
+        presence.gain.value = -4;
+        lowpass.frequency.value = 3400;
+        compressor.threshold.value = -32;
+        compressor.ratio.value = 8;
+        break;
+      default:
+        dryGain.gain.value = 0.78;
+        wetGain.gain.value = 0.28;
+        highpass.frequency.value = 85;
+        lowShelf.frequency.value = 180;
+        lowShelf.gain.value = 1;
+        presence.frequency.value = 3000;
+        presence.Q.value = 0.9;
+        presence.gain.value = 1.5;
+        lowpass.frequency.value = 8500;
+        compressor.threshold.value = -22;
+        compressor.ratio.value = 2.5;
+        break;
+    }
+  };
+
+  applyProfile(initialEnabled, initialFilter);
+  void context.resume().catch(() => undefined);
+
+  const [processedTrack] = destination.stream.getAudioTracks();
+  if (!processedTrack) {
+    void context.close();
+    return null;
+  }
+
+  return {
+    track: processedTrack,
+    update: (enabled, filter) => {
+      applyProfile(enabled, filter);
+      void context.resume().catch(() => undefined);
+    },
+    stop: () => {
+      processedTrack.stop();
+      void context.close();
+    },
+  };
 };
 
 const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
@@ -248,7 +317,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     incomingAudioOnly: false,
     localSpeaking: false,
     remoteSpeaking: false,
-    voiceFilter: "none",
+    voiceChangerEnabled: false,
+    voiceFilter: "normal",
     callQuality: {
       latencyMs: null,
       jitterMs: null,
@@ -331,32 +401,23 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, []);
 
   const createVoiceProcessedTrack = useCallback(
-    (sourceTrack: MediaStreamTrack, filter: VoiceFilterPreset): MediaStreamTrack => {
-      if (typeof AudioContext === "undefined") {
+    (
+      sourceTrack: MediaStreamTrack,
+      voiceChangerEnabled: boolean,
+      filter: VoiceFilterPreset
+    ): MediaStreamTrack => {
+      const chain = createVoiceProcessingChain(
+        sourceTrack,
+        voiceChangerEnabled,
+        filter
+      );
+
+      if (!chain) {
         return sourceTrack;
       }
 
-      const context = new AudioContext();
-      const sourceStream = new MediaStream([sourceTrack]);
-      const source = context.createMediaStreamSource(sourceStream);
-      const destination = context.createMediaStreamDestination();
-      applyVoiceFilterToSource(source, destination, filter);
-      const [processedTrack] = destination.stream.getAudioTracks();
-
-      if (!processedTrack) {
-        context.close().catch(() => undefined);
-        return sourceTrack;
-      }
-
-      voiceProcessingRef.current = {
-        track: processedTrack,
-        stop: () => {
-          processedTrack.stop();
-          void context.close();
-        },
-      };
-
-      return processedTrack;
+      voiceProcessingRef.current = chain;
+      return chain.track;
     },
     []
   );
@@ -411,19 +472,32 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   );
 
   const updateRemoteStreamState = useCallback((stream: MediaStream | null) => {
-    remoteStreamRef.current = stream;
+    const nextStream = stream
+      ? (() => {
+          stream.getTracks().forEach((track) => {
+            if (track.readyState === "ended") {
+              stream.removeTrack(track);
+            }
+          });
+          return stream;
+        })()
+      : null;
+
+    remoteStreamRef.current = nextStream;
 
     setState((prev) => ({
       ...prev,
-      remoteStream: stream,
-      remoteHasVideo: Boolean(stream?.getVideoTracks().length),
+      remoteStream: nextStream,
+      remoteHasVideo: Boolean(
+        nextStream?.getVideoTracks().some((track) => track.readyState === "live")
+      ),
       isConnecting: false,
       error: null,
       notice: null,
     }));
 
-    if (stream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = stream;
+    if (nextStream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = nextStream;
       playMediaElement(remoteVideoRef.current);
     }
   }, []);
@@ -647,22 +721,21 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
 
     connection.ontrack = (event) => {
-      let remoteStream = event.streams[0] ?? null;
+      const remoteStream = remoteStreamRef.current ?? new MediaStream();
+      const alreadyAdded = remoteStream
+        .getTracks()
+        .some((track) => track.id === event.track.id);
 
-      if (!remoteStream) {
-        remoteStream = remoteStreamRef.current ?? new MediaStream();
-        const alreadyAdded = remoteStream
-          .getTracks()
-          .some((track) => track.id === event.track.id);
-
-        if (!alreadyAdded) {
-          remoteStream.addTrack(event.track);
-        }
+      if (!alreadyAdded) {
+        remoteStream.addTrack(event.track);
       }
 
       if (!observedRemoteTrackIdsRef.current.has(event.track.id)) {
         observedRemoteTrackIdsRef.current.add(event.track.id);
         const syncRemoteState = () => {
+          if (event.track.readyState === "ended") {
+            remoteStream.removeTrack(event.track);
+          }
           updateRemoteStreamState(remoteStreamRef.current);
         };
         event.track.addEventListener("mute", syncRemoteState);
@@ -670,6 +743,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         event.track.addEventListener("ended", syncRemoteState);
       }
 
+      remoteStreamRef.current = remoteStream;
       updateRemoteStreamState(remoteStream);
     };
 
@@ -786,11 +860,13 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           stopVoiceProcessing();
           const filteredTrack = createVoiceProcessedTrack(
             audioTrack,
+            stateRef.current.voiceChangerEnabled,
             stateRef.current.voiceFilter
           );
           if (filteredTrack !== audioTrack) {
             stream.removeTrack(audioTrack);
             stream.addTrack(filteredTrack);
+            filteredTrack.enabled = audioTrack.enabled;
             audioTrack.enabled = true;
           }
         }
@@ -1361,38 +1437,20 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   const setVoiceFilter = useCallback(
     async (filter: VoiceFilterPreset) => {
       setState((prev) => ({ ...prev, voiceFilter: filter }));
-
-      const stream = localStreamRef.current;
-      const sourceTrack = rawAudioTrackRef.current;
-      if (!stream || !sourceTrack) {
-        return true;
-      }
-
-      stopVoiceProcessing();
-      const nextTrack = createVoiceProcessedTrack(sourceTrack, filter);
-      const currentAudioTracks = stream.getAudioTracks();
-      currentAudioTracks.forEach((track) => {
-        stream.removeTrack(track);
-        if (track !== sourceTrack) {
-          track.stop();
-        }
-      });
-      stream.addTrack(nextTrack);
-      setState((prev) => ({ ...prev, localStream: stream }));
-
-      const connection = peerConnection.current;
-      const audioSender = connection
-        ?.getSenders()
-        .find((sender) => sender.track?.kind === "audio");
-      if (audioSender) {
-        await audioSender.replaceTrack(nextTrack).catch((error) => {
-          console.warn("Failed to update audio sender track:", error);
-        });
-      }
+      voiceProcessingRef.current?.update(stateRef.current.voiceChangerEnabled, filter);
 
       return true;
     },
-    [createVoiceProcessedTrack, stopVoiceProcessing]
+    []
+  );
+
+  const setVoiceChangerEnabled = useCallback(
+    async (enabled: boolean) => {
+      setState((prev) => ({ ...prev, voiceChangerEnabled: enabled }));
+      voiceProcessingRef.current?.update(enabled, stateRef.current.voiceFilter);
+      return true;
+    },
+    []
   );
 
   const startAudioCall = useCallback(async () => {
@@ -1688,6 +1746,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
+    setVoiceChangerEnabled,
     setVoiceFilter,
   };
 };

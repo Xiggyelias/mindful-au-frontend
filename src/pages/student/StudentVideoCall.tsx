@@ -50,6 +50,13 @@ const navItems = [
 
 type CallMode = "video" | "audio";
 
+const VOICE_PROFILE_OPTIONS = [
+  { value: "normal", label: "Normal" },
+  { value: "deep", label: "Deep" },
+  { value: "soft", label: "Soft" },
+  { value: "neutralized", label: "Neutralized" },
+] as const;
+
 const getParticipantName = (participant: any, fallback: string) =>
   participant?.profile?.full_name ||
   participant?.full_name ||
@@ -117,6 +124,7 @@ const StudentVideoCall = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
+    voiceChangerEnabled,
     voiceFilter,
     callQuality,
     localVideoRef,
@@ -128,6 +136,7 @@ const StudentVideoCall = () => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
+    setVoiceChangerEnabled,
     setVoiceFilter,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
 
@@ -315,7 +324,7 @@ const StudentVideoCall = () => {
 
   const remoteVideoStatusMessage =
     remoteStream && !remoteHasVideo
-      ? `${remoteParticipantName} joined without video. Ask them to allow camera access or tap the camera button.`
+      ? `${remoteParticipantName} is connected in audio mode or has camera sharing turned off. Audio is still live.`
       : statusMessage;
   const callStateLabel = isConnected
     ? "Live"
@@ -363,6 +372,10 @@ const StudentVideoCall = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
+  };
+
+  const handleToggleVoiceChanger = () => {
+    void setVoiceChangerEnabled(!voiceChangerEnabled);
   };
 
   const handleToggleAnonymousMode = async () => {
@@ -710,12 +723,17 @@ const StudentVideoCall = () => {
                           showRemoteVideo ? "bg-black" : "bg-[#0b141a]"
                         )}
                       >
-                        {showRemoteVideo ? (
+                        {remoteStream ? (
                           <video
                             ref={remoteVideoRef}
                             autoPlay
                             playsInline
-                            className="absolute inset-0 h-full w-full object-cover"
+                            className={cn(
+                              "absolute inset-0 h-full w-full object-cover",
+                              showRemoteVideo
+                                ? "opacity-100"
+                                : "h-1 w-1 opacity-0 pointer-events-none"
+                            )}
                           />
                         ) : null}
 
@@ -871,19 +889,32 @@ const StudentVideoCall = () => {
                                 >
                                   <Phone className="h-7 w-7 rotate-[135deg]" />
                                 </Button>
+                                <Button
+                                  variant={voiceChangerEnabled ? "secondary" : "ghost"}
+                                  className={cn(
+                                    "h-11 rounded-full px-4 text-xs text-white",
+                                    voiceChangerEnabled
+                                      ? "bg-emerald-500/85 hover:bg-emerald-400"
+                                      : "bg-white/10 hover:bg-white/20"
+                                  )}
+                                  onClick={handleToggleVoiceChanger}
+                                >
+                                  {voiceChangerEnabled ? "Voice Changer On" : "Enable Voice Changer"}
+                                </Button>
                                 <select
                                   value={voiceFilter}
                                   onChange={(event) => {
-                                    void setVoiceFilter(event.target.value as any);
+                                    void setVoiceFilter(event.target.value as typeof voiceFilter);
                                   }}
-                                  className="h-11 rounded-full border border-white/15 bg-black/40 px-4 text-xs text-white outline-none"
-                                  aria-label="Voice anonymization filter"
+                                  disabled={!voiceChangerEnabled}
+                                  className="h-11 rounded-full border border-white/15 bg-black/40 px-4 text-xs text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                                  aria-label="Voice changer profile"
                                 >
-                                  <option value="none">Voice: Natural</option>
-                                  <option value="neutral-mask">Voice: Neutral Mask</option>
-                                  <option value="pitch-shift">Voice: Pitch Shift</option>
-                                  <option value="tone-mod">Voice: Tone Mod</option>
-                                  <option value="robotic">Voice: Robotic</option>
+                                  {VOICE_PROFILE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
                                 </select>
                               </>
                             ) : (

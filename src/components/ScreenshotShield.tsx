@@ -17,7 +17,6 @@ export const ScreenshotShield = () => {
   const { user } = useAuth();
   const location = useLocation();
   const [showShield, setShowShield] = useState(false);
-  const [inactiveProtected, setInactiveProtected] = useState(false);
   const [policyNoticeOpen, setPolicyNoticeOpen] = useState(true);
   const [timestampLabel, setTimestampLabel] = useState(() =>
     new Date().toLocaleString()
@@ -37,7 +36,6 @@ export const ScreenshotShield = () => {
   useEffect(() => {
     if (!active) {
       setShowShield(false);
-      setInactiveProtected(false);
       setPolicyNoticeOpen(true);
       return;
     }
@@ -62,39 +60,18 @@ export const ScreenshotShield = () => {
         (event.metaKey && event.shiftKey && (key === "3" || key === "4" || key === "5"));
 
       if (looksLikeCaptureShortcut) {
-        event.preventDefault();
         triggerShield();
       }
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") {
-        setInactiveProtected(true);
-        triggerShield(2200);
-      } else {
-        setInactiveProtected(false);
+        triggerShield(1800);
       }
-    };
-    const onWindowBlur = () => {
-      setInactiveProtected(true);
-    };
-    const onWindowFocus = () => {
-      setInactiveProtected(false);
-    };
-
-    const blockClipboardAndMenu = (event: Event) => {
-      event.preventDefault();
-      triggerShield(1300);
     };
 
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("blur", onWindowBlur);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("copy", blockClipboardAndMenu);
-    document.addEventListener("cut", blockClipboardAndMenu);
-    document.addEventListener("contextmenu", blockClipboardAndMenu);
-    document.addEventListener("dragstart", blockClipboardAndMenu);
 
     return () => {
       if (shieldTimer) {
@@ -102,12 +79,6 @@ export const ScreenshotShield = () => {
       }
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("blur", onWindowBlur);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("copy", blockClipboardAndMenu);
-      document.removeEventListener("cut", blockClipboardAndMenu);
-      document.removeEventListener("contextmenu", blockClipboardAndMenu);
-      document.removeEventListener("dragstart", blockClipboardAndMenu);
     };
   }, [active]);
 
@@ -151,7 +122,7 @@ export const ScreenshotShield = () => {
           <div className="flex items-start justify-between gap-3">
             <p>
               Privacy notice: Capturing or sharing counseling content is restricted.
-              Monitoring and deterrence controls are active on this screen.
+              Watermarking and privacy reminders are active on this screen.
             </p>
             <button
               type="button"
@@ -163,22 +134,12 @@ export const ScreenshotShield = () => {
           </div>
         </div>
       )}
-      {inactiveProtected && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 px-6 text-center text-white backdrop-blur-sm">
-          <div>
-            <p className="text-lg font-semibold">Sensitive content hidden</p>
-            <p className="mt-2 text-sm text-white/80">
-              Content is temporarily obscured while the app is inactive.
-            </p>
-          </div>
-        </div>
-      )}
       {showShield && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 px-6 text-center text-white">
+        <div className="fixed bottom-24 right-4 z-[9999] w-[min(92vw,360px)] rounded-2xl border border-amber-300/35 bg-slate-950/90 px-4 py-3 text-white shadow-2xl backdrop-blur-xl">
           <div>
-            <p className="text-lg font-semibold">Protected screen</p>
-            <p className="mt-2 text-sm text-white/80">
-              Capture and clipboard actions are restricted in this confidential area.
+            <p className="text-sm font-semibold">Privacy reminder</p>
+            <p className="mt-1 text-xs text-white/75">
+              This counseling screen is watermarked. Avoid capturing or sharing confidential content.
             </p>
           </div>
         </div>

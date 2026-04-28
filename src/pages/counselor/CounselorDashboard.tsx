@@ -64,7 +64,14 @@ const CounselorDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const toastRef = useRef(toast);
-  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
+  const {
+    tip: dailyTip,
+    isLoading: tipLoading,
+    error: tipError,
+    refresh: refreshDailyTip,
+    toggleFavorite,
+    isSavingFavorite,
+  } = useDailyTip();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isApprovedCounselor = user?.roles?.some((r: any) => r.role === "counselor" && r.approved);
 
@@ -334,6 +341,9 @@ const CounselorDashboard = () => {
             isLoading={tipLoading}
             error={tipError}
             title="Counselor Tip of the Day"
+            onRefresh={() => void refreshDailyTip()}
+            onToggleFavorite={() => void toggleFavorite()}
+            isSavingFavorite={isSavingFavorite}
             actionLabel="Open Wellness"
             onAction={() => navigate("/counselor/wellness")}
           />

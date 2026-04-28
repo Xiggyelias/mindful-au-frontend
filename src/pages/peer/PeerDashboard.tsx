@@ -47,7 +47,14 @@ const PeerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [savingAvailability, setSavingAvailability] = useState(false);
   const [data, setData] = useState<PeerDashboardResponse | null>(null);
-  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
+  const {
+    tip: dailyTip,
+    isLoading: tipLoading,
+    error: tipError,
+    refresh: refreshDailyTip,
+    toggleFavorite,
+    isSavingFavorite,
+  } = useDailyTip();
 
   const load = async () => {
     try {
@@ -140,6 +147,9 @@ const PeerDashboard = () => {
             isLoading={tipLoading}
             error={tipError}
             title="Peer Support Tip of the Day"
+            onRefresh={() => void refreshDailyTip()}
+            onToggleFavorite={() => void toggleFavorite()}
+            isSavingFavorite={isSavingFavorite}
             actionLabel="Open Ethics Guidelines"
             onAction={() => navigate("/peer/ethics")}
           />

@@ -12,6 +12,7 @@ import {
   encryptMessage,
   decryptMessage,
 } from '@/lib/encryption';
+import type { ChatAttachment } from '@/lib/chatAttachments';
 
 export interface ChatMessage {
   id: number;
@@ -23,6 +24,8 @@ export interface ChatMessage {
   is_encrypted: boolean;
   message_type: string;
   file_url?: string;
+  has_file?: boolean;
+  attachment?: ChatAttachment | null;
   decryptedContent?: string;
 }
 
@@ -171,6 +174,17 @@ const isOptimisticMessageId = (id: number): boolean => id >= OPTIMISTIC_MESSAGE_
 
 const sortAndTrimMessages = (messages: ChatMessage[]): ChatMessage[] => {
   return [...messages].sort((a, b) => a.id - b.id).slice(-MAX_CLIENT_MESSAGES);
+};
+
+const normalizeExternalMessage = (message: ChatMessage): ChatMessage => {
+  if (message.is_encrypted) {
+    return message;
+  }
+
+  return {
+    ...message,
+    decryptedContent: message.decryptedContent ?? message.content,
+  };
 };
 
 const normalizeMessagePayload = (payload: unknown): RawMessage[] => {
@@ -1191,6 +1205,39 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     ]
   );
 
+  const registerServerMessage = useCallback(
+    (message: ChatMessage | null | undefined) => {
+      if (!message) {
+        return;
+      }
+
+      const normalizedMessage = normalizeExternalMessage(message);
+      if (!Number.isInteger(normalizedMessage.id) || normalizedMessage.id <= 0) {
+        return;
+      }
+
+      lastMessageIdRef.current = Math.max(lastMessageIdRef.current, normalizedMessage.id);
+      if (oldestMessageIdRef.current <= 0) {
+        oldestMessageIdRef.current = normalizedMessage.id;
+      } else {
+        oldestMessageIdRef.current = Math.min(oldestMessageIdRef.current, normalizedMessage.id);
+      }
+
+      setMessages((previous) => {
+        const merged = new Map<number, ChatMessage>();
+        for (const existing of previous) {
+          merged.set(existing.id, existing);
+        }
+        merged.set(normalizedMessage.id, normalizedMessage);
+        return sortAndTrimMessages(Array.from(merged.values()));
+      });
+
+      setError(null);
+      void emitRealtimeSyncHint();
+    },
+    [emitRealtimeSyncHint]
+  );
+
   useEffect(() => {
     const hasRealtimeConfig = Boolean(
       import.meta.env.VITE_SUPABASE_URL &&
@@ -1469,5 +1516,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     getKeyForSharing,
     getEncryptionKey,
     refreshMessages,
+    registerServerMessage,
   };
 };

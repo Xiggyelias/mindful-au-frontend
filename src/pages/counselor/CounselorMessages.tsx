@@ -30,6 +30,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  formatChatFileSize,
+  getAttachmentKind,
+  resolveMessageAttachment,
+  validateChatAttachment,
+} from "@/lib/chatAttachments";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -207,7 +214,7 @@ const CounselorMessages = () => {
     sendMessage: sendEncryptedMessage,
     notifyTyping,
     loadOlderMessages,
-    getEncryptionKey,
+    registerServerMessage,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
@@ -221,8 +228,6 @@ const CounselorMessages = () => {
     clearError: clearUploadError,
   } = useFileAttachment({
     sessionId: selectedSessionId,
-    userId: String(user?.id || ""),
-    encryptionKey: getEncryptionKey(),
   });
 
   const filteredChats = useMemo(() => {
@@ -568,7 +573,7 @@ const CounselorMessages = () => {
     e.preventDefault();
     const hasPayload = isPeerCounselor ? Boolean(message.trim()) : Boolean(message.trim() || selectedFile);
     if (!hasPayload || isSending || !selectedSessionId) return;
-    if (!isEncryptionReady) {
+    if (message.trim() && !isEncryptionReady) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
     }
@@ -581,11 +586,12 @@ const CounselorMessages = () => {
 
     try {
       if (selectedFile) {
-        const sentFile = await sendFileMessage(selectedFile, sendEncryptedMessage);
+        const sentFile = await sendFileMessage(selectedFile);
         if (!sentFile) {
           toast.error("Failed to send file");
           return;
         }
+        registerServerMessage(sentFile);
         setSelectedFile(null);
       }
 
@@ -682,8 +688,10 @@ const CounselorMessages = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("File size exceeds 8MB limit");
+    const validationError = validateChatAttachment(file);
+    if (validationError) {
+      toast.error(validationError);
+      e.target.value = "";
       return;
     }
 
@@ -702,9 +710,7 @@ const CounselorMessages = () => {
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return formatChatFileSize(bytes);
   };
 
   const canSend = isPeerCounselor ? Boolean(message.trim()) : Boolean(message.trim() || selectedFile);
@@ -765,35 +771,72 @@ const CounselorMessages = () => {
   const renderMessageContent = (msg: any) => {
     const content = msg.decryptedContent || msg.content || "";
 
-    if (msg.message_type === "file") {
-      try {
-        const fileInfo = typeof content === "string" ? JSON.parse(content) : content;
-        const isImage = fileInfo.fileType?.startsWith("image/");
-        const resolvedUrl = msg.file_url || fileInfo.url;
+    const attachment = resolveMessageAttachment(msg);
+    if (attachment && (msg.message_type === "file" || msg.message_type === "voice" || msg.has_file)) {
+      const kind = getAttachmentKind(attachment);
+      const resolvedUrl = attachment.url || msg.file_url;
+      const downloadUrl = attachment.download_url || attachment.url || msg.file_url;
+      const hasSize = Number(attachment.file_size) > 0;
 
-        if (!resolvedUrl) {
-          return <p>Attachment unavailable</p>;
-        }
+      if (!resolvedUrl) {
+        return <p>Attachment unavailable</p>;
+      }
 
+      if (kind === "image") {
         return (
-          <div className="space-y-2">
-            <a
-              href={resolvedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
-            >
-              {isImage ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{fileInfo.fileName}</p>
-                <p className="text-xs opacity-70">{formatFileSize(fileInfo.fileSize)}</p>
-              </div>
+          <div className="space-y-3">
+            <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer">
+              <img
+                src={resolvedUrl}
+                alt={attachment.file_name}
+                className="max-h-60 w-full rounded-2xl object-cover"
+                loading="lazy"
+              />
             </a>
+            <div className="flex items-center justify-between gap-3 text-xs opacity-80">
+              <span className="truncate">{attachment.file_name}</span>
+              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
+            </div>
           </div>
         );
-      } catch {
-        return <p>{content}</p>;
       }
+
+      if (kind === "audio") {
+        return (
+          <div className="space-y-2">
+            <audio controls preload="none" className="w-full max-w-xs">
+              <source src={resolvedUrl} type={attachment.file_type} />
+              Your browser does not support the audio element.
+            </audio>
+            <div className="flex items-center gap-2 text-xs opacity-80">
+              <span className="truncate">{attachment.file_name}</span>
+              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 rounded-2xl bg-background/50 p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{attachment.file_name}</p>
+              {hasSize ? <p className="text-xs opacity-70">{formatFileSize(attachment.file_size)}</p> : null}
+            </div>
+            <a
+              href={downloadUrl || resolvedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold underline underline-offset-2"
+            >
+              Download
+            </a>
+          </div>
+        </div>
+      );
     }
 
     return <p>{content}</p>;
@@ -1124,7 +1167,7 @@ const CounselorMessages = () => {
                       ref={fileInputRef}
                       onChange={handleFileSelect}
                       className="hidden"
-                      accept="image/*,.pdf,.doc,.docx,.txt"
+                      accept={CHAT_ATTACHMENT_ACCEPT}
                     />
                     {!isPeerCounselor && (
                       <Button
@@ -1158,7 +1201,7 @@ const CounselorMessages = () => {
                         !canSend ||
                         isSending ||
                         isUploading ||
-                        !isEncryptionReady
+                        (Boolean(message.trim()) && !isEncryptionReady)
                       }
                     >
                       {isSending || isUploading ? (

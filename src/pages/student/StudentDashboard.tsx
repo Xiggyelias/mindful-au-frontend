@@ -53,7 +53,14 @@ const StudentDashboard = () => {
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const { user } = useAuth();
-  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
+  const {
+    tip: dailyTip,
+    isLoading: tipLoading,
+    error: tipError,
+    refresh: refreshDailyTip,
+    toggleFavorite,
+    isSavingFavorite,
+  } = useDailyTip();
 
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
@@ -408,11 +415,14 @@ const StudentDashboard = () => {
 
             {/* Wellness Tips & Mood Analytics */}
             <DailyTipCard
-              className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background"
+              className="rounded-3xl shadow-xl shadow-primary/5"
               title="Your Wellness Corner"
               tip={dailyTip}
               isLoading={tipLoading}
               error={tipError}
+              onRefresh={() => void refreshDailyTip()}
+              onToggleFavorite={() => void toggleFavorite()}
+              isSavingFavorite={isSavingFavorite}
               actionLabel="Open AI Support"
               onAction={() => navigate("/student/ai-support")}
             />

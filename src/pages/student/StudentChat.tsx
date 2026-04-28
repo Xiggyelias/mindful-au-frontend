@@ -41,6 +41,13 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  formatChatFileSize,
+  getAttachmentKind,
+  resolveMessageAttachment,
+  validateChatAttachment,
+} from "@/lib/chatAttachments";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -153,7 +160,7 @@ const StudentChat = () => {
     deleteMessage,
     notifyTyping,
     loadOlderMessages,
-    getEncryptionKey,
+    registerServerMessage,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
@@ -167,8 +174,6 @@ const StudentChat = () => {
     clearError: clearUploadError,
   } = useFileAttachment({
     sessionId: sessionId || "",
-    userId: user?.id?.toString() || "",
-    encryptionKey: getEncryptionKey(),
   });
 
   // Cleanup voice recorder on unmount
@@ -347,7 +352,11 @@ const StudentChat = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!message.trim() && !selectedFile && !recording) || isSending || !sessionId) return;
-    if (!isEncryptionReady) {
+    if (activeSessionIsPeerAssigned && (selectedFile || recording)) {
+      toast.error("Peer support chats support text only.");
+      return;
+    }
+    if (message.trim() && !isEncryptionReady) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
     }
@@ -356,8 +365,9 @@ const StudentChat = () => {
 
     try {
       if (selectedFile) {
-        const success = await sendFileMessage(selectedFile, sendEncryptedMessage);
-        if (success) {
+        const sentFile = await sendFileMessage(selectedFile);
+        if (sentFile) {
+          registerServerMessage(sentFile);
           setSelectedFile(null);
           toast.success("File sent successfully");
         } else {
@@ -366,9 +376,9 @@ const StudentChat = () => {
       }
       
       if (recording) {
-        // Send voice recording as file
-        const success = await sendFileMessage(recording.blob, sendEncryptedMessage);
-        if (success) {
+        const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
+        if (sentVoice) {
+          registerServerMessage(sentVoice);
           clearRecording();
           toast.success("Voice message sent successfully");
         } else {
@@ -395,8 +405,16 @@ const StudentChat = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        toast.error("File size exceeds 8MB limit");
+      if (activeSessionIsPeerAssigned) {
+        toast.error("Peer support chats support text only.");
+        e.target.value = "";
+        return;
+      }
+
+      const validationError = validateChatAttachment(file);
+      if (validationError) {
+        toast.error(validationError);
+        e.target.value = "";
         return;
       }
       setSelectedFile(file);
@@ -558,65 +576,79 @@ const StudentChat = () => {
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return formatChatFileSize(bytes);
   };
 
   const renderMessageContent = (msg: any) => {
     const content = msg.decryptedContent || msg.content;
-    
-    if (msg.message_type === 'file') {
-      try {
-        const fileInfo = JSON.parse(content);
-        const isAudio = fileInfo.fileType?.startsWith('audio/');
-        const isImage = fileInfo.fileType?.startsWith('image/');
-        const resolvedUrl = msg.file_url || fileInfo.url;
 
-        if (!resolvedUrl) {
-          return <p>Attachment unavailable</p>;
-        }
-        
-        if (isAudio && resolvedUrl) {
-          return (
-            <div className="space-y-2">
-              <audio controls className="w-full max-w-xs">
-                <source src={resolvedUrl} type={fileInfo.fileType} />
-                Your browser does not support the audio element.
-              </audio>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Mic className="h-3 w-3" />
-                <span>Voice message</span>
-                <span>|</span>
-                <span>{formatFileSize(fileInfo.fileSize)}</span>
-              </div>
-            </div>
-          );
-        }
-        
+    const attachment = resolveMessageAttachment(msg);
+    if (attachment && (msg.message_type === "file" || msg.message_type === "voice" || msg.has_file)) {
+      const kind = getAttachmentKind(attachment);
+      const resolvedUrl = attachment.url || msg.file_url;
+      const downloadUrl = attachment.download_url || attachment.url || msg.file_url;
+      const hasSize = Number(attachment.file_size) > 0;
+
+      if (!resolvedUrl) {
+        return <p>Attachment unavailable</p>;
+      }
+
+      if (kind === "image") {
         return (
-          <div className="space-y-2">
-            <a 
-              href={resolvedUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
-            >
-              {isImage ? (
-                <ImageIcon className="h-4 w-4" />
-              ) : (
-                <FileText className="h-4 w-4" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{fileInfo.fileName}</p>
-                <p className="text-xs opacity-70">{formatFileSize(fileInfo.fileSize)}</p>
-              </div>
+          <div className="space-y-3">
+            <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer">
+              <img
+                src={resolvedUrl}
+                alt={attachment.file_name}
+                className="max-h-60 w-full rounded-2xl object-cover"
+                loading="lazy"
+              />
             </a>
+            <div className="flex items-center justify-between gap-3 text-xs opacity-80">
+              <span className="truncate">{attachment.file_name}</span>
+              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
+            </div>
           </div>
         );
-      } catch {
-        return <p>{content}</p>;
       }
+
+      if (kind === "audio") {
+        return (
+          <div className="space-y-2">
+            <audio controls preload="none" className="w-full max-w-xs">
+              <source src={resolvedUrl} type={attachment.file_type} />
+              Your browser does not support the audio element.
+            </audio>
+            <div className="flex items-center gap-2 text-xs opacity-80">
+              <Mic className="h-3 w-3" />
+              <span className="truncate">{attachment.file_name}</span>
+              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 rounded-2xl bg-background/50 p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{attachment.file_name}</p>
+              {hasSize ? <p className="text-xs opacity-70">{formatFileSize(attachment.file_size)}</p> : null}
+            </div>
+            <a
+              href={downloadUrl || resolvedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold underline underline-offset-2"
+            >
+              Download
+            </a>
+          </div>
+        </div>
+      );
     }
     
     return <p>{content}</p>;
@@ -1310,7 +1342,7 @@ const StudentChat = () => {
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     className="hidden"
-                    accept="image/*,audio/*,.pdf,.doc,.docx,.txt"
+                    accept={CHAT_ATTACHMENT_ACCEPT}
                   />
                   <Button 
                     type="button" 
@@ -1318,7 +1350,7 @@ const StudentChat = () => {
                     size="icon"
                     className="h-12 w-12 rounded-2xl bg-secondary/30 hover:bg-secondary/50 transition-all shrink-0"
                     onClick={handleAttachClick}
-                    disabled={isUploading || isRecording}
+                    disabled={isUploading || isRecording || activeSessionIsPeerAssigned}
                   >
                     <Paperclip className="h-5 w-5 text-muted-foreground" />
                   </Button>
@@ -1344,7 +1376,7 @@ const StudentChat = () => {
                           size="icon"
                           className="h-10 w-10 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all shrink-0"
                           onClick={handleVoiceToggle}
-                          disabled={isSending || isUploading}
+                          disabled={isSending || isUploading || activeSessionIsPeerAssigned}
                         >
                           <Mic className="h-5 w-5 text-muted-foreground" />
                         </Button>
@@ -1357,7 +1389,7 @@ const StudentChat = () => {
                             (!message.trim() && !selectedFile && !recording) ||
                             isSending ||
                             isUploading ||
-                            !isEncryptionReady
+                            (Boolean(message.trim()) && !isEncryptionReady)
                           }
                         >
                           {isSending || isUploading ? (

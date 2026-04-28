@@ -664,10 +664,10 @@ const AdminSettings = () => {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Bell className="h-5 w-5 text-primary" />
-                Tip of the Day Library
+                Wellness Tip Library
               </CardTitle>
               <CardDescription>
-                Manage the daily engagement tips shown across student, counselor, admin, and peer dashboards.
+                Manage the supportive daily wellness tips shown across student, counselor, admin, and peer dashboards.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -679,7 +679,7 @@ const AdminSettings = () => {
                         {editingTipId ? "Edit Tip" : "Create New Tip"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Tips rotate automatically by day and audience.
+                        Tips rotate automatically by day and audience. Keep them short, supportive, and limited to 1 to 3 sentences.
                       </p>
                     </div>
                     {editingTipId ? (
@@ -704,6 +704,7 @@ const AdminSettings = () => {
                       <Input
                         value={tipDraft.category}
                         onChange={(event) => updateTipDraft("category", event.target.value)}
+                        placeholder="Stress Management"
                         className="mt-2"
                         disabled={isSavingTip}
                       />
@@ -732,6 +733,7 @@ const AdminSettings = () => {
                       <Textarea
                         value={tipDraft.content}
                         onChange={(event) => updateTipDraft("content", event.target.value)}
+                        placeholder="Take 5 slow breaths and let your shoulders relax before your next task."
                         className="mt-2 min-h-[120px]"
                         disabled={isSavingTip}
                       />

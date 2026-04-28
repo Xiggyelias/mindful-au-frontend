@@ -50,6 +50,13 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
 ];
 
+const VOICE_PROFILE_OPTIONS = [
+  { value: "normal", label: "Normal" },
+  { value: "deep", label: "Deep" },
+  { value: "soft", label: "Soft" },
+  { value: "neutralized", label: "Neutralized" },
+] as const;
+
 const getParticipantName = (participant: any, fallback: string) =>
   participant?.profile?.full_name ||
   participant?.full_name ||
@@ -108,6 +115,7 @@ const CounselorVideo = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
+    voiceChangerEnabled,
     voiceFilter,
     callQuality,
     localVideoRef,
@@ -119,6 +127,7 @@ const CounselorVideo = () => {
     toggleVideo,
     acceptIncomingCall,
     rejectIncomingCall,
+    setVoiceChangerEnabled,
     setVoiceFilter,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
@@ -197,6 +206,10 @@ const CounselorVideo = () => {
 
   const handleToggleVideo = () => {
     void toggleVideo();
+  };
+
+  const handleToggleVoiceChanger = () => {
+    void setVoiceChangerEnabled(!voiceChangerEnabled);
   };
 
   const handleAcceptIncomingCall = () => {
@@ -523,8 +536,15 @@ const CounselorVideo = () => {
 
   const remoteVideoStatusMessage =
     remoteStream && !remoteHasVideo
-      ? `${remoteParticipantName} joined without video. Ask them to allow camera access or tap the camera button.`
+      ? `${remoteParticipantName} is connected in audio mode or has camera sharing turned off. Audio is still live.`
       : statusMessage;
+  const counselorVisibilityLabel = !localStream
+    ? "Camera preview unavailable"
+    : isAudioOnly
+    ? "Audio only"
+    : isVideoOff
+    ? "Hidden from student"
+    : "Visible to student";
   const canEndActiveSession = Boolean(
     activeSessionId && (localStream || isConnected || isConnecting || isStartingActiveSession)
   );
@@ -679,14 +699,19 @@ const CounselorVideo = () => {
                       </div>
 
                       <div className="relative flex-1 overflow-hidden rounded-[24px] border border-border/50 bg-background/90 shadow-[0_30px_80px_-50px_hsl(var(--foreground)/0.55)]">
-                        {showRemoteVideo ? (
+                        {remoteStream ? (
                           <video
                             ref={remoteVideoRef}
                             autoPlay
                             playsInline
-                            className="h-full w-full object-cover"
+                            className={cn(
+                              "h-full w-full object-cover",
+                              showRemoteVideo ? "opacity-100" : "h-1 w-1 opacity-0 pointer-events-none"
+                            )}
                           />
-                        ) : (
+                        ) : null}
+
+                        {!showRemoteVideo && (
                           <div className="flex h-full min-h-[320px] flex-col items-center justify-center px-6 text-center">
                             <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-primary/12 text-3xl font-semibold text-primary shadow-inner">
                               {activeSession ? getInitials(remoteParticipantName) : "--"}
@@ -776,7 +801,10 @@ const CounselorVideo = () => {
                             {statusMessage}
                           </p>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Your local preview stays visible so you can confirm camera, framing, and mute state before the student joins.
+                            Your local preview stays visible so you can confirm camera, framing, mute state, and whether the student can currently see you.
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-foreground">
+                            {counselorVisibilityLabel}
                           </p>
                         </div>
                       </div>
@@ -815,20 +843,30 @@ const CounselorVideo = () => {
                     </Button>
                   )}
                   {localStream && (
-                    <select
-                      value={voiceFilter}
-                      onChange={(event) => {
-                        void setVoiceFilter(event.target.value as any);
-                      }}
-                      className="h-11 rounded-full border border-border/60 bg-background px-4 text-xs text-foreground outline-none"
-                      aria-label="Voice anonymization filter"
-                    >
-                      <option value="none">Voice: Natural</option>
-                      <option value="neutral-mask">Voice: Neutral Mask</option>
-                      <option value="pitch-shift">Voice: Pitch Shift</option>
-                      <option value="tone-mod">Voice: Tone Mod</option>
-                      <option value="robotic">Voice: Robotic</option>
-                    </select>
+                    <>
+                      <Button
+                        variant={voiceChangerEnabled ? "default" : "outline"}
+                        className="h-11 rounded-full px-4 text-xs"
+                        onClick={handleToggleVoiceChanger}
+                      >
+                        {voiceChangerEnabled ? "Voice Changer On" : "Enable Voice Changer"}
+                      </Button>
+                      <select
+                        value={voiceFilter}
+                        onChange={(event) => {
+                          void setVoiceFilter(event.target.value as typeof voiceFilter);
+                        }}
+                        disabled={!voiceChangerEnabled}
+                        className="h-11 rounded-full border border-border/60 bg-background px-4 text-xs text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Voice changer profile"
+                      >
+                        {VOICE_PROFILE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </>
                   )}
                 </div>
               </CardContent>

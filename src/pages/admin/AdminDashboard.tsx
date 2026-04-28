@@ -117,7 +117,14 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingAppointmentId, setConfirmingAppointmentId] = useState<number | null>(null);
   const loadRequestRef = useRef(0);
-  const { tip: dailyTip, isLoading: tipLoading, error: tipError } = useDailyTip();
+  const {
+    tip: dailyTip,
+    isLoading: tipLoading,
+    error: tipError,
+    refresh: refreshDailyTip,
+    toggleFavorite,
+    isSavingFavorite,
+  } = useDailyTip();
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -326,6 +333,9 @@ const AdminDashboard = () => {
             isLoading={tipLoading}
             error={tipError}
             title="Admin Tip of the Day"
+            onRefresh={() => void refreshDailyTip()}
+            onToggleFavorite={() => void toggleFavorite()}
+            isSavingFavorite={isSavingFavorite}
             actionLabel="Manage Tips"
             onAction={() => navigate("/admin/settings")}
           />

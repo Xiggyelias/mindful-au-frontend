@@ -2,6 +2,8 @@
 
 Mindful AU is a counseling platform with role-based access for students, staff, and admins.
 
+Full cross-repo manual: `../CMS_MANUAL.md`
+
 ## Portals
 
 - `Student Portal`: chat, appointments, wellness check-ins, AI support, video sessions.
@@ -15,9 +17,11 @@ Mindful AU is a counseling platform with role-based access for students, staff, 
 - Peer counselor assignment with notification flow.
 - Anonymous support mode for protected student identity in chat, appointments, and calls.
 - End-to-end encrypted messaging with delivery/seen receipts.
+- Real-time chat attachments with image previews, document downloads, and playable voice notes.
 - Server-backed chat message deletion (sender/admin authorized, synced across devices).
-- Secure real-time call flow with call-request/accept/reject, reconnect handling, and quality telemetry.
+- Secure real-time call flow with stable signaling, call-request/accept/reject, reconnect handling, and quality telemetry.
 - Appointment-based video call access windows.
+- Daily wellness tip cards with per-user daily caching, favorites, and notification integration.
 - Optional real-time voice anonymization filters during calls (neutral mask, pitch shift, tone modulation, robotic).
 - Speaking-activity indicators and low-bandwidth call handling.
 - Screen-capture deterrence on sensitive routes (watermark, blur-on-inactive, copy/context restrictions, warning overlay).
@@ -34,8 +38,10 @@ Mindful AU is a counseling platform with role-based access for students, staff, 
 
 ### 1) Backend
 
+Run the API from the sibling backend repository:
+
 ```sh
-cd backend
+cd ../mindful-au-backend
 composer install
 cp .env.example .env
 php artisan key:generate
@@ -43,14 +49,15 @@ php artisan migrate
 php artisan serve
 ```
 
-If you use the default local SQLite settings from `backend/.env.example`, create `backend/database/database.sqlite` before running migrations.
+If you use the default local SQLite settings from `../mindful-au-backend/.env.example`, create `../mindful-au-backend/database/database.sqlite` before running migrations.
 
 Backend runs at `http://127.0.0.1:8000`.
 
 ### 2) Frontend
 
+Run the web app from this repository:
+
 ```sh
-cd frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -58,7 +65,7 @@ npm run dev
 
 Frontend runs at `http://127.0.0.1:5173`.
 
-## Environment (backend/.env)
+## Environment (../mindful-au-backend/.env)
 
 Set at minimum:
 
@@ -79,14 +86,14 @@ AUTH_AUTO_PROVISION_STUDENTS=true
 
 When hosting frontend and backend, set these values explicitly to avoid `Network Error` and failed data loads:
 
-Frontend (`frontend/.env` from `frontend/.env.example`):
+Frontend (`.env` from `.env.example`):
 
 ```env
 VITE_API_URL=https://your-api-domain.com/api
 VITE_API_TIMEOUT_MS=45000
 ```
 
-Backend (`backend/.env` from `backend/.env.production.example`):
+Backend (`../mindful-au-backend/.env` from `../mindful-au-backend/.env.example`):
 
 ```env
 APP_URL=https://your-api-domain.com
@@ -97,6 +104,15 @@ CORS_SUPPORTS_CREDENTIALS=false
 
 Notes:
 - If frontend and backend are on the same domain, `VITE_API_URL` can be omitted and the app falls back to `https://your-domain/api`.
+- For reliable student-to-counselor audio/video across mobile, carrier NAT, school, or office networks, configure TURN as well as STUN:
+
+```env
+VITE_WEBRTC_ICE_SERVERS=[{"urls":["stun:stun.l.google.com:19302"]},{"urls":["turn:turn.example.com:3478?transport=udp","turn:turn.example.com:3478?transport=tcp"],"username":"turn-user","credential":"turn-password"}]
+VITE_WEBRTC_TURN_URLS=turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
+VITE_WEBRTC_TURN_USERNAME=turn-user
+VITE_WEBRTC_TURN_CREDENTIAL=turn-password
+```
+
 - Restart backend after env changes: `php artisan config:clear && php artisan cache:clear`.
 - Do not place provider secrets (for example OpenRouter private keys) in `VITE_*` frontend env vars.
 - Health probes:
@@ -108,7 +124,7 @@ Notes:
 Backend startup (PHP-FPM/Nginx stack recommended, not `php artisan serve`):
 
 ```sh
-cd backend
+cd ../mindful-au-backend
 php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
@@ -122,18 +138,20 @@ php artisan schedule:work
 
 Production-ready container files are included:
 
-- `backend/Dockerfile`
-- `frontend/docker-compose.yml`
-- `frontend/deploy/nginx/default.conf`
-- `backend/.env.production.example`
+- `Dockerfile`
+- `deploy/nginx/default.conf`
+- `../mindful-au-backend/Dockerfile`
+- `../mindful-au-backend/docker-compose.yml`
+- `../mindful-au-backend/.env.example`
 
 Quick start:
 
 ```sh
-cp backend/.env.production.example backend/.env
-php backend/artisan key:generate
-docker compose -f frontend/docker-compose.yml up -d --build
-docker compose -f frontend/docker-compose.yml exec app php artisan migrate --force
+cd ../mindful-au-backend
+cp .env.example .env
+php artisan key:generate
+docker compose up -d --build
+docker compose exec app php artisan migrate --force
 ```
 
 Health endpoints (for Dokploy checks):
@@ -144,16 +162,50 @@ Health endpoints (for Dokploy checks):
 Pre-deploy env validation:
 
 ```sh
-node backend/scripts/validate-production-env.mjs
+node ../mindful-au-backend/scripts/validate-production-env.mjs
 ```
 
 Frontend deploy:
 
 ```sh
-cd frontend
 npm ci
 npm run build
 ```
+
+## Real-Time Chat Attachments
+
+- Upload transport: `FormData` to `POST /api/chat/upload-file`
+- Message sync: attachment metadata is returned in normal chat message payloads
+- Rendering:
+  - images: inline preview thumbnails
+  - documents: file card with download action
+  - audio: embedded player for voice notes
+- Default limit: `5 MB`
+- Supported types:
+  - images: `jpg`, `jpeg`, `png`, `gif`
+  - documents: `pdf`, `docx`, `txt`
+  - audio: `mp3`, `wav`, `webm`, `ogg`, `m4a`, `aac`
+
+## Daily Wellness Tips
+
+- Dashboard cards load from `GET /api/wellness/tip`
+- The current tip is cached locally per authenticated user for the served date
+- Users can save or unsave tips without losing the current card state
+- The same daily tip can surface in the notifications view because the backend creates one notification on first daily delivery
+- UI is optimized for low bandwidth: one small JSON request, local reuse for the rest of the day, and lightweight card rendering
+
+## Video And Audio Calls
+
+- Signaling uses Supabase broadcast channels.
+- Media transport uses browser WebRTC with configurable ICE servers.
+- Student and counselor call pages share a common `useWebRTC` hook for offer/answer flow, track handling, and reconnect recovery.
+- Current implementation includes:
+  - preflight media access before accepting an incoming call
+  - stable signaling subscriptions per active session
+  - remote audio/video track refresh on mute, unmute, and end events
+  - low-bandwidth media constraints and live quality telemetry
+
+If calls work on the same network but fail across different laptops or off-campus networks, TURN configuration is the first thing to verify.
 
 ## Chat Message Deletion
 
@@ -189,30 +241,29 @@ npm run build
 
 Additional ML docs:
 
-- `backend/docs/ml-integration.md`
-- `backend/docs/screen-capture-privacy-protection.md`
+- `../mindful-au-backend/docs/ml-integration.md`
+- `../mindful-au-backend/docs/screen-capture-privacy-protection.md`
 
 ## Quality Checks
 
-From workspace root:
+From this repository:
 
 ```sh
-npm --prefix frontend run check:prod
+npm run check:prod
 ```
 
 Equivalent manual checks:
 
 ```sh
-cd frontend
 npm run lint
 npx tsc --noEmit
 npm run build
-composer --working-dir=../backend test
+composer --working-dir=../mindful-au-backend test
 ```
 
 ## Database Schema
 
-- Canonical SQL snapshot: `backend/database/schema.sql`
+- Canonical SQL snapshot: `../mindful-au-backend/database/schema.sql`
 - Schema includes peer assignment, escalations, login logs, student mood logs, message seen receipts, and performance indexes.
 - Keep schema in sync with migrations when adding/changing tables.
 
@@ -223,5 +274,5 @@ composer --working-dir=../backend test
 - `src/pages/admin/`: admin pages
 - `src/hooks/`: frontend hooks
 - `src/lib/api.ts`: API client
-- `backend/app/Http/Controllers/`: backend controllers
-- `backend/routes/api.php`: API routes
+- `../mindful-au-backend/app/Http/Controllers/`: backend controllers
+- `../mindful-au-backend/routes/api.php`: API routes
