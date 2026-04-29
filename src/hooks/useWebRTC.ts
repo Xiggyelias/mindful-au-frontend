@@ -341,14 +341,25 @@ const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
   engine.remoteStream = nextStream;
 
   const videoTracks = nextStream?.getVideoTracks() || [];
-  const hasLiveVideoTrack = Boolean(
-    videoTracks.some((track) => track.readyState === "live")
-  );
+  // Some browsers keep remote video tracks in `readyState: "new"` until the first frames start.
+  // If we require `readyState === "live"`, the UI may hide the remote video permanently.
+  const hasVideoTrack = videoTracks.some((track) => track.readyState !== "ended");
+
+  console.log("[WebRTC] Remote stream video tracks:", {
+    videoTrackCount: videoTracks.length,
+    hasVideoTrack,
+    tracks: videoTracks.map((t) => ({
+      id: t.id,
+      readyState: t.readyState,
+      enabled: (t as any).enabled,
+      muted: (t as any).muted,
+    })),
+  });
 
   setEngineState((prev) => ({
     ...prev,
     remoteStream: nextStream,
-    remoteHasVideo: hasLiveVideoTrack,
+    remoteHasVideo: hasVideoTrack,
     isConnecting: false,
     error: null,
     notice: null,
@@ -639,6 +650,7 @@ const createEnginePeerConnection = () => {
   };
 
   connection.oniceconnectionstatechange = () => {
+    console.log("[WebRTC] ICE connection state:", connection.iceConnectionState);
     if (connection.iceConnectionState === "failed") {
       handleEngineConnectionFailure();
     }
@@ -881,6 +893,7 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
 
       void (async () => {
         try {
+          clearEngineConnectionTimeout();
           const stream = await initializeEngineMedia(pendingRequest.audioOnly);
           if (!stream) {
             clearEngineConnectionTimeout();
@@ -892,6 +905,7 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
           attachEngineLocalTracks(connection, stream);
           engine.remotePeerId = normalizedSenderId;
           engine.pendingCallRequest = null;
+          startEngineConnectionTimeout();
           await sendEngineOffer(connection);
         } catch (error) {
           console.error("Error handling accepted call:", error);
@@ -952,7 +966,6 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
         }
 
         setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
-        startEngineConnectionTimeout();
 
         try {
           const stream = await initializeEngineMedia(audioOnly);
@@ -980,6 +993,7 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
             connection = await rollbackEngineConnectionIfNeeded(connection, stream);
           }
 
+          startEngineConnectionTimeout();
           await connection.setRemoteDescription(new RTCSessionDescription(offer));
           engine.remotePeerId = senderId;
           engine.ignoreOffer = false;
@@ -1074,11 +1088,13 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
         return;
       }
 
-      if (engine.remotePeerId && engine.remotePeerId !== senderId) {
-        return;
+      // Lock onto the first peer we hear from so we don't accidentally drop
+      // candidates before an offer/answer finishes setting `remotePeerId`.
+      if (!engine.remotePeerId) {
+        engine.remotePeerId = senderId;
       }
 
-      if (engine.ignoreOffer && !engine.remotePeerId) {
+      if (engine.remotePeerId && engine.remotePeerId !== senderId) {
         return;
       }
 
@@ -1245,7 +1261,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
 
       setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
-      startEngineConnectionTimeout();
 
       try {
         engine.pendingCallRequest = { audioOnly: Boolean(options.audioOnly) };
