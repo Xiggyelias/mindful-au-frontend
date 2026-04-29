@@ -291,3 +291,17 @@
 .low-bandwidth .btn-primary-glow::before {
   display: none !important;
 }
+
+/* Safe area utilities for mobile devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-pb {
+    padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+}
+
+/* Touch action for smooth scrolling on mobile */
+@layer utilities {
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+}

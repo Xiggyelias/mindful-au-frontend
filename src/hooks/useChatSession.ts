@@ -254,7 +254,7 @@ export const useChatSession = (userId: number | undefined) => {
     }
   }, [sessionCacheKey, sessionPage, userId]);
 
-  const selectSession = (session: Session) => {
+  const selectSession = (session: Session | null) => {
     setActiveSession(session);
   };
 
@@ -276,7 +276,6 @@ export const useChatSession = (userId: number | undefined) => {
     options?: { isAnonymous?: boolean }
   ) => {
     try {
-      setIsLoading(true);
       const shouldBeAnonymous = Boolean(options?.isAnonymous);
       // Check if session already exists
       const existing = sessions.find(
@@ -292,7 +291,8 @@ export const useChatSession = (userId: number | undefined) => {
         return existing;
       }
 
-      // Create new session
+      // Create new session - set loading to show activity but don't block UI
+      setIsLoading(true);
       const newSession = await api.createSession({
         counselor_id: counselorId,
         session_type: "chat",
@@ -306,15 +306,19 @@ export const useChatSession = (userId: number | undefined) => {
           );
           return [newSession, ...withoutSameSession];
         });
+        // Set active session immediately so UI opens the chat
         setActiveSession(newSession);
+        // Loading false immediately so chat UI is accessible
+        setIsLoading(false);
+        return newSession;
       }
-      return newSession;
+      setIsLoading(false);
+      return null;
     } catch (err) {
       console.error("Failed to start session:", err);
       setError("Failed to start chat with counselor");
-      return null;
-    } finally {
       setIsLoading(false);
+      return null;
     }
   };
 

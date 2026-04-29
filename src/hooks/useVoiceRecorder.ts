@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
 export interface VoiceRecording {
-  blob: Blob;
+  blob: File;
   url: string;
   duration: number;
   timestamp: Date;

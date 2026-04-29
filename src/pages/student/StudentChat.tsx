@@ -25,6 +25,7 @@ import {
   Phone,
   Square,
   Trash2,
+  ArrowLeft,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -877,11 +878,11 @@ const StudentChat = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-0 lg:p-6 h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)]">
-          <Card className="h-full border-none lg:border shadow-none lg:shadow-xl rounded-none lg:rounded-[2rem] overflow-hidden flex flex-col lg:flex-row bg-background">
+        <main className="p-0 lg:p-6 h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)] overflow-hidden">
+          <Card className="h-full border-none lg:border shadow-none lg:shadow-xl rounded-none lg:rounded-[2rem] overflow-hidden flex flex-col lg:flex-row bg-background relative">
             
-            {/* Left Sidebar: Counselor/Chat List */}
-            <div className="w-full lg:w-[350px] border-r border-border/50 flex flex-col h-full bg-secondary/10">
+            {/* Left Sidebar: Counselor/Chat List - Hidden on mobile when chat is active */}
+            <div className={`${sessionId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[350px] border-r border-border/50 flex-col h-full bg-secondary/10 absolute lg:relative z-10`}>
               <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold px-2">Chats</h2>
@@ -1090,7 +1091,18 @@ const StudentChat = () => {
                 <>
                   {/* Chat Header */}
                   <div className="p-4 lg:p-6 border-b border-border/50 flex items-center justify-between bg-background/80 backdrop-blur-md sticky top-0 z-10">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      {/* Mobile back button */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="lg:hidden h-10 w-10 rounded-full -ml-2"
+                        onClick={() => selectSession(null)}
+                        title="Back to chats"
+                      >
+                        <ArrowLeft className="h-5 w-5" />
+                      </Button>
                       <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shadow-lg shadow-primary/5">
                         <User className="h-6 w-6 text-primary" />
                       </div>
@@ -1296,8 +1308,8 @@ const StudentChat = () => {
                   </div>
               </ScrollArea>
 
-                  {/* Chat Input Area */}
-                  <div className="p-4 lg:p-6 bg-background border-t border-border/50">
+                  {/* Chat Input Area - Fixed at bottom on mobile */}
+                  <div className="p-4 lg:p-6 bg-background border-t border-border/50 safe-area-pb">
                     <div className="max-w-4xl mx-auto">
               {/* File preview */}
               {selectedFile && (
