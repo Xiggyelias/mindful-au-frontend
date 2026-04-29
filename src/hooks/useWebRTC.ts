@@ -601,6 +601,27 @@ const createEnginePeerConnection = () => {
         error: null,
         notice: null,
       }));
+
+      // If we reach "connected" but the remote video never arrives (common after transient signaling
+      // issues or stalled negotiation), trigger a safe renegotiation / ICE restart.
+      window.setTimeout(() => {
+        const stream = engine.localStream;
+        const canRenegotiate =
+          Boolean(engine.channel) &&
+          engine.state.isSignalingReady &&
+          !engine.makingOffer &&
+          connection.signalingState === "stable" &&
+          connection.connectionState === "connected";
+
+        const localExpectsVideo = Boolean(stream && stream.getVideoTracks().length > 0);
+        const remoteHasVideo = Boolean(engine.remoteStream?.getVideoTracks().some((t) => t.readyState !== "ended"));
+        const remoteMissingMedia = !engine.remoteStream || (localExpectsVideo && !remoteHasVideo);
+
+        if (canRenegotiate && remoteMissingMedia) {
+          console.log("[WebRTC] Remote media missing after connect; restarting ICE/negotiation");
+          void sendEngineOffer(connection, { iceRestart: true });
+        }
+      }, 2000);
       return;
     }
 

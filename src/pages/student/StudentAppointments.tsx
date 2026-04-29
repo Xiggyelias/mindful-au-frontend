@@ -452,6 +452,22 @@ const StudentAppointments = () => {
     return map[status] || "bg-secondary/40 text-foreground";
   };
 
+  const sortedAppointments = useMemo(() => {
+    const getSortTimestamp = (apt: any) => {
+      const createdAtMs = new Date(apt?.created_at || 0).getTime();
+      if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
+        return createdAtMs;
+      }
+      const scheduledAtMs = new Date(apt?.scheduled_at || 0).getTime();
+      if (Number.isFinite(scheduledAtMs) && scheduledAtMs > 0) {
+        return scheduledAtMs;
+      }
+      return 0;
+    };
+
+    return [...appointments].sort((a, b) => getSortTimestamp(b) - getSortTimestamp(a));
+  }, [appointments]);
+
   const canGoToPrevPage = appointmentPage > 1;
   const canGoToNextPage = appointmentPage < appointmentTotalPages;
 
@@ -746,7 +762,7 @@ const StudentAppointments = () => {
             ) : appointments.length === 0 ? (
               <p className="text-muted-foreground text-sm">No appointments yet. Book your first session.</p>
             ) : (
-            appointments.map((apt) => {
+            sortedAppointments.map((apt) => {
               const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
 
               return (

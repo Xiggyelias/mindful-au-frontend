@@ -214,6 +214,18 @@ const CounselorAppointments = () => {
   const filteredAppointments = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
 
+    const getSortTimestamp = (apt: any) => {
+      const createdAtMs = new Date(apt?.created_at || 0).getTime();
+      if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
+        return createdAtMs;
+      }
+      const scheduledAtMs = new Date(apt?.scheduled_at || 0).getTime();
+      if (Number.isFinite(scheduledAtMs) && scheduledAtMs > 0) {
+        return scheduledAtMs;
+      }
+      return 0;
+    };
+
     return appointments
       .filter((apt) => {
         const studentName = String(
@@ -234,9 +246,8 @@ const CounselorAppointments = () => {
         return matchesSearch && matchesFilter;
       })
       .sort((a, b) => {
-        const aTime = new Date(a.scheduled_at || 0).getTime();
-        const bTime = new Date(b.scheduled_at || 0).getTime();
-        return aTime - bTime;
+        // Newest first (prefer creation time so newly booked shows at top)
+        return getSortTimestamp(b) - getSortTimestamp(a);
       });
   }, [appointments, searchQuery, statusFilter]);
 
