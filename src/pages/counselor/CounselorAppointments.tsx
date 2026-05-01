@@ -63,9 +63,11 @@ const CounselorAppointments = () => {
   const [statusFilter, setStatusFilter] = useState<AppointmentFilter>("all");
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const lastAppointmentsLoadAtRef = useRef(0);
+  const appointmentPageRef = useRef(appointmentPage);
 
   useEffect(() => {
     setAppointmentPage(1);
+    appointmentPageRef.current = 1;
     setAppointmentTotalPages(1);
     setAppointmentTotalItems(0);
     appointmentsRequestInFlightRef.current = null;
@@ -91,7 +93,7 @@ const CounselorAppointments = () => {
         try {
           setIsLoading(true);
           const payload = (await api.getAppointments({
-            page: appointmentPage,
+            page: appointmentPageRef.current,
             per_page: APPOINTMENTS_PAGE_SIZE,
             timeout_ms: 15000,
           })) as AppointmentListResponse;
@@ -122,9 +124,11 @@ const CounselorAppointments = () => {
           setAppointments(normalized);
           setAppointmentTotalPages(nextTotalPages);
           setAppointmentTotalItems(nextTotal);
-          if (!pagedPayload && appointmentPage !== 1) {
+          if (!pagedPayload && appointmentPageRef.current !== 1) {
+            appointmentPageRef.current = 1;
             setAppointmentPage(1);
-          } else if (pagedPayload && nextPage !== appointmentPage) {
+          } else if (pagedPayload && nextPage !== appointmentPageRef.current) {
+            appointmentPageRef.current = nextPage;
             setAppointmentPage(nextPage);
           }
         } catch (err: any) {
@@ -145,7 +149,7 @@ const CounselorAppointments = () => {
         appointmentsRequestInFlightRef.current = null;
       }
     },
-    [appointmentPage]
+    []
   );
 
   useEffect(() => {
@@ -156,6 +160,13 @@ const CounselorAppointments = () => {
 
     void loadAppointments(true, { force: true });
   }, [loadAppointments, user]);
+
+  // Reload when user navigates to a different page via pagination
+  useEffect(() => {
+    if (!user || appointmentPage === 1) return;
+    appointmentPageRef.current = appointmentPage;
+    void loadAppointments(true, { force: true });
+  }, [appointmentPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user) return;
@@ -290,12 +301,16 @@ const CounselorAppointments = () => {
 
   const handlePrevPage = () => {
     if (!canGoToPrevPage || isLoading) return;
-    setAppointmentPage((current) => Math.max(1, current - 1));
+    const next = Math.max(1, appointmentPage - 1);
+    appointmentPageRef.current = next;
+    setAppointmentPage(next);
   };
 
   const handleNextPage = () => {
     if (!canGoToNextPage || isLoading) return;
-    setAppointmentPage((current) => Math.min(appointmentTotalPages, current + 1));
+    const next = Math.min(appointmentTotalPages, appointmentPage + 1);
+    appointmentPageRef.current = next;
+    setAppointmentPage(next);
   };
 
   const openSessionRoom = (appointment: any) => {

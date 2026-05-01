@@ -10,6 +10,7 @@ import {
   Heart,
   AlertTriangle,
   Phone,
+  Clock,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -52,6 +53,7 @@ const StudentDashboard = () => {
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -83,14 +85,22 @@ const StudentDashboard = () => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadStats = async () => {
+      if (!isMounted) return;
+      
       try {
+        setStatsError(null);
+        
         const [sessions, appointments, summary, moodData] = await Promise.all([
           api.getSessions({ lightweight: true }),
           api.getAppointments(),
           api.getStudentWellnessSummary().catch(() => null),
           api.getStudentMoodToday().catch(() => null),
         ]);
+
+        if (!isMounted) return;
 
         const sessionItems = Array.isArray(sessions)
           ? sessions
@@ -103,8 +113,9 @@ const StudentDashboard = () => {
           ? (appointments as any).data
           : [];
         
+        // Fix: Validate scheduled_at before creating Date objects
         const upcomingApts = appointmentItems
-          .filter((a: any) => new Date(a.scheduled_at) > new Date())
+          .filter((a: any) => a.scheduled_at && new Date(a.scheduled_at) > new Date())
           .slice(0, 3);
         
         const wellnessScore =
@@ -124,15 +135,35 @@ const StudentDashboard = () => {
           setDailyMood(null);
         }
       } catch (error) {
-        console.error('Failed to load stats:', error);
+        if (!isMounted) return;
+        const errorMessage = error instanceof Error ? error.message : "Failed to load dashboard statistics";
+        setStatsError(errorMessage);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to load stats:', error);
+        }
+      } finally {
+        if (isMounted) {
+          // No-op
+        }
       }
     };
+    
     if (user) loadStats();
+    
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   const handlePanicButton = async () => {
     if (!user?.id) {
       toast.error("Please log in to use this feature");
+      return;
+    }
+
+    // Prevent multiple concurrent panic button clicks
+    if (isPanicLoading) {
       return;
     }
 
@@ -148,14 +179,19 @@ const StudentDashboard = () => {
           });
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
         } catch (err) {
-          console.log('Could not get location:', err);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Could not get location:', err);
+          }
+          toast.warning("Location unavailable - we'll send your alert without location data.");
         }
       }
 
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent! A counselor will contact you shortly.");
     } catch (error: any) {
-      console.error('Panic button error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Panic button error:', error);
+      }
       toast.error(error.response?.data?.message || "Failed to send emergency alert. Please try again.");
     } finally {
       setIsPanicLoading(false);
@@ -190,9 +226,16 @@ const StudentDashboard = () => {
     } catch (error: any) {
       const message = error?.response?.data?.message;
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
-        const today = await api.getStudentMoodToday().catch(() => null);
-        if (today?.log?.mood) {
-          setDailyMood(today.log.mood as StudentMood);
+        // Always sync state from server to maintain single source of truth
+        try {
+          const today = await api.getStudentMoodToday().catch(() => null);
+          if (today?.log?.mood) {
+            setDailyMood(today.log.mood as StudentMood);
+          }
+        } catch (syncError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to sync mood state:', syncError);
+          }
         }
         toast.info("Today's first mood is already recorded.");
       } else {
@@ -224,9 +267,15 @@ const StudentDashboard = () => {
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-background p-8 border border-primary/10">
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-2">
-                <h2 className="text-3xl font-display font-bold text-foreground">
-                  Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userName}! ✨
-            </h2>
+                {(() => {
+                  const now = new Date();
+                  const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
+                  return (
+                    <h2 className="text-3xl font-display font-bold text-foreground">
+                      Good {greeting}, {userName}! ✨
+                    </h2>
+                  );
+                })()}
                 <p className="text-lg text-muted-foreground max-w-xl">
                   Take a deep breath. We're here to support your journey today. How are you feeling right now?
                 </p>
@@ -329,7 +378,73 @@ const StudentDashboard = () => {
             </Card>
           </div>
 
-          {/* Stats */}
+          {/* Stats - with error display and loading indicator */}
+          {statsError && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <p className="text-destructive text-sm font-medium">{statsError}</p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-destructive hover:text-destructive/80"
+                onClick={() => {
+                  setStatsError(null);
+                  // Trigger stats reload by simulating user change
+                  if (user) {
+                    const loadStats = async () => {
+                      try {
+                        setStatsError(null);
+                        
+                        const [sessions, appointments, summary] = await Promise.all([
+                          api.getSessions({ lightweight: true }),
+                          api.getAppointments(),
+                          api.getStudentWellnessSummary().catch(() => null),
+                          api.getStudentMoodToday().catch(() => null),
+                        ]);
+
+                        const sessionItems = Array.isArray(sessions)
+                          ? sessions
+                          : Array.isArray((sessions as any)?.data)
+                          ? (sessions as any).data
+                          : [];
+                        const appointmentItems = Array.isArray(appointments)
+                          ? appointments
+                          : Array.isArray((appointments as any)?.data)
+                          ? (appointments as any).data
+                          : [];
+                        
+                        const upcomingApts = appointmentItems
+                          .filter((a: any) => a.scheduled_at && new Date(a.scheduled_at) > new Date())
+                          .slice(0, 3);
+                        
+                        const wellnessScore =
+                          typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
+
+                        setStats({
+                          sessions: sessionItems.length,
+                          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
+                          wellness: wellnessScore,
+                          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+                        });
+                        setUpcomingAppointments(upcomingApts);
+                        setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+                      } catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : "Failed to reload statistics";
+                        setStatsError(errorMessage);
+                      } finally {
+                        // No-op
+                      }
+                    };
+                    loadStats();
+                  }
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
               title="Sessions This Month"
@@ -388,15 +503,46 @@ const StudentDashboard = () => {
                     upcomingAppointments.map((apt) => (
                       <div key={apt.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300">
                         <div className="h-14 w-14 rounded-2xl bg-primary/10 flex flex-col items-center justify-center text-primary border border-primary/20">
-                          <span className="text-xs font-bold uppercase">{apt.scheduled_at ? format(new Date(apt.scheduled_at), "MMM") : "---"}</span>
-                          <span className="text-lg font-bold">{apt.scheduled_at ? format(new Date(apt.scheduled_at), "d") : "--"}</span>
+                          {apt.scheduled_at ? (() => {
+                            try {
+                              const date = new Date(apt.scheduled_at);
+                              if (isNaN(date.getTime())) throw new Error('Invalid date');
+                              return (
+                                <>
+                                  <span className="text-xs font-bold uppercase">{format(date, "MMM")}</span>
+                                  <span className="text-lg font-bold">{format(date, "d")}</span>
+                                </>
+                              );
+                            } catch {
+                              return (
+                                <>
+                                  <span className="text-xs font-bold uppercase">---</span>
+                                  <span className="text-lg font-bold">--</span>
+                                </>
+                              );
+                            }
+                          })() : (
+                            <>
+                              <span className="text-xs font-bold uppercase">---</span>
+                              <span className="text-lg font-bold">--</span>
+                            </>
+                          )}
                         </div>
                         <div className="flex-1">
                           <p className="font-bold text-foreground group-hover:text-primary transition-colors">
                             Session with {apt.counselor?.profile?.full_name || "Counselor"}
                           </p>
                           <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Bot className="h-3 w-3" /> {apt.scheduled_at ? format(new Date(apt.scheduled_at), "h:mm a") : "Time TBD"}
+                            <Clock className="h-3 w-3" /> 
+                            {apt.scheduled_at ? (() => {
+                              try {
+                                const date = new Date(apt.scheduled_at);
+                                if (isNaN(date.getTime())) throw new Error('Invalid date');
+                                return format(date, "h:mm a");
+                              } catch {
+                                return "Time TBD";
+                              }
+                            })() : "Time TBD"}
                           </p>
                         </div>
                         <Button 

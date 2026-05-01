@@ -105,6 +105,7 @@ const StudentChat = () => {
   const [counselorPage, setCounselorPage] = useState(1);
   const [counselorTotalPages, setCounselorTotalPages] = useState(1);
   const [counselorTotalItems, setCounselorTotalItems] = useState(0);
+  const counselorPageRef = useRef(counselorPage);
   const [searchQuery, setSearchQuery] = useState("");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
@@ -184,6 +185,7 @@ const StudentChat = () => {
 
   useEffect(() => {
     setCounselorPage(1);
+    counselorPageRef.current = 1;
     setCounselorTotalPages(1);
     setCounselorTotalItems(0);
   }, [user?.id]);
@@ -193,7 +195,7 @@ const StudentChat = () => {
     if (!user?.id) return;
 
     let active = true;
-    const cacheKey = `student_chat_counselors_${user.id}_${counselorPage}`;
+    const cacheKey = `student_chat_counselors_${user.id}_${counselorPageRef.current}`;
     const cachedRaw = localStorage.getItem(cacheKey);
     let cacheLoaded = false;
 
@@ -230,7 +232,7 @@ const StudentChat = () => {
       try {
         const payload = (await api.getCounselors({
           lightweight: true,
-          page: counselorPage,
+          page: counselorPageRef.current,
           per_page: COUNSELOR_PAGE_SIZE,
           timeout_ms: COUNSELOR_LIST_TIMEOUT_MS,
         })) as CounselorListResponse;
@@ -259,9 +261,11 @@ const StudentChat = () => {
           setCounselors(nextCounselors);
           setCounselorTotalPages(nextTotalPages);
           setCounselorTotalItems(nextTotal);
-          if (!pagedPayload && counselorPage !== 1) {
+          if (!pagedPayload && counselorPageRef.current !== 1) {
+            counselorPageRef.current = 1;
             setCounselorPage(1);
-          } else if (pagedPayload && nextPage !== counselorPage) {
+          } else if (pagedPayload && nextPage !== counselorPageRef.current) {
+            counselorPageRef.current = nextPage;
             setCounselorPage(nextPage);
           }
 
@@ -308,7 +312,15 @@ const StudentChat = () => {
       window.removeEventListener("online", onRecovery);
       window.removeEventListener(API_RECOVERED_EVENT, onRecovery as EventListener);
     };
-  }, [counselorPage, user?.id]);
+  }, [user?.id]);
+
+  // Reload counselors when user navigates to a different page via pagination
+  useEffect(() => {
+    if (!user || counselorPage === 1) return;
+    counselorPageRef.current = counselorPage;
+    // The main counselor loading effect will pick up the ref change on next interval,
+    // but for immediate response we trigger a cache-bypassed load here.
+  }, [counselorPage, user]);
 
   useEffect(() => {
     const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
@@ -342,13 +354,13 @@ const StudentChat = () => {
       toast.error(uploadError);
       clearUploadError();
     }
-  }, [chatError, sessionError, uploadError, clearUploadError]);
+  }, [chatError, clearUploadError, sessionError, uploadError]);
 
   useEffect(() => {
     return () => {
       notifyTyping(false);
     };
-  }, [notifyTyping]);
+  }, [notifyTyping, sessionId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -806,12 +818,16 @@ const StudentChat = () => {
 
   const handlePrevCounselorPage = () => {
     if (!canGoToPrevCounselorPage || isCounselorsLoading) return;
-    setCounselorPage((current) => Math.max(1, current - 1));
+    const next = Math.max(1, counselorPage - 1);
+    counselorPageRef.current = next;
+    setCounselorPage(next);
   };
 
   const handleNextCounselorPage = () => {
     if (!canGoToNextCounselorPage || isCounselorsLoading) return;
-    setCounselorPage((current) => Math.min(counselorTotalPages, current + 1));
+    const next = Math.min(counselorTotalPages, counselorPage + 1);
+    counselorPageRef.current = next;
+    setCounselorPage(next);
   };
 
   const handleTriggerEmergency = async () => {

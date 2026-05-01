@@ -111,7 +111,6 @@ const CounselorVideo = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
-    callQuality,
     isDisconnected,
     rejoinDeadline,
     localVideoRef,
@@ -766,8 +765,9 @@ const CounselorVideo = () => {
                             autoPlay
                             playsInline
                             className={cn(
-                              "h-full w-full object-cover",
-                              showRemoteVideo ? "opacity-100" : "h-1 w-1 opacity-0 pointer-events-none"
+                              showRemoteVideo
+                                ? "h-full w-full object-cover opacity-100"
+                                : "absolute h-full w-full object-cover opacity-0 pointer-events-none"
                             )}
                           />
                         ) : null}

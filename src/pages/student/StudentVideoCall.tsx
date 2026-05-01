@@ -120,7 +120,6 @@ const StudentVideoCall = () => {
     incomingAudioOnly,
     localSpeaking,
     remoteSpeaking,
-    callQuality,
     isDisconnected,
     rejoinDeadline,
     localVideoRef,
@@ -795,10 +794,9 @@ const StudentVideoCall = () => {
                             autoPlay
                             playsInline
                             className={cn(
-                              "absolute inset-0 h-full w-full object-cover",
                               showRemoteVideo
-                                ? "opacity-100"
-                                : "h-1 w-1 opacity-0 pointer-events-none"
+                                ? "absolute inset-0 h-full w-full object-cover opacity-100"
+                                : "absolute h-full w-full object-cover opacity-0 pointer-events-none"
                             )}
                           />
                         ) : null}

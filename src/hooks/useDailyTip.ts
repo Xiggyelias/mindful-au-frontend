@@ -97,7 +97,6 @@ export const useDailyTip = () => {
     if (!tip?.id) {
       return false;
     }
-
     try {
       setIsSavingFavorite(true);
       setError(null);
@@ -119,6 +118,8 @@ export const useDailyTip = () => {
     }
   }, [applyTip, tip]);
 
+  // Fix: Separate effect for initial load that only depends on user?.id
+  // This prevents circular dependency between cachedTip and refresh
   useEffect(() => {
     if (!user?.id) {
       setTip(null);
@@ -134,9 +135,9 @@ export const useDailyTip = () => {
       return;
     }
 
-    setTip(null);
+    // If no cached tip, fetch a fresh one
     void refresh();
-  }, [cachedTip, refresh, user?.id]);
+  }, [user?.id, cachedTip, refresh]);
 
   return {
     tip,

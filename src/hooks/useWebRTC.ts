@@ -175,7 +175,6 @@ const engine: WebRTCEngine = {
 
 const ACTIVE_CALL_STORAGE_KEY = "mindful.activeCall";
 const RECONNECT_WINDOW_MS = 5 * 60 * 1000;
-const RECONNECT_RETRY_INTERVAL_MS = 3000;
 
 type PersistedActiveCall = {
   sessionId: string;
@@ -615,7 +614,8 @@ const createEnginePeerConnection = () => {
 
         const localExpectsVideo = Boolean(stream && stream.getVideoTracks().length > 0);
         const remoteHasVideo = Boolean(engine.remoteStream?.getVideoTracks().some((t) => t.readyState !== "ended"));
-        const remoteMissingMedia = !engine.remoteStream || (localExpectsVideo && !remoteHasVideo);
+        const remoteHasAudio = Boolean(engine.remoteStream?.getAudioTracks().some((t) => t.readyState !== "ended"));
+        const remoteMissingMedia = !engine.remoteStream || (localExpectsVideo && !remoteHasVideo) || (!localExpectsVideo && !remoteHasAudio);
 
         if (canRenegotiate && remoteMissingMedia) {
           console.log("[WebRTC] Remote media missing after connect; restarting ICE/negotiation");
@@ -908,24 +908,27 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
       }
 
       const pendingRequest = engine.pendingCallRequest;
-      if (!pendingRequest) {
-        return;
-      }
+      // Allow call-accepted even without pendingCallRequest (e.g. reconnect scenario)
+      // as long as we have a local stream or can acquire one.
+      const audioOnly = pendingRequest?.audioOnly ?? engine.state.isAudioOnly;
 
       void (async () => {
         try {
           clearEngineConnectionTimeout();
-          const stream = await initializeEngineMedia(pendingRequest.audioOnly);
+          const stream = await initializeEngineMedia(audioOnly);
           if (!stream) {
             clearEngineConnectionTimeout();
             setEngineState((prev) => ({ ...prev, isConnecting: false }));
             return;
           }
 
+          // Clear pendingCallRequest *before* creating PC and sending offer
+          // to prevent a re-entrant call-accepted from creating a second PC.
+          engine.pendingCallRequest = null;
+
           const connection = createEngineFreshPeerConnection();
           attachEngineLocalTracks(connection, stream);
           engine.remotePeerId = normalizedSenderId;
-          engine.pendingCallRequest = null;
           startEngineConnectionTimeout();
           await sendEngineOffer(connection);
         } catch (error) {
@@ -986,6 +989,16 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
           return;
         }
 
+        // If we're in the middle of making our own offer (e.g. call-accepted just fired),
+        // wait briefly for it to complete before processing the incoming offer.
+        if (engine.makingOffer) {
+          console.log("[WebRTC] Deferring incoming offer — own offer in progress");
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          if (engine.makingOffer) {
+            console.log("[WebRTC] Still making offer; will rely on polite-peer collision handling");
+          }
+        }
+
         setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
 
         try {
@@ -1001,7 +1014,15 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
               ? engine.peerConnection
               : createEngineFreshPeerConnection();
 
-          attachEngineLocalTracks(connection, stream);
+          // Only attach local tracks if the connection doesn't already have them
+          // (acceptIncomingCall may have already attached them)
+          const currentSenderTrackIds = new Set(
+            connection.getSenders().map((s) => s.track?.id).filter(Boolean) as string[]
+          );
+          const needsAttach = stream.getTracks().some((t) => !currentSenderTrackIds.has(t.id));
+          if (needsAttach) {
+            attachEngineLocalTracks(connection, stream);
+          }
 
           const offerCollision = engine.makingOffer || connection.signalingState !== "stable";
           const politePeer = isPolitePeer(normalizedUserId, senderId);
@@ -1017,7 +1038,8 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
           startEngineConnectionTimeout();
           await connection.setRemoteDescription(new RTCSessionDescription(offer));
           engine.remotePeerId = senderId;
-          engine.ignoreOffer = false;
+          // NOTE: ignoreOffer is NOT reset here — it must stay false until the answer
+          // is fully sent to prevent a second simultaneous offer from corrupting the negotiation.
           engine.reconnectAttempts = 0;
           setEngineState((prev) => ({
             ...prev,
@@ -1047,6 +1069,9 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
               senderId: normalizedUserId,
             },
           });
+
+          // Now that the answer has been sent, it's safe to clear the ignore flag
+          engine.ignoreOffer = false;
 
           await flushEnginePendingIceCandidates(connection);
         } catch (error) {
@@ -1145,6 +1170,7 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
       if (!engine.localStream) {
         return;
       }
+      engine.remotePeerId = senderId;
       if (!engine.peerConnection || engine.peerConnection.signalingState === "closed") {
         const connection = createEngineFreshPeerConnection();
         attachEngineLocalTracks(connection, engine.localStream);
@@ -1347,6 +1373,15 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return false;
     }
 
+    // Set up peer connection and remote peer ID *before* sending call-accepted
+    // so the offer handler can find an existing connection instead of creating a duplicate.
+    const connection =
+      engine.peerConnection && engine.peerConnection.signalingState !== "closed"
+        ? engine.peerConnection
+        : createEngineFreshPeerConnection();
+    attachEngineLocalTracks(connection, stream);
+    engine.remotePeerId = incomingCallerId;
+
     await engine.channel.send({
       type: "broadcast",
       event: "call-accepted",
@@ -1541,27 +1576,29 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, [sessionId, userId]);
 
   useEffect(() => {
-    if (localVideoRef.current && state.localStream) {
-      engine.localVideoElements.add(localVideoRef.current);
-      localVideoRef.current.srcObject = state.localStream;
-      playMediaElement(localVideoRef.current);
+    const currentLocalRef = localVideoRef.current;
+    if (currentLocalRef && state.localStream) {
+      engine.localVideoElements.add(currentLocalRef);
+      currentLocalRef.srcObject = state.localStream;
+      playMediaElement(currentLocalRef);
     }
     return () => {
-      if (localVideoRef.current) {
-        engine.localVideoElements.delete(localVideoRef.current);
+      if (currentLocalRef) {
+        engine.localVideoElements.delete(currentLocalRef);
       }
     };
   }, [state.isAudioOnly, state.isLocalVideoEnabled, state.localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && state.remoteStream) {
-      engine.remoteVideoElements.add(remoteVideoRef.current);
-      remoteVideoRef.current.srcObject = state.remoteStream;
-      playMediaElement(remoteVideoRef.current);
+    const currentRemoteRef = remoteVideoRef.current;
+    if (currentRemoteRef && state.remoteStream) {
+      engine.remoteVideoElements.add(currentRemoteRef);
+      currentRemoteRef.srcObject = state.remoteStream;
+      playMediaElement(currentRemoteRef);
     }
     return () => {
-      if (remoteVideoRef.current) {
-        engine.remoteVideoElements.delete(remoteVideoRef.current);
+      if (currentRemoteRef) {
+        engine.remoteVideoElements.delete(currentRemoteRef);
       }
     };
   }, [state.remoteHasVideo, state.remoteStream]);
@@ -1592,19 +1629,29 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       remoteAnalyser.fftSize = 2048;
     }
 
-    const connectTrack = (track: MediaStreamTrack, analyser: AnalyserNode | null) => {
+    const connectTrack = (
+      track: MediaStreamTrack,
+      analyser: AnalyserNode | null,
+      outputToSpeakers: boolean
+    ) => {
       if (!analyser) {
         return;
       }
       const source = context.createMediaStreamSource(new MediaStream([track]));
       source.connect(analyser);
+      // Remote audio MUST be routed through to destination so it isn't silenced
+      // by the AudioContext capturing the stream. Local audio is NOT routed to
+      // destination to avoid hearing yourself.
+      if (outputToSpeakers) {
+        analyser.connect(context.destination);
+      }
     };
 
     if (localTrack) {
-      connectTrack(localTrack, localAnalyser);
+      connectTrack(localTrack, localAnalyser, false);
     }
     if (remoteTrack) {
-      connectTrack(remoteTrack, remoteAnalyser);
+      connectTrack(remoteTrack, remoteAnalyser, true);
     }
 
     const sample = (analyser: AnalyserNode | null) => {

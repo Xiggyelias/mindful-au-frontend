@@ -64,7 +64,8 @@ export const useChatSession = (userId: number | undefined) => {
   const [sessionTotalItems, setSessionTotalItems] = useState(0);
   const sessionsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const lastSessionsLoadAtRef = useRef(0);
-  const sessionCacheKey = userId ? `student_chat_sessions_${userId}_${sessionPage}` : null;
+  const sessionPageRef = useRef(sessionPage);
+  const sessionCacheKey = userId ? `student_chat_sessions_${userId}_${sessionPageRef.current}` : null;
 
   const hydrateCachedSessions = useCallback(() => {
     if (!sessionCacheKey) return false;
@@ -140,7 +141,7 @@ export const useChatSession = (userId: number | undefined) => {
           lightweight: true,
           session_type: "chat",
           open_only: true,
-          page: sessionPage,
+          page: sessionPageRef.current,
           per_page: perPage,
           timeout_ms: timeoutMs,
         });
@@ -189,9 +190,11 @@ export const useChatSession = (userId: number | undefined) => {
       setSessionTotalPages(nextTotalPages);
       setSessionTotalItems(nextTotal);
 
-      if (!pagedPayload && sessionPage !== 1) {
+      if (!pagedPayload && sessionPageRef.current !== 1) {
+        sessionPageRef.current = 1;
         setSessionPage(1);
-      } else if (pagedPayload && nextPage !== sessionPage) {
+      } else if (pagedPayload && nextPage !== sessionPageRef.current) {
+        sessionPageRef.current = nextPage;
         setSessionPage(nextPage);
       }
 
@@ -252,7 +255,7 @@ export const useChatSession = (userId: number | undefined) => {
     } finally {
       sessionsRequestInFlightRef.current = null;
     }
-  }, [sessionCacheKey, sessionPage, userId]);
+  }, [sessionCacheKey, userId]);
 
   const selectSession = (session: Session | null) => {
     setActiveSession(session);
@@ -263,12 +266,16 @@ export const useChatSession = (userId: number | undefined) => {
 
   const goToPrevPage = () => {
     if (!canGoToPrevPage || isLoading) return;
-    setSessionPage((current) => Math.max(1, current - 1));
+    const next = Math.max(1, sessionPage - 1);
+    sessionPageRef.current = next;
+    setSessionPage(next);
   };
 
   const goToNextPage = () => {
     if (!canGoToNextPage || isLoading) return;
-    setSessionPage((current) => Math.min(sessionTotalPages, current + 1));
+    const next = Math.min(sessionTotalPages, sessionPage + 1);
+    sessionPageRef.current = next;
+    setSessionPage(next);
   };
 
   const startSessionWithCounselor = async (
@@ -324,11 +331,19 @@ export const useChatSession = (userId: number | undefined) => {
 
   useEffect(() => {
     setSessionPage(1);
+    sessionPageRef.current = 1;
     setSessionTotalPages(1);
     setSessionTotalItems(0);
     sessionsRequestInFlightRef.current = null;
     lastSessionsLoadAtRef.current = 0;
   }, [userId]);
+
+  // Reload sessions when user navigates to a different page via pagination
+  useEffect(() => {
+    if (!userId || sessionPage === 1) return;
+    sessionPageRef.current = sessionPage;
+    void loadSessions(true, { force: true });
+  }, [sessionPage, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!userId) return;
