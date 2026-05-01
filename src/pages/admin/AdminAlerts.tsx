@@ -79,15 +79,17 @@ const AdminAlerts = () => {
 
       const mappedPanic: PanicAlert[] = (panicLogs || []).map((log: any) => {
         const studentName = log.student?.profile?.full_name || `Student #${log.student_id ?? "N/A"}`;
+        const location = log.location ? ` (at ${log.location})` : "";
 
         return {
           id: Number(log.id),
           type: "panic",
           title: "Panic Button Triggered",
-          message: `${studentName} triggered panic button`,
+          message: `${studentName} triggered panic button${location}`,
           created_at: log.created_at,
           resolved_at: log.resolved_at,
           status: log.resolved ? "resolved" : "active",
+          raw_location: log.location,
         };
       });
 
@@ -325,6 +327,17 @@ const AdminAlerts = () => {
                           >
                             {alert.status}
                           </span>
+
+                          {alert.type === "panic" && (alert as any).raw_location && /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test((alert as any).raw_location) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7"
+                              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((alert as any).raw_location)}`, '_blank')}
+                            >
+                              View on Maps
+                            </Button>
+                          )}
 
                           {alert.status === "active" && (
                             <Button

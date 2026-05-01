@@ -85,6 +85,7 @@ const CounselorVideo = () => {
   );
   const [rejoinSecondsLeft, setRejoinSecondsLeft] = useState<number | null>(null);
   const [isRejoining, setIsRejoining] = useState(false);
+  const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
@@ -603,7 +604,7 @@ const CounselorVideo = () => {
           <div className={cn(
             "grid gap-6 transition-all duration-500",
             isConnected 
-              ? "grid-cols-1" 
+              ? "xl:grid-cols-[1fr_380px] h-[calc(100vh-100px)]" 
               : localStream 
                 ? "xl:grid-cols-[minmax(0,1fr)_320px]" 
                 : "xl:grid-cols-[minmax(0,2fr)_360px]"
@@ -611,8 +612,8 @@ const CounselorVideo = () => {
             <Card
               variant="glass"
               className={cn(
-                "min-h-[72vh] overflow-hidden transition-all duration-500",
-                isConnected ? "xl:h-[calc(100vh-120px)]" : "xl:h-[calc(100vh-160px)]"
+                "overflow-hidden transition-all duration-500",
+                isConnected ? "h-full border-primary/20 shadow-2xl" : "min-h-[72vh] xl:h-[calc(100vh-160px)]"
               )}
             >
               <CardContent className="flex h-full flex-col gap-4 p-4">
@@ -766,7 +767,7 @@ const CounselorVideo = () => {
                             playsInline
                             className={cn(
                               showRemoteVideo
-                                ? "h-full w-full object-cover opacity-100"
+                                ? cn("h-full w-full opacity-100", videoFit === "cover" ? "object-cover" : "object-contain")
                                 : "absolute h-full w-full object-cover opacity-0 pointer-events-none"
                             )}
                           />
@@ -792,10 +793,21 @@ const CounselorVideo = () => {
                           </div>
                         )}
 
-                        <div className="pointer-events-none absolute left-3 top-3">
+                        <div className="absolute left-3 top-3 flex items-center gap-2">
                           <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
                             {remoteParticipantName}{remoteSpeaking ? " • speaking" : ""}
                           </Badge>
+                          {isConnected && showRemoteVideo && (
+                            <Button 
+                              size="icon" 
+                              variant="secondary" 
+                              className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
+                              onClick={() => setVideoFit(prev => prev === "cover" ? "contain" : "cover")}
+                              title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                            >
+                              <RefreshCw className={cn("h-3.5 w-3.5", videoFit === "contain" && "rotate-45")} />
+                            </Button>
+                          )}
                         </div>
 
                         <div className="absolute bottom-3 right-3 w-28 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-40 md:w-52">
@@ -839,36 +851,38 @@ const CounselorVideo = () => {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Session
-                          </p>
-                          <p className="mt-2 text-lg font-semibold text-foreground">
-                            {activeSession ? remoteParticipantName : "Choose a session"}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {activeSession
-                              ? `Scheduled ${formatScheduleLabel(activeSession.scheduled_at)}`
-                              : "Only online sessions inside their call window appear here."}
-                          </p>
-                        </div>
+                      {!isConnected && (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Session
+                            </p>
+                            <p className="mt-2 text-lg font-semibold text-foreground">
+                              {activeSession ? remoteParticipantName : "Choose a session"}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {activeSession
+                                ? `Scheduled ${formatScheduleLabel(activeSession.scheduled_at)}`
+                                : "Only online sessions inside their call window appear here."}
+                            </p>
+                          </div>
 
-                        <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Session status
-                          </p>
-                          <p className="mt-2 text-base font-medium text-foreground">
-                            {statusMessage}
-                          </p>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Your local preview stays visible so you can confirm camera, framing, mute state, and whether the student can currently see you.
-                          </p>
-                          <p className="mt-2 text-sm font-medium text-foreground">
-                            {counselorVisibilityLabel}
-                          </p>
+                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Session status
+                            </p>
+                            <p className="mt-2 text-base font-medium text-foreground">
+                              {statusMessage}
+                            </p>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              Your local preview stays visible so you can confirm camera, framing, mute state, and whether the student can currently see you.
+                            </p>
+                            <p className="mt-2 text-sm font-medium text-foreground">
+                              {counselorVisibilityLabel}
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -906,6 +920,63 @@ const CounselorVideo = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {isConnected && (
+              <Card variant="glass" className="h-full flex flex-col overflow-hidden border-primary/10">
+                <CardHeader className="p-4 border-b border-border/40">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    Session Workspace
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto p-4 space-y-5">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Student</p>
+                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-primary/5 border border-primary/10">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                        {getInitials(remoteParticipantName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{remoteParticipantName}</p>
+                        <p className="text-[10px] text-muted-foreground">Active Online Session</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Session Intel</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-muted-foreground">Status</span>
+                        <span className="font-medium text-emerald-500">Connected</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-secondary/30">
+                        <span className="text-muted-foreground">Call Quality</span>
+                        <span className="font-medium">Excellent</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 flex-1 flex flex-col">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                      Session Notes
+                      <span className="normal-case font-normal text-muted-foreground/60">Auto-saving...</span>
+                    </p>
+                    <textarea 
+                      className="w-full flex-1 min-h-[200px] p-4 rounded-2xl bg-secondary/20 border border-border/40 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                      placeholder="Type your session observations here..."
+                    />
+                  </div>
+                  
+                  <div className="pt-2">
+                    <Button variant="outline" className="w-full justify-start gap-2 h-11 rounded-xl text-xs" onClick={() => navigate("/counselor/notes")}>
+                      <FileText className="h-4 w-4" />
+                      View Past Notes
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {!isConnected && (
               <Card variant="glass" className="overflow-hidden h-fit">

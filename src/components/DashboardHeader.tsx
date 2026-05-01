@@ -169,7 +169,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                               {formatTimestamp(notification.created_at)}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {notification.message}
                           </p>
                         </div>
