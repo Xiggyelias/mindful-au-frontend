@@ -844,7 +844,7 @@ const CounselorVideo = () => {
                                   </div>
                                 )}
                                 <span className="text-[11px] font-medium sm:text-xs">
-                                  {isAudioOnly ? "Audio only" : isVideoOff ? "Camera off" : "Waiting for camera"}
+                                  {counselorVisibilityLabel}
                                 </span>
                               </div>
                             )}
@@ -852,38 +852,6 @@ const CounselorVideo = () => {
                         </div>
                       </div>
 
-                      {!isConnected && (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Session
-                            </p>
-                            <p className="mt-2 text-lg font-semibold text-foreground">
-                              {activeSession ? remoteParticipantName : "Choose a session"}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {activeSession
-                                ? `Scheduled ${formatScheduleLabel(activeSession.scheduled_at)}`
-                                : "Only online sessions inside their call window appear here."}
-                            </p>
-                          </div>
-
-                          <div className="rounded-[22px] border border-border/60 bg-background/70 p-4 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Session status
-                            </p>
-                            <p className="mt-2 text-base font-medium text-foreground">
-                              {statusMessage}
-                            </p>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              Your local preview stays visible so you can confirm camera, framing, mute state, and whether the student can currently see you.
-                            </p>
-                            <p className="mt-2 text-sm font-medium text-foreground">
-                              {counselorVisibilityLabel}
-                            </p>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
