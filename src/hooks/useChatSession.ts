@@ -65,13 +65,13 @@ export const useChatSession = (userId: number | undefined) => {
   const sessionsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const lastSessionsLoadAtRef = useRef(0);
   const sessionPageRef = useRef(sessionPage);
-  const sessionCacheKey = userId ? `student_chat_sessions_${userId}_${sessionPageRef.current}` : null;
 
   const hydrateCachedSessions = useCallback(() => {
-    if (!sessionCacheKey) return false;
+    if (!userId) return false;
+    const cacheKey = `student_chat_sessions_${userId}_${sessionPageRef.current}`;
 
     try {
-      const raw = localStorage.getItem(sessionCacheKey);
+      const raw = localStorage.getItem(cacheKey);
       if (!raw) return false;
 
       const parsed = JSON.parse(raw) as {
@@ -116,7 +116,7 @@ export const useChatSession = (userId: number | undefined) => {
     } catch {
       return false;
     }
-  }, [sessionCacheKey]);
+  }, [userId]);
 
   const loadSessions = useCallback(async (silent = false, options?: { force?: boolean }) => {
     if (!userId) {
@@ -222,9 +222,9 @@ export const useChatSession = (userId: number | undefined) => {
 
       const normalizedSessions = Array.from(dedupedByConversation.values());
       setSessions(normalizedSessions);
-      if (sessionCacheKey) {
-        localStorage.setItem(
-          sessionCacheKey,
+      const cacheKey = `student_chat_sessions_${userId}_${sessionPageRef.current}`;
+      localStorage.setItem(
+        cacheKey,
           JSON.stringify({
             saved_at: Date.now(),
             sessions: normalizedSessions,
@@ -232,7 +232,6 @@ export const useChatSession = (userId: number | undefined) => {
             total_items: nextTotal,
           })
         );
-      }
       setError(null);
 
       // If active session is missing/invalid, switch to the latest valid one.
@@ -262,7 +261,7 @@ export const useChatSession = (userId: number | undefined) => {
     } finally {
       sessionsRequestInFlightRef.current = null;
     }
-  }, [sessionCacheKey, userId]);
+  }, [userId]);
 
   const selectSession = (session: Session | null) => {
     setActiveSession(session);
