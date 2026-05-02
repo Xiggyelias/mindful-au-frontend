@@ -73,6 +73,7 @@ const StudentAppointments = () => {
   const lastAppointmentsLoadAtRef = useRef(0);
   const lastCounselorsLoadAtRef = useRef(0);
   const appointmentPageRef = useRef(appointmentPage);
+  const hasInitiallyLoadedRef = useRef(false);
   const { toast } = useToast();
   const toastRef = useRef(toast);
   useEffect(() => {
@@ -92,6 +93,10 @@ const StudentAppointments = () => {
     counselorsRequestInFlightRef.current = null;
     lastAppointmentsLoadAtRef.current = 0;
     lastCounselorsLoadAtRef.current = 0;
+    hasInitiallyLoadedRef.current = false;
+    setIsLoading(false);
+    setAppointments([]);
+    setCounselors([]);
   }, [user?.id]);
 
   const loadAppointments = useCallback(
@@ -106,6 +111,8 @@ const StudentAppointments = () => {
         !force &&
         Date.now() - lastAppointmentsLoadAtRef.current < APPOINTMENTS_REFRESH_MIN_GAP_MS
       ) {
+        // Clear loading state if we're throttling
+        setIsLoading(false);
         return;
       }
 
@@ -229,7 +236,6 @@ const StudentAppointments = () => {
     [] // Stable
   );
 
-  const hasInitiallyLoadedRef = useRef(false);
   useEffect(() => {
     if (!user?.id || hasInitiallyLoadedRef.current) return;
     hasInitiallyLoadedRef.current = true;
@@ -255,8 +261,9 @@ const StudentAppointments = () => {
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      retryLoad();
-    }, 30000);
+      void loadAppointments(false);
+      void loadCounselors(false);
+    }, 60000); // 60 seconds instead of 30
 
     window.addEventListener("focus", retryLoad);
     window.addEventListener("online", retryLoad);
