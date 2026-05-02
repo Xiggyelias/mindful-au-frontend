@@ -10,46 +10,48 @@ import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 
-const Index = lazy(() => import("./pages/Index"));
-const OAuthCallback = lazy(() => import("./pages/auth/OAuthCallback"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
-const StudentLogin = lazy(() => import("./pages/student/StudentLogin"));
-const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
-const StudentChat = lazy(() => import("./pages/student/StudentChat"));
-const StudentAppointments = lazy(() => import("./pages/student/StudentAppointments"));
-const StudentAISupport = lazy(() => import("./pages/student/StudentAISupport"));
-const StudentVideoCall = lazy(() => import("./pages/student/StudentVideoCall"));
-const StudentHistory = lazy(() => import("./pages/student/StudentHistory"));
-const StudentWellness = lazy(() => import("./pages/student/StudentWellness"));
+const Index = lazyWithRetry(() => import("./pages/Index"));
+const OAuthCallback = lazyWithRetry(() => import("./pages/auth/OAuthCallback"));
+const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 
-const CounselorLogin = lazy(() => import("./pages/counselor/CounselorLogin"));
-const CounselorRegister = lazy(() => import("./pages/counselor/CounselorRegister"));
-const CounselorDashboard = lazy(() => import("./pages/counselor/CounselorDashboard"));
-const CounselorMessages = lazy(() => import("./pages/counselor/CounselorMessages"));
-const CounselorAppointments = lazy(() => import("./pages/counselor/CounselorAppointments"));
-const CounselorStudents = lazy(() => import("./pages/counselor/CounselorStudents"));
-const CounselorAIInsights = lazy(() => import("./pages/counselor/CounselorAIInsights"));
-const CounselorVideo = lazy(() => import("./pages/counselor/CounselorVideo"));
-const CounselorNotes = lazy(() => import("./pages/counselor/CounselorNotes"));
-const CounselorWellness = lazy(() => import("./pages/counselor/CounselorWellness"));
-const CounselorTwoFactor = lazy(() => import("./pages/counselor/CounselorTwoFactor"));
-const PeerLogin = lazy(() => import("./pages/peer/PeerLogin"));
-const PeerDashboard = lazy(() => import("./pages/peer/PeerDashboard"));
-const PeerEscalatedCases = lazy(() => import("./pages/peer/PeerEscalatedCases"));
-const PeerEthics = lazy(() => import("./pages/peer/PeerEthics"));
-const PeerProfile = lazy(() => import("./pages/peer/PeerProfile"));
+const StudentLogin = lazyWithRetry(() => import("./pages/student/StudentLogin"));
+const StudentDashboard = lazyWithRetry(() => import("./pages/student/StudentDashboard"));
+const StudentChat = lazyWithRetry(() => import("./pages/student/StudentChat"));
+const StudentAppointments = lazyWithRetry(() => import("./pages/student/StudentAppointments"));
+const StudentAISupport = lazyWithRetry(() => import("./pages/student/StudentAISupport"));
+const StudentVideoCall = lazyWithRetry(() => import("./pages/student/StudentVideoCall"));
+const StudentHistory = lazyWithRetry(() => import("./pages/student/StudentHistory"));
+const StudentWellness = lazyWithRetry(() => import("./pages/student/StudentWellness"));
 
-const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
-const AdminRegister = lazy(() => import("./pages/admin/AdminRegister"));
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
-const AdminStudents = lazy(() => import("./pages/admin/AdminStudents"));
-const AdminCounselors = lazy(() => import("./pages/admin/AdminCounselors"));
-const AdminAnalytics = lazy(() => import("./pages/admin/AdminAnalytics"));
-const AdminAIReports = lazy(() => import("./pages/admin/AdminAIReports"));
-const AdminAlerts = lazy(() => import("./pages/admin/AdminAlerts"));
-const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"));
-const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const CounselorLogin = lazyWithRetry(() => import("./pages/counselor/CounselorLogin"));
+const CounselorRegister = lazyWithRetry(() => import("./pages/counselor/CounselorRegister"));
+const CounselorDashboard = lazyWithRetry(() => import("./pages/counselor/CounselorDashboard"));
+const CounselorMessages = lazyWithRetry(() => import("./pages/counselor/CounselorMessages"));
+const CounselorAppointments = lazyWithRetry(() => import("./pages/counselor/CounselorAppointments"));
+const CounselorStudents = lazyWithRetry(() => import("./pages/counselor/CounselorStudents"));
+const CounselorAIInsights = lazyWithRetry(() => import("./pages/counselor/CounselorAIInsights"));
+const CounselorVideo = lazyWithRetry(() => import("./pages/counselor/CounselorVideo"));
+const CounselorNotes = lazyWithRetry(() => import("./pages/counselor/CounselorNotes"));
+const CounselorWellness = lazyWithRetry(() => import("./pages/counselor/CounselorWellness"));
+const CounselorTwoFactor = lazyWithRetry(() => import("./pages/counselor/CounselorTwoFactor"));
+const PeerLogin = lazyWithRetry(() => import("./pages/peer/PeerLogin"));
+const PeerDashboard = lazyWithRetry(() => import("./pages/peer/PeerDashboard"));
+const PeerEscalatedCases = lazyWithRetry(() => import("./pages/peer/PeerEscalatedCases"));
+const PeerEthics = lazyWithRetry(() => import("./pages/peer/PeerEthics"));
+const PeerProfile = lazyWithRetry(() => import("./pages/peer/PeerProfile"));
+
+const AdminLogin = lazyWithRetry(() => import("./pages/admin/AdminLogin"));
+const AdminRegister = lazyWithRetry(() => import("./pages/admin/AdminRegister"));
+const AdminDashboard = lazyWithRetry(() => import("./pages/admin/AdminDashboard"));
+const AdminStudents = lazyWithRetry(() => import("./pages/admin/AdminStudents"));
+const AdminCounselors = lazyWithRetry(() => import("./pages/admin/AdminCounselors"));
+const AdminAnalytics = lazyWithRetry(() => import("./pages/admin/AdminAnalytics"));
+const AdminAIReports = lazyWithRetry(() => import("./pages/admin/AdminAIReports"));
+const AdminAlerts = lazyWithRetry(() => import("./pages/admin/AdminAlerts"));
+const AdminLogs = lazyWithRetry(() => import("./pages/admin/AdminLogs"));
+const AdminSettings = lazyWithRetry(() => import("./pages/admin/AdminSettings"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
