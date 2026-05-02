@@ -15,12 +15,10 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
-import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle } from "lucide-react";
@@ -64,14 +62,6 @@ const CounselorDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const toastRef = useRef(toast);
-  const {
-    tip: dailyTip,
-    isLoading: tipLoading,
-    error: tipError,
-    refresh: refreshDailyTip,
-    toggleFavorite,
-    isSavingFavorite,
-  } = useDailyTip();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isApprovedCounselor = user?.roles?.some((r: any) => r.role === "counselor" && r.approved);
 
@@ -322,19 +312,6 @@ const CounselorDashboard = () => {
             </div>
           </div>
 
-          <DailyTipCard
-            tip={dailyTip}
-            isLoading={tipLoading}
-            error={tipError}
-            title="Counselor Tip of the Day"
-            onRefresh={() => void refreshDailyTip()}
-            onToggleFavorite={() => void toggleFavorite()}
-            isSavingFavorite={isSavingFavorite}
-            actionLabel="Open Wellness"
-            onAction={() => navigate("/counselor/wellness")}
-          />
-
-          {/* Stats */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {stats.map((s, idx) => (
               <StatsCard

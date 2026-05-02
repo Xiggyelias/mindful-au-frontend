@@ -18,12 +18,10 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
-import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -117,14 +115,7 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingAppointmentId, setConfirmingAppointmentId] = useState<number | null>(null);
   const loadRequestRef = useRef(0);
-  const {
-    tip: dailyTip,
-    isLoading: tipLoading,
-    error: tipError,
-    refresh: refreshDailyTip,
-    toggleFavorite,
-    isSavingFavorite,
-  } = useDailyTip();
+
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -296,18 +287,6 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
-
-          <DailyTipCard
-            tip={dailyTip}
-            isLoading={tipLoading}
-            error={tipError}
-            title="Admin Tip of the Day"
-            onRefresh={() => void refreshDailyTip()}
-            onToggleFavorite={() => void toggleFavorite()}
-            isSavingFavorite={isSavingFavorite}
-            actionLabel="Manage Tips"
-            onAction={() => navigate("/admin/settings")}
-          />
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
