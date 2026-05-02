@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   LayoutDashboard,
@@ -70,6 +70,7 @@ const formatScheduleLabel = (scheduledAt?: string | null) =>
 
 const CounselorVideo = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const autoStartedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
