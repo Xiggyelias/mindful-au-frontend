@@ -12,12 +12,14 @@ import {
   Search,
   Send,
   Shield,
+  ShieldCheck,
   Loader2,
   Paperclip,
   AlertTriangle,
   X,
   Image as ImageIcon,
   User,
+  UserCircle2,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -52,7 +54,11 @@ const counselorNavItems = [
 ];
 
 const peerCounselorNavItems = [
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/peer/dashboard" },
+  { label: "Active Chats", icon: MessageSquare, path: "/peer/chats" },
+  { label: "Escalated Cases", icon: AlertTriangle, path: "/peer/escalations" },
+  { label: "Ethics Guidelines", icon: ShieldCheck, path: "/peer/ethics" },
+  { label: "Profile", icon: UserCircle2, path: "/peer/profile" },
 ];
 
 const SESSION_POLL_INTERVAL_MS = 10000;
@@ -188,7 +194,7 @@ const CounselorMessages = () => {
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
-  const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
+  const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
 
   const [searchParams] = useSearchParams();
   const targetSessionParam = searchParams.get("session");
