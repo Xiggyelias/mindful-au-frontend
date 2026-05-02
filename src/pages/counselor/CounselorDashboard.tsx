@@ -224,9 +224,9 @@ const CounselorDashboard = () => {
       icon: Users,
     },
     {
-      title: "Unread Messages",
-      value: 0,
-      change: "",
+      title: "Active Chats",
+      value: activeSessionStudentIds.length,
+      change: "Open chat sessions",
       trend: "neutral" as const,
       icon: MessageSquare,
     },
