@@ -195,11 +195,19 @@ const StudentChat = () => {
     counselorPageRef.current = 1;
     setCounselorTotalPages(1);
     setCounselorTotalItems(0);
+    // If no user, make sure we're not stuck in loading state
+    if (!user?.id) {
+      setIsCounselorsLoading(false);
+      setCounselors([]);
+    }
   }, [user?.id]);
 
   // Load counselors
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setIsCounselorsLoading(false);
+      return;
+    }
 
     let active = true;
     const cacheKey = `student_chat_counselors_${user.id}_${counselorPageRef.current}`;

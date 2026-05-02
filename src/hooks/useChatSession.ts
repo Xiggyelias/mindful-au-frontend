@@ -119,7 +119,10 @@ export const useChatSession = (userId: number | undefined) => {
   }, [sessionCacheKey]);
 
   const loadSessions = useCallback(async (silent = false, options?: { force?: boolean }) => {
-    if (!userId) return;
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
     if (sessionsRequestInFlightRef.current) {
       await sessionsRequestInFlightRef.current;
       return;
@@ -127,6 +130,10 @@ export const useChatSession = (userId: number | undefined) => {
 
     const force = Boolean(options?.force);
     if (!force && Date.now() - lastSessionsLoadAtRef.current < SESSION_REFRESH_MIN_GAP_MS) {
+      // If we're throttling and not silent, still clear loading state
+      if (!silent) {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -336,6 +343,12 @@ export const useChatSession = (userId: number | undefined) => {
     setSessionTotalItems(0);
     sessionsRequestInFlightRef.current = null;
     lastSessionsLoadAtRef.current = 0;
+    // If no userId, make sure we're not stuck in loading state
+    if (!userId) {
+      setIsLoading(false);
+      setSessions([]);
+      setActiveSession(null);
+    }
   }, [userId]);
 
   // Reload sessions when user navigates to a different page via pagination
