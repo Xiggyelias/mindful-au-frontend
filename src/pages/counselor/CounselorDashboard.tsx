@@ -322,6 +322,18 @@ const CounselorDashboard = () => {
             </div>
           </div>
 
+          <DailyTipCard
+            tip={dailyTip}
+            isLoading={tipLoading}
+            error={tipError}
+            title="Counselor Tip of the Day"
+            onRefresh={() => void refreshDailyTip()}
+            onToggleFavorite={() => void toggleFavorite()}
+            isSavingFavorite={isSavingFavorite}
+            actionLabel="Open Wellness"
+            onAction={() => navigate("/counselor/wellness")}
+          />
+
           {/* Stats */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {stats.map((s, idx) => (
@@ -335,18 +347,6 @@ const CounselorDashboard = () => {
               />
             ))}
           </div>
-
-          <DailyTipCard
-            tip={dailyTip}
-            isLoading={tipLoading}
-            error={tipError}
-            title="Counselor Tip of the Day"
-            onRefresh={() => void refreshDailyTip()}
-            onToggleFavorite={() => void toggleFavorite()}
-            isSavingFavorite={isSavingFavorite}
-            actionLabel="Open Wellness"
-            onAction={() => navigate("/counselor/wellness")}
-          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Today's Schedule */}
