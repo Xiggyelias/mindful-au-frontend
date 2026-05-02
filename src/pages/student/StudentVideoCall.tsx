@@ -79,6 +79,7 @@ const StudentVideoCall = () => {
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
   const [isStartingMode, setIsStartingMode] = useState<CallMode | null>(null);
+  const [videoFit, setVideoFit] = useState<"cover" | "fit">("cover");
   const [isUpdatingAnonymousMode, setIsUpdatingAnonymousMode] = useState(false);
   const [isOnline, setIsOnline] = useState(
     () => (typeof navigator === "undefined" ? true : navigator.onLine)
@@ -794,9 +795,8 @@ const StudentVideoCall = () => {
                             autoPlay
                             playsInline
                             className={cn(
-                              showRemoteVideo
-                                ? "absolute inset-0 h-full w-full object-cover opacity-100"
-                                : "absolute h-full w-full object-cover opacity-0 pointer-events-none"
+                              "absolute inset-0 h-full w-full opacity-100 transition-all duration-300",
+                              videoFit === "cover" ? "object-cover" : "object-contain"
                             )}
                           />
                         ) : null}
@@ -941,6 +941,16 @@ const StudentVideoCall = () => {
                                 </Button>
 
                                 <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
+                                  onClick={() => setVideoFit(videoFit === "cover" ? "fit" : "cover")}
+                                  title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                                >
+                                  <RefreshCw className={cn("h-6 w-6 transition-transform duration-500", videoFit === "fit" && "rotate-180")} />
+                                </Button>
+
+                                <Button
                                   variant="destructive"
                                   size="icon"
                                   className="h-16 w-16 rounded-full shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95"
@@ -1000,7 +1010,8 @@ const StudentVideoCall = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleToggleAnonymousMode}
-                      disabled={isUpdatingAnonymousMode}
+                      disabled={isUpdatingAnonymousMode || isConnected || !!localStream}
+                      title={isConnected || !!localStream ? "Cannot change mode during active call" : ""}
                     >
                       {isUpdatingAnonymousMode
                         ? "Updating..."

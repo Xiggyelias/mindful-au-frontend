@@ -1231,6 +1231,12 @@ const StudentChat = () => {
                           </Button>
                         </div>
                       )}
+                      {isInitialLoading && (
+                        <div className="flex flex-col items-center justify-center py-20">
+                          <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+                          <p className="text-muted-foreground animate-pulse">Initializing secure connection...</p>
+                        </div>
+                      )}
                       {visibleMessages.length === 0 && !isInitialLoading && (
                         <div className="text-center py-12">
                           <div className="inline-flex items-center gap-2 px-4 py-2 bg-secondary/30 rounded-2xl text-xs text-muted-foreground mb-4">
@@ -1238,7 +1244,7 @@ const StudentChat = () => {
                             Messages are end-to-end encrypted
                           </div>
                           <p className="text-sm text-muted-foreground">Say hello to your counselor!</p>
-                  </div>
+                        </div>
                       )}
                       
                     {visibleMessages.map((msg) => (

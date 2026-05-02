@@ -1045,7 +1045,7 @@ const CounselorMessages = () => {
                     <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
                       Select a student conversation to start chatting
                     </div>
-                  ) : isLoading ? (
+                  ) : messagesLoading ? (
                     <div className="flex items-center justify-center h-full">
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
