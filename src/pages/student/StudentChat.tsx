@@ -1569,29 +1569,6 @@ const StudentChat = () => {
                           )}
                         </Button>
                       </form>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <Mic className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">Tap to record</span>
-                          </div>
-                          <div className="flex-1" />
-                          <Button 
-                            type="button" 
-                            variant="ghost" 
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
-                            onClick={() => setIsVoiceMode(false)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </form>
                     </div>
                   </div>
                 </>
