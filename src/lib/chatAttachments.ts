@@ -165,9 +165,20 @@ export const resolveMessageAttachment = (message: {
 
   if (message.message_type === 'file' || message.message_type === 'voice') {
     const url = message.file_url || null;
+    const fileName = rawContent || (message.message_type === 'voice' ? 'Voice note' : 'Attachment');
+    let fileType = message.message_type === 'voice' ? 'audio/webm' : 'application/octet-stream';
+    
+    if (message.message_type === 'file') {
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      if (ext === 'jpg' || ext === 'jpeg') fileType = 'image/jpeg';
+      else if (ext === 'png') fileType = 'image/png';
+      else if (ext === 'gif') fileType = 'image/gif';
+      else if (ext === 'pdf') fileType = 'application/pdf';
+    }
+
     return {
-      file_name: rawContent || (message.message_type === 'voice' ? 'Voice note' : 'Attachment'),
-      file_type: message.message_type === 'voice' ? 'audio/webm' : 'application/octet-stream',
+      file_name: fileName,
+      file_type: fileType,
       file_size: 0,
       url,
       download_url: url,

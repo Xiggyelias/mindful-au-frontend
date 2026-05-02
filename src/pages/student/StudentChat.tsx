@@ -26,6 +26,7 @@ import {
   Square,
   Trash2,
   ArrowLeft,
+  Smile,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -42,6 +43,12 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from "@/components/ui/popover";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   formatChatFileSize,
@@ -365,10 +372,12 @@ const StudentChat = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!message.trim() && !selectedFile && !recording) || isSending || !sessionId) return;
+    /*
     if (activeSessionIsPeerAssigned && (selectedFile || recording)) {
       toast.error("Peer support chats support text only.");
       return;
     }
+    */
     if (message.trim() && !isEncryptionReady) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
@@ -418,11 +427,13 @@ const StudentChat = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      /*
       if (activeSessionIsPeerAssigned) {
         toast.error("Peer support chats support text only.");
         e.target.value = "";
         return;
       }
+      */
 
       const validationError = validateChatAttachment(file);
       if (validationError) {
@@ -592,6 +603,26 @@ const StudentChat = () => {
     return formatChatFileSize(bytes);
   };
 
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "??";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  };
+
+  const getUserColor = (name: string) => {
+    const colors = [
+      "bg-blue-500", "bg-purple-500", "bg-emerald-500", 
+      "bg-orange-500", "bg-pink-500", "bg-indigo-500",
+      "bg-cyan-500", "bg-rose-500"
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   const renderMessageContent = (msg: any) => {
     const content = msg.decryptedContent || msg.content;
 
@@ -608,16 +639,21 @@ const StudentChat = () => {
 
       if (kind === "image") {
         return (
-          <div className="space-y-3">
-            <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer">
+          <div className="space-y-2 max-w-sm">
+            <a 
+              href={downloadUrl || resolvedUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block overflow-hidden rounded-2xl border border-border/50 hover:ring-2 hover:ring-primary/20 transition-all"
+            >
               <img
                 src={resolvedUrl}
                 alt={attachment.file_name}
-                className="max-h-60 w-full rounded-2xl object-cover"
+                className="max-h-80 w-full object-cover"
                 loading="lazy"
               />
             </a>
-            <div className="flex items-center justify-between gap-3 text-xs opacity-80">
+            <div className="flex items-center justify-between gap-3 px-1 text-[10px] font-medium opacity-70 uppercase tracking-tight">
               <span className="truncate">{attachment.file_name}</span>
               {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
             </div>
@@ -851,32 +887,35 @@ const StudentChat = () => {
     }
   };
 
-  const renderCounselorButton = (counselor: Counselor) => (
-    <button
-      key={counselor.id}
-      onClick={async () => {
-        const result = await startSessionWithCounselor(counselor.id, {
-          isAnonymous: anonymousStartMode,
-        });
-        if (result && anonymousStartMode) {
-          setAnonymousStartMode(false);
-          toast.success("Anonymous support session started.");
-        }
-      }}
-      className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all duration-300 hover:bg-secondary/50 text-foreground group"
-    >
-      <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-        <User className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-      </div>
-      <div className="flex-1 text-left min-w-0">
-        <p className="font-bold truncate">{counselor.profile?.full_name || counselor.email}</p>
-        <p className={`text-xs truncate ${counselor.is_online ? "text-success" : "text-muted-foreground"}`}>
-          {counselor.is_online ? "Online now" : "Offline"}
-        </p>
-      </div>
-      <span className={`h-2.5 w-2.5 rounded-full ${counselor.is_online ? "bg-success" : "bg-muted-foreground/40"}`} />
-    </button>
-  );
+  const renderCounselorButton = (counselor: Counselor) => {
+    const name = counselor.profile?.full_name || counselor.email;
+    return (
+      <button
+        key={counselor.id}
+        onClick={async () => {
+          const result = await startSessionWithCounselor(counselor.id, {
+            isAnonymous: anonymousStartMode,
+          });
+          if (result && anonymousStartMode) {
+            setAnonymousStartMode(false);
+            toast.success("Anonymous support session started.");
+          }
+        }}
+        className="w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-300 hover:bg-secondary/50 text-foreground group"
+      >
+        <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-105 ${getUserColor(name)}`}>
+          <span className="text-xs font-bold text-white">{getInitials(name)}</span>
+        </div>
+        <div className="flex-1 text-left min-w-0">
+          <p className="text-[13px] font-bold truncate tracking-tight group-hover:text-primary transition-colors">{name}</p>
+          <p className={`text-[11px] font-medium truncate ${counselor.is_online ? "text-emerald-500" : "text-muted-foreground/70"}`}>
+            {counselor.is_online ? "Online now" : "Offline"}
+          </p>
+        </div>
+        <span className={`h-2 w-2 rounded-full ${counselor.is_online ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
+      </button>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -917,13 +956,14 @@ const StudentChat = () => {
                 </div>
                 <Button
                   type="button"
-                  variant={anonymousStartMode ? "default" : "outline"}
-                  className="w-full rounded-xl"
+                  variant={anonymousStartMode ? "default" : "secondary"}
+                  size="sm"
+                  className="w-full rounded-xl text-xs font-semibold h-9 shadow-none"
                   onClick={() => setAnonymousStartMode((prev) => !prev)}
                 >
                   {anonymousStartMode
-                    ? "Anonymous Support: On (pick counselor/chat)"
-                    : "Start Anonymous Support Session"}
+                    ? "Anonymous Support: On"
+                    : "Start Anonymous Session"}
                 </Button>
               </div>
 
@@ -969,64 +1009,62 @@ const StudentChat = () => {
                       No active conversations
                     </div>
                   )}
-                  {sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={async () => {
-                        // If anonymous mode is armed, picking a counselor should open/create
-                        // an anonymous thread for that counselor instead of selecting the
-                        // identified conversation.
-                        if (
-                          anonymousStartMode &&
-                          !session.is_anonymous &&
-                          Number(session.counselor_id) > 0
-                        ) {
-                          const result = await startSessionWithCounselor(Number(session.counselor_id), {
-                            isAnonymous: true,
-                          });
-                          if (result) {
-                            setAnonymousStartMode(false);
-                            toast.success("Anonymous support session started.");
+                      <button
+                        key={session.id}
+                        onClick={async () => {
+                          if (
+                            anonymousStartMode &&
+                            !session.is_anonymous &&
+                            Number(session.counselor_id) > 0
+                          ) {
+                            const result = await startSessionWithCounselor(Number(session.counselor_id), {
+                              isAnonymous: true,
+                            });
+                            if (result) {
+                              setAnonymousStartMode(false);
+                              toast.success("Anonymous support session started.");
+                            }
+                            return;
                           }
-                          return;
-                        }
-
-                        selectSession(session);
-                      }}
-                      className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all duration-300 ${
-                        activeSession?.id === session.id 
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[0.98]" 
-                          : "hover:bg-secondary/50 text-foreground"
-                      }`}
-                    >
-                      <div className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${
-                        activeSession?.id === session.id ? "bg-white/20" : "bg-primary/10"
-                      }`}>
-                        <User className={`h-6 w-6 ${activeSession?.id === session.id ? "text-white" : "text-primary"}`} />
-                      </div>
-                      <div className="flex-1 text-left min-w-0">
-                        <p className="font-bold truncate">
-                          {getCounselorLabel(session)}
-                        </p>
-                        <p
-                            className={`text-xs truncate ${
+                          selectSession(session);
+                        }}
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-300 ${
+                          activeSession?.id === session.id 
+                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                            : "hover:bg-secondary/50 text-foreground"
+                        }`}
+                      >
+                        <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                          activeSession?.id === session.id 
+                            ? "bg-white/20" 
+                            : getUserColor(getCounselorLabel(session))
+                        }`}>
+                          <span className={`text-xs font-bold ${activeSession?.id === session.id ? "text-white" : "text-white"}`}>
+                            {getInitials(getCounselorLabel(session))}
+                          </span>
+                        </div>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="text-[13px] font-bold truncate tracking-tight">
+                            {getCounselorLabel(session)}
+                          </p>
+                          <p
+                            className={`text-[11px] font-medium truncate ${
                               activeSession?.id === session.id
-                                ? "text-white/70"
+                                ? "text-white/80"
                                 : isPeerAssignedSession(session)
-                                ? "text-primary"
+                                ? "text-primary/80"
                                 : getCounselorOnline(session)
-                                ? "text-success"
-                                : "text-muted-foreground"
+                                ? "text-emerald-500"
+                                : "text-muted-foreground/70"
                             }`}
                           >
-                          {getSessionStatusText(session)}
-                        </p>
-                      </div>
-                      <div className="text-[10px] whitespace-nowrap opacity-70 font-medium">
-                        {format(new Date(session.created_at), "h:mm a")}
-                      </div>
-                    </button>
-                  ))}
+                            {getSessionStatusText(session)}
+                          </p>
+                        </div>
+                        <div className="text-[10px] whitespace-nowrap opacity-60 font-bold tabular-nums">
+                          {format(new Date(session.created_at), "h:mm")}
+                        </div>
+                      </button>
 
                   {/* Counselors Header */}
                   <div className="px-4 py-2 mt-4">
@@ -1119,34 +1157,36 @@ const StudentChat = () => {
                       >
                         <ArrowLeft className="h-5 w-5" />
                       </Button>
-                      <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shadow-lg shadow-primary/5">
-                        <User className="h-6 w-6 text-primary" />
+                       <div className={`h-10 w-10 lg:h-11 lg:w-11 rounded-full ${getUserColor(activeSession ? getCounselorLabel(activeSession) : "Counselor")} flex items-center justify-center shadow-sm shrink-0`}>
+                        <span className="text-xs font-bold text-white">
+                          {getInitials(activeSession ? getCounselorLabel(activeSession) : "Counselor")}
+                        </span>
                       </div>
-                      <div>
-                        <h2 className="font-bold text-lg leading-none mb-1">
+                      <div className="min-w-0">
+                        <h2 className="font-bold text-base lg:text-lg leading-tight truncate">
                           {activeSession ? getCounselorLabel(activeSession) : "Counselor"}
                         </h2>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 mt-0.5">
                           <span
                             className={`h-2 w-2 rounded-full ${
                               activeSessionIsPeerAssigned
                                 ? "bg-primary"
                                 : isRecipientOnline
-                                ? "bg-success animate-pulse"
-                                : "bg-muted-foreground/50"
+                                ? "bg-emerald-500 animate-pulse"
+                                : "bg-muted-foreground/40"
                             }`}
                           />
                           <p
-                            className={`text-xs font-medium ${
+                            className={`text-[11px] font-bold tracking-tight ${
                               activeSessionIsPeerAssigned
                                 ? "text-primary"
                                 : isRecipientOnline
-                                ? "text-success"
-                                : "text-muted-foreground"
+                                ? "text-emerald-500"
+                                : "text-muted-foreground/60"
                             }`}
                           >
                             {activeSessionIsPeerAssigned
-                              ? "Peer support assigned"
+                              ? "Peer support"
                               : isRecipientOnline
                               ? "Online"
                               : "Away"}
@@ -1165,20 +1205,19 @@ const StudentChat = () => {
                           <span>Anonymous Session</span>
                         </div>
                       )}
-                      <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-3 py-1.5 rounded-full">
-                        <Shield className="h-3 w-3 text-success" />
+                      <div className="hidden lg:flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                        <Shield className="h-3 w-3" />
                         <span>{isEncryptionReady ? "Encrypted" : "Securing..."}</span>
                       </div>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="gap-2"
+                        className="h-9 px-3 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive border border-destructive/10 gap-1.5"
                         onClick={handleTriggerEmergency}
                         disabled={isTriggeringEmergency || !activeSession}
-                        title="Trigger emergency escalation"
                       >
-                        <AlertTriangle className="h-4 w-4" />
-                        {isTriggeringEmergency ? "Alerting..." : "Panic"}
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="text-xs font-bold uppercase tracking-tight">{isTriggeringEmergency ? "Alerting" : "Panic"}</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -1247,25 +1286,41 @@ const StudentChat = () => {
                         </div>
                       )}
                       
-                    {visibleMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                          className={`flex ${msg.sender_id === currentUserId ? "justify-end" : "justify-start"}`}
+                    {visibleMessages.map((msg, idx) => {
+                      const isMine = msg.sender_id === currentUserId;
+                      const prevMsg = visibleMessages[idx - 1];
+                      const showAvatar = !isMine && (!prevMsg || prevMsg.sender_id !== msg.sender_id);
+                      const senderName = msg.sender?.name || (isMine ? "You" : activeSessionName);
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         >
-                          <div className={`group flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${msg.sender_id === currentUserId ? "items-end" : "items-start"}`}>
+                          {!isMine && (
+                            <div className="w-8 shrink-0">
+                              {showAvatar && (
+                                <div className={`h-8 w-8 rounded-full ${getUserColor(senderName)} flex items-center justify-center text-[10px] font-bold text-white shadow-sm ring-2 ring-background`}>
+                                  {getInitials(senderName)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div className={`group flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${isMine ? "items-end" : "items-start"}`}>
                             <div
-                              className={`p-4 rounded-[1.5rem] transition-all duration-300 shadow-sm ${
-                                msg.sender_id === currentUserId
+                              className={`p-3 lg:p-4 rounded-[1.25rem] transition-all duration-300 shadow-sm ${
+                                isMine
                                   ? "bg-primary text-primary-foreground rounded-br-none"
-                                  : "bg-secondary/50 text-foreground rounded-bl-none border border-border/50"
+                                  : "bg-background text-foreground rounded-bl-none border border-border/50"
                               }`}
                             >
-                              <div className="text-base leading-relaxed">
-                          {renderMessageContent(msg)}
+                              <div className="text-[15px] leading-relaxed">
+                                {renderMessageContent(msg)}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1 px-1">
-                              {msg.sender_id === currentUserId && (
+                            <div className="flex items-center gap-1 px-1 mt-0.5">
+                              {isMine && (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1284,14 +1339,14 @@ const StudentChat = () => {
                                   )}
                                 </Button>
                               )}
-                              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                              {formatTime(msg.created_at)}
-                            </span>
-                              {msg.sender_id === currentUserId && (
+                              <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                                {formatTime(msg.created_at)}
+                              </span>
+                              {isMine && (
                                 <div className="flex ml-1">
                                   <span
-                                    className={`text-[10px] font-semibold ${
-                                      msg.seen_at ? "text-success" : "text-muted-foreground"
+                                    className={`text-[10px] font-black ${
+                                      msg.seen_at ? "text-emerald-500" : "text-muted-foreground/40"
                                     }`}
                                     aria-label={msg.seen_at ? "Seen" : "Sent"}
                                     title={msg.seen_at ? "Seen" : "Sent"}
@@ -1303,7 +1358,8 @@ const StudentChat = () => {
                             </div>
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                       {showLoadingBubble && (
                         <div className="flex justify-start">
                           <div className="bg-secondary/50 p-4 rounded-[1.5rem] rounded-bl-none border border-border/50">
@@ -1370,55 +1426,135 @@ const StudentChat = () => {
                 </div>
               )}
 
-                      <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    accept={CHAT_ATTACHMENT_ACCEPT}
-                  />
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-12 w-12 rounded-2xl bg-secondary/30 hover:bg-secondary/50 transition-all shrink-0"
-                    onClick={handleAttachClick}
-                    disabled={isUploading || isRecording || activeSessionIsPeerAssigned}
-                  >
-                    <Paperclip className="h-5 w-5 text-muted-foreground" />
-                  </Button>
-                        <div className="flex-1 relative">
-                  {!isVoiceMode ? (
-                    <>
-                      <Input
-                        placeholder="Type a message..."
-                        value={message}
-                        onChange={(e) => {
-                          const nextMessage = e.target.value;
-                          setMessage(nextMessage);
-                          notifyTyping(nextMessage.trim().length > 0);
-                        }}
-                        onBlur={() => notifyTyping(false)}
-                        className="h-12 pl-4 pr-20 rounded-2xl bg-secondary/30 border-none focus-visible:ring-primary/20 text-base"
-                        disabled={isSending || isUploading}
-                      />
-                      <div className="absolute right-1 top-1 flex gap-1">
+                      <form onSubmit={handleSendMessage} className="relative flex items-end gap-2 p-2 bg-background border border-border/50 rounded-[2rem] shadow-lg shadow-primary/5 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileSelect}
+                          className="hidden"
+                          accept={CHAT_ATTACHMENT_ACCEPT}
+                        />
                         <Button 
                           type="button" 
                           variant="ghost" 
                           size="icon"
-                          className="h-10 w-10 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all shrink-0"
-                          onClick={handleVoiceToggle}
-                          disabled={isSending || isUploading || activeSessionIsPeerAssigned}
+                          className="h-10 w-10 rounded-full hover:bg-secondary transition-all shrink-0 mb-0.5"
+                          onClick={handleAttachClick}
+                          disabled={isUploading || isRecording}
                         >
-                          <Mic className="h-5 w-5 text-muted-foreground" />
+                          <Paperclip className="h-5 w-5 text-muted-foreground" />
                         </Button>
+                        <div className="flex-1 relative mb-0.5">
+                          {!isVoiceMode ? (
+                            <div className="relative flex items-center">
+                              <Input
+                                placeholder="Type a message..."
+                                value={message}
+                                onChange={(e) => {
+                                  const nextMessage = e.target.value;
+                                  setMessage(nextMessage);
+                                  notifyTyping(nextMessage.trim().length > 0);
+                                }}
+                                onBlur={() => notifyTyping(false)}
+                                className="h-10 pl-1 pr-24 rounded-xl bg-transparent border-none focus-visible:ring-0 text-[15px] shadow-none"
+                                disabled={isSending || isUploading}
+                              />
+                              <div className="absolute right-0 flex items-center gap-1">
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button 
+                                      type="button" 
+                                      variant="ghost" 
+                                      size="icon"
+                                      className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
+                                      disabled={isSending || isUploading}
+                                    >
+                                      <Smile className="h-5 w-5 text-muted-foreground/60" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-full p-0 border-none shadow-2xl bg-transparent mb-4" align="end" side="top">
+                                    <EmojiPicker
+                                      onEmojiClick={(emojiData) => setMessage(prev => prev + emojiData.emoji)}
+                                      theme={EmojiTheme.AUTO}
+                                      lazyLoadEmojis={true}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
+                                  onClick={handleVoiceToggle}
+                                  disabled={isSending || isUploading}
+                                >
+                                  <Mic className="h-5 w-5 text-muted-foreground/60" />
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 h-10 px-1">
+                              {isRecording ? (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                                    <span className="text-xs font-bold tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                                  </div>
+                                  <div className="flex-1 h-1 bg-secondary rounded-full overflow-hidden">
+                                    <div className="h-full bg-primary animate-progress" style={{ width: '100%' }} />
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button 
+                                      type="button" 
+                                      variant="ghost" 
+                                      size="icon"
+                                      className="h-7 w-7 rounded-full"
+                                      onClick={isPaused ? resumeRecording : pauseRecording}
+                                    >
+                                      {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button 
+                                      type="button" 
+                                      variant="ghost" 
+                                      size="icon"
+                                      className="h-7 w-7 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={handleVoiceCancel}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button 
+                                      type="button" 
+                                      variant="hero" 
+                                      size="icon"
+                                      className="h-7 w-7 rounded-lg bg-primary hover:bg-primary/90 shadow-md shadow-primary/20"
+                                      onClick={handleVoiceToggle}
+                                    >
+                                      <Square className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex-1 flex items-center justify-between">
+                                  <span className="text-[13px] font-medium text-muted-foreground">Voice message ready</span>
+                                  <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-7 text-[11px] font-bold uppercase tracking-tight"
+                                    onClick={() => setVoiceMode(false)}
+                                  >
+                                    Switch to Text
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <Button 
                           type="submit" 
                           variant="hero" 
                           size="icon"
-                          className="h-10 w-10 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95 shrink-0"
+                          className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95 shrink-0 mb-0.5"
                           disabled={
                             (!message.trim() && !selectedFile && !recording) ||
                             isSending ||
@@ -1432,46 +1568,7 @@ const StudentChat = () => {
                             <Send className="h-5 w-5" />
                           )}
                         </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2 h-12 px-4 rounded-2xl bg-secondary/30 border-none">
-                      {isRecording ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-                            <span className="text-sm font-medium">{formatRecordingTime(recordingTime)}</span>
-                          </div>
-                          <div className="flex-1" />
-                          <div className="flex gap-1">
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="icon"
-                              className="h-8 w-8 rounded-full"
-                              onClick={isPaused ? resumeRecording : pauseRecording}
-                            >
-                              {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="icon"
-                              className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
-                              onClick={handleVoiceCancel}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="hero" 
-                              size="icon"
-                              className="h-8 w-8 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95"
-                              onClick={handleVoiceToggle}
-                            >
-                              <Square className="h-4 w-4" />
-                            </Button>
-                          </div>
+                      </form>
                         </>
                       ) : (
                         <>

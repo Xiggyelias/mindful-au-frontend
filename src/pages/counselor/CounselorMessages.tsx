@@ -20,6 +20,12 @@ import {
   Image as ImageIcon,
   User,
   UserCircle2,
+  Mic,
+  Smile,
+  Play,
+  Pause,
+  Square,
+  Trash2,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -41,6 +47,13 @@ import {
 } from "@/lib/chatAttachments";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from "@/components/ui/popover";
 
 const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -170,6 +183,19 @@ const resolveAnonymousLabel = (session: RawSession) => {
   return `User_${String(Number(session.id) % 10000).padStart(4, "0")}`;
 };
 
+const getUserColor = (name: string) => {
+  const colors = [
+    "bg-blue-500", "bg-purple-500", "bg-emerald-500", 
+    "bg-orange-500", "bg-pink-500", "bg-indigo-500",
+    "bg-cyan-500", "bg-rose-500"
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 const CounselorMessages = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
@@ -195,6 +221,27 @@ const CounselorMessages = () => {
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+
+  // Voice recording functionality
+  const {
+    isRecording,
+    isPaused,
+    recording,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    pauseRecording,
+    resumeRecording,
+    cancelRecording,
+    clearRecording,
+    cleanup
+  } = useVoiceRecorder();
+
+  // Cleanup voice recorder on unmount
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
 
   const [searchParams] = useSearchParams();
   const targetSessionParam = searchParams.get("session");
@@ -601,6 +648,17 @@ const CounselorMessages = () => {
         setSelectedFile(null);
       }
 
+      if (recording) {
+        const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
+        if (sentVoice) {
+          registerServerMessage(sentVoice);
+          clearRecording();
+          toast.success("Voice message sent successfully");
+        } else {
+          toast.error("Failed to send voice message");
+        }
+      }
+
       if (message.trim()) {
         const sentText = await sendEncryptedMessage(message.trim());
         if (!sentText) {
@@ -715,11 +773,34 @@ const CounselorMessages = () => {
     }
   };
 
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleVoiceToggle = () => {
+    if (isRecording) {
+      stopRecording();
+      setIsVoiceMode(false);
+    } else {
+      setIsVoiceMode(!isVoiceMode);
+      if (!isVoiceMode && !recording) {
+        startRecording();
+      }
+    }
+  };
+
+  const handleVoiceCancel = () => {
+    cancelRecording();
+    setIsVoiceMode(false);
+  };
+
   const formatFileSize = (bytes: number) => {
     return formatChatFileSize(bytes);
   };
 
-  const canSend = isPeerCounselor ? Boolean(message.trim()) : Boolean(message.trim() || selectedFile);
+  const canSend = Boolean(message.trim() || selectedFile || recording);
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
@@ -790,16 +871,21 @@ const CounselorMessages = () => {
 
       if (kind === "image") {
         return (
-          <div className="space-y-3">
-            <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer">
+          <div className="space-y-2 max-w-sm">
+            <a 
+              href={downloadUrl || resolvedUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block overflow-hidden rounded-2xl border border-border/50 hover:ring-2 hover:ring-primary/20 transition-all"
+            >
               <img
                 src={resolvedUrl}
                 alt={attachment.file_name}
-                className="max-h-60 w-full rounded-2xl object-cover"
+                className="max-h-80 w-full object-cover"
                 loading="lazy"
               />
             </a>
-            <div className="flex items-center justify-between gap-3 text-xs opacity-80">
+            <div className="flex items-center justify-between gap-3 px-1 text-[10px] font-medium opacity-70 uppercase tracking-tight">
               <span className="truncate">{attachment.file_name}</span>
               {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
             </div>
@@ -922,37 +1008,43 @@ const CounselorMessages = () => {
                     filteredChats.map((chat) => (
                       <div
                         key={chat.id}
-                        className={`p-4 cursor-pointer transition-colors border-b border-border/50 ${
-                          selectedChat?.id === chat.id ? "bg-secondary/50" : "hover:bg-secondary/30"
+                        className={`p-3 cursor-pointer transition-all border-b border-border/50 group ${
+                          selectedChat?.id === chat.id 
+                            ? "bg-primary/5 border-l-4 border-l-primary" 
+                            : "hover:bg-secondary/30"
                         }`}
                         onClick={() => setSelectedChatId(chat.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span className="text-sm font-medium text-primary">
+                          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm ${getUserColor(chat.studentName)}`}>
+                            <span className="text-white text-xs font-bold">
                               {getInitials(chat.studentName)}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <p className="font-medium text-foreground truncate">{chat.studentName}</p>
+                            <div className="flex justify-between items-start mb-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                <p className={`text-[13px] font-bold truncate tracking-tight ${selectedChat?.id === chat.id ? "text-primary" : "text-foreground"}`}>
+                                  {chat.studentName}
+                                </p>
                                 {chat.isAnonymous && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                                    Anonymous
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase tracking-tight">
+                                    Anon
                                   </span>
                                 )}
                                 {chat.isPeerAssigned && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary uppercase tracking-wide">
-                                    Peer Assigned
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-tight">
+                                    Peer
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-[10px] font-bold text-muted-foreground/60 tabular-nums uppercase">
                                 {formatTime(chat.lastActivity)}
                               </span>
                             </div>
-                            <p className="text-sm text-muted-foreground truncate">{chat.preview}</p>
+                            <p className="text-[12px] text-muted-foreground/80 truncate leading-snug">
+                              {chat.preview}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -966,23 +1058,25 @@ const CounselorMessages = () => {
               <CardHeader className="border-b border-border/50">
                 <CardTitle className="text-lg flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                      <span className="text-primary font-medium">
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-sm ${getUserColor(selectedChat?.studentName || "Student")}`}>
+                      <span className="text-white text-xs font-bold">
                         {selectedChat ? getInitials(selectedChat.studentName) : <User className="h-4 w-4" />}
                       </span>
                     </div>
-                    <div>
-                      <p className="font-medium">{selectedChat?.studentName || "Select a conversation"}</p>
-                      <p className={`text-sm ${selectedChatIsOnline ? "text-success" : "text-muted-foreground"}`}>
-                        {selectedChat ? (selectedChatIsOnline ? "Online" : "Offline") : ""}
-                      </p>
-                      {selectedChat?.isPeerAssigned && (
-                        <p className="text-xs text-primary">
-                          {isPeerCounselor
-                            ? "Assigned to you by counselor"
-                            : `Delegated to ${selectedChat.peerCounselorName}`}
+                    <div className="min-w-0">
+                      <p className="font-bold text-base lg:text-lg leading-tight truncate">{selectedChat?.studentName || "Select a conversation"}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            selectedChatIsOnline
+                              ? "bg-emerald-500 animate-pulse"
+                              : "bg-muted-foreground/40"
+                          }`}
+                        />
+                        <p className={`text-[11px] font-bold tracking-tight ${selectedChatIsOnline ? "text-emerald-500" : "text-muted-foreground/60"}`}>
+                          {selectedChat ? (selectedChatIsOnline ? "Online" : "Away") : ""}
                         </p>
-                      )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -996,50 +1090,46 @@ const CounselorMessages = () => {
                         Peer Case
                       </span>
                     )}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Shield className="h-4 w-4 text-success" />
+                    <div className="hidden lg:flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                      <Shield className="h-3 w-3" />
                       <span>
-                        {!selectedSessionId
-                          ? "Select a conversation"
-                          : isEncryptionReady
-                          ? "End-to-end encrypted"
-                          : "Securing channel..."}
+                        {isEncryptionReady ? "Encrypted" : "Securing..."}
                       </span>
                     </div>
                     {selectedSessionId && (
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="gap-2"
+                        className="h-9 px-3 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive border border-destructive/10 gap-1.5"
                         onClick={handleEmergencyEscalation}
                         disabled={isTriggeringEmergency}
                       >
-                        <AlertTriangle className="h-4 w-4" />
-                        {isTriggeringEmergency ? "Alerting..." : "Emergency"}
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="text-xs font-bold uppercase tracking-tight">{isTriggeringEmergency ? "Alerting" : "Emergency"}</span>
                       </Button>
                     )}
                     {selectedSessionId && selectedChat?.isAnonymous && (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
-                        className="gap-2"
+                        className="h-9 px-3 rounded-xl gap-1.5"
                         onClick={handleRevealIdentity}
                         disabled={isRevealingIdentity}
                       >
-                        <Shield className="h-4 w-4" />
-                        {isRevealingIdentity ? "Revealing..." : "Reveal Identity"}
+                        <Shield className="h-3.5 w-3.5" />
+                        <span className="text-xs font-bold uppercase tracking-tight">{isRevealingIdentity ? "Revealing" : "Reveal Identity"}</span>
                       </Button>
                     )}
                     {isPeerCounselor && selectedSessionId && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-2"
+                        className="h-9 px-3 rounded-xl gap-1.5"
                         onClick={handleEscalateToCounselor}
                         disabled={isEscalating}
                       >
-                        <AlertTriangle className="h-4 w-4" />
-                        {isEscalating ? "Escalating..." : "Escalate to Counselor"}
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="text-xs font-bold uppercase tracking-tight">{isEscalating ? "Escalating" : "Escalate"}</span>
                       </Button>
                     )}
                   </div>
@@ -1085,43 +1175,61 @@ const CounselorMessages = () => {
                           </Button>
                         </div>
                       )}
-                      {messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`flex ${msg.sender_id === currentUserId ? "justify-end" : "justify-start"}`}
-                        >
+                      {messages.map((msg, idx) => {
+                        const isMine = msg.sender_id === currentUserId;
+                        const prevMsg = messages[idx - 1];
+                        const showAvatar = !isMine && (!prevMsg || prevMsg.sender_id !== msg.sender_id);
+                        const senderName = isMine ? "You" : selectedChat?.studentName || "Student";
+
+                        return (
                           <div
-                            className={`max-w-[70%] p-3 rounded-2xl ${
-                              msg.sender_id === currentUserId
-                                ? "bg-primary text-primary-foreground rounded-br-md"
-                                : "bg-secondary text-secondary-foreground rounded-bl-md"
-                            }`}
+                            key={msg.id}
+                            className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                           >
-                            {renderMessageContent(msg)}
-                            <div
-                              className={`flex items-center gap-1 mt-1 ${
-                                msg.sender_id === currentUserId
-                                  ? "text-primary-foreground/70"
-                                  : "text-muted-foreground"
-                              }`}
-                            >
-                              {msg.is_encrypted && <Shield className="h-3 w-3" />}
-                              <span className="text-xs">{formatTime(msg.created_at)}</span>
-                              {msg.sender_id === currentUserId && (
-                                <span
-                                  className={`text-xs font-semibold ml-1 ${
-                                    msg.seen_at ? "text-success/90" : "text-primary-foreground/80"
-                                  }`}
-                                  aria-label={msg.seen_at ? "Seen" : "Sent"}
-                                  title={msg.seen_at ? "Seen" : "Sent"}
-                                >
-                                  {msg.seen_at ? "✓✓" : "✓"}
+                            {!isMine && (
+                              <div className="w-8 shrink-0">
+                                {showAvatar && (
+                                  <div className={`h-8 w-8 rounded-full ${getUserColor(senderName)} flex items-center justify-center text-[10px] font-bold text-white shadow-sm ring-2 ring-background`}>
+                                    {getInitials(senderName)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div className={`group flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${isMine ? "items-end" : "items-start"}`}>
+                              <div
+                                className={`p-3 lg:p-4 rounded-[1.25rem] transition-all duration-300 shadow-sm ${
+                                  isMine
+                                    ? "bg-primary text-primary-foreground rounded-br-none"
+                                    : "bg-background text-foreground rounded-bl-none border border-border/50"
+                                }`}
+                              >
+                                <div className="text-[15px] leading-relaxed">
+                                  {renderMessageContent(msg)}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 px-1 mt-0.5">
+                                <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                                  {formatTime(msg.created_at)}
                                 </span>
-                              )}
+                                {isMine && (
+                                  <div className="flex ml-1">
+                                    <span
+                                      className={`text-[10px] font-black ${
+                                        msg.seen_at ? "text-emerald-500" : "text-muted-foreground/40"
+                                      }`}
+                                      aria-label={msg.seen_at ? "Seen" : "Sent"}
+                                      title={msg.seen_at ? "Seen" : "Sent"}
+                                    >
+                                      {msg.seen_at ? "✓✓" : "✓"}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {isPeerTyping && (
                         <div className="flex justify-start">
                           <div className="max-w-[70%] p-3 rounded-2xl bg-secondary text-secondary-foreground rounded-bl-md border border-border/50">
@@ -1166,8 +1274,26 @@ const CounselorMessages = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-border/50">
-                  <div className="flex gap-2">
+                {/* Voice recording preview */}
+                {recording && (
+                  <div className="px-4 py-2 border-t border-border/50">
+                    <div className="flex items-center gap-3 p-2 rounded-lg bg-primary/5 border border-primary/10">
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary animate-pulse">
+                        <Mic className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate">Voice Message</p>
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{formatRecordingTime(recordingTime)} | {formatFileSize(recording.blob.size)}</p>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={clearRecording}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-border/50 bg-background/50">
+                  <div className="relative flex items-end gap-2 p-2 bg-background border border-border/50 rounded-[1.5rem] shadow-sm focus-within:ring-2 focus-within:ring-primary/10 transition-all">
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -1175,38 +1301,134 @@ const CounselorMessages = () => {
                       className="hidden"
                       accept={CHAT_ATTACHMENT_ACCEPT}
                     />
-                    {!isPeerCounselor && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleAttachClick}
-                        disabled={isUploading || !selectedSessionId}
-                      >
-                        <Paperclip className="h-5 w-5" />
-                      </Button>
-                    )}
-                    <Input
-                      placeholder={selectedSessionId ? "Type your message..." : "Select a conversation first"}
-                      value={message}
-                      onChange={(e) => {
-                        const nextMessage = e.target.value;
-                        setMessage(nextMessage);
-                        notifyTyping(nextMessage.trim().length > 0);
-                      }}
-                      onBlur={() => notifyTyping(false)}
-                      className="flex-1"
-                      disabled={isSending || isUploading || !selectedSessionId}
-                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 rounded-full hover:bg-secondary transition-all shrink-0 mb-0.5"
+                      onClick={handleAttachClick}
+                      disabled={isUploading || isRecording || !selectedSessionId}
+                    >
+                      <Paperclip className="h-5 w-5 text-muted-foreground" />
+                    </Button>
+                    
+                    <div className="flex-1 relative mb-0.5">
+                      {!isVoiceMode ? (
+                        <div className="relative flex items-center">
+                          <Input
+                            placeholder={selectedSessionId ? "Type your message..." : "Select a conversation"}
+                            value={message}
+                            onChange={(e) => {
+                              const nextMessage = e.target.value;
+                              setMessage(nextMessage);
+                              notifyTyping(nextMessage.trim().length > 0);
+                            }}
+                            onBlur={() => notifyTyping(false)}
+                            className="h-10 pl-1 pr-24 rounded-xl bg-transparent border-none focus-visible:ring-0 text-[15px] shadow-none"
+                            disabled={isSending || isUploading || !selectedSessionId}
+                          />
+                          <div className="absolute right-0 flex items-center gap-1">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
+                                  disabled={isSending || isUploading || !selectedSessionId}
+                                >
+                                  <Smile className="h-5 w-5 text-muted-foreground/60" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-full p-0 border-none shadow-2xl bg-transparent mb-4" align="end" side="top">
+                                <EmojiPicker
+                                  onEmojiClick={(emojiData) => setMessage(prev => prev + emojiData.emoji)}
+                                  theme={EmojiTheme.AUTO}
+                                  lazyLoadEmojis={true}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="icon"
+                              className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
+                              onClick={handleVoiceToggle}
+                              disabled={isSending || isUploading || !selectedSessionId}
+                            >
+                              <Mic className="h-5 w-5 text-muted-foreground/60" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 h-10 px-1">
+                          {isRecording ? (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                                <span className="text-xs font-bold tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                              </div>
+                              <div className="flex-1 h-1 bg-secondary rounded-full overflow-hidden">
+                                <div className="h-full bg-primary animate-progress" style={{ width: '100%' }} />
+                              </div>
+                              <div className="flex gap-1">
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="h-7 w-7 rounded-full"
+                                  onClick={isPaused ? resumeRecording : pauseRecording}
+                                >
+                                  {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                                </Button>
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="h-7 w-7 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={handleVoiceCancel}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button 
+                                  type="button" 
+                                  variant="hero" 
+                                  size="icon"
+                                  className="h-7 w-7 rounded-lg bg-primary hover:bg-primary/90 shadow-md shadow-primary/20"
+                                  onClick={handleVoiceToggle}
+                                >
+                                  <Square className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-between">
+                              <span className="text-[13px] font-medium text-muted-foreground">Voice message ready</span>
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-[11px] font-bold uppercase tracking-tight"
+                                onClick={() => setVoiceMode(false)}
+                              >
+                                Switch to Text
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <Button
                       type="submit"
                       variant="hero"
                       size="icon"
+                      className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95 shrink-0 mb-0.5"
                       disabled={
                         !selectedSessionId ||
-                        !canSend ||
                         isSending ||
                         isUploading ||
+                        (!message.trim() && !selectedFile && !recording) ||
                         (Boolean(message.trim()) && !isEncryptionReady)
                       }
                     >

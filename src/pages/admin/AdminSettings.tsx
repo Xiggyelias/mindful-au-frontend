@@ -667,7 +667,7 @@ const AdminSettings = () => {
                 Wellness Tip Library
               </CardTitle>
               <CardDescription>
-                Manage the supportive daily wellness tips shown across student, counselor, admin, and peer dashboards.
+                Manage the supportive daily wellness tips shown to students and peer counselors.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -722,9 +722,7 @@ const AdminSettings = () => {
                         <SelectContent>
                           <SelectItem value="all">All users</SelectItem>
                           <SelectItem value="student">Students</SelectItem>
-                          <SelectItem value="counselor">Counselors</SelectItem>
                           <SelectItem value="peer_counselor">Peer counselors</SelectItem>
-                          <SelectItem value="admin">Admins</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
