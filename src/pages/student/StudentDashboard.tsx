@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -158,13 +158,17 @@ const StudentDashboard = () => {
     }
   }, [user]);
 
+  const hasInitiallyLoadedRef = useRef(false);
   useEffect(() => {
+    if (!user || hasInitiallyLoadedRef.current) return;
+    hasInitiallyLoadedRef.current = true;
+    
     let isMounted = true;
     void loadStats(isMounted);
     return () => {
       isMounted = false;
     };
-  }, [loadStats]);
+  }, [loadStats, user?.id]);
 
   const handlePanicButton = async () => {
     if (!user?.id) {

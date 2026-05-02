@@ -152,21 +152,23 @@ const CounselorAppointments = () => {
     []
   );
 
+  const hasInitiallyLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user) {
-      setIsLoading(false);
+    if (!user || hasInitiallyLoadedRef.current) {
+      if (!user) setIsLoading(false);
       return;
     }
 
+    hasInitiallyLoadedRef.current = true;
     void loadAppointments(true, { force: true });
-  }, [loadAppointments, user]);
+  }, [loadAppointments, user?.id]);
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
-    if (!user || appointmentPage === 1) return;
+    if (!user || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
     appointmentPageRef.current = appointmentPage;
     void loadAppointments(true, { force: true });
-  }, [appointmentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [appointmentPage, loadAppointments, user?.id]);
 
   useEffect(() => {
     if (!user) return;
