@@ -791,8 +791,18 @@ const StudentChat = () => {
     ? counselorMap.get(activeSession.counselor_id)
     : undefined;
   const activeSessionIsPeerAssigned = isPeerAssignedSession(activeSession);
-  const activeSessionName = activeSession ? getCounselorLabel(activeSession) : "Counselor";
   const currentUserId = Number(user?.id);
+
+  const getCounselorLabel = (session: any) =>
+    (session.assigned_role === "peer_counselor"
+      ? session.peer_counselor?.profile?.full_name || session.peer_counselor?.email
+      : null) ||
+    session.counselor?.profile?.full_name ||
+    (session.counselor_id ? counselorMap.get(session.counselor_id)?.profile?.full_name : undefined) ||
+    session.counselor?.email ||
+    (session.assigned_role === "peer_counselor" ? "Peer Counselor" : "Counselor");
+
+  const activeSessionName = activeSession ? getCounselorLabel(activeSession) : "Counselor";
   const isRecipientOnline = useMemo(() => {
     if (!activeSession) return false;
 
@@ -819,15 +829,6 @@ const StudentChat = () => {
 
     return isWithinOnlineWindow(activeSession.counselor?.last_seen_at);
   }, [activeCounselor, activeSession, activeSessionIsPeerAssigned]);
-
-  const getCounselorLabel = (session: any) =>
-    (session.assigned_role === "peer_counselor"
-      ? session.peer_counselor?.profile?.full_name || session.peer_counselor?.email
-      : null) ||
-    session.counselor?.profile?.full_name ||
-    (session.counselor_id ? counselorMap.get(session.counselor_id)?.profile?.full_name : undefined) ||
-    session.counselor?.email ||
-    (session.assigned_role === "peer_counselor" ? "Peer Counselor" : "Counselor");
 
   const getCounselorOnline = (session: any) => {
     if (!session) return false;
@@ -1301,7 +1302,7 @@ const StudentChat = () => {
                       const isMine = msg.sender_id === currentUserId;
                       const prevMsg = visibleMessages[idx - 1];
                       const showAvatar = !isMine && (!prevMsg || prevMsg.sender_id !== msg.sender_id);
-                      const senderName = msg.sender?.name || (isMine ? "You" : activeSessionName);
+                      const senderName = isMine ? "You" : activeSessionName;
 
                       return (
                         <div
