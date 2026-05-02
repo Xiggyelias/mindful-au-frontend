@@ -37,131 +37,102 @@ export const DailyTipCard = ({
 }: DailyTipCardProps) => {
   return (
     <Card
-      className={`group overflow-hidden border border-sky-200/60 bg-[linear-gradient(145deg,rgba(240,249,255,0.96),rgba(236,253,245,0.96))] shadow-[0_18px_50px_-28px_rgba(14,116,144,0.4)] transition-all duration-500 hover:shadow-[0_22px_60px_-25px_rgba(14,116,144,0.5)] dark:border-sky-900/60 dark:bg-[linear-gradient(145deg,rgba(8,47,73,0.72),rgba(6,78,59,0.68))] ${className ?? ""}`}
+      className={`overflow-hidden border border-sky-200/60 bg-[linear-gradient(145deg,rgba(240,249,255,0.96),rgba(236,253,245,0.96))] shadow-[0_18px_50px_-28px_rgba(14,116,144,0.4)] dark:border-sky-900/60 dark:bg-[linear-gradient(145deg,rgba(8,47,73,0.72),rgba(6,78,59,0.68))] ${className ?? ""}`}
     >
-      <CardHeader className="relative pb-0">
-        <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl transition-all duration-700 group-hover:scale-150 group-hover:bg-emerald-500/20" />
+      <CardHeader className="space-y-4 border-b border-sky-200/50 bg-white/35 backdrop-blur-sm dark:border-sky-900/50 dark:bg-slate-950/10">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-2">
-            <CardTitle className="flex items-center gap-3 text-lg font-bold text-slate-900 dark:text-slate-50">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-transform duration-500 group-hover:rotate-12">
-                <Leaf className="h-6 w-6" />
+            <CardTitle className="flex items-center gap-2 text-lg text-slate-900 dark:text-slate-50">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-200">
+                <Leaf className="h-5 w-5" />
               </span>
-              <span className="bg-[linear-gradient(to_right,theme(colors.slate.900),theme(colors.slate.600))] bg-clip-text text-transparent dark:bg-[linear-gradient(to_right,theme(colors.slate.50),theme(colors.slate.400))]">
-                {title}
-              </span>
+              {title}
             </CardTitle>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              Small, supportive guidance for your day
+            <p className="max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Small, supportive guidance for today. Wellness tips are short by design so they stay easy to use even on busy or low-bandwidth days.
             </p>
           </div>
           {tip?.category ? (
-            <Badge className="whitespace-nowrap border border-emerald-200/50 bg-emerald-100/50 text-emerald-700 shadow-sm dark:border-emerald-800/60 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <Badge className="whitespace-nowrap border border-emerald-300/60 bg-emerald-500/10 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-500/20 dark:text-emerald-100">
               {tip.category}
             </Badge>
           ) : null}
         </div>
       </CardHeader>
-
-      <CardContent className="mt-6 space-y-6">
+      <CardContent className="space-y-4 p-5">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-            <div className="relative">
-              <div className="h-12 w-12 rounded-full border-2 border-emerald-500/20" />
-              <div className="absolute top-0 h-12 w-12 animate-spin rounded-full border-t-2 border-emerald-500" />
-            </div>
-            <p className="animate-pulse text-sm font-medium text-slate-500">
-              Curating your wellness tip...
-            </p>
+          <div className="rounded-3xl border border-dashed border-sky-200/70 bg-white/50 px-4 py-8 text-center text-sm text-slate-600 dark:border-sky-900/60 dark:bg-slate-950/10 dark:text-slate-300">
+            <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
+            Loading today&apos;s wellness tip...
           </div>
         ) : tip ? (
           <>
-            <div className="relative rounded-[2rem] bg-white/60 p-6 shadow-sm transition-colors duration-500 group-hover:bg-white/80 dark:bg-slate-900/40 dark:group-hover:bg-slate-900/60">
-              <div className="space-y-3">
-                <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {tip.title}
-                </h4>
-                <p className="text-base leading-relaxed text-slate-600 dark:text-slate-300">
-                  {tip.content}
-                </p>
-              </div>
-              {onToggleFavorite && (
-                <div className="absolute -right-2 -top-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`h-10 w-10 rounded-full shadow-md transition-all duration-300 ${
-                      tip.is_favorite
-                        ? "bg-pink-50 text-pink-500 hover:bg-pink-100 hover:text-pink-600 dark:bg-pink-500/20"
-                        : "bg-white text-slate-400 hover:bg-slate-50 hover:text-pink-500 dark:bg-slate-800"
-                    }`}
-                    onClick={onToggleFavorite}
-                    disabled={isSavingFavorite}
-                  >
-                    {isSavingFavorite ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                    ) : (
-                      <Heart
-                        className={`h-5 w-5 ${tip.is_favorite ? "fill-current" : ""}`}
-                      />
-                    )}
-                  </Button>
+            <div className="rounded-[1.75rem] border border-sky-200/70 bg-white/70 p-5 shadow-sm dark:border-sky-900/60 dark:bg-slate-950/15">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-slate-900 dark:text-slate-50">
+                    {tip.title}
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-200">
+                    {tip.content}
+                  </p>
                 </div>
-              )}
+                {tip.is_favorite ? (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-200">
+                    <Heart className="h-4 w-4 fill-current" />
+                  </span>
+                ) : null}
+              </div>
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               {tip.personalized ? (
-                <Badge variant="outline" className="gap-1.5 border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-500/10 dark:text-emerald-300">
-                  <Sparkles className="h-3.5 w-3.5" />
+                <Badge variant="outline" className="gap-1 border-sky-300/70 bg-sky-500/10 text-sky-700 dark:border-sky-800/70 dark:bg-sky-500/20 dark:text-sky-100">
+                  <Sparkles className="h-3 w-3" />
                   Personalized for today
                 </Badge>
               ) : null}
               {tip.mood ? (
-                <Badge variant="outline" className="border-sky-200 bg-sky-50/50 text-sky-700 dark:border-sky-800/50 dark:bg-sky-500/10 dark:text-sky-300">
+                <Badge variant="outline" className="capitalize border-emerald-300/70 bg-emerald-500/10 text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-500/20 dark:text-emerald-100">
                   Mood: {tip.mood}
                 </Badge>
               ) : null}
               {tip.served_for_date ? (
-                <Badge variant="outline" className="border-slate-200 bg-white/50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/50">
+                <Badge variant="outline" className="border-slate-300/70 bg-white/60 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/10 dark:text-slate-300">
                   {tip.served_for_date}
                 </Badge>
               ) : null}
             </div>
           </>
         ) : (
-          <div className="rounded-[2rem] border border-dashed border-slate-200 bg-slate-50/50 px-4 py-10 text-center dark:border-slate-800 dark:bg-slate-950/20">
-            <div className="mb-3 flex justify-center">
-              <Sparkles className="h-8 w-8 text-slate-300" />
-            </div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              {error || "No wellness tip available right now. We'll have something new for you soon."}
-            </p>
+          <div className="rounded-3xl border border-dashed border-sky-200/70 bg-white/50 px-4 py-8 text-sm text-slate-600 dark:border-sky-900/60 dark:bg-slate-950/10 dark:text-slate-300">
+            {error || "No active wellness tip is available right now."}
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          {onRefresh && (
+        <div className="flex flex-wrap gap-2">
+          {onRefresh ? (
+            <Button variant="outline" onClick={onRefresh} disabled={isLoading}>
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          ) : null}
+          {tip && onToggleFavorite ? (
             <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-slate-200 bg-white/50 px-4 hover:bg-white hover:text-emerald-600 dark:border-slate-800 dark:bg-slate-900/50"
-              onClick={onRefresh}
-              disabled={isLoading}
+              variant={tip.is_favorite ? "secondary" : "outline"}
+              onClick={onToggleFavorite}
+              disabled={isSavingFavorite}
             >
-              <RefreshCcw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin text-emerald-500" : "text-slate-400"}`} />
-              New Tip
+              {isSavingFavorite ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Heart className={`mr-2 h-4 w-4 ${tip.is_favorite ? "fill-current" : ""}`} />
+              )}
+              {tip.is_favorite ? "Saved" : "Save tip"}
             </Button>
-          )}
-          {actionLabel && onAction && (
-            <Button 
-              size="sm"
-              className="rounded-xl bg-emerald-600 px-4 hover:bg-emerald-700 shadow-md shadow-emerald-600/10"
-              onClick={onAction}
-            >
-              {actionLabel}
-            </Button>
-          )}
+          ) : null}
+          {actionLabel && onAction ? (
+            <Button onClick={onAction}>{actionLabel}</Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>

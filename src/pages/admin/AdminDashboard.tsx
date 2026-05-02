@@ -297,18 +297,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          <DailyTipCard
-            tip={dailyTip}
-            isLoading={tipLoading}
-            error={tipError}
-            title="Admin Tip of the Day"
-            onRefresh={() => void refreshDailyTip()}
-            onToggleFavorite={() => void toggleFavorite()}
-            isSavingFavorite={isSavingFavorite}
-            actionLabel="Manage Tips"
-            onAction={() => navigate("/admin/settings")}
-          />
-
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
               title="Total Students"
@@ -340,6 +328,17 @@ const AdminDashboard = () => {
             />
           </div>
 
+          <DailyTipCard
+            tip={dailyTip}
+            isLoading={tipLoading}
+            error={tipError}
+            title="Admin Tip of the Day"
+            onRefresh={() => void refreshDailyTip()}
+            onToggleFavorite={() => void toggleFavorite()}
+            isSavingFavorite={isSavingFavorite}
+            actionLabel="Manage Tips"
+            onAction={() => navigate("/admin/settings")}
+          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card variant="glass" className="lg:col-span-2">

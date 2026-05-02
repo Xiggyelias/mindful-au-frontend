@@ -136,6 +136,12 @@ const PeerDashboard = () => {
             </CardContent>
           </Card>
 
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {stats.map((item) => (
+              <StatsCard key={item.title} title={item.title} value={item.value} icon={item.icon} />
+            ))}
+          </div>
+
           <DailyTipCard
             tip={dailyTip}
             isLoading={tipLoading}
@@ -147,12 +153,6 @@ const PeerDashboard = () => {
             actionLabel="Open Ethics Guidelines"
             onAction={() => navigate("/peer/ethics")}
           />
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {stats.map((item) => (
-              <StatsCard key={item.title} title={item.title} value={item.value} icon={item.icon} />
-            ))}
-          </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card variant="glass" className="lg:col-span-2">
