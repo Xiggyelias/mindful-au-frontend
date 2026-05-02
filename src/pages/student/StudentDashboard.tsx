@@ -56,7 +56,6 @@ const StudentDashboard = () => {
     chats: 0 
   });
   const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
-  const [diagnostics, setDiagnostics] = useState<any>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -90,8 +89,8 @@ const StudentDashboard = () => {
     navigate(`/student/video-call?${params.toString()}`);
   };
 
-  const loadStats = useCallback(async (isMounted = true) => {
-    if (!user || !isMounted) return;
+  const loadStats = useCallback(async () => {
+    if (!user?.id) return;
     
     try {
       setStatsError(null);
@@ -102,8 +101,6 @@ const StudentDashboard = () => {
         api.getStudentWellnessSummary().catch(() => null),
         api.getStudentMoodToday().catch(() => null),
       ]);
-
-      if (!isMounted) return;
 
       const sessionItems = Array.isArray(sessions)
         ? sessions
@@ -130,44 +127,46 @@ const StudentDashboard = () => {
       const wellnessScore =
         typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
 
-      if (isMounted) {
-        setStats({
-          sessions: sessionItems.length,
-          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
-          wellness: wellnessScore,
-          wellnessLabel: summary?.labels?.wellness ?? null,
-          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
-        });
-        setUpcomingAppointments(upcomingApts);
-        setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
-        
-        const currentMood = summary?.mood || moodData?.log?.mood;
-        if (currentMood) {
-          setDailyMood(currentMood as StudentMood);
-        } else {
-          setDailyMood(null);
-        }
+      setStats({
+        sessions: sessionItems.length,
+        appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
+        wellness: wellnessScore,
+        wellnessLabel: summary?.labels?.wellness ?? null,
+        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+      });
+      setUpcomingAppointments(upcomingApts);
+      
+      const currentMood = summary?.mood || moodData?.log?.mood;
+      if (currentMood) {
+        setDailyMood(currentMood as StudentMood);
+      } else {
+        setDailyMood(null);
       }
     } catch (error) {
-      if (!isMounted) return;
       const errorMessage = error instanceof Error ? error.message : "Failed to load dashboard statistics";
       setStatsError(errorMessage);
       if (import.meta.env.DEV) {
         console.error('Failed to load stats:', error);
       }
     }
-  }, [user]);
+  }, [user?.id]);
 
   const hasInitiallyLoadedRef = useRef(false);
+  
+  // Reset state when user changes
   useEffect(() => {
-    if (!user || hasInitiallyLoadedRef.current) return;
+    hasInitiallyLoadedRef.current = false;
+    setStats({ sessions: 0, appointments: 0, wellness: null, wellnessLabel: null, chats: 0 });
+    setUpcomingAppointments([]);
+    setDailyMood(null);
+    setStatsError(null);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || hasInitiallyLoadedRef.current) return;
     hasInitiallyLoadedRef.current = true;
     
-    let isMounted = true;
-    void loadStats(isMounted);
-    return () => {
-      isMounted = false;
-    };
+    void loadStats();
   }, [loadStats, user?.id]);
 
   const handlePanicButton = async () => {
