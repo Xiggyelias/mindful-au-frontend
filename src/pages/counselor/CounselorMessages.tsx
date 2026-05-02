@@ -419,7 +419,10 @@ const CounselorMessages = () => {
 
         const dedupedByConversation = new Map<string, RawSession>();
         for (const session of chatSessions) {
-          const conversationKey = `session:${Number(session.id)}`;
+          const isAnon = Boolean(session.is_anonymous);
+          const studentId = isAnon ? String(session.anonymous_id || "") : String(session.student_id || "");
+          const assignedRole = session.assigned_role || "counselor";
+          const conversationKey = `s:${studentId}:a:${isAnon ? 1 : 0}:r:${assignedRole}`;
           const existing = dedupedByConversation.get(conversationKey);
           if (!existing) {
             dedupedByConversation.set(conversationKey, session);
@@ -430,6 +433,10 @@ const CounselorMessages = () => {
           const currentOpen = isOpenSession(session.status);
           if (currentOpen && !existingOpen) {
             dedupedByConversation.set(conversationKey, session);
+            continue;
+          }
+
+          if (!currentOpen && existingOpen) {
             continue;
           }
 
