@@ -898,7 +898,7 @@ const StudentChat = () => {
           <Card className="h-full border-none lg:border shadow-none lg:shadow-xl rounded-none lg:rounded-[2rem] overflow-hidden flex flex-col lg:flex-row bg-background relative">
             
             {/* Left Sidebar: Counselor/Chat List - Hidden on mobile when chat is active */}
-            <div className={`${sessionId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[350px] border-r border-border/50 flex-col h-full bg-secondary/10 absolute lg:relative z-10`}>
+            <div className={`${sessionId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[350px] border-r border-border/50 flex-col h-full bg-background lg:bg-secondary/10 absolute lg:relative z-20`}>
               <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold px-2">Chats</h2>
@@ -1092,7 +1092,7 @@ const StudentChat = () => {
             {/* Right Side: Chat Window */}
             <div className="flex-1 flex flex-col h-full bg-background relative">
               {!sessionId ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center space-y-4">
+                <div className="hidden lg:flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center space-y-4">
                   <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
                     <MessageSquare className="h-12 w-12 opacity-20" />
                   </div>
