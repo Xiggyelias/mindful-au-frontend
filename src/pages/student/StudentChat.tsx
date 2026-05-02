@@ -783,6 +783,7 @@ const StudentChat = () => {
     ? counselorMap.get(activeSession.counselor_id)
     : undefined;
   const activeSessionIsPeerAssigned = isPeerAssignedSession(activeSession);
+  const activeSessionName = activeSession ? getCounselorLabel(activeSession) : "Counselor";
   const currentUserId = Number(user?.id);
   const isRecipientOnline = useMemo(() => {
     if (!activeSession) return false;
@@ -1009,6 +1010,7 @@ const StudentChat = () => {
                       No active conversations
                     </div>
                   )}
+                  {sessions.map((session) => (
                       <button
                         key={session.id}
                         onClick={async () => {
@@ -1065,6 +1067,7 @@ const StudentChat = () => {
                           {format(new Date(session.created_at), "h:mm")}
                         </div>
                       </button>
+                    ))}
 
                   {/* Counselors Header */}
                   <div className="px-4 py-2 mt-4">
@@ -1541,7 +1544,7 @@ const StudentChat = () => {
                                     variant="ghost" 
                                     size="sm" 
                                     className="h-7 text-[11px] font-bold uppercase tracking-tight"
-                                    onClick={() => setVoiceMode(false)}
+                                    onClick={() => setIsVoiceMode(false)}
                                   >
                                     Switch to Text
                                   </Button>

@@ -1409,7 +1409,7 @@ const CounselorMessages = () => {
                                 variant="ghost" 
                                 size="sm" 
                                 className="h-7 text-[11px] font-bold uppercase tracking-tight"
-                                onClick={() => setVoiceMode(false)}
+                                onClick={() => setIsVoiceMode(false)}
                               >
                                 Switch to Text
                               </Button>
