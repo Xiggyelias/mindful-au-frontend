@@ -52,7 +52,14 @@ const isOpenChatSession = (session: Session) =>
   session.status !== "completed" && session.status !== "cancelled";
 const isPeerAssignedSession = (session: Session) =>
   session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
-const conversationKey = (session: Session) => `session:${Number(session.id)}`;
+const conversationKey = (session: Session) => {
+  const cId = session.counselor_id || 0;
+  const pId = session.peer_counselor_id || 0;
+  const isAnon = session.is_anonymous ? 1 : 0;
+  const role = session.assigned_role || "counselor";
+  return `c:${cId}:p:${pId}:a:${isAnon}:r:${role}`;
+};
+
 
 export const useChatSession = (userId: number | undefined) => {
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -205,16 +212,24 @@ export const useChatSession = (userId: number | undefined) => {
         setSessionPage(nextPage);
       }
 
-      // Keep unique sessions by id so counselor and peer threads stay separate.
+      // Keep unique sessions by conversation key (counselor + peer + anonymity)
+      // to avoid showing multiple entries for the same chat thread.
       const dedupedByConversation = new Map<string, Session>();
-      for (const session of chatSessions) {
+      
+      // Sort by ID descending first so we process latest sessions first
+      const sortedByRecency = [...chatSessions].sort((a, b) => b.id - a.id);
+      
+      for (const session of sortedByRecency) {
         const key = conversationKey(session);
         const existing = dedupedByConversation.get(key);
+        
         if (!existing) {
           dedupedByConversation.set(key, session);
           continue;
         }
 
+        // If we found an open version of a session we already have, prefer it
+        // (though we already sorted by recency, so this is a safety check).
         if (!isOpenChatSession(existing) && isOpenChatSession(session)) {
           dedupedByConversation.set(key, session);
         }
