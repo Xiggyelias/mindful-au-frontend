@@ -231,7 +231,7 @@ const StudentAppointments = () => {
 
   const hasInitiallyLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || hasInitiallyLoadedRef.current) return;
+    if (!user?.id || hasInitiallyLoadedRef.current) return;
     hasInitiallyLoadedRef.current = true;
     void loadAppointments(true, { force: true });
     void loadCounselors(true, { force: true });
@@ -239,13 +239,13 @@ const StudentAppointments = () => {
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
-    if (!user || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
+    if (!user?.id || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
     appointmentPageRef.current = appointmentPage;
     void loadAppointments(true, { force: true });
   }, [appointmentPage, loadAppointments, user?.id]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const retryLoad = () => {
       if (document.visibilityState !== "visible") return;
@@ -268,7 +268,7 @@ const StudentAppointments = () => {
       window.removeEventListener("online", retryLoad);
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
     };
-  }, [loadAppointments, loadCounselors, user]);
+  }, [loadAppointments, loadCounselors, user?.id]);
 
   const availableCounselors = useMemo(() => {
     const merged = new Map<string, any>();
