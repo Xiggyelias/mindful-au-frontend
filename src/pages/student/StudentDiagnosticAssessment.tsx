@@ -82,8 +82,9 @@ const StudentDiagnosticAssessment = () => {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   useEffect(() => {
+    if (!user?.id) return;
     loadQuestionnaire();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (step === "results") {

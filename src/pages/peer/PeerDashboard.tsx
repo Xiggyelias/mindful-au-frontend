@@ -69,8 +69,9 @@ const PeerDashboard = () => {
   };
 
   useEffect(() => {
+    if (!user?.id) return;
     void load();
-  }, []);
+  }, [user?.id]);
 
   const handleAvailabilityToggle = async (available: boolean) => {
     try {

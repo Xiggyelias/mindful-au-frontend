@@ -73,7 +73,6 @@ const CounselorAIDashboard = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
 
-  const [_highRiskDiagnostics, setHighRiskDiagnostics] = useState<DiagnosticData[]>([]);
   const [recentDiagnostics, setRecentDiagnostics] = useState<DiagnosticData[]>([]);
   const [studentObservations, setStudentObservations] = useState<StudentObservation[]>([]);
   const [highRiskStudents, setHighRiskStudents] = useState<StudentObservation[]>([]);
@@ -83,15 +82,15 @@ const CounselorAIDashboard = () => {
   const [selectedDiagnostic, setSelectedDiagnostic] = useState<DiagnosticData | null>(null);
 
   useEffect(() => {
+    if (!user?.id) return;
     loadDashboardData();
-  }, []);
+  }, [user?.id]);
 
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
       const data = await api.getCounselorDiagnosticDashboard();
 
-      setHighRiskDiagnostics(data.high_risk || []);
       setRecentDiagnostics(data.recent || []);
       setStudentObservations(data.student_observations || []);
       setHighRiskStudents(data.high_risk_students || []);
