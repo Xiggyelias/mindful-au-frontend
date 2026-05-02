@@ -115,7 +115,6 @@ const StudentDashboard = () => {
         : Array.isArray((appointments as any)?.data)
         ? (appointments as any).data
         : [];
-      
       const now = new Date();
       const upcomingApts = appointmentItems
         .filter((a: any) => {
@@ -131,27 +130,29 @@ const StudentDashboard = () => {
       const wellnessScore =
         typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
 
-      setStats({
-        sessions: sessionItems.length,
-        appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
-        wellness: wellnessScore,
-        wellnessLabel: summary?.labels?.wellness ?? null,
-        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
-      });
-      setUpcomingAppointments(upcomingApts);
-      setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
-      
-      const currentMood = summary?.mood || moodData?.log?.mood;
-      if (currentMood) {
-        setDailyMood(currentMood as StudentMood);
-      } else {
-        setDailyMood(null);
+      if (isMounted) {
+        setStats({
+          sessions: sessionItems.length,
+          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
+          wellness: wellnessScore,
+          wellnessLabel: summary?.labels?.wellness ?? null,
+          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+        });
+        setUpcomingAppointments(upcomingApts);
+        setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+        
+        const currentMood = summary?.mood || moodData?.log?.mood;
+        if (currentMood) {
+          setDailyMood(currentMood as StudentMood);
+        } else {
+          setDailyMood(null);
+        }
       }
     } catch (error) {
       if (!isMounted) return;
       const errorMessage = error instanceof Error ? error.message : "Failed to load dashboard statistics";
       setStatsError(errorMessage);
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error('Failed to load stats:', error);
       }
     }
@@ -188,7 +189,7 @@ const StudentDashboard = () => {
           });
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
         } catch (err) {
-          if (process.env.NODE_ENV === 'development') {
+          if (import.meta.env.DEV) {
             console.log('Could not get location:', err);
           }
           toast.warning("Location unavailable - we'll send your alert without location data.");
@@ -198,7 +199,7 @@ const StudentDashboard = () => {
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent! A counselor will contact you shortly.");
     } catch (error: any) {
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error('Panic button error:', error);
       }
       toast.error(error.response?.data?.message || "Failed to send emergency alert. Please try again.");
@@ -242,7 +243,7 @@ const StudentDashboard = () => {
             setDailyMood(today.log.mood as StudentMood);
           }
         } catch (syncError) {
-          if (process.env.NODE_ENV === 'development') {
+          if (import.meta.env.DEV) {
             console.error('Failed to sync mood state:', syncError);
           }
         }
