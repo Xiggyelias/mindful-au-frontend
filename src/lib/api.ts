@@ -254,7 +254,7 @@ class ApiClient {
 
     // Intercept requests to add token
     this.client.interceptors.request.use((config) => {
-      config.headers = config.headers ?? {};
+      config.headers = (config.headers ?? {}) as any;
 
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;

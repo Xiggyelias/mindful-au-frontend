@@ -264,25 +264,35 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
   return "Could not access camera or microphone. Check device permissions and try again.";
 };
 
+const normalizeId = (id: string | number | null | undefined): string => {
+  if (id === null || id === undefined) return "";
+  const s = String(id).trim();
+  // If it's a numeric string, we keep it as is, but we'll use numeric comparison where possible
+  return s;
+};
+
 const isPolitePeer = (localUserId: string, remoteUserId: string): boolean => {
-  const normalizedLocalId = String(localUserId || "");
-  const normalizedRemoteId = String(remoteUserId || "");
+  const normalizedLocalId = normalizeId(localUserId);
+  const normalizedRemoteId = normalizeId(remoteUserId);
 
   if (!normalizedLocalId || !normalizedRemoteId || normalizedLocalId === normalizedRemoteId) {
+    // Default to false if we can't decide, but usually we should have both IDs
     return false;
   }
 
   const localNumericId = Number(normalizedLocalId);
   const remoteNumericId = Number(normalizedRemoteId);
 
+  // If both are numeric, use numeric comparison for consistency
   if (
-    Number.isFinite(localNumericId) &&
-    Number.isFinite(remoteNumericId) &&
+    !Number.isNaN(localNumericId) &&
+    !Number.isNaN(remoteNumericId) &&
     localNumericId !== remoteNumericId
   ) {
     return localNumericId > remoteNumericId;
   }
 
+  // Fallback to string comparison (e.g. for UUIDs)
   return normalizedLocalId.localeCompare(normalizedRemoteId) > 0;
 };
 
@@ -667,6 +677,15 @@ const createEnginePeerConnection = () => {
         isConnecting: false,
         notice: null,
       }));
+    }
+  };
+
+  connection.onnegotiationneeded = async () => {
+    try {
+      console.log("[WebRTC] Negotiation needed event fired");
+      await sendEngineOffer(connection);
+    } catch (err) {
+      console.error("[WebRTC] Error during onnegotiationneeded:", err);
     }
   };
 
@@ -1178,12 +1197,15 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
     })
     .subscribe((status) => {
       if (status === "SUBSCRIBED") {
+        console.log(`[WebRTC] Successfully subscribed to channel: video-call-${sessionId}`);
         setEngineState((prev) => ({ ...prev, isSignalingReady: true, error: null, notice: null }));
-      }
-
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+      } else if (status === "CHANNEL_ERROR") {
+        console.error(`[WebRTC] Channel error for session: ${sessionId}`);
         setEngineState((prev) => ({ ...prev, isSignalingReady: false }));
         setEngineConnectionError("Call signaling channel unavailable.");
+      } else if (status === "TIMED_OUT" || status === "CLOSED") {
+        setEngineState((prev) => ({ ...prev, isSignalingReady: false }));
+        setEngineConnectionError("Call signaling channel timed out or closed.");
       }
     });
 };
@@ -1527,7 +1549,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, []);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !userId) {
       setEngineState((prev) => ({
         ...prev,
         isSignalingReady: false,
@@ -1539,6 +1561,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     }
 
     ensureEngineChannel(sessionId, userId);
+
+    return () => {
+      // Cleanup channel on unmount if we aren't in a live call
+      // This prevents stale signaling in background tabs/pages
+      if (engine.channel && !engine.peerConnection) {
+        console.log(`[WebRTC] Cleaning up signaling channel on unmount: ${sessionId}`);
+        engine.channel.unsubscribe();
+        engine.channel = null;
+        engine.sessionId = "";
+      }
+    };
   }, [sessionId, userId]);
 
   useEffect(() => {
