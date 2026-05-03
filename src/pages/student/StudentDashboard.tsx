@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Phone,
   Clock,
+  Users,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -56,7 +57,7 @@ const StudentDashboard = () => {
     chats: 0 
   });
   const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
-  const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
+  const [recentSessions, setRecentSessions] = useState<any[]>([]);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -124,15 +125,12 @@ const StudentDashboard = () => {
         })
         .slice(0, 3);
       
-      const wellnessScore =
-        typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
-
       setStats({
-        sessions: sessionItems.length,
-        appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
-        wellness: wellnessScore,
+        sessions: sessionRows.filter((s: any) => s.status !== 'completed' && s.status !== 'cancelled').length,
+        appointments: appointmentRows.filter((a: any) => a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'pending').length,
+        wellness: Number(summary?.scores?.wellness_score) || null,
         wellnessLabel: summary?.labels?.wellness ?? null,
-        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionRows.length),
       });
       setUpcomingAppointments(upcomingApts);
       
@@ -440,6 +438,62 @@ const StudentDashboard = () => {
           </div>
 
           <div className="grid gap-8 lg:grid-cols-2">
+            {/* Recent Conversations */}
+            <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
+              <CardHeader className="bg-secondary/10 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl font-bold flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-primary" />
+                    Recent Conversations
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80" onClick={() => navigate("/student/chat")}>
+                    View all
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  {recentSessions.length === 0 ? (
+                    <div className="text-center py-8 bg-secondary/20 rounded-2xl border-2 border-dashed border-border/50">
+                      <p className="text-muted-foreground mb-4">No active conversations yet</p>
+                      <Button variant="outline" size="sm" onClick={() => navigate("/student/chat")}>
+                        Find a counselor
+                      </Button>
+                    </div>
+                  ) : (
+                    recentSessions.map((session) => {
+                      const counselorName = session.counselor?.profile?.full_name || session.peer_counselor?.profile?.full_name || "Counselor";
+                      const isPeer = session.assigned_role === 'peer_counselor';
+                      
+                      return (
+                        <div key={session.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300 cursor-pointer" onClick={() => navigate(`/student/chat?session_id=${session.id}`)}>
+                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center border ${isPeer ? 'bg-info/10 text-info border-info/20' : 'bg-primary/10 text-primary border-primary/20'}`}>
+                            {isPeer ? <Users className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                              {counselorName}
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className={`h-2 w-2 rounded-full ${session.status === 'active' || session.status === 'open' ? 'bg-success animate-pulse' : 'bg-muted'}`} />
+                              {session.is_anonymous ? "Anonymous Session" : isPeer ? "Peer Support" : "Professional Support"}
+                            </p>
+                          </div>
+                          <Button 
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full text-primary"
+                          >
+                            Resume
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Upcoming Sessions */}
             <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
               <CardHeader className="bg-secondary/10 border-b border-border/50">
@@ -521,7 +575,9 @@ const StudentDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          </div>
 
+          <div className="mt-8">
             {/* Wellness Tips & Mood Analytics */}
             <DailyTipCard
               className="rounded-3xl shadow-xl shadow-primary/5"

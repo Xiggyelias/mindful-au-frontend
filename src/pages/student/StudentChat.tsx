@@ -13,6 +13,7 @@ import {
   Bot,
   History,
   Heart,
+  Menu,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -371,11 +372,13 @@ const StudentChat = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <DashboardHeader
-          title="Clinical Support"
-          onMenuClick={() => setSidebarOpen(true)}
-        />
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {!activeSession && (
+          <DashboardHeader
+            title="Clinical Support"
+            onMenuClick={() => setSidebarOpen(true)}
+          />
+        )}
 
         <ErrorBoundary>
           <div className="flex-1 flex overflow-hidden">
@@ -425,17 +428,22 @@ const StudentChat = () => {
                 <>
                   {/* Chat Header */}
                   <div className="p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
-                    <div className="flex items-center gap-4">
-                      <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => selectSession(null)}>
-                        <X className="h-5 w-5" />
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
+                        <Menu className="h-5 w-5" />
                       </Button>
-                      <div>
-                        <h2 className="text-lg font-bold truncate">
-                          {activeSession.counselor?.profile?.full_name || "Support Session"}
-                        </h2>
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
+                      <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => selectSession(null)}>
+                          <X className="h-5 w-5" />
+                        </Button>
+                        <div className="min-w-0">
+                          <h2 className="text-lg font-bold truncate">
+                            {activeSession.counselor?.profile?.full_name || "Support Session"}
+                          </h2>
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
+                          </div>
                         </div>
                       </div>
                     </div>
