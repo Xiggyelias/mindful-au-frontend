@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useAIChat } from "@/hooks/useAIChat";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
 const navItems = [
@@ -99,9 +99,11 @@ const StudentAISupport = () => {
 
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent. A counselor or responder will be notified.");
-    } catch (triggerError: any) {
-      console.error("Emergency alert error:", triggerError);
-      toast.error(triggerError?.response?.data?.message || "Failed to send emergency alert. Please try again.");
+    } catch (triggerError: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Emergency alert error:", triggerError);
+      }
+      toast.error(getApiErrorMessage(triggerError, "Failed to send emergency alert. Please try again."));
     } finally {
       setIsTriggeringEmergency(false);
     }

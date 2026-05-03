@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { api } from "@/lib/api";
+import { Appointment, Session } from "@/hooks/useChatSession";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -52,9 +53,9 @@ const navItems = [
 ];
 
 const getParticipantName = (participant: any, fallback: string) =>
-  participant?.profile?.full_name ||
-  participant?.full_name ||
-  participant?.email?.split("@")[0] ||
+  (participant as { profile?: { full_name?: string }, full_name?: string, email?: string })?.profile?.full_name ||
+  (participant as { profile?: { full_name?: string }, full_name?: string, email?: string })?.full_name ||
+  (participant as { profile?: { full_name?: string }, full_name?: string, email?: string })?.email?.split("@")[0] ||
   fallback;
 
 const getInitials = (value: string) =>
@@ -77,7 +78,7 @@ const CounselorVideo = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [pendingSessionStartId, setPendingSessionStartId] = useState<string | null>(null);
   const [pendingCallMode, setPendingCallMode] = useState<"video" | "audio">("video");
-  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
@@ -146,7 +147,7 @@ const CounselorVideo = () => {
       setIsLoading(true);
       const appointments = await api.getAppointments();
       const videoAppointments = appointments
-        .filter((apt: any) => {
+        .filter((apt: Appointment) => {
           if (!apt?.scheduled_at) return false;
           if (!isVideoEnabledAppointment(apt.notes)) return false;
           if (!(apt.status === "scheduled" || apt.status === "confirmed")) return false;
@@ -157,8 +158,8 @@ const CounselorVideo = () => {
           return !callWindow.isExpired;
         })
         .sort(
-          (a: any, b: any) =>
-            new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+          (a: Appointment, b: Appointment) =>
+            new Date(a.scheduled_at || 0).getTime() - new Date(b.scheduled_at || 0).getTime()
         )
         .slice(0, 5);
 
@@ -171,18 +172,20 @@ const CounselorVideo = () => {
 
       const requestedSession =
         requestedAppointmentId !== null
-          ? videoAppointments.find((item: any) => Number(item.id) === requestedAppointmentId)
+          ? videoAppointments.find((item: Appointment) => Number(item.id) === requestedAppointmentId)
           : null;
 
       setActiveSessionId((previous) =>
-        previous && videoAppointments.some((item: any) => String(item.id) === previous)
+        previous && videoAppointments.some((item: Appointment) => String(item.id) === previous)
           ? previous
           : requestedSession
           ? String(requestedSession.id)
           : String(videoAppointments[0].id)
       );
-    } catch (err: any) {
-      console.error("Failed to load sessions:", err);
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to load sessions:", err);
+      }
       toast.error("Failed to load upcoming sessions");
     } finally {
       setIsLoading(false);
@@ -378,9 +381,10 @@ const CounselorVideo = () => {
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          toast.error(err?.response?.data?.message || "Failed to start session");
+          const errMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to start session";
+          toast.error(errMsg);
           setPendingSessionStartId(null);
         }
         return;

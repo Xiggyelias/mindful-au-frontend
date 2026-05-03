@@ -12,16 +12,18 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { resolveMessageAttachment, getAttachmentKind, formatChatFileSize } from "@/lib/chatAttachments";
+import { ChatMessage } from "@/hooks/useEncryptedChat";
+import { Session } from "@/hooks/useChatSession";
 
 interface MessageListProps {
-  messages: any[];
+  messages: ChatMessage[];
   isLoading: boolean;
   isLoadingOlderMessages: boolean;
   hasOlderMessages: boolean;
   isAtBottom: boolean;
   showScrollToBottom: boolean;
   user: any;
-  activeSession: any;
+  activeSession: Session | null;
   isPeerTyping: boolean;
   deletingMessageIds: Set<number>;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -58,7 +60,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
-  const renderMessageContent = (msg: any) => {
+  const renderMessageContent = (msg: ChatMessage) => {
     const content = msg.decryptedContent || msg.content;
     const attachment = resolveMessageAttachment(msg);
 
@@ -145,12 +147,20 @@ export const MessageList: React.FC<MessageListProps> = ({
             </p>
           </div>
           <div className="grid gap-3 pt-4">
-             <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic">
+             <button 
+                className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left hover:bg-secondary/50 transition-colors"
+                onClick={() => {}} // Could be wired to set input message
+                aria-label="Prompt: I'm feeling a bit overwhelmed lately"
+             >
                 "I'm feeling a bit overwhelmed lately..."
-             </div>
-             <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic">
+             </button>
+             <button 
+                className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left hover:bg-secondary/50 transition-colors"
+                onClick={() => {}}
+                aria-label="Prompt: I'd like to check in on my wellness goals"
+             >
                 "I'd like to check in on my wellness goals."
-             </div>
+             </button>
           </div>
         </div>
       </div>
@@ -243,13 +253,14 @@ export const MessageList: React.FC<MessageListProps> = ({
         <Button
           size="icon"
           variant="secondary"
-          className="absolute bottom-6 right-6 h-10 w-10 rounded-full shadow-2xl border border-border/50 animate-in zoom-in fade-in duration-300 z-10 hover:scale-110 transition-transform"
+          className="absolute bottom-6 right-6 h-10 w-10 rounded-full shadow-2xl border border-border/50 animate-in zoom-in fade-in duration-300 z-40 hover:scale-110 transition-transform"
           onClick={scrollToBottom}
           aria-label="Scroll to bottom of messages"
         >
           <ArrowDown className="h-5 w-5" />
         </Button>
       )}
+
     </div>
   );
 };

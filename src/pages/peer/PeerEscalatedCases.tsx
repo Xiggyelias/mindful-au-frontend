@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { peerNavItems } from "./navItems";
 
@@ -40,8 +40,8 @@ const PeerEscalatedCases = () => {
         setLoading(true);
         const response = await api.getPeerEscalations();
         setRows(Array.isArray(response) ? response : []);
-      } catch (error: any) {
-        toast.error(error?.response?.data?.message || "Failed to load escalated cases");
+      } catch (error: unknown) {
+        toast.error(getApiErrorMessage(error, "Failed to load escalated cases"));
       } finally {
         setLoading(false);
       }
@@ -85,7 +85,7 @@ const PeerEscalatedCases = () => {
                       <p className="font-medium text-foreground">{row.student_label}</p>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="capitalize">
-                          {row.escalation_type.replaceAll("_", " ")}
+                          {row.escalation_type.replace(/_/g, " ")}
                         </Badge>
                         <span
                           className={`text-xs px-2 py-0.5 rounded-full capitalize ${severityClass[row.severity] || ""}`}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Appointment } from "@/hooks/useChatSession";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -41,14 +42,14 @@ type PagedMeta = {
   total_pages?: number;
 };
 
-type AppointmentListResponse = any[] | { data?: any[]; meta?: PagedMeta };
+type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
 const APPOINTMENTS_PAGE_SIZE = 12;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
 
 const StudentAppointments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [appointmentTotalPages, setAppointmentTotalPages] = useState(1);
   const [appointmentTotalItems, setAppointmentTotalItems] = useState(0);
@@ -132,7 +133,7 @@ const StudentAppointments = () => {
               : Array.isArray(pagedPayload?.data)
               ? pagedPayload.data
               : []
-          ) as any[];
+          ) as Appointment[];
 
           const receivedPage = Number(pagedPayload?.meta?.page);
           const receivedTotalPages = Number(pagedPayload?.meta?.total_pages);
@@ -158,7 +159,7 @@ const StudentAppointments = () => {
             appointmentPageRef.current = nextPage;
             setAppointmentPage(nextPage);
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("Failed to load appointments", err);
           if (showErrorToast) {
             toastRef.current({
@@ -405,8 +406,10 @@ const StudentAppointments = () => {
         duration_minutes: 60,
       });
       await loadAppointments(false, { force: true });
-    } catch (err: any) {
-      console.error("Create appointment error", err);
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Create appointment error", err);
+      }
       toast({
         title: "Booking failed",
         description: getApiErrorMessage(err, "Please try again."),
@@ -417,7 +420,7 @@ const StudentAppointments = () => {
     }
   };
 
-  const openCancelDialog = (appointment: any) => {
+  const openCancelDialog = (appointment: Appointment) => {
     setAppointmentToCancel(appointment);
     setCancellationReason("");
     setCancelDialogOpen(true);
@@ -451,8 +454,10 @@ const StudentAppointments = () => {
       setCancellationReason("");
 
       await loadAppointments(false, { force: true });
-    } catch (err: any) {
-      console.error("Cancel appointment error", err);
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Cancel appointment error", err);
+      }
       toast({
         title: "Cancellation failed",
         description: getApiErrorMessage(err, "Please try again."),
@@ -474,7 +479,7 @@ const StudentAppointments = () => {
   };
 
   const sortedAppointments = useMemo(() => {
-    const getSortTimestamp = (apt: any) => {
+    const getSortTimestamp = (apt: Appointment) => {
       const createdAtMs = new Date(apt?.created_at || 0).getTime();
       if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
         return createdAtMs;
@@ -506,18 +511,18 @@ const StudentAppointments = () => {
     setAppointmentPage(next);
   };
 
-  const openVideoCallRoom = (appointment: any) => {
-    if (!appointment?.id) {
+  const openVideoCallRoom = (apt: Appointment) => {
+    if (!apt?.id) {
       return;
     }
 
     const params = new URLSearchParams({
-      appointment_id: String(appointment.id),
+      appointment_id: String(apt.id),
       autostart: "1",
     });
 
-    if (appointment.counselor_id) {
-      params.set("counselor_id", String(appointment.counselor_id));
+    if (apt.counselor_id) {
+      params.set("counselor_id", String(apt.counselor_id));
     }
 
     navigate(`/student/video-call?${params.toString()}`);

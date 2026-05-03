@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -201,11 +201,11 @@ const StudentDashboard = () => {
 
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent! A counselor will contact you shortly.");
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error('Panic button error:', error);
       }
-      toast.error(error.response?.data?.message || "Failed to send emergency alert. Please try again.");
+      toast.error(getApiErrorMessage(error, "Failed to send emergency alert. Please try again."));
     } finally {
       setIsPanicLoading(false);
     }
@@ -236,8 +236,8 @@ const StudentDashboard = () => {
       setDailyMood(recorded);
       const recordedLabel = moodOptions.find((item) => item.value === recorded)?.label.toLowerCase() ?? recorded;
       toast.success(`Mood saved: ${recordedLabel}.`);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error);
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
         // Always sync state from server to maintain single source of truth
         try {

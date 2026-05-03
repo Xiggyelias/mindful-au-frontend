@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
 const navItems = [
@@ -177,9 +177,11 @@ const StudentDiagnosticAssessment = () => {
       setResult(data.diagnostic);
       setStep("results");
       toast.success("Assessment completed successfully!");
-    } catch (error: any) {
-      console.error("Failed to submit assessment:", error);
-      toast.error(error.response?.data?.message || "Failed to submit assessment");
+    } catch (error: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to submit assessment:", error);
+      }
+      toast.error(getApiErrorMessage(error, "Failed to submit assessment"));
     } finally {
       setIsLoading(false);
     }

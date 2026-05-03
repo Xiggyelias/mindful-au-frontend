@@ -35,8 +35,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { useEncryptedChat } from "@/hooks/useEncryptedChat";
+import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
+import { useChatSession, Session } from "@/hooks/useChatSession";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -559,7 +560,7 @@ const CounselorMessages = () => {
 
         hasShownLoadErrorRef.current = false;
       } catch (err) {
-        if (process.env.NODE_ENV === "development") {
+        if (import.meta.env.DEV) {
           console.error("Failed to load sessions:", err);
         }
         const status = (err as { response?: { status?: number } })?.response?.status;
@@ -610,7 +611,27 @@ const CounselorMessages = () => {
     };
   }, [loadSessions, user?.id]);
 
+  // Optimized scroll management using refs to avoid re-binding on every message change
+  const messagesLengthRef = useRef(messages.length);
+  const isAtBottomRef = useRef(true);
+
+  // Track if we are at bottom
   useEffect(() => {
+    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]"
+    );
+    if (!viewport) return;
+
+    const onScrollInternal = () => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
+    };
+    viewport.addEventListener("scroll", onScrollInternal, { passive: true });
+    return () => viewport.removeEventListener("scroll", onScrollInternal);
+  }, []);
+
+  useEffect(() => {
+    messagesLengthRef.current = messages.length;
     const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
     if (!latestMessageId || !Number.isFinite(latestMessageId)) {
       lastRenderedTailMessageIdRef.current = null;
@@ -618,9 +639,12 @@ const CounselorMessages = () => {
     }
 
     const previousTailId = lastRenderedTailMessageIdRef.current;
-    if (previousTailId === null || latestMessageId !== previousTailId) {
+    if (previousTailId === null || (latestMessageId !== previousTailId && isAtBottomRef.current)) {
       if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: previousTailId === null ? "auto" : "smooth" });
+        scrollRef.current.scrollIntoView({ 
+          behavior: previousTailId === null ? "auto" : "smooth",
+          block: "end"
+        });
       }
     }
     lastRenderedTailMessageIdRef.current = latestMessageId;
@@ -703,7 +727,7 @@ const CounselorMessages = () => {
 
       void loadSessions(true);
     } catch (error) {
-      if (process.env.NODE_ENV === "development") {
+      if (import.meta.env.DEV) {
         console.error("Failed to send message:", error);
       }
       toast.error(getApiErrorMessage(error, "Failed to send message"));
@@ -724,8 +748,9 @@ const CounselorMessages = () => {
       toast.success("Case escalated to counselor.");
       setSelectedChatId(null);
       await loadSessions(false);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to escalate case");
+    } catch (error: unknown) {
+      const errMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to escalate case";
+      toast.error(errMsg);
     } finally {
       setIsEscalating(false);
     }
@@ -748,8 +773,9 @@ const CounselorMessages = () => {
       });
       toast.success("Emergency escalation sent.");
       await loadSessions(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to send emergency escalation");
+    } catch (error: unknown) {
+      const errMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to send emergency escalation";
+      toast.error(errMsg);
     } finally {
       setIsTriggeringEmergency(false);
     }
@@ -887,7 +913,7 @@ const CounselorMessages = () => {
     };
   }, [handleLoadOlderMessages, hasOlderMessages, isLoadingOlderMessages, selectedSessionId]);
 
-  const renderMessageContent = (msg: any) => {
+  const renderMessageContent = (msg: ChatMessage) => {
     const content = msg.decryptedContent || msg.content || "";
 
     const attachment = resolveMessageAttachment(msg);

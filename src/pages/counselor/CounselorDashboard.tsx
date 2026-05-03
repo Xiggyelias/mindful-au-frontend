@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Appointment } from "@/hooks/useChatSession";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -19,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle } from "lucide-react";
 
@@ -53,7 +54,7 @@ const toList = <T,>(payload: unknown): T[] => {
 const CounselorDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [counselorWellness, setCounselorWellness] = useState<any>(null);
   const [diagnosticsSummary, setDiagnosticsSummary] = useState<any>(null);
   const [activeSessionStudentIds, setActiveSessionStudentIds] = useState<number[]>([]);
@@ -63,7 +64,7 @@ const CounselorDashboard = () => {
   const { toast } = useToast();
   const toastRef = useRef(toast);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
-  const isApprovedCounselor = user?.roles?.some((r: any) => r.role === "counselor" && r.approved);
+  const isApprovedCounselor = user?.roles?.some((r: { role: string; approved: boolean }) => r.role === "counselor" && r.approved);
 
   useEffect(() => {
     toastRef.current = toast;
@@ -89,7 +90,7 @@ const CounselorDashboard = () => {
         return;
       }
 
-      const appointmentRows = toList<any>(appointmentsPayload);
+      const appointmentRows = toList<Appointment>(appointmentsPayload);
       setAppointments(appointmentRows);
       setIsLoading(false);
 
@@ -148,12 +149,14 @@ const CounselorDashboard = () => {
         );
         setActiveSessionStudentIds(uniqueStudentIds);
       })();
-    } catch (err: any) {
-      console.error("Failed to load counselor dashboard data", err);
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to load counselor dashboard data", err);
+      }
       if (loadRequestRef.current === requestId) {
         toastRef.current({
           title: "Could not load dashboard data",
-          description: err?.response?.data?.message || "Please try again.",
+          description: getApiErrorMessage(err, "Please try again."),
           variant: "destructive",
         });
       }
@@ -243,7 +246,7 @@ const CounselorDashboard = () => {
     navigate("/counselor/appointments");
   };
 
-  const handleJoinSession = (apt: any) => {
+  const handleJoinSession = (apt: Appointment) => {
     if (apt.notes?.includes("Physical")) {
       navigate("/counselor/appointments");
     } else {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 
-interface Session {
+export interface Session {
   id: number;
   student_id: number;
   counselor_id: number | null;
@@ -30,6 +30,34 @@ interface Session {
     profile?: {
       full_name?: string;
       avatar_url?: string;
+    };
+  };
+}
+
+export interface Appointment {
+  id: number;
+  student_id: number;
+  counselor_id: number;
+  scheduled_at: string;
+  duration_minutes: number;
+  status: 'pending' | 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+  is_anonymous?: boolean;
+  notes?: string;
+  cancellation_reason?: string;
+  created_at?: string;
+  updated_at?: string;
+  student?: {
+    id: number;
+    email: string;
+    profile?: {
+      full_name: string;
+    };
+  };
+  counselor?: {
+    id: number;
+    email: string;
+    profile?: {
+      full_name: string;
     };
   };
 }

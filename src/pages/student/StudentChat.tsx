@@ -7,6 +7,12 @@ import {
   Phone,
   Video,
   AlertTriangle,
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
+  Bot,
+  History,
+  Heart,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -14,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
@@ -23,13 +30,13 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 
 const navItems = [
-  { label: "Dashboard", icon: (props: any) => <span {...props} className="lucide lucide-layout-dashboard" /> as any, path: "/student/dashboard" },
-  { label: "Chat", icon: (props: any) => <span {...props} className="lucide lucide-message-square" /> as any, path: "/student/chat" },
-  { label: "Appointments", icon: (props: any) => <span {...props} className="lucide lucide-calendar" /> as any, path: "/student/appointments" },
-  { label: "AI Support", icon: (props: any) => <span {...props} className="lucide lucide-bot" /> as any, path: "/student/ai-support" },
-  { label: "Video Call", icon: (props: any) => <span {...props} className="lucide lucide-video" /> as any, path: "/student/video-call" },
-  { label: "Past Sessions", icon: (props: any) => <span {...props} className="lucide lucide-history" /> as any, path: "/student/history" },
-  { label: "Wellness", icon: (props: any) => <span {...props} className="lucide lucide-heart" /> as any, path: "/student/wellness" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
+  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
+  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
+  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
+  { label: "Video Call", icon: Video, path: "/student/video-call" },
+  { label: "Past Sessions", icon: History, path: "/student/history" },
+  { label: "Wellness", icon: Heart, path: "/student/wellness" },
 ];
 
 // Note: Using placeholders for nav icons to keep this file cleaner, 
@@ -205,6 +212,9 @@ const StudentChat = () => {
           }));
         }
       } catch (err) {
+        if (import.meta.env.DEV) {
+          console.error("Failed to load counselors:", err);
+        }
         if (showErrorToast && !cacheLoaded) toast.error("Failed to load counselors");
       } finally {
         if (active) setIsCounselorsLoading(false);
@@ -271,6 +281,9 @@ const StudentChat = () => {
         }
       }
     } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to send message:", error);
+      }
       toast.error("Failed to send message");
     }
     setIsSending(false);
@@ -351,7 +364,7 @@ const StudentChat = () => {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <DashboardSidebar
-        items={navItems as any}
+        items={navItems as any[]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -364,164 +377,178 @@ const StudentChat = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Chat Sidebar */}
-          <div className="hidden lg:block">
-            <ChatSidebar
-              sessions={sessions}
-              activeSession={activeSession}
-              counselors={counselors}
-              isCounselorsLoading={isCounselorsLoading}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              onSelectSession={handleSelectSessionById}
-              onStartSession={handleStartSessionWrapper}
-              anonymousStartMode={anonymousStartMode}
-              onToggleAnonymous={setAnonymousStartMode}
-              counselorPage={counselorPage}
-              counselorTotalPages={counselorTotalPages}
-              onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
-              onPrevCounselorPage={() => setCounselorPage(p => Math.max(p - 1, 1))}
-              sessionPage={sessionPage}
-              sessionTotalPages={sessionTotalPages}
-              onNextSessionPage={goToNextSessionPage}
-              onPrevSessionPage={goToPrevSessionPage}
-            />
-          </div>
+        <ErrorBoundary>
+          <div className="flex-1 flex overflow-hidden">
+            {/* Chat Sidebar */}
+            <div className="hidden lg:block">
+              <ChatSidebar
+                sessions={sessions}
+                activeSession={activeSession}
+                counselors={counselors}
+                isCounselorsLoading={isCounselorsLoading}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onSelectSession={handleSelectSessionById}
+                onStartSession={handleStartSessionWrapper}
+                anonymousStartMode={anonymousStartMode}
+                onToggleAnonymous={setAnonymousStartMode}
+                counselorPage={counselorPage}
+                counselorTotalPages={counselorTotalPages}
+                onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
+                onPrevCounselorPage={() => setCounselorPage(p => Math.max(p - 1, 1))}
+                sessionPage={sessionPage}
+                sessionTotalPages={sessionTotalPages}
+                onNextSessionPage={goToNextSessionPage}
+                onPrevSessionPage={goToPrevSessionPage}
+              />
+            </div>
 
-          {/* Main Chat Area */}
-          <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative">
-            {/* Handshake Indicator */}
-            {activeSession && !isEncryptionReady && (
-              <div className="absolute top-0 left-0 right-0 z-20 bg-primary/10 backdrop-blur-md border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection...</span>
-              </div>
-            )}
+            {/* Main Chat Area */}
+            <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative">
+              {/* Handshake Indicator */}
+              {activeSession && !isEncryptionReady && (
+                <div className="absolute top-0 left-0 right-0 z-20 bg-primary/10 backdrop-blur-md border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection...</span>
+                </div>
+              )}
 
-            {activeSession ? (
-              <>
-                {/* Chat Header */}
-                <div className="p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
-                  <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => selectSession(null)}>
-                      <X className="h-5 w-5" />
-                    </Button>
-                    <div>
-                      <h2 className="text-lg font-bold truncate">
-                        {activeSession.counselor?.profile?.full_name || "Support Session"}
-                      </h2>
-                      <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
+              {activeSession ? (
+                <>
+                  {/* Chat Header */}
+                  <div className="p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
+                    <div className="flex items-center gap-4">
+                      <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => selectSession(null)}>
+                        <X className="h-5 w-5" />
+                      </Button>
+                      <div>
+                        <h2 className="text-lg font-bold truncate">
+                          {activeSession.counselor?.profile?.full_name || "Support Session"}
+                        </h2>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
+                        {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
+                        <AlertTriangle className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
-                      {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
-                      <AlertTriangle className="h-5 w-5" />
-                    </Button>
-                  </div>
-                </div>
 
-                {/* Message List */}
-                <MessageList
-                  messages={messages}
-                  isLoading={messagesLoading}
-                  isLoadingOlderMessages={isLoadingOlderMessages}
-                  hasOlderMessages={hasOlderMessages}
-                  isAtBottom={isAtBottom}
-                  showScrollToBottom={showScrollToBottom}
-                  user={user}
-                  activeSession={activeSession}
-                  isPeerTyping={isPeerTyping}
-                  deletingMessageIds={deletingMessageIds}
-                  onScroll={handleScroll}
-                  onLoadOlder={loadOlderMessages}
-                  onDeleteMessage={handleDeleteMessageWrapper}
-                  scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                  messageScrollAreaRef={messageScrollAreaRef as any}
-                  scrollRef={scrollRef}
-                />
+                  {/* Message List */}
+                  <MessageList
+                    messages={messages}
+                    isLoading={messagesLoading}
+                    isLoadingOlderMessages={isLoadingOlderMessages}
+                    hasOlderMessages={hasOlderMessages}
+                    isAtBottom={isAtBottom}
+                    showScrollToBottom={showScrollToBottom}
+                    user={user}
+                    activeSession={activeSession}
+                    isPeerTyping={isPeerTyping}
+                    deletingMessageIds={deletingMessageIds}
+                    onScroll={handleScroll}
+                    onLoadOlder={loadOlderMessages}
+                    onDeleteMessage={handleDeleteMessageWrapper}
+                    scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                    messageScrollAreaRef={messageScrollAreaRef as any}
+                    scrollRef={scrollRef}
+                  />
 
-                {/* Chat Input */}
-                <ChatInput
-                  message={message}
-                  isSending={isSending}
-                  isUploading={isUploading}
-                  uploadProgress={uploadProgress}
-                  isEncryptionReady={isEncryptionReady}
-                  isVoiceMode={isVoiceMode}
-                  recording={recording}
-                  recordingTime={recordingTime}
-                  isPaused={isPaused}
-                  selectedFile={selectedFile}
-                  onMessageChange={setMessage}
-                  onSubmit={handleSendMessage}
-                  onFileSelect={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
+                  {/* Chat Input */}
+                  <ChatInput
+                    message={message}
+                    isSending={isSending}
+                    isUploading={isUploading}
+                    uploadProgress={uploadProgress}
+                    isEncryptionReady={isEncryptionReady}
+                    isVoiceMode={isVoiceMode}
+                    recording={recording}
+                    recordingTime={recordingTime}
+                    isPaused={isPaused}
+                    selectedFile={selectedFile}
+                    onMessageChange={setMessage}
+                    onSubmit={handleSendMessage}
+                    onFileSelect={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (activeSession?.assigned_role === 'peer_counselor') {
+                          toast.error("Peer support sessions are text-only for now.");
+                          return;
+                        }
+                        setSelectedFile(file);
+                      }
+                    }}
+                    onAttachClick={() => {
                       if (activeSession?.assigned_role === 'peer_counselor') {
                         toast.error("Peer support sessions are text-only for now.");
                         return;
                       }
-                      setSelectedFile(file);
-                    }
-                  }}
-                  onAttachClick={() => {
-                    if (activeSession?.assigned_role === 'peer_counselor') {
-                      toast.error("Peer support sessions are text-only for now.");
-                      return;
-                    }
-                    fileInputRef.current?.click();
-                  }}
-                  onVoiceToggle={() => {
-                    if (activeSession?.assigned_role === 'peer_counselor') {
-                      toast.error("Peer support sessions are text-only for now.");
-                      return;
-                    }
-                    if (isRecording) { stopRecording(); setIsVoiceMode(false); }
-                    else { setIsVoiceMode(true); startRecording(); }
-                  }}
-                  onVoicePause={pauseRecording}
-                  onVoiceResume={resumeRecording}
-                  onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); }}
-                  onRemoveFile={() => setSelectedFile(null)}
-                  onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
-                  fileInputRef={fileInputRef}
-                />
+                      fileInputRef.current?.click();
+                    }}
+                    onVoiceToggle={() => {
+                      if (activeSession?.assigned_role === 'peer_counselor') {
+                        toast.error("Peer support sessions are text-only for now.");
+                        return;
+                      }
+                      if (isRecording) { stopRecording(); setIsVoiceMode(false); }
+                      else { setIsVoiceMode(true); startRecording(); }
+                    }}
+                    onVoicePause={pauseRecording}
+                    onVoiceResume={resumeRecording}
+                    onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); }}
+                    onRemoveFile={() => setSelectedFile(null)}
+                    onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
+                    fileInputRef={fileInputRef}
+                  />
 
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 lg:hidden">
-                <ChatSidebar
-                  sessions={sessions}
-                  activeSession={activeSession}
-                  counselors={counselors}
-                  isCounselorsLoading={isCounselorsLoading}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  onSelectSession={handleSelectSessionById}
-                  onStartSession={handleStartSessionWrapper}
-                  anonymousStartMode={anonymousStartMode}
-                  onToggleAnonymous={setAnonymousStartMode}
-                  counselorPage={counselorPage}
-                  counselorTotalPages={counselorTotalPages}
-                  onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
-                  onPrevCounselorPage={() => setCounselorPage(p => Math.max(p - 1, 1))}
-                  sessionPage={sessionPage}
-                  sessionTotalPages={sessionTotalPages}
-                  onNextSessionPage={goToNextSessionPage}
-                  onPrevSessionPage={goToPrevSessionPage}
-                />
-              </div>
-            )}
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 lg:hidden">
+                  <ChatSidebar
+                    sessions={sessions}
+                    activeSession={activeSession}
+                    counselors={counselors}
+                    isCounselorsLoading={isCounselorsLoading}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    onSelectSession={handleSelectSessionById}
+                    onStartSession={handleStartSessionWrapper}
+                    anonymousStartMode={anonymousStartMode}
+                    onToggleAnonymous={setAnonymousStartMode}
+                    counselorPage={counselorPage}
+                    counselorTotalPages={counselorTotalPages}
+                    onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
+                    onPrevCounselorPage={() => setCounselorPage(p => Math.max(p - 1, 1))}
+                    sessionPage={sessionPage}
+                    sessionTotalPages={sessionTotalPages}
+                    onNextSessionPage={goToNextSessionPage}
+                    onPrevSessionPage={goToPrevSessionPage}
+                  />
+                </div>
+              )}
+              
+              {!activeSession && (
+                 <div className="hidden lg:flex flex-1 flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-700">
+                    <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 shadow-2xl shadow-primary/5 mb-6">
+                      <Shield className="h-16 w-16 text-primary" />
+                    </div>
+                    <h2 className="text-3xl font-display font-bold tracking-tight mb-2">Clinical Safe Space</h2>
+                    <p className="text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                      Select a conversation or start a new one to begin your secure, encrypted session with a qualified counselor.
+                    </p>
+                 </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ErrorBoundary>
       </div>
     </div>
   );

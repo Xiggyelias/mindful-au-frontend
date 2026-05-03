@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
 const navItems = [
@@ -99,8 +99,8 @@ const StudentWellness = () => {
       setDailyMood(recorded);
       const recordedLabel = moodOptions.find((item) => item.value === recorded)?.label.toLowerCase() ?? recorded;
       toast.success(`Mood saved: ${recordedLabel}.`);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error);
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
         const today = await api.getStudentMoodToday().catch(() => null);
         if (today?.log?.mood) {

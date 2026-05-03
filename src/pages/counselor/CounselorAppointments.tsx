@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Appointment } from "@/hooks/useChatSession";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -44,7 +45,7 @@ type PagedMeta = {
   total?: number;
   total_pages?: number;
 };
-type AppointmentListResponse = any[] | { data?: any[]; meta?: PagedMeta };
+type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
 const APPOINTMENTS_PAGE_SIZE = 16;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 
@@ -53,7 +54,7 @@ const CounselorAppointments = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [appointmentTotalPages, setAppointmentTotalPages] = useState(1);
   const [appointmentTotalItems, setAppointmentTotalItems] = useState(0);
@@ -105,7 +106,7 @@ const CounselorAppointments = () => {
               : Array.isArray(pagedPayload?.data)
               ? pagedPayload.data
               : []
-          ) as any[];
+          ) as Appointment[];
 
           const receivedPage = Number(pagedPayload?.meta?.page);
           const receivedTotalPages = Number(pagedPayload?.meta?.total_pages);
@@ -131,9 +132,11 @@ const CounselorAppointments = () => {
             appointmentPageRef.current = nextPage;
             setAppointmentPage(nextPage);
           }
-        } catch (err: any) {
-          console.error("Failed to load appointments:", err);
-          if (showErrorToast && err?.response?.status !== 401) {
+        } catch (err: unknown) {
+          if (import.meta.env.DEV) {
+            console.error("Failed to load appointments:", err);
+          }
+          if (showErrorToast && (err as { response?: { status?: number } })?.response?.status !== 401) {
             toast.error(getApiErrorMessage(err, "Failed to load appointments"));
           }
         } finally {
@@ -227,7 +230,7 @@ const CounselorAppointments = () => {
   const filteredAppointments = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
 
-    const getSortTimestamp = (apt: any) => {
+    const getSortTimestamp = (apt: Appointment) => {
       const createdAtMs = new Date(apt?.created_at || 0).getTime();
       if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
         return createdAtMs;
@@ -315,13 +318,13 @@ const CounselorAppointments = () => {
     setAppointmentPage(next);
   };
 
-  const openSessionRoom = (appointment: any) => {
-    if (!appointment?.id) {
+  const openSessionRoom = (apt: Appointment) => {
+    if (!apt?.id) {
       return;
     }
 
     const params = new URLSearchParams({
-      appointment_id: String(appointment.id),
+      appointment_id: String(apt.id),
       autostart: "1",
     });
 

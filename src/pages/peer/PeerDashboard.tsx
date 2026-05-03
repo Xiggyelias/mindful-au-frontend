@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { peerNavItems } from "./navItems";
 
@@ -61,8 +61,8 @@ const PeerDashboard = () => {
       setLoading(true);
       const next = await api.getPeerDashboard();
       setData(next);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to load peer dashboard");
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to load peer dashboard"));
     } finally {
       setLoading(false);
     }
@@ -79,8 +79,8 @@ const PeerDashboard = () => {
       const result = await api.updatePeerAvailability(available);
       setData((prev) => (prev ? { ...prev, availability: Boolean(result?.available) } : prev));
       toast.success(`Availability set to ${available ? "online" : "offline"}`);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to update availability");
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to update availability"));
     } finally {
       setSavingAvailability(false);
     }

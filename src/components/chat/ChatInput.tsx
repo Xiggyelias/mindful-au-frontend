@@ -98,9 +98,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <p className="text-sm font-medium truncate">{selectedFile.name}</p>
               <p className="text-[10px] uppercase font-bold opacity-60">Ready to send</p>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onRemoveFile} aria-label="Remove selected file">
-              <X className="h-4 w-4" />
-            </Button>
+            {!isUploading && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onRemoveFile} aria-label="Remove selected file">
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
 

@@ -29,7 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -482,8 +482,8 @@ const StudentVideoCall = () => {
               : "Video call started. Waiting for your counselor."
           );
         }
-      } catch (startError: any) {
-        toast.error(startError?.response?.data?.message || "Failed to start the call");
+      } catch (startError: unknown) {
+        toast.error(getApiErrorMessage(startError, "Failed to start the call"));
       } finally {
         setIsStartingMode(null);
       }

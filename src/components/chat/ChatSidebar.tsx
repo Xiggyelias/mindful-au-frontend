@@ -1,4 +1,5 @@
 import React from "react";
+import { Session } from "@/hooks/useChatSession";
 import { 
   Search, 
   MessageSquare, 
@@ -18,8 +19,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 interface ChatSidebarProps {
-  sessions: any[];
-  activeSession: any;
+  sessions: Session[];
+  activeSession: Session | null;
   counselors: any[];
   isCounselorsLoading: boolean;
   searchQuery: string;
@@ -127,7 +128,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 return (
                   <button
                     key={session.id}
-                    onClick={() => onSelectSession(session.id)}
+                    onClick={() => onSelectSession(String(session.id))}
                     className={`w-full flex items-center gap-3 p-3 rounded-[1.5rem] transition-all duration-300 group ${
                       isActive 
                         ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]" 
