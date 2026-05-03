@@ -56,6 +56,7 @@ import {
   validateChatAttachment,
 } from "@/lib/chatAttachments";
 
+const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
