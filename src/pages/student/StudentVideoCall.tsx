@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import type { Appointment } from "@/hooks/useChatSession";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
