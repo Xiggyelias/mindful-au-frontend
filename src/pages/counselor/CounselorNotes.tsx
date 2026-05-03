@@ -4,9 +4,15 @@ import {
   MessageSquare,
   Calendar,
   Users,
+  Brain,
+  Video,
+  FileText,
+  Heart,
   Loader2,
   CheckCircle2,
   Trash2,
+  Search,
+  Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -52,7 +58,7 @@ const CounselorNotes = () => {
   const loadSessions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await api.getCounselorSessions();
+      const data = await api.getSessions({ limit: 300 });
       setSessions(data);
     } catch (error) {
       toast.error("Failed to load sessions");
@@ -94,11 +100,7 @@ const CounselorNotes = () => {
     if (!selectedSessionId) return;
     try {
       setIsSaving(true);
-      await api.updateSessionNote(selectedSessionId, {
-        noteText,
-        sessionDate,
-        status,
-      });
+      await api.updateSessionNote(selectedSessionId, noteText);
       toast.success(status === "final" ? "Note saved successfully" : "Draft saved");
       await loadSessions();
     } catch (error) {
@@ -112,10 +114,7 @@ const CounselorNotes = () => {
     if (!confirm("Are you sure you want to delete this note?")) return;
     try {
       setIsDeleting(true);
-      await api.updateSessionNote(sessionId, {
-        noteText: "",
-        status: "draft",
-      });
+      await api.deleteSessionNote(sessionId);
       toast.success("Note cleared");
       await loadSessions();
     } catch (error) {
