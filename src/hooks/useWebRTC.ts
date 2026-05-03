@@ -360,8 +360,8 @@ const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
     tracks: videoTracks.map((t) => ({
       id: t.id,
       readyState: t.readyState,
-      enabled: (t as any).enabled,
-      muted: (t as any).muted,
+      enabled: t.enabled,
+      muted: t.muted,
     })),
   });
 

@@ -124,10 +124,12 @@ const StudentHistory = () => {
             sessionPageRef.current = nextPage;
             setSessionPage(nextPage);
           }
-        } catch (err: any) {
-          console.error("Failed to load sessions:", err);
+        } catch (err: unknown) {
+          if (import.meta.env.DEV) {
+            console.error("Failed to load sessions:", err);
+          }
           if (showErrorToast) {
-            toast.error("Could not load session history");
+            toast.error(getApiErrorMessage(err, "Could not load session history"));
           }
         } finally {
           lastLoadAtRef.current = Date.now();

@@ -989,7 +989,7 @@ class ApiClient {
     return response.data;
   }
 
-  async updateSession(id: string, data: any) {
+  async updateSession(id: string, data: Record<string, unknown>) {
     const response = await this.client.put(`/sessions/${id}`, data);
     return response.data;
   }
@@ -1175,7 +1175,7 @@ class ApiClient {
     return response.data;
   }
 
-  async updateAppointment(id: string, data: any) {
+  async updateAppointment(id: string, data: Record<string, unknown>) {
     const response = await this.client.put(`/appointments/${id}`, data);
     return response.data;
   }

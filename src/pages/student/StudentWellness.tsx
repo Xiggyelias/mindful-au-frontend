@@ -314,7 +314,7 @@ const StudentWellness = () => {
               </CardHeader>
               <CardContent className="pb-8">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {recentHistory.map((entry: any) => (
+                  {recentHistory.map((entry: { id: number; created_at?: string; risk_level?: string; wellness_score?: number }) => (
                     <div
                       key={entry.id}
                       className="group p-5 rounded-3xl border border-border/50 bg-secondary/10 hover:bg-secondary/20 transition-all duration-300"

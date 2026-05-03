@@ -51,11 +51,13 @@ const navItems = [
 
 type CallMode = "video" | "audio";
 
-const getParticipantName = (participant: any, fallback: string) =>
-  participant?.profile?.full_name ||
-  participant?.full_name ||
-  participant?.email?.split("@")[0] ||
-  fallback;
+const getParticipantName = (
+  participant: { profile?: { full_name?: string }; email?: string } | null | undefined,
+  fallback: string
+) => {
+  const name = participant?.profile?.full_name || participant?.email?.split("@")[0];
+  return name || fallback;
+};
 
 const getInitials = (value: string) =>
   value
@@ -73,7 +75,7 @@ const StudentVideoCall = () => {
   const autoStartedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [activeAppointmentId, setActiveAppointmentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -155,7 +157,7 @@ const StudentVideoCall = () => {
         setIsLoading(true);
         const appointments = await api.getAppointments();
         const availableNow = appointments
-          .filter((appointment: any) => {
+          .filter((appointment: Appointment) => {
             if (!appointment.scheduled_at) return false;
             if (!isVideoEnabledAppointment(appointment.notes)) return false;
             if (!(appointment.status === "scheduled" || appointment.status === "confirmed")) {
@@ -170,7 +172,7 @@ const StudentVideoCall = () => {
             return !callWindow.isExpired;
           })
           .sort(
-            (left: any, right: any) =>
+            (left: Appointment, right: Appointment) =>
               new Date(left.scheduled_at).getTime() - new Date(right.scheduled_at).getTime()
           )
           .slice(0, 5);
@@ -183,15 +185,15 @@ const StudentVideoCall = () => {
 
         const matchingRequestedAppointment =
           requestedAppointmentId !== null
-            ? availableNow.find((appointment: any) => Number(appointment.id) === requestedAppointmentId)
+            ? availableNow.find((appointment: Appointment) => Number(appointment.id) === requestedAppointmentId)
             : null;
         const matchingRequestedCounselor =
           requestedCounselorId !== null
-            ? availableNow.find((appointment: any) => Number(appointment.counselor_id) === requestedCounselorId)
+            ? availableNow.find((appointment: Appointment) => Number(appointment.counselor_id) === requestedCounselorId)
             : null;
 
         setActiveAppointmentId((previous) => {
-          if (previous && availableNow.some((appointment: any) => String(appointment.id) === previous)) {
+          if (previous && availableNow.some((appointment: Appointment) => String(appointment.id) === previous)) {
             return previous;
           }
           if (matchingRequestedAppointment) {
@@ -202,9 +204,11 @@ const StudentVideoCall = () => {
           }
           return String(availableNow[0].id);
         });
-      } catch (loadError) {
-        console.error("Failed to load appointments:", loadError);
-        toast.error("Failed to load upcoming appointments");
+      } catch (loadError: unknown) {
+        if (import.meta.env.DEV) {
+          console.error("Failed to load appointments:", loadError);
+        }
+        toast.error(getApiErrorMessage(loadError, "Failed to load upcoming appointments"));
       } finally {
         setIsLoading(false);
       }

@@ -81,7 +81,7 @@ export class OpenRouterService {
 
         if (!response.ok) {
           const text = await response.text();
-          let parsed: any = null;
+          let parsed: unknown = null;
           try {
             parsed = text ? JSON.parse(text) : null;
           } catch {
@@ -223,7 +223,7 @@ export class OpenRouterService {
     model: string = "nvidia/nemotron-nano-9b-v2:free",
     conversationId?: number
   ): Promise<{ content: string; conversationId?: number }> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; content: string; conversation_id: number }>(
       "/openrouter/chat",
       {
         method: "POST",
@@ -250,7 +250,7 @@ export class OpenRouterService {
     message: string,
     model: string = "nvidia/nemotron-nano-9b-v2:free"
   ): Promise<{ message: string; response: string; model: string }> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; message: string; response: string; model: string }>(
       "/openrouter/simple-chat",
       {
         method: "POST",
@@ -274,7 +274,7 @@ export class OpenRouterService {
   }
 
   async getModels(): Promise<any[]> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; models: any[] }>(
       "/openrouter/models",
       {
         method: "GET",
@@ -290,7 +290,7 @@ export class OpenRouterService {
   }
 
   async getConversations(): Promise<Conversation[]> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; conversations: Conversation[] }>(
       "/openrouter/conversations",
       {
         method: "GET",
@@ -306,7 +306,7 @@ export class OpenRouterService {
   }
 
   async getConversationMessages(conversationId: number): Promise<ConversationDetail> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; conversation: ConversationDetail }>(
       `/openrouter/conversations/${conversationId}`,
       {
         method: "GET",
@@ -322,7 +322,7 @@ export class OpenRouterService {
   }
 
   async createConversation(title?: string, model?: string): Promise<Conversation> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string; conversation: Conversation }>(
       "/openrouter/conversations",
       {
         method: "POST",
@@ -342,7 +342,7 @@ export class OpenRouterService {
   }
 
   async deleteConversation(conversationId: number): Promise<void> {
-    const data = await this.requestJson<any>(
+    const data = await this.requestJson<{ success: boolean; error?: string }>(
       `/openrouter/conversations/${conversationId}`,
       {
         method: "DELETE",
