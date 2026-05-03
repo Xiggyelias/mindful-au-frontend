@@ -308,6 +308,23 @@ const StudentChat = () => {
     }
   };
 
+  const handleSelectSessionById = useCallback((id: string) => {
+    if (!id) {
+      selectSession(null);
+      return;
+    }
+    const session = sessions.find(s => s.id.toString() === id);
+    if (session) selectSession(session);
+  }, [sessions, selectSession]);
+
+  const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
+    void startSessionWithCounselor(id, { isAnonymous: isAnon });
+  }, [startSessionWithCounselor]);
+
+  const handleDeleteMessageWrapper = useCallback(async (id: number) => {
+    await deleteMessage(id);
+  }, [deleteMessage]);
+
   // Refs for scroll handler to avoid re-creating callback on every message change
   const messagesLengthRef = useRef(messages.length);
   const hasOlderMessagesRef = useRef(hasOlderMessages);
@@ -357,8 +374,8 @@ const StudentChat = () => {
               isCounselorsLoading={isCounselorsLoading}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              onSelectSession={selectSession}
-              onStartSession={startSessionWithCounselor}
+              onSelectSession={handleSelectSessionById}
+              onStartSession={handleStartSessionWrapper}
               anonymousStartMode={anonymousStartMode}
               onToggleAnonymous={setAnonymousStartMode}
               counselorPage={counselorPage}
@@ -387,7 +404,7 @@ const StudentChat = () => {
                 {/* Chat Header */}
                 <div className="p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
                   <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => selectSession("")}>
+                    <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => selectSession(null)}>
                       <X className="h-5 w-5" />
                     </Button>
                     <div>
@@ -425,7 +442,7 @@ const StudentChat = () => {
                   deletingMessageIds={deletingMessageIds}
                   onScroll={handleScroll}
                   onLoadOlder={loadOlderMessages}
-                  onDeleteMessage={deleteMessage}
+                  onDeleteMessage={handleDeleteMessageWrapper}
                   scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                   messageScrollAreaRef={messageScrollAreaRef as any}
                   scrollRef={scrollRef}
@@ -447,10 +464,26 @@ const StudentChat = () => {
                   onSubmit={handleSendMessage}
                   onFileSelect={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) setSelectedFile(file);
+                    if (file) {
+                      if (activeSession?.assigned_role === 'peer_counselor') {
+                        toast.error("Peer support sessions are text-only for now.");
+                        return;
+                      }
+                      setSelectedFile(file);
+                    }
                   }}
-                  onAttachClick={() => fileInputRef.current?.click()}
+                  onAttachClick={() => {
+                    if (activeSession?.assigned_role === 'peer_counselor') {
+                      toast.error("Peer support sessions are text-only for now.");
+                      return;
+                    }
+                    fileInputRef.current?.click();
+                  }}
                   onVoiceToggle={() => {
+                    if (activeSession?.assigned_role === 'peer_counselor') {
+                      toast.error("Peer support sessions are text-only for now.");
+                      return;
+                    }
                     if (isRecording) { stopRecording(); setIsVoiceMode(false); }
                     else { setIsVoiceMode(true); startRecording(); }
                   }}
@@ -461,6 +494,7 @@ const StudentChat = () => {
                   onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
                   fileInputRef={fileInputRef}
                 />
+
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 lg:hidden">
@@ -471,8 +505,8 @@ const StudentChat = () => {
                   isCounselorsLoading={isCounselorsLoading}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
-                  onSelectSession={selectSession}
-                  onStartSession={startSessionWithCounselor}
+                  onSelectSession={handleSelectSessionById}
+                  onStartSession={handleStartSessionWrapper}
                   anonymousStartMode={anonymousStartMode}
                   onToggleAnonymous={setAnonymousStartMode}
                   counselorPage={counselorPage}

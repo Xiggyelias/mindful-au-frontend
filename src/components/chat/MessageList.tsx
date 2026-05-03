@@ -172,6 +172,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 onClick={onLoadOlder} 
                 disabled={isLoadingOlderMessages}
                 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
+                aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
               >
                 {isLoadingOlderMessages ? (
                   <Loader2 className="h-3 w-3 animate-spin mr-2" />
@@ -203,6 +204,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => onDeleteMessage(msg.id)}
                       disabled={isDeleting}
+                      aria-label={isDeleting ? "Deleting message" : "Delete message"}
                     >
                       {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </Button>
@@ -243,6 +245,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           variant="secondary"
           className="absolute bottom-6 right-6 h-10 w-10 rounded-full shadow-2xl border border-border/50 animate-in zoom-in fade-in duration-300 z-10 hover:scale-110 transition-transform"
           onClick={scrollToBottom}
+          aria-label="Scroll to bottom of messages"
         >
           <ArrowDown className="h-5 w-5" />
         </Button>

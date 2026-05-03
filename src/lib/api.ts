@@ -1722,6 +1722,11 @@ class ApiClient {
     const response = await this.client.delete(`/ai-reports/${id}`);
     return response.data;
   }
+
+  async triggerEmergencyAlert(data: { session_id?: number; notes?: string } = {}) {
+    const response = await this.client.post('/panic-logs', data);
+    return response.data;
+  }
 }
 
 export const api = new ApiClient();

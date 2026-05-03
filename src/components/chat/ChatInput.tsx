@@ -98,7 +98,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <p className="text-sm font-medium truncate">{selectedFile.name}</p>
               <p className="text-[10px] uppercase font-bold opacity-60">Ready to send</p>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onRemoveFile}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onRemoveFile} aria-label="Remove selected file">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -118,10 +118,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={isPaused ? onVoiceResume : onVoicePause}>
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={isPaused ? onVoiceResume : onVoicePause} aria-label={isPaused ? "Resume recording" : "Pause recording"}>
                     {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onVoiceCancel}>
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onVoiceCancel} aria-label="Cancel voice recording">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -131,7 +131,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <div className="flex items-center pl-2">
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary">
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" aria-label="Open emoji picker">
                         <Smile className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
@@ -140,7 +140,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     </PopoverContent>
                   </Popover>
                   
-                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" onClick={onAttachClick}>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" onClick={onAttachClick} aria-label="Attach file">
                     <Paperclip className="h-5 w-5" />
                   </Button>
                   <input type="file" ref={fileInputRef} className="hidden" accept={CHAT_ATTACHMENT_ACCEPT} onChange={onFileSelect} />
@@ -165,6 +165,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               className={`h-12 w-12 rounded-full shadow-lg transition-all duration-300 ${isVoiceMode ? "animate-pulse" : "hover:bg-primary/10 hover:text-primary"}`}
               onClick={onVoiceToggle}
               disabled={isSending}
+              aria-label={isVoiceMode ? "Stop recording" : "Start voice message"}
             >
               {isVoiceMode ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </Button>
@@ -174,6 +175,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               size="icon"
               className="h-12 w-12 rounded-full shadow-lg shadow-primary/20 transition-transform active:scale-95"
               disabled={(!message.trim() && !selectedFile && !recording) || isSending || !isEncryptionReady}
+              aria-label={isSending ? "Sending message" : "Send message"}
             >
               {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </Button>

@@ -1049,8 +1049,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
 
 
-    messageType: string = 'text'
-  ) => {
+
+
     if (!sessionId || !userId) {
       setError('Cannot send message: session is not initialized');
       return false;

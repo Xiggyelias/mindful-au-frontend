@@ -559,7 +559,9 @@ const CounselorMessages = () => {
 
         hasShownLoadErrorRef.current = false;
       } catch (err) {
-        console.error("Failed to load sessions:", err);
+        if (process.env.NODE_ENV === "development") {
+          console.error("Failed to load sessions:", err);
+        }
         const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 401) {
           return;
@@ -701,7 +703,9 @@ const CounselorMessages = () => {
 
       void loadSessions(true);
     } catch (error) {
-      console.error("Failed to send message:", error);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Failed to send message:", error);
+      }
       toast.error(getApiErrorMessage(error, "Failed to send message"));
     } finally {
       setIsSending(false);

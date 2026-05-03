@@ -77,7 +77,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-display font-bold tracking-tight">Conversations</h2>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More options">
             <MoreVertical className="h-4 w-4" />
           </Button>
         </div>
@@ -112,8 +112,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Recent Support</h3>
               {sessionTotalPages > 1 && (
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevSessionPage} disabled={sessionPage === 1}><ChevronLeft className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextSessionPage} disabled={sessionPage === sessionTotalPages}><ChevronRight className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevSessionPage} disabled={sessionPage === 1} aria-label="Previous sessions page"><ChevronLeft className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextSessionPage} disabled={sessionPage === sessionTotalPages} aria-label="Next sessions page"><ChevronRight className="h-3 w-3" /></Button>
                 </div>
               )}
             </div>
@@ -164,8 +164,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Available Now</h3>
               {counselorTotalPages > 1 && (
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevCounselorPage} disabled={counselorPage === 1}><ChevronLeft className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextCounselorPage} disabled={counselorPage === counselorTotalPages}><ChevronRight className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevCounselorPage} disabled={counselorPage === 1} aria-label="Previous counselors page"><ChevronLeft className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextCounselorPage} disabled={counselorPage === counselorTotalPages} aria-label="Next counselors page"><ChevronRight className="h-3 w-3" /></Button>
                 </div>
               )}
             </div>
@@ -197,6 +197,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                           variant="ghost" 
                           className="h-8 w-8 rounded-full bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all"
                           onClick={() => onStartSession(counselor.id, anonymousStartMode)}
+                          aria-label={`Start session with ${counselor.profile?.full_name || "counselor"}`}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
