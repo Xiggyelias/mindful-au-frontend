@@ -4,38 +4,23 @@ import {
   MessageSquare,
   Calendar,
   Users,
-  Brain,
-  Video,
-  FileText,
-  Heart,
-  Plus,
-  Search,
-  Clock,
-  Trash2,
   Loader2,
-  ChevronRight,
-  History,
-  Sparkles,
-  AlertCircle,
   CheckCircle2,
-  ClipboardList,
-  FileJson,
+  Trash2,
 } from "lucide-react";
+import { format } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { format } from "date-fns";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -48,303 +33,109 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
 ];
 
-type SessionNoteItem = {
-  id: string;
-  studentId: number;
-  studentName: string;
-  studentEmail: string;
-  status: string;
-  sessionType: string;
-  updatedAt: string;
-  noteText: string;
-  riskLevel?: string;
-  isAppointment?: boolean;
-};
-
-type ChatMessage = {
-  id: number;
-  sender: "student" | "counselor" | "system";
-  content: string;
-  created_at: string;
-};
-
-type AiDiagnostic = {
-  id: number;
-  risk_level: string;
-  stress_level: number;
-  anxiety_level: number;
-  depression_level: number;
-  mood: string;
-  insights: string;
-  recommendations: string;
-  created_at: string;
-};
-
-const toDateInputValue = (iso?: string) => {
-  if (!iso) return format(new Date(), "yyyy-MM-dd");
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return format(new Date(), "yyyy-MM-dd");
-  return format(parsed, "yyyy-MM-dd");
-};
-
-const buildStudentName = (session: any) => {
-  return (
-    session?.student?.profile?.full_name ||
-    session?.student?.email?.split("@")[0] ||
-    `Student #${String(session?.student_id || session?.id || "").slice(-4)}`
-  );
-};
-
 const CounselorNotes = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useAuth();
-  const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
-
-  const [sessions, setSessions] = useState<SessionNoteItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  
+  // Note content state
   const [noteText, setNoteText] = useState("");
   const [sessionDate, setSessionDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
-  // New state for AI and Context
-  const [diagnostic, setDiagnostic] = useState<AiDiagnostic | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const { user } = useAuth();
+  const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
 
   const loadSessions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [sessionsRes, appointmentsRes] = await Promise.all([
-        api.getSessions({ limit: 200 }),
-        api.getAppointments({ limit: 200 })
-      ]);
-
-      const normalizedSessions = (Array.isArray(sessionsRes) ? sessionsRes : [])
-        .map((session: any): SessionNoteItem => {
-          const updatedAt = String(session?.updated_at || session?.created_at || "");
-          return {
-            id: `session_${session?.id}`,
-            studentId: Number(session?.student_id),
-            studentName: buildStudentName(session),
-            studentEmail: String(session?.student?.email || ""),
-            status: String(session?.status || "pending"),
-            sessionType: String(session?.session_type || "chat"),
-            updatedAt,
-            noteText: String(session?.notes || ""),
-            riskLevel: String(session?.risk_level || "low"),
-            isAppointment: false,
-          };
-        });
-
-      const normalizedAppointments = (Array.isArray(appointmentsRes) ? appointmentsRes : (appointmentsRes as any)?.data || [])
-        .map((apt: any): SessionNoteItem => {
-          const updatedAt = String(apt?.updated_at || apt?.scheduled_at || "");
-          return {
-            id: `apt_${apt?.id}`,
-            studentId: Number(apt?.student_id),
-            studentName: buildStudentName(apt),
-            studentEmail: String(apt?.student?.email || ""),
-            status: String(apt?.status || "scheduled"),
-            sessionType: String(apt?.notes || "").toLowerCase().includes("physical") ? "physical" : "online",
-            updatedAt,
-            noteText: String(apt?.notes || ""),
-            riskLevel: "N/A",
-            isAppointment: true,
-          };
-        });
-
-      const merged = [...normalizedSessions, ...normalizedAppointments]
-        .filter((item) => item.id)
-        .sort((a, b) => {
-          const aTs = new Date(a.updatedAt || 0).getTime();
-          const bTs = new Date(b.updatedAt || 0).getTime();
-          return bTs - aTs;
-        });
-
-      setSessions(merged);
-      setSelectedSessionId((current) => {
-        if (current && merged.some((item) => item.id === current)) {
-          return current;
-        }
-        return merged[0]?.id ?? null;
-      });
-    } catch (err: any) {
-      console.error("Failed to load notes:", err);
-      toast.error(err?.response?.data?.message || "Failed to load session notes");
+      const data = await api.getCounselorSessions();
+      setSessions(data);
+    } catch (error: any) {
+      toast.error("Failed to load sessions");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    void loadSessions();
-  }, [loadSessions, user]);
+    loadSessions();
+  }, [loadSessions]);
 
   const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedSessionId) || null,
-    [selectedSessionId, sessions]
+    () => sessions.find((s) => s.id === selectedSessionId),
+    [sessions, selectedSessionId]
   );
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (selectedSession) {
+      setNoteText(selectedSession.noteText || "");
+      setSessionDate(
+        selectedSession.sessionDate 
+          ? format(new Date(selectedSession.sessionDate), "yyyy-MM-dd") 
+          : format(new Date(), "yyyy-MM-dd")
+      );
+    } else {
       setNoteText("");
       setSessionDate(format(new Date(), "yyyy-MM-dd"));
-      setDiagnostic(null);
-      setMessages([]);
-      return;
     }
-    setNoteText(selectedSession.noteText);
-    setSessionDate(toDateInputValue(selectedSession.updatedAt));
-    void loadSessionContext(selectedSession.id);
   }, [selectedSession]);
 
-  const loadSessionContext = async (id: string) => {
-    try {
-      setIsLoadingContext(true);
-      const isApt = id.startsWith("apt_");
-      const realId = id.split("_")[1];
-
-      // Fetch diagnostics
-      const diagnosticsResponse = await api.getAIDiagnostics({ limit: 10 });
-      const sessionDiag = Array.isArray(diagnosticsResponse?.data) 
-        ? diagnosticsResponse.data.find((d: any) => {
-            if (isApt) return d.session_id === `apt_${realId}`;
-            return String(d.session_id) === realId;
-          })
-        : null;
-      setDiagnostic(sessionDiag || null);
-
-      // Fetch messages (only for digital sessions)
-      if (!isApt) {
-        const messagesResponse = await api.getMessages(realId, { limit: 100 });
-        setMessages(Array.isArray(messagesResponse) ? messagesResponse : []);
-      } else {
-        setMessages([]);
-      }
-    } catch (err) {
-      console.error("Failed to load session context:", err);
-    } finally {
-      setIsLoadingContext(false);
-    }
-  };
-
-  const handleAnalyze = async () => {
-    if (!selectedSessionId || !selectedSession) return;
-    try {
-      setIsAnalyzing(true);
-      const realId = selectedSessionId.split("_")[1];
-      if (selectedSession.isAppointment) {
-        await api.analyzeAppointment(realId);
-      } else {
-        await api.analyzeSession(realId);
-      }
-      toast.success("AI analysis started. Results will appear shortly.");
-      // Poll or wait a bit
-      setTimeout(() => void loadSessionContext(selectedSessionId), 3000);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to start AI analysis");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const insertTemplate = (type: "soap" | "dap" | "basic") => {
-    const templates = {
-      soap: "SUBJECTIVE:\n\nOBJECTIVE:\n\nASSESSMENT:\n\nPLAN:",
-      dap: "DESCRIPTION:\n\nASSESSMENT:\n\nPLAN:",
-      basic: "SUMMARY:\n\nKEY POINTS:\n- \n\nNEXT STEPS:\n- ",
-    };
-    const content = templates[type];
-    setNoteText((prev) => (prev ? `${prev}\n\n${content}` : content));
-  };
-
   const filteredSessions = useMemo(() => {
-    const needle = searchQuery.trim().toLowerCase();
-    if (!needle) return sessions;
-    return sessions.filter((session) => {
-      return (
-        session.studentName.toLowerCase().includes(needle) ||
-        session.studentEmail.toLowerCase().includes(needle) ||
-        session.noteText.toLowerCase().includes(needle) ||
-        String(session.id).includes(needle)
-      );
-    });
+    return sessions.filter((s) =>
+      s.studentName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   }, [sessions, searchQuery]);
 
-  const saveNote = async (kind: "draft" | "final") => {
-    if (!selectedSessionId) {
-      toast.error("Select a session first.");
-      return;
-    }
-
-    const trimmed = noteText.trim();
-    if (trimmed === "") {
-      toast.error("Write a note before saving.");
-      return;
-    }
-
+  const saveNote = async (status: "draft" | "final") => {
+    if (!selectedSessionId) return;
     try {
       setIsSaving(true);
-      const realId = selectedSessionId.split("_")[1];
-      
-      if (selectedSession.isAppointment) {
-        await api.updateAppointment(realId, {
-          notes: noteText,
-        });
-      } else {
-        await api.updateSessionNote(realId, noteText);
-      }
-      toast.success(kind === "final" ? "Note finalized" : "Draft saved");
-      void loadSessions();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save note");
+      await api.updateSessionNote(selectedSessionId, {
+        noteText,
+        sessionDate,
+        status,
+      });
+      toast.success(status === "final" ? "Note saved successfully" : "Draft saved");
+      await loadSessions();
+    } catch (error: any) {
+      toast.error("Failed to save note");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const deleteNote = async (id: string) => {
-    const session = sessions.find((item) => item.id === id);
-    if (!session || session.noteText.trim() === "") {
-      toast.error("No note to delete.");
-      return;
-    }
-
-    const confirmed = window.confirm("Delete this note? This action cannot be undone.");
-    if (!confirmed) return;
-
+  const deleteNote = async (sessionId: string) => {
+    if (!confirm("Are you sure you want to delete this note?")) return;
     try {
       setIsDeleting(true);
-      const realId = id.split("_")[1];
-      if (session.isAppointment) {
-        await api.updateAppointment(realId, { notes: "" });
-      } else {
-        await api.deleteSessionNote(realId);
-      }
-
-      toast.success("Note removed.");
-      void loadSessions();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete note");
+      await api.updateSessionNote(sessionId, {
+        noteText: "",
+        status: "draft",
+      });
+      toast.success("Note cleared");
+      await loadSessions();
+    } catch (error: any) {
+      toast.error("Failed to delete note");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleNewNote = () => {
-    if (!sessions.length) {
-      toast.error("No sessions found. Start a chat first.");
-      return;
-    }
+  const insertTemplate = (type: "soap" | "dap" | "basic") => {
+    const templates = {
+      soap: "S (Subjective): \nO (Objective): \nA (Assessment): \nP (Plan): ",
+      dap: "D (Data): \nA (Assessment): \nP (Plan): ",
+      basic: "Observations: \n\nInterventions: \n\nPlan: ",
+    };
+    setNoteText((prev) => (prev ? prev + "\n\n" + templates[type] : templates[type]));
+  };
 
-    const candidate = sessions.find((session) => session.noteText.trim() === "") || sessions[0];
-    setSelectedSessionId(candidate.id);
+  const handleNewNote = () => {
+    setSelectedSessionId(null);
     setNoteText("");
     setSessionDate(format(new Date(), "yyyy-MM-dd"));
   };
@@ -465,6 +256,8 @@ const CounselorNotes = () => {
               </Card>
             </div>
 
+            {/* MIDDLE PANE: Editor */}
+            <div className="xl:col-span-9 space-y-4">
               <Card variant="glass" className="border-border/40 shadow-xl">
                 <CardHeader className="pb-3 border-b border-border/20">
                   <div className="flex items-center justify-between">
@@ -555,7 +348,6 @@ const CounselorNotes = () => {
                 </CardContent>
               </Card>
             </div>
-
           </div>
         </main>
       </div>
