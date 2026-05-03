@@ -26,6 +26,7 @@ import {
   Pause,
   Square,
   Trash2,
+  Menu,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
