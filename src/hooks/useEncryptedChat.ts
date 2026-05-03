@@ -577,6 +577,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         peerIdRef.current = null;
       }
 
+      // Validate that we have a valid peer to communicate with
+      if (!peerIdRef.current || !Number.isFinite(peerIdRef.current) || peerIdRef.current <= 0) {
+        throw new Error('Unable to identify chat participant. Please refresh and try again.');
+      }
+
       if (peerIdRef.current) {
         const peerMarkerKey = getSessionPeerMarkerStorageKey(sessionId);
         const previousPeerId = Number(localStorage.getItem(peerMarkerKey) || 0);

@@ -364,7 +364,7 @@ const StudentChat = () => {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <DashboardSidebar
-        items={navItems as any[]}
+        items={navItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -406,10 +406,18 @@ const StudentChat = () => {
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative">
               {/* Handshake Indicator */}
-              {activeSession && !isEncryptionReady && (
+              {activeSession && !isEncryptionReady && !chatError && (
                 <div className="absolute top-0 left-0 right-0 z-20 bg-primary/10 backdrop-blur-md border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection...</span>
+                </div>
+              )}
+              
+              {/* Encryption Error */}
+              {activeSession && chatError && (
+                <div className="absolute top-0 left-0 right-0 z-20 bg-destructive/10 backdrop-blur-md border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-destructive/80">{chatError}</span>
                 </div>
               )}
 
