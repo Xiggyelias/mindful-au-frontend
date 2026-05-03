@@ -1,3 +1,34 @@
+﻿import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
+  Bot,
+  Video,
+  History,
+  Heart,
+  Send,
+  Paperclip,
+  Shield,
+  AlertTriangle,
+  Loader2,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Mic,
+  Search,
+  MoreVertical,
+  Play,
+  Pause,
+  Phone,
+  Square,
+  Trash2,
+  ArrowLeft,
+  Smile,
+} from "lucide-react";
+import { DashboardSidebar } from "@/components/DashboardSidebar";
+import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +56,6 @@ import {
   validateChatAttachment,
 } from "@/lib/chatAttachments";
 
-const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
   { label: "Chat", icon: MessageSquare, path: "/student/chat" },
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
@@ -1331,7 +1361,7 @@ const StudentChat = () => {
                                     aria-label={msg.seen_at ? "Seen" : "Sent"}
                                     title={msg.seen_at ? "Seen" : "Sent"}
                                   >
-                                    {msg.seen_at ? "✓✓" : "✓"}
+                                    {msg.seen_at ? "âœ“âœ“" : "âœ“"}
                                   </span>
                                 </div>
                               )}
