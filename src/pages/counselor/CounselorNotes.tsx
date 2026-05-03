@@ -54,7 +54,7 @@ const CounselorNotes = () => {
       setIsLoading(true);
       const data = await api.getCounselorSessions();
       setSessions(data);
-    } catch (error: any) {
+    } catch (error) {
       toast.error("Failed to load sessions");
     } finally {
       setIsLoading(false);
@@ -101,7 +101,7 @@ const CounselorNotes = () => {
       });
       toast.success(status === "final" ? "Note saved successfully" : "Draft saved");
       await loadSessions();
-    } catch (error: any) {
+    } catch (error) {
       toast.error("Failed to save note");
     } finally {
       setIsSaving(false);
@@ -118,7 +118,7 @@ const CounselorNotes = () => {
       });
       toast.success("Note cleared");
       await loadSessions();
-    } catch (error: any) {
+    } catch (error) {
       toast.error("Failed to delete note");
     } finally {
       setIsDeleting(false);

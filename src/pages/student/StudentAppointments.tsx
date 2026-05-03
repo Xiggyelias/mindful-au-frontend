@@ -350,7 +350,7 @@ const StudentAppointments = () => {
         setIsLoadingMatches(false);
       }
     },
-    [user?.id] // Stable
+    [user]
   );
 
   useEffect(() => {

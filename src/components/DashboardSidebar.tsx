@@ -17,6 +17,7 @@ interface DashboardSidebarProps {
   userName?: string;
   isOpen?: boolean;
   onClose?: () => void;
+  className?: string;
 }
 
 export const DashboardSidebar = ({
@@ -25,6 +26,7 @@ export const DashboardSidebar = ({
   userName = "User",
   isOpen = true,
   onClose,
+  className,
 }: DashboardSidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -70,7 +72,8 @@ export const DashboardSidebar = ({
       <aside
         className={cn(
           "fixed left-0 top-0 h-full w-72 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300 lg:translate-x-0",
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          className
         )}
       >
         <div className="flex flex-col h-full p-4">
