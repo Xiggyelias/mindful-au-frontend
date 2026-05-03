@@ -792,14 +792,20 @@ const StudentChat = () => {
   const activeSessionIsPeerAssigned = isPeerAssignedSession(activeSession);
   const currentUserId = Number(user?.id);
 
-  const getCounselorLabel = (session: any) =>
-    (session.assigned_role === "peer_counselor"
-      ? session.peer_counselor?.profile?.full_name || session.peer_counselor?.email
-      : null) ||
-    session.counselor?.profile?.full_name ||
-    (session.counselor_id ? counselorMap.get(session.counselor_id)?.profile?.full_name : undefined) ||
-    session.counselor?.email ||
-    (session.assigned_role === "peer_counselor" ? "Peer Counselor" : "Counselor");
+  const getCounselorLabel = (session: any) => {
+    if (session?.is_anonymous) {
+      return "Counselor";
+    }
+    return (
+      (session?.assigned_role === "peer_counselor"
+        ? session?.peer_counselor?.profile?.full_name || session?.peer_counselor?.email
+        : null) ||
+      session?.counselor?.profile?.full_name ||
+      (session?.counselor_id ? counselorMap.get(session.counselor_id)?.profile?.full_name : undefined) ||
+      session?.counselor?.email ||
+      (session?.assigned_role === "peer_counselor" ? "Peer Counselor" : "Counselor")
+    );
+  };
 
   const activeSessionName = activeSession ? getCounselorLabel(activeSession) : "Counselor";
   const isRecipientOnline = useMemo(() => {
