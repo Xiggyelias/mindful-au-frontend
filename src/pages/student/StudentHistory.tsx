@@ -15,7 +15,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { api, API_RECOVERED_EVENT } from "@/lib/api";
+import { api, getApiErrorMessage, API_RECOVERED_EVENT } from "@/lib/api";
 import { toast } from "sonner";
 
 const SESSIONS_PAGE_SIZE = 10;
