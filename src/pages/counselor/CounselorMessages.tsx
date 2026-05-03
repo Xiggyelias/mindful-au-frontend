@@ -1005,14 +1005,16 @@ const CounselorMessages = () => {
       />
 
       <div className="lg:pl-72">
-        <DashboardHeader
-          title={isPeerCounselor ? "Peer Support Messages" : "Messages"}
-          onMenuClick={() => setSidebarOpen(true)}
-        />
+        {!selectedSessionId && (
+          <DashboardHeader
+            title={isPeerCounselor ? "Peer Support Messages" : "Messages"}
+            onMenuClick={() => setSidebarOpen(true)}
+          />
+        )}
 
-        <main className="p-0">
-          <div className="grid lg:grid-cols-3 h-[calc(100vh-80px)]">
-            <Card variant="glass" className="lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none">
+        <main className="p-0 overflow-hidden h-full">
+          <div className={`grid lg:grid-cols-3 ${selectedSessionId ? "h-screen" : "h-[calc(100vh-80px)]"}`}>
+            <Card variant="glass" className={`lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1114,10 +1116,16 @@ const CounselorMessages = () => {
               </CardContent>
             </Card>
 
-            <Card variant="glass" className="lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none">
+            <Card variant="glass" className={`lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="border-b border-border/50">
-                <CardTitle className="text-lg flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSelectedChatId(null)}>
+                      <X className="h-5 w-5" />
+                    </Button>
                     <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-sm ${selectedChat?.isAnonymous ? "bg-slate-500" : getUserColor(selectedChat?.studentName || "Student")}`}>
                       <span className="text-white text-xs font-bold">
                         {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4" />}
@@ -1195,8 +1203,8 @@ const CounselorMessages = () => {
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col h-[calc(100%-80px)] p-0">
-                <ScrollArea ref={messageScrollAreaRef} className="flex-1 p-4">
+              <CardContent className="flex flex-col h-[calc(100%-80px)] p-0 bg-gradient-to-b from-background to-secondary/5">
+                <ScrollArea ref={messageScrollAreaRef} className="flex-1 p-4 lg:p-6">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
                       <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
@@ -1270,10 +1278,10 @@ const CounselorMessages = () => {
                             
                             <div className={`group flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${isMine ? "items-end" : "items-start"}`}>
                               <div
-                                className={`p-3 lg:p-4 rounded-[1.25rem] transition-all duration-300 shadow-sm ${
+                                className={`p-4 rounded-[1.5rem] transition-all duration-300 shadow-sm border ${
                                   isMine
-                                    ? "bg-primary text-primary-foreground rounded-br-none"
-                                    : "bg-background text-foreground rounded-bl-none border border-border/50"
+                                    ? "bg-primary text-primary-foreground rounded-br-none border-primary/20 shadow-primary/10"
+                                    : "bg-background text-foreground rounded-bl-none border-border/50"
                                 }`}
                               >
                                 <div className="text-[15px] leading-relaxed">
