@@ -256,6 +256,20 @@ const CounselorWellness = () => {
 
   const checkInProgress = Math.round((answeredCount / checkInQuestions.length) * 100);
 
+  const getWellnessBarColor = (score: number | null) => {
+    if (typeof score !== "number") return "bg-muted";
+    if (score >= 70) return "bg-success";
+    if (score >= 50) return "bg-warning";
+    return "bg-destructive";
+  };
+
+  const getPressureBarColor = (score: number | null, low: number, med: number) => {
+    if (typeof score !== "number") return "bg-muted";
+    if (score < low) return "bg-success";
+    if (score < med) return "bg-warning";
+    return "bg-destructive";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -282,7 +296,11 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Overall Wellness ({moodScore ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress value={typeof moodScore === "number" ? moodScore : 0} className="h-2 mt-3" />
+                <Progress 
+                  value={typeof moodScore === "number" ? moodScore : 0} 
+                  className="h-2 mt-3" 
+                  indicatorClassName={getWellnessBarColor(moodScore)}
+                />
               </CardContent>
             </Card>
             <Card variant="glass">
@@ -296,7 +314,11 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Stress Level ({stressLevel ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress value={typeof stressLevel === "number" ? stressLevel : 0} className="h-2 mt-3" />
+                <Progress 
+                  value={typeof stressLevel === "number" ? stressLevel : 0} 
+                  className="h-2 mt-3" 
+                  indicatorClassName={getPressureBarColor(stressLevel, 40, 70)}
+                />
               </CardContent>
             </Card>
             <Card variant="glass">
@@ -310,7 +332,11 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Burnout Risk ({burnoutIndex ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress value={typeof burnoutIndex === "number" ? burnoutIndex : 0} className="h-2 mt-3" />
+                <Progress 
+                  value={typeof burnoutIndex === "number" ? burnoutIndex : 0} 
+                  className="h-2 mt-3" 
+                  indicatorClassName={getPressureBarColor(burnoutIndex, 30, 60)}
+                />
               </CardContent>
             </Card>
           </div>
