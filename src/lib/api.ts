@@ -1646,6 +1646,12 @@ class ApiClient {
     return response.data;
   }
 
+  async analyzeAppointment(appointmentId: string) {
+    const response = await this.client.post(`/appointments/${appointmentId}/analyze`);
+    return response.data;
+  }
+
+
   // Counselor Wellness
   async getCounselorWellness(counselorId?: number) {
     const params = counselorId ? { counselor_id: counselorId } : {};

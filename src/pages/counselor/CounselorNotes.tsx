@@ -49,7 +49,7 @@ const navItems = [
 ];
 
 type SessionNoteItem = {
-  id: number;
+  id: string;
   studentId: number;
   studentName: string;
   studentEmail: string;
@@ -58,6 +58,7 @@ type SessionNoteItem = {
   updatedAt: string;
   noteText: string;
   riskLevel?: string;
+  isAppointment?: boolean;
 };
 
 type ChatMessage = {
@@ -105,7 +106,7 @@ const CounselorNotes = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [sessionDate, setSessionDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
@@ -118,12 +119,16 @@ const CounselorNotes = () => {
   const loadSessions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await api.getSessions({ limit: 300 });
-      const normalized = (Array.isArray(response) ? response : [])
+      const [sessionsRes, appointmentsRes] = await Promise.all([
+        api.getSessions({ limit: 200 }),
+        api.getAppointments({ limit: 200 })
+      ]);
+
+      const normalizedSessions = (Array.isArray(sessionsRes) ? sessionsRes : [])
         .map((session: any): SessionNoteItem => {
           const updatedAt = String(session?.updated_at || session?.created_at || "");
           return {
-            id: Number(session?.id),
+            id: `session_${session?.id}`,
             studentId: Number(session?.student_id),
             studentName: buildStudentName(session),
             studentEmail: String(session?.student?.email || ""),
@@ -132,21 +137,41 @@ const CounselorNotes = () => {
             updatedAt,
             noteText: String(session?.notes || ""),
             riskLevel: String(session?.risk_level || "low"),
+            isAppointment: false,
           };
-        })
-        .filter((session) => Number.isFinite(session.id) && session.id > 0)
+        });
+
+      const normalizedAppointments = (Array.isArray(appointmentsRes) ? appointmentsRes : (appointmentsRes as any)?.data || [])
+        .map((apt: any): SessionNoteItem => {
+          const updatedAt = String(apt?.updated_at || apt?.scheduled_at || "");
+          return {
+            id: `apt_${apt?.id}`,
+            studentId: Number(apt?.student_id),
+            studentName: buildStudentName(apt),
+            studentEmail: String(apt?.student?.email || ""),
+            status: String(apt?.status || "scheduled"),
+            sessionType: String(apt?.notes || "").toLowerCase().includes("physical") ? "physical" : "online",
+            updatedAt,
+            noteText: String(apt?.notes || ""),
+            riskLevel: "N/A",
+            isAppointment: true,
+          };
+        });
+
+      const merged = [...normalizedSessions, ...normalizedAppointments]
+        .filter((item) => item.id)
         .sort((a, b) => {
           const aTs = new Date(a.updatedAt || 0).getTime();
           const bTs = new Date(b.updatedAt || 0).getTime();
           return bTs - aTs;
         });
 
-      setSessions(normalized);
+      setSessions(merged);
       setSelectedSessionId((current) => {
-        if (current && normalized.some((session) => session.id === current)) {
+        if (current && merged.some((item) => item.id === current)) {
           return current;
         }
-        return normalized[0]?.id ?? null;
+        return merged[0]?.id ?? null;
       });
     } catch (err: any) {
       console.error("Failed to load notes:", err);
@@ -179,19 +204,29 @@ const CounselorNotes = () => {
     void loadSessionContext(selectedSession.id);
   }, [selectedSession]);
 
-  const loadSessionContext = async (sessionId: number) => {
+  const loadSessionContext = async (id: string) => {
     try {
       setIsLoadingContext(true);
+      const isApt = id.startsWith("apt_");
+      const realId = id.split("_")[1];
+
       // Fetch diagnostics
       const diagnosticsResponse = await api.getAIDiagnostics({ limit: 10 });
       const sessionDiag = Array.isArray(diagnosticsResponse?.data) 
-        ? diagnosticsResponse.data.find((d: any) => Number(d.session_id) === sessionId)
+        ? diagnosticsResponse.data.find((d: any) => {
+            if (isApt) return d.session_id === `apt_${realId}`;
+            return String(d.session_id) === realId;
+          })
         : null;
       setDiagnostic(sessionDiag || null);
 
-      // Fetch messages
-      const messagesResponse = await api.getMessages(String(sessionId), { limit: 100 });
-      setMessages(Array.isArray(messagesResponse) ? messagesResponse : []);
+      // Fetch messages (only for digital sessions)
+      if (!isApt) {
+        const messagesResponse = await api.getMessages(realId, { limit: 100 });
+        setMessages(Array.isArray(messagesResponse) ? messagesResponse : []);
+      } else {
+        setMessages([]);
+      }
     } catch (err) {
       console.error("Failed to load session context:", err);
     } finally {
@@ -200,10 +235,15 @@ const CounselorNotes = () => {
   };
 
   const handleAnalyze = async () => {
-    if (!selectedSessionId) return;
+    if (!selectedSessionId || !selectedSession) return;
     try {
       setIsAnalyzing(true);
-      await api.analyzeSession(String(selectedSessionId));
+      const realId = selectedSessionId.split("_")[1];
+      if (selectedSession.isAppointment) {
+        await api.analyzeAppointment(realId);
+      } else {
+        await api.analyzeSession(realId);
+      }
       toast.success("AI analysis started. Results will appear shortly.");
       // Poll or wait a bit
       setTimeout(() => void loadSessionContext(selectedSessionId), 3000);
@@ -251,27 +291,26 @@ const CounselorNotes = () => {
 
     try {
       setIsSaving(true);
-      await api.updateSessionNote(selectedSessionId, trimmed);
-
-      const nowIso = new Date().toISOString();
-      setSessions((previous) =>
-        previous.map((session) =>
-          session.id === selectedSessionId
-            ? { ...session, noteText: trimmed, updatedAt: nowIso }
-            : session
-        )
-      );
-      setSessionDate(toDateInputValue(nowIso));
-      toast.success(kind === "draft" ? "Draft saved." : "Note saved.");
+      const realId = selectedSessionId.split("_")[1];
+      
+      if (selectedSession.isAppointment) {
+        await api.updateAppointment(realId, {
+          notes: noteText,
+        });
+      } else {
+        await api.updateSessionNote(realId, noteText);
+      }
+      toast.success(kind === "final" ? "Note finalized" : "Draft saved");
+      void loadSessions();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save note.");
+      toast.error(err?.response?.data?.message || "Failed to save note");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const deleteNote = async (sessionId: number) => {
-    const session = sessions.find((item) => item.id === sessionId);
+  const deleteNote = async (id: string) => {
+    const session = sessions.find((item) => item.id === id);
     if (!session || session.noteText.trim() === "") {
       toast.error("No note to delete.");
       return;
@@ -282,23 +321,17 @@ const CounselorNotes = () => {
 
     try {
       setIsDeleting(true);
-      await api.deleteSessionNote(sessionId);
-
-      const nowIso = new Date().toISOString();
-      setSessions((previous) =>
-        previous.map((item) =>
-          item.id === sessionId ? { ...item, noteText: "", updatedAt: nowIso } : item
-        )
-      );
-
-      if (selectedSessionId === sessionId) {
-        setNoteText("");
-        setSessionDate(toDateInputValue(nowIso));
+      const realId = id.split("_")[1];
+      if (session.isAppointment) {
+        await api.updateAppointment(realId, { notes: "" });
+      } else {
+        await api.deleteSessionNote(realId);
       }
 
-      toast.success("Note deleted.");
+      toast.success("Note removed.");
+      void loadSessions();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete note.");
+      toast.error(err?.response?.data?.message || "Failed to delete note");
     } finally {
       setIsDeleting(false);
     }
@@ -411,7 +444,13 @@ const CounselorNotes = () => {
                               {format(new Date(session.updatedAt), "MMM d")}
                             </div>
                             <div className="flex items-center gap-1">
-                              {session.sessionType === "chat" ? <MessageSquare className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+                              {session.sessionType === "physical" ? (
+                                <Users className="h-3 w-3 text-emerald-500" />
+                              ) : session.sessionType === "chat" ? (
+                                <MessageSquare className="h-3 w-3 text-blue-500" />
+                              ) : (
+                                <Video className="h-3 w-3 text-purple-500" />
+                              )}
                               <span className="capitalize">{session.sessionType}</span>
                             </div>
                           </div>
@@ -427,7 +466,7 @@ const CounselorNotes = () => {
             </div>
 
             {/* MIDDLE PANE: Editor */}
-            <div className="xl:col-span-5 space-y-4">
+            <div className="xl:col-span-6 space-y-4">
               <Card variant="glass" className="border-border/40 shadow-xl">
                 <CardHeader className="pb-3 border-b border-border/20">
                   <div className="flex items-center justify-between">
@@ -479,7 +518,7 @@ const CounselorNotes = () => {
                         <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Clinical Observations & Plan</label>
                         <Textarea
                           placeholder="Document your observations, assessment, and care plan here..."
-                          className="min-h-[450px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-none p-4"
+                          className="min-h-[550px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-none p-4"
                           value={noteText}
                           onChange={(e) => setNoteText(e.target.value)}
                         />
@@ -520,7 +559,7 @@ const CounselorNotes = () => {
             </div>
 
             {/* RIGHT PANE: Context & AI */}
-            <div className="xl:col-span-4 space-y-4">
+            <div className="xl:col-span-3 space-y-4">
               <Tabs defaultValue="insights" className="w-full">
                 <Card variant="glass" className="border-border/40 shadow-lg h-full overflow-hidden">
                   <CardHeader className="pb-0 border-b border-border/10 bg-secondary/5">

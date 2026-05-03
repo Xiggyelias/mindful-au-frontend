@@ -943,8 +943,8 @@ const StudentChat = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-0 lg:p-6 h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)] overflow-hidden">
-          <Card className="h-full border-none lg:border shadow-none lg:shadow-xl rounded-none lg:rounded-[2rem] overflow-hidden flex flex-col lg:flex-row bg-background relative">
+        <main className="h-[calc(100vh-80px)] p-0 flex flex-col">
+          <Card className="flex-1 flex overflow-hidden border-none shadow-none bg-background/60 backdrop-blur-md rounded-none">
             
             {/* Left Sidebar: Counselor/Chat List - Hidden on mobile when chat is active */}
             <div className={`${sessionId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[350px] border-r border-border/50 flex-col h-full bg-background lg:bg-secondary/10 absolute lg:relative z-20`}>

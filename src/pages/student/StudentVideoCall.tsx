@@ -662,17 +662,23 @@ const StudentVideoCall = () => {
         userName={userName}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        className={cn(isConnected && "hidden lg:hidden")}
       />
 
-      <div className="lg:pl-72">
-        <DashboardHeader
-          title="Video Call"
-          onMenuClick={() => setSidebarOpen(true)}
-        />
+      <div className={cn(
+        "transition-all duration-500",
+        isConnected ? "lg:pl-0" : "lg:pl-72"
+      )}>
+        {!isConnected && (
+          <DashboardHeader
+            title="Video Call"
+            onMenuClick={() => setSidebarOpen(true)}
+          />
+        )}
 
         <main className={cn(
           "transition-all duration-500",
-          isConnected ? "p-0 h-[calc(100vh-80px)]" : "p-4 lg:p-6 max-w-full mx-auto"
+          isConnected ? "p-0 h-screen" : "p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-80px)]"
         )}>
           <div className={cn(
             "grid gap-6 transition-all duration-500 h-full",

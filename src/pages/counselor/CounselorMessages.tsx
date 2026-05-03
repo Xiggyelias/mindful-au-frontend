@@ -959,9 +959,9 @@ const CounselorMessages = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6">
-          <div className="grid gap-4 lg:grid-cols-3 h-[calc(100vh-180px)]">
-            <Card variant="glass" className="lg:col-span-1">
+        <main className="p-0">
+          <div className="grid lg:grid-cols-3 h-[calc(100vh-80px)]">
+            <Card variant="glass" className="lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none">
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1061,7 +1061,7 @@ const CounselorMessages = () => {
               </CardContent>
             </Card>
 
-            <Card variant="glass" className="lg:col-span-2">
+            <Card variant="glass" className="lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none">
               <CardHeader className="border-b border-border/50">
                 <CardTitle className="text-lg flex items-center justify-between">
                   <div className="flex items-center gap-3">

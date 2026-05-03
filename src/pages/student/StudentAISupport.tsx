@@ -139,59 +139,50 @@ const StudentAISupport = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6 max-w-6xl mx-auto h-[calc(100vh-80px)]">
-          <Card className="h-full border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-background/40 backdrop-blur-md flex flex-col glass">
-            <CardHeader className="border-b border-border/20 bg-card/30 backdrop-blur-xl py-6 px-8">
+        <main className="p-4 lg:p-6">
+          <Card className="h-[calc(100vh-180px)] border-none shadow-2xl shadow-primary/5 rounded-[2rem] overflow-hidden bg-background">
+            <CardHeader className="border-b border-border/50 bg-secondary/5 py-6">
               <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-info flex items-center justify-center shadow-2xl shadow-primary/30 animate-pulse-glow">
-                    <Sparkles className="h-7 w-7 text-primary-foreground" />
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-info flex items-center justify-center shadow-lg shadow-primary/20">
+                    <Sparkles className="h-6 w-6 text-primary-foreground" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-display font-bold text-gradient leading-tight">AI Wellness Assistant</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="h-2.5 w-2.5 rounded-full bg-success shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                      <p className="text-sm font-medium text-muted-foreground/80">Always here to listen & support you</p>
+                    <h2 className="text-xl font-bold text-foreground">AI Wellness Assistant</h2>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                      <p className="text-sm font-medium text-muted-foreground">Always here for you</p>
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="rounded-2xl hover:bg-primary/10 transition-colors" onClick={() => toast.info("Your conversation is private and encrypted.")}>
-                  <Heart className="h-6 w-6 text-primary animate-pulse" />
+                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => toast.info("Your conversation is private and encrypted.")}>
+                  <Heart className="h-5 w-5 text-primary" />
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-0 min-h-0 bg-transparent">
-              <ScrollArea className="flex-1 px-8 py-8 scrollbar-hide">
-                <div className="space-y-8 max-w-4xl mx-auto pb-10">
+            <CardContent className="flex flex-col h-[calc(100%-100px)] p-0">
+              <ScrollArea className="flex-1 px-6 py-6">
+                <div className="space-y-6 max-w-4xl mx-auto">
                   {messages.length === 0 && !isLoading && (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-4 animate-fade-in">
-                      <div className="p-4 rounded-3xl bg-primary/5">
-                        <Bot className="h-12 w-12 text-primary/40" />
-                      </div>
-                      <div className="space-y-1 text-center">
-                        <p className="text-lg font-semibold text-foreground/80">How can I help you today?</p>
-                        <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                          Start a conversation or choose a topic below to explore wellness support.
-                        </p>
-                      </div>
+                    <div className="p-5 rounded-2xl border border-dashed border-border/70 bg-secondary/20 text-center text-sm text-muted-foreground">
+                      No conversation yet. Send a message to start live AI support.
                     </div>
                   )}
-                  {messages.map((msg, idx) => (
+                  {messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"} animate-slide-up`}
-                      style={{ animationDelay: `${idx * 0.05}s` }}
+                      className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`group relative max-w-[85%] sm:max-w-[75%] p-5 rounded-[2rem] transition-all duration-300 ${
+                        className={`group relative max-w-[85%] sm:max-w-[70%] p-4 rounded-[1.5rem] transition-all duration-300 ${
                           msg.sender === "user"
-                            ? "bg-primary text-primary-foreground rounded-br-none shadow-xl shadow-primary/20"
-                            : "bg-secondary/40 backdrop-blur-sm text-foreground rounded-bl-none border border-border/10 shadow-sm"
+                            ? "bg-primary text-primary-foreground rounded-br-none shadow-lg shadow-primary/10"
+                            : "bg-secondary/50 text-foreground rounded-bl-none border border-border/50"
                         }`}
                       >
-                        <p className="text-[15px] sm:text-base leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                        <div className={`flex items-center gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                          <p className={`text-[10px] font-bold uppercase tracking-widest ${msg.sender === "user" ? "text-primary-foreground/50" : "text-muted-foreground/50"}`}>
+                        <p className="text-base leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                        <div className={`flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                          <p className={`text-[10px] font-medium uppercase tracking-wider ${msg.sender === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                             {msg.time}
                           </p>
                         </div>
@@ -199,9 +190,9 @@ const StudentAISupport = () => {
                     </div>
                   ))}
                   {isLoading && (
-                    <div className="flex justify-start animate-fade-in">
-                      <div className="bg-secondary/40 backdrop-blur-sm p-5 rounded-[2rem] rounded-bl-none border border-border/10">
-                        <div className="flex gap-1.5">
+                    <div className="flex justify-start">
+                      <div className="bg-secondary/50 p-4 rounded-[1.5rem] rounded-bl-none border border-border/50">
+                        <div className="flex gap-1">
                           <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '0ms' }} />
                           <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '150ms' }} />
                           <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -213,60 +204,58 @@ const StudentAISupport = () => {
                 </div>
               </ScrollArea>
               
-              <div className="p-8 bg-card/20 backdrop-blur-2xl border-t border-border/10">
-                <div className="max-w-4xl mx-auto space-y-6">
+              <div className="p-6 bg-background border-t border-border/50">
+                <div className="max-w-4xl mx-auto space-y-4">
                   {supportSignal?.requiresImmediateHelp && (
-                    <div className="rounded-3xl border border-destructive/20 bg-destructive/5 p-6 animate-pulse-glow">
-                      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-destructive">
-                            <AlertTriangle className="h-6 w-6" />
-                            <p className="text-base font-bold uppercase tracking-tight">Immediate help recommended</p>
+                            <AlertTriangle className="h-5 w-5" />
+                            <p className="text-sm font-semibold">Immediate help recommended</p>
                           </div>
-                          <p className="text-sm text-foreground/90 font-medium">
-                            Please find a safe place or a trusted person. You can also alert our response team now.
+                          <p className="text-sm text-foreground">
+                            Move toward another person or a safer place now. Use the emergency alert if you need a counselor response quickly.
                           </p>
                           {supportSignal.crisisHotline && (
-                            <p className="text-xs font-semibold text-muted-foreground/70">
-                              Direct Crisis Contact: {supportSignal.crisisHotline}
+                            <p className="text-xs text-muted-foreground">
+                              Crisis contact: {supportSignal.crisisHotline}
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-3">
+                        <div className="flex flex-wrap gap-2">
                           {supportSignal.showPanicButton && (
                             <Button
                               type="button"
                               variant="destructive"
-                              className="rounded-2xl h-12 px-6 shadow-xl shadow-destructive/20 active:scale-95 transition-transform"
                               onClick={() => {
                                 void handleTriggerEmergency();
                               }}
                               disabled={isTriggeringEmergency}
                             >
-                              {isTriggeringEmergency ? "Sending Alert..." : "Send Emergency Alert"}
+                              {isTriggeringEmergency ? "Alerting..." : "Send emergency alert"}
                             </Button>
                           )}
                           <Button
                             type="button"
                             variant="outline"
-                            className="rounded-2xl h-12 px-6 gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all"
+                            className="gap-2"
                             onClick={handleCallHotline}
                           >
                             <Phone className="h-4 w-4" />
-                            Call Support
+                            Call now
                           </Button>
                         </div>
                       </div>
                     </div>
                   )}
-                  
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="flex flex-wrap gap-2">
                     {quickPrompts.map((prompt) => (
                       <Button
                         key={prompt}
                         variant="outline"
                         size="sm"
-                        className="rounded-full bg-secondary/30 border-border/10 hover:bg-primary/20 hover:text-primary hover:border-primary/30 transition-all duration-300 px-5 h-9"
+                        className="rounded-full bg-secondary/30 border-none hover:bg-primary/10 hover:text-primary transition-all duration-300"
                         onClick={() => handleQuickPrompt(prompt)}
                         disabled={isLoading}
                       >
@@ -274,35 +263,30 @@ const StudentAISupport = () => {
                       </Button>
                     ))}
                   </div>
-                  
-                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-4">
-                    <div className="relative flex-1 group">
-                      <Input
-                        placeholder="Type a message or share how you're feeling..."
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        className="h-16 pl-8 pr-20 rounded-[1.5rem] bg-secondary/40 border-border/10 focus-visible:ring-primary/20 text-base placeholder:text-muted-foreground/50 transition-all focus:bg-secondary/60"
-                        disabled={isLoading}
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                        <Button 
-                          type="submit" 
-                          variant="hero" 
-                          size="icon"
-                          className="h-11 w-11 rounded-2xl bg-primary hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all active:scale-90"
-                          disabled={!message.trim() || isLoading}
-                        >
-                          {isLoading ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <Send className="h-5 w-5" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
+                    <Input
+                      placeholder="Share what's on your mind..."
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      className="h-14 pl-6 pr-16 rounded-2xl bg-secondary/30 border-none focus-visible:ring-primary/20 text-base"
+                      disabled={isLoading}
+                    />
+                    <Button 
+                      type="submit" 
+                      variant="hero" 
+                      size="icon"
+                      className="absolute right-2 h-10 w-10 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95"
+                      disabled={!message.trim() || isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Send className="h-5 w-5" />
+                      )}
+                    </Button>
                   </form>
-                  <p className="text-[11px] font-medium text-center text-muted-foreground/60 max-w-lg mx-auto">
-                    Mindful AU: Anonymous, secure AI support. Not a replacement for professional clinical help.
+                  <p className="text-[10px] text-center text-muted-foreground">
+                    I'm here to listen. Remember, I'm an AI assistant and not a replacement for professional clinical help.
                   </p>
                 </div>
               </div>

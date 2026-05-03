@@ -50,6 +50,18 @@ type AnalyticsData = {
     total_sessions: number;
     sessions_by_type: Record<string, number>;
     sessions_this_month: number;
+    total_users: number;
+    total_students: number;
+    total_counselors: number;
+    total_sessions: number;
+    active_sessions: number;
+    total_appointments: number;
+    pending_appointments: number;
+  };
+  sessions?: {
+    total_sessions: number;
+    sessions_by_type: Record<string, number>;
+    sessions_this_month: number;
     sessions_this_week: number;
     avg_session_duration: number;
   };
@@ -58,6 +70,7 @@ type AnalyticsData = {
     appointments_by_status: Record<string, number>;
     appointments_today: number;
     appointments_this_week: number;
+    appointments_by_mode?: Record<string, number>;
   };
   ai_diagnostics?: {
     total_diagnostics: number;
@@ -122,6 +135,16 @@ const AdminAnalytics = () => {
     return Object.entries(types).map(([label, count]) => ({
       label,
       value: Math.round((count / total) * 100),
+    }));
+  }, [data]);
+
+  const appointmentModes = useMemo(() => {
+    const modes = data?.appointments?.appointments_by_mode || {};
+    const total = Object.values(modes).reduce((a, b) => a + b, 0) || 1;
+    return Object.entries(modes).map(([label, count]) => ({
+      label,
+      value: Math.round((count / total) * 100),
+      count,
     }));
   }, [data]);
 
@@ -323,7 +346,7 @@ const AdminAnalytics = () => {
             </Card>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-4">
             <Card variant="glass">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Students Needing Follow-Up</p>
@@ -412,6 +435,31 @@ const AdminAnalytics = () => {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
+            {/* Appointment Modality */}
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  Appointment Modality
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {appointmentModes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No appointment modality data available.</p>
+                ) : (
+                  appointmentModes.map((mode) => (
+                    <div key={mode.label}>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-muted-foreground capitalize">{mode.label}</span>
+                        <span className="text-foreground font-medium">{mode.count} ({mode.value}%)</span>
+                      </div>
+                      <Progress value={mode.value} className="h-2" />
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
             <Card variant="glass">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -437,7 +485,9 @@ const AdminAnalytics = () => {
                 )}
               </CardContent>
             </Card>
+          </div>
 
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card variant="glass">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
