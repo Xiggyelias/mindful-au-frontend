@@ -366,71 +366,77 @@ const CounselorAppointments = () => {
             </Card>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:flex-wrap gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center">
+            <div className="relative w-full xl:max-w-md group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by student name or appointment ID..."
-                className="pl-9"
+                className="pl-9 h-11 bg-secondary/20 border-none rounded-2xl focus-visible:ring-4 focus-visible:ring-primary/5 transition-all"
               />
             </div>
-            <Button
-              size="sm"
-              variant={statusFilter === "all" ? "default" : "outline"}
-              onClick={() => setStatusFilter("all")}
-              className="gap-2"
-            >
-              <Filter className="h-4 w-4" />
-              All
-            </Button>
-            <Button
-              size="sm"
-              variant={statusFilter === "action_needed" ? "default" : "outline"}
-              onClick={() => setStatusFilter("action_needed")}
-            >
-              Needs Action
-            </Button>
-            <Button
-              size="sm"
-              variant={statusFilter === "upcoming" ? "default" : "outline"}
-              onClick={() => setStatusFilter("upcoming")}
-            >
-              Upcoming
-            </Button>
-            <Button
-              size="sm"
-              variant={statusFilter === "completed" ? "default" : "outline"}
-              onClick={() => setStatusFilter("completed")}
-            >
-              Completed
-            </Button>
-            <Button
-              size="sm"
-              variant={statusFilter === "cancelled" ? "default" : "outline"}
-              onClick={() => setStatusFilter("cancelled")}
-            >
-              Cancelled
-            </Button>
-            {(statusFilter !== "all" || searchQuery.trim().length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
-                variant="ghost"
-                className="gap-2"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                }}
+                variant={statusFilter === "all" ? "default" : "outline"}
+                onClick={() => setStatusFilter("all")}
+                className="rounded-xl h-9"
               >
-                <FilterX className="h-4 w-4" />
-                Clear
+                <Filter className="h-3.5 w-3.5 mr-2" />
+                All
               </Button>
-            )}
+              <Button
+                size="sm"
+                variant={statusFilter === "action_needed" ? "default" : "outline"}
+                onClick={() => setStatusFilter("action_needed")}
+                className="rounded-xl h-9"
+              >
+                Needs Action
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === "upcoming" ? "default" : "outline"}
+                onClick={() => setStatusFilter("upcoming")}
+                className="rounded-xl h-9"
+              >
+                Upcoming
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === "completed" ? "default" : "outline"}
+                onClick={() => setStatusFilter("completed")}
+                className="rounded-xl h-9"
+              >
+                Completed
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === "cancelled" ? "default" : "outline"}
+                onClick={() => setStatusFilter("cancelled")}
+                className="rounded-xl h-9"
+              >
+                Cancelled
+              </Button>
+              {(statusFilter !== "all" || searchQuery.trim().length > 0) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-2 rounded-xl h-9 text-muted-foreground hover:text-primary"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  <FilterX className="h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-            <span>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
               Showing {filteredAppointments.length} of {appointments.length} on this page
               {appointmentTotalItems > appointments.length ? ` (${appointmentTotalItems} total)` : ""}
             </span>
@@ -461,11 +467,8 @@ const CounselorAppointments = () => {
             </div>
           </div>
 
-          <Card variant="glass">
-            <CardHeader>
-              <CardTitle className="text-lg">Appointments</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card variant="glass" className="border-none shadow-none bg-transparent">
+            <CardContent className="p-0 pt-2">
               <div className="space-y-4">
                 {isLoading ? (
                   <p className="text-sm text-muted-foreground">Loading appointments...</p>
@@ -487,31 +490,31 @@ const CounselorAppointments = () => {
                     return (
                       <div
                         key={apt.id}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-secondary/30"
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-5 rounded-[2rem] bg-secondary/10 border border-border/50 hover:bg-secondary/20 transition-all duration-300"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-full bg-info/20 flex items-center justify-center">
+                          <div className="h-14 w-14 rounded-2xl bg-info/10 flex items-center justify-center shrink-0">
                             <Calendar className="h-6 w-6 text-info" />
                           </div>
-                          <div>
-                            <p className="font-medium text-foreground">{studentName}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {isPhysical ? "In-person" : "Video call"}
+                          <div className="min-w-0">
+                            <p className="font-bold text-foreground truncate">{studentName}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mt-0.5">
+                              {isPhysical ? "In-person" : "Secure Video"}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
-                          <div className="text-right min-w-[140px]">
-                            <p className="font-medium text-foreground">
+                        <div className="flex flex-wrap items-center gap-4 sm:gap-8">
+                          <div className="min-w-[120px]">
+                            <p className="text-sm font-bold text-foreground">
                               {apt.scheduled_at ? format(new Date(apt.scheduled_at), "MMM d, yyyy") : "TBD"}
                             </p>
-                            <p className="text-sm text-muted-foreground flex items-center justify-end gap-1">
+                            <p className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5 mt-0.5">
                               <Clock className="h-3 w-3" />
                               {apt.scheduled_at ? format(new Date(apt.scheduled_at), "h:mm a") : "TBD"}
                             </p>
                           </div>
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${statusClassName(
+                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${statusClassName(
                               apt.status
                             )}`}
                           >
