@@ -14,6 +14,7 @@ import {
   RefreshCcw,
   Download,
   Loader2,
+  Calendar,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -38,18 +39,6 @@ const navItems = [
 
 type AnalyticsData = {
   overview?: {
-    total_users: number;
-    total_students: number;
-    total_counselors: number;
-    total_sessions: number;
-    active_sessions: number;
-    total_appointments: number;
-    pending_appointments: number;
-  };
-  sessions?: {
-    total_sessions: number;
-    sessions_by_type: Record<string, number>;
-    sessions_this_month: number;
     total_users: number;
     total_students: number;
     total_counselors: number;

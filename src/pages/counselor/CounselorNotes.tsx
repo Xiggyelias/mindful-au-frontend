@@ -567,16 +567,6 @@ const CounselorNotes = () => {
                       <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                         Session Context
                       </CardTitle>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-8 text-[10px] uppercase font-bold tracking-tight text-primary hover:text-primary hover:bg-primary/10"
-                        onClick={handleAnalyze}
-                        disabled={!selectedSessionId || isAnalyzing}
-                      >
-                        {isAnalyzing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Sparkles className="h-3 w-3 mr-1.5" />}
-                        Re-Analyze
-                      </Button>
                     </div>
                     <TabsList className="grid w-full grid-cols-2 bg-background/50 p-1 h-12 mb-4">
                       <TabsTrigger value="insights" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
