@@ -89,9 +89,13 @@ export class OpenRouterService {
           }
 
           const message =
-            (parsed && typeof parsed === "object" && typeof parsed.message === "string" && parsed.message.trim() !== ""
-              ? parsed.message
-              : `HTTP error! status: ${response.status}`);
+            parsed &&
+            typeof parsed === "object" &&
+            "message" in (parsed as Record<string, unknown>) &&
+            typeof (parsed as { message: unknown }).message === "string" &&
+            (parsed as { message: string }).message.trim() !== ""
+              ? (parsed as { message: string }).message
+              : `HTTP error! status: ${response.status}`;
           const error = new Error(message);
 
           const shouldRetry = (response.status === 429 || response.status >= 500) && attempt < retries;
