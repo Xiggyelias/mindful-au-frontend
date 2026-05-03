@@ -245,7 +245,9 @@ export const useChatSession = (userId: number | undefined) => {
       const dedupedByConversation = new Map<string, Session>();
       
       // Sort by ID descending first so we process latest sessions first
-      const sortedByRecency = [...chatSessions].sort((a, b) => b.id - a.id);
+      const sortedByRecency = [...chatSessions].sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
       
       for (const session of sortedByRecency) {
         const key = conversationKey(session);

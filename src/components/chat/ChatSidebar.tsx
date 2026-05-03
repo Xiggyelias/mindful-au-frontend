@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Session } from "@/hooks/useChatSession";
 import { 
   Search, 
@@ -120,7 +120,60 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="space-y-1">
-              {sessions.map((session) => {
+              {useMemo(() => {
+                if (!sessions || sessions.length === 0) return [];
+
+                // 1. Group sessions by counselor to identify multiple sessions
+                const sessionsByCounselor: Record<string, Session[]> = {};
+                sessions.forEach(s => {
+                  const counselorId = s.counselor_id || s.peer_counselor_id || 0;
+                  const counselorName = s.counselor?.profile?.full_name || s.peer_counselor?.profile?.full_name || "Counselor";
+                  const groupKey = counselorId !== 0 ? String(counselorId) : counselorName;
+                  
+                  if (!sessionsByCounselor[groupKey]) sessionsByCounselor[groupKey] = [];
+                  sessionsByCounselor[groupKey].push(s);
+                });
+
+                const finalSessionsList: (Session & { sessionLabel?: string })[] = [];
+
+                Object.values(sessionsByCounselor).forEach(group => {
+                  // Sort group by created_at ASC to identify duplicates and assign numbers
+                  const sortedGroup = [...group].sort((a, b) => 
+                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                  );
+
+                  // Keep only the latest for each "logical conversation" (same role and anon status)
+                  const seenLogicalKeys = new Set<string>();
+                  const keptInGroup: Session[] = [];
+                  
+                  // Process from newest to oldest for deduplication
+                  [...sortedGroup].reverse().forEach(s => {
+                    const logicalKey = `${s.assigned_role}-${s.is_anonymous ? 'anon' : 'clear'}`;
+                    if (!seenLogicalKeys.has(logicalKey)) {
+                      seenLogicalKeys.add(logicalKey);
+                      keptInGroup.push(s);
+                    }
+                  });
+
+                  // If multiple sessions remain for this counselor, assign them labels
+                  if (keptInGroup.length > 1) {
+                    // Sort by original creation time again for stable numbering
+                    const labeled = keptInGroup.sort((a, b) => 
+                      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    );
+                    labeled.forEach((s, idx) => {
+                      finalSessionsList.push({ ...s, sessionLabel: `(Session ${idx + 1})` });
+                    });
+                  } else if (keptInGroup.length === 1) {
+                    finalSessionsList.push(keptInGroup[0]);
+                  }
+                });
+
+                // 2. Final sort by timestamp DESC (most recent first)
+                return finalSessionsList.sort((a, b) => 
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+              }, [sessions]).map((session) => {
                 const name = session.counselor?.profile?.full_name || session.peer_counselor?.profile?.full_name || "Counselor";
                 const isActive = activeSession?.id === session.id;
                 const isPeer = session.assigned_role === "peer_counselor";
@@ -141,7 +194,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       {getInitials(name)}
                     </div>
                     <div className="flex-1 text-left min-w-0">
-                      <p className="font-bold truncate text-sm">{name}</p>
+                      <p className="font-bold truncate text-sm">
+                        {name} {session.sessionLabel && <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">{session.sessionLabel}</span>}
+                      </p>
                       <p className={`text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1`}>
                         {isPeer && <Users className="h-2.5 w-2.5" />}
                         {isPeer ? "Peer Support" : "Professional"}
