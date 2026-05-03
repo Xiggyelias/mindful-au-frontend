@@ -116,6 +116,7 @@ type RawSession = {
 type ChatListItem = {
   id: number;
   studentId: number | null;
+  counselorId: number;
   studentName: string;
   studentEmail: string;
   isAnonymous: boolean;
@@ -284,15 +285,34 @@ const CounselorMessages = () => {
   });
 
   const filteredChats = useMemo(() => {
-    const needle = searchQuery.trim().toLowerCase();
-    if (!needle) return chats;
-
-    return chats.filter((chat) => {
-      return (
-        chat.studentName.toLowerCase().includes(needle) ||
-        chat.studentEmail.toLowerCase().includes(needle)
-      );
+    // Deduplicate by counselorId, keeping the most recent one per counselor
+    const dedupedByCounselor = new Map<number, ChatListItem>();
+    for (const chat of chats) {
+      const existing = dedupedByCounselor.get(chat.counselorId);
+      if (!existing || new Date(chat.lastActivity).getTime() > new Date(existing.lastActivity).getTime()) {
+        dedupedByCounselor.set(chat.counselorId, chat);
+      }
+    }
+    
+    // Convert to array and sort by lastActivity descending
+    let result = Array.from(dedupedByCounselor.values()).sort((a, b) => {
+      const aTime = new Date(a.lastActivity).getTime();
+      const bTime = new Date(b.lastActivity).getTime();
+      return bTime - aTime;
     });
+    
+    // Apply search filter if present
+    const needle = searchQuery.trim().toLowerCase();
+    if (needle) {
+      result = result.filter((chat) => {
+        return (
+          chat.studentName.toLowerCase().includes(needle) ||
+          chat.studentEmail.toLowerCase().includes(needle)
+        );
+      });
+    }
+    
+    return result;
   }, [chats, searchQuery]);
 
   const loadSessions = useCallback(
@@ -473,6 +493,7 @@ const CounselorMessages = () => {
             return {
               id: Number(session.id),
               studentId: visibleStudentId,
+              counselorId: Number(session.counselor_id),
               studentName: name,
               studentEmail: email,
               isAnonymous,

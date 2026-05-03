@@ -1,35 +1,3 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  History,
-  Heart,
-  Send,
-  Paperclip,
-  Shield,
-  AlertTriangle,
-  Loader2,
-  X,
-  FileText,
-  Image as ImageIcon,
-  Mic,
-  User,
-  Search,
-  MoreVertical,
-  Play,
-  Pause,
-  Phone,
-  Square,
-  Trash2,
-  ArrowLeft,
-  Smile,
-} from "lucide-react";
-import { DashboardSidebar } from "@/components/DashboardSidebar";
-import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
