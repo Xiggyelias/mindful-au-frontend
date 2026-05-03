@@ -80,7 +80,10 @@ interface RealtimeClient {
   removeChannel(channel: RealtimeBroadcastChannel): Promise<unknown> | unknown;
 }
 
-const POLLING_INTERVAL_MS = 8000;
+const DEFAULT_POLLING_INTERVAL_MS = 8000;
+const ACTIVE_POLLING_INTERVAL_MS = 3000;
+const POLLING_BOOST_DURATION_MS = 15000;
+
 const MESSAGE_BATCH_LIMIT = 30;
 const INITIAL_SYNC_BATCH_LIMIT = 30;
 const MESSAGE_RETRY_BATCH_LIMIT = 15;
@@ -234,6 +237,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const typingPollTimeoutRef = useRef<number | null>(null);
   const localTypingStateRef = useRef(false);
   const localTypingLastSentAtRef = useRef(0);
+  const lastActiveAtRef = useRef(0);
+
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isInteger(numericUserId) && numericUserId > 0;
@@ -1039,9 +1044,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     messageCountRef.current = messages.length;
   }, [messages.length]);
 
-  const sendMessage = useCallback(async (
-    content: string,
-    fileUrl?: string,
+  const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
+    lastActiveAtRef.current = Date.now();
+
+
+
     messageType: string = 'text'
   ) => {
     if (!sessionId || !userId) {
@@ -1430,6 +1437,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
     const scheduleNextPoll = () => {
       if (isDisposed || !isInitializedRef.current) return;
+      const now = Date.now();
+      const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTyping;
+      const nextInterval = shouldBoost ? ACTIVE_POLLING_INTERVAL_MS : DEFAULT_POLLING_INTERVAL_MS;
+
 
       pollingTimeoutRef.current = window.setTimeout(async () => {
         if (isDisposed || !isInitializedRef.current) return;
@@ -1439,7 +1450,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
 
         scheduleNextPoll();
-      }, POLLING_INTERVAL_MS);
+      }, nextInterval);
     };
 
     const scheduleTypingPoll = () => {
