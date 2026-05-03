@@ -1006,7 +1006,7 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-360px)]">
+                <ScrollArea className="h-[calc(100vh-220px)]">
                   {!isLoadingChats && filteredChats.length === 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">
                       No conversations found
