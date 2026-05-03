@@ -58,6 +58,7 @@ const StudentDashboard = () => {
   });
   const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
+  const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -125,12 +126,14 @@ const StudentDashboard = () => {
         })
         .slice(0, 3);
       
+      setRecentSessions(sessionItems.slice(0, 3));
+      
       setStats({
-        sessions: sessionRows.filter((s: any) => s.status !== 'completed' && s.status !== 'cancelled').length,
-        appointments: appointmentRows.filter((a: any) => a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'pending').length,
+        sessions: sessionItems.filter((s: any) => s.status !== 'completed' && s.status !== 'cancelled').length,
+        appointments: appointmentItems.filter((a: any) => a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'pending').length,
         wellness: Number(summary?.scores?.wellness_score) || null,
         wellnessLabel: summary?.labels?.wellness ?? null,
-        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionRows.length),
+        chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
       });
       setUpcomingAppointments(upcomingApts);
       
@@ -235,7 +238,7 @@ const StudentDashboard = () => {
       const recordedLabel = moodOptions.find((item) => item.value === recorded)?.label.toLowerCase() ?? recorded;
       toast.success(`Mood saved: ${recordedLabel}.`);
     } catch (error: unknown) {
-      const message = getApiErrorMessage(error);
+      const message = getApiErrorMessage(error, "Failed to record mood");
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
         // Always sync state from server to maintain single source of truth
         try {
