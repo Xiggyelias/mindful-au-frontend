@@ -995,35 +995,37 @@ const CounselorMessages = () => {
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {chatTotalItems > 0
-                      ? `${chatTotalItems} conversation${chatTotalItems === 1 ? "" : "s"}`
+                    {filteredChats.length > 0
+                      ? `${filteredChats.length} conversation${filteredChats.length === 1 ? "" : "s"}`
                       : "No conversations"}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={handlePrevPage}
-                      disabled={!canGoToPrevPage || isLoadingChats}
-                    >
-                      Prev
-                    </Button>
-                    <span>
-                      Page {chatPage} of {Math.max(1, chatTotalPages)}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={handleNextPage}
-                      disabled={!canGoToNextPage || isLoadingChats}
-                    >
-                      Next
-                    </Button>
-                  </div>
+                  {chatTotalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={handlePrevPage}
+                        disabled={!canGoToPrevPage || isLoadingChats}
+                      >
+                        Prev
+                      </Button>
+                      <span>
+                        Page {chatPage} of {Math.max(1, chatTotalPages)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={handleNextPage}
+                        disabled={!canGoToNextPage || isLoadingChats}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -1038,22 +1040,22 @@ const CounselorMessages = () => {
                         key={chat.id}
                         className={`p-3 cursor-pointer transition-all border-b border-border/50 group ${
                           selectedChat?.id === chat.id 
-                            ? "bg-primary/5 border-l-4 border-l-primary" 
+                            ? "bg-accent border-l-4 border-l-accent-foreground/30" 
                             : "hover:bg-secondary/30"
                         }`}
                         onClick={() => setSelectedChatId(chat.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm ${getUserColor(chat.studentName)}`}>
+                          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm ${chat.isAnonymous ? "bg-slate-500" : getUserColor(chat.studentName)}`}>
                             <span className="text-white text-xs font-bold">
-                              {getInitials(chat.studentName)}
+                              {chat.isAnonymous ? "??" : getInitials(chat.studentName)}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start mb-0.5">
                               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                <p className={`text-[13px] font-bold truncate tracking-tight ${selectedChat?.id === chat.id ? "text-primary" : "text-foreground"}`}>
-                                  {chat.studentName}
+                                <p className={`text-[13px] font-bold truncate tracking-tight ${selectedChat?.id === chat.id ? "text-accent-foreground" : "text-foreground"}`}>
+                                  {chat.isAnonymous ? "Anonymous Student" : chat.studentName}
                                 </p>
                                 {chat.isAnonymous && (
                                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase tracking-tight">
@@ -1086,13 +1088,13 @@ const CounselorMessages = () => {
               <CardHeader className="border-b border-border/50">
                 <CardTitle className="text-lg flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-sm ${getUserColor(selectedChat?.studentName || "Student")}`}>
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-sm ${selectedChat?.isAnonymous ? "bg-slate-500" : getUserColor(selectedChat?.studentName || "Student")}`}>
                       <span className="text-white text-xs font-bold">
-                        {selectedChat ? getInitials(selectedChat.studentName) : <User className="h-4 w-4" />}
+                        {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4" />}
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-base lg:text-lg leading-tight truncate">{selectedChat?.studentName || "Select a conversation"}</p>
+                      <p className="font-bold text-base lg:text-lg leading-tight truncate">{selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName || "Select a conversation")}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span
                           className={`h-2 w-2 rounded-full ${
@@ -1166,8 +1168,20 @@ const CounselorMessages = () => {
               <CardContent className="flex flex-col h-[calc(100%-80px)] p-0">
                 <ScrollArea ref={messageScrollAreaRef} className="flex-1 p-4">
                   {!selectedSessionId ? (
-                    <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                      Select a student conversation to start chatting
+                    <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
+                      <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
+                        <MessageSquare className="h-12 w-12 opacity-20" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-foreground">Student Conversations</h3>
+                      <p className="max-w-xs">
+                        {selectedChat?.lastActivity 
+                          ? `Last conversation was ${formatTime(selectedChat.lastActivity)}`
+                          : "Select a student conversation to start chatting"}
+                      </p>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-full text-xs">
+                        <Shield className="h-3 w-3 text-success" />
+                        <span>Encrypted and secure</span>
+                      </div>
                     </div>
                   ) : messagesLoading ? (
                     <div className="flex items-center justify-center h-full">
