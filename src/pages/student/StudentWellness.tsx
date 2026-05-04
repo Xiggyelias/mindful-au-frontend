@@ -69,7 +69,7 @@ const StudentWellness = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadSummary();

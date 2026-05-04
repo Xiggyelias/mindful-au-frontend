@@ -218,6 +218,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const deviceKeyPairRef = useRef<DeviceKeyPair | null>(null);
   const peerPublicKeyRef = useRef<CryptoKey | null>(null);
   const peerIdRef = useRef<number | null>(null);
+  const isPeerTypingRef = useRef(false);
   const hasSentPublicKeyRef = useRef(false);
   const hasSentSessionKeyRef = useRef(false);
   const lastMessageIdRef = useRef(0);
@@ -1370,6 +1371,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   ]);
 
   useEffect(() => {
+    isPeerTypingRef.current = isPeerTyping;
+  }, [isPeerTyping]);
+
+  useEffect(() => {
     if (!sessionId) {
       if (pollingTimeoutRef.current !== null) {
         window.clearTimeout(pollingTimeoutRef.current);
@@ -1447,7 +1452,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     const scheduleNextPoll = () => {
       if (isDisposed || !isInitializedRef.current) return;
       const now = Date.now();
-      const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTyping;
+      const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTypingRef.current;
       const nextInterval = shouldBoost ? ACTIVE_POLLING_INTERVAL_MS : DEFAULT_POLLING_INTERVAL_MS;
 
 

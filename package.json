@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check:prod": "npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../backend test"
+    "check:prod": "npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend test"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

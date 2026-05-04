@@ -144,26 +144,26 @@ const StudentHistory = () => {
         requestInFlightRef.current = null;
       }
     },
-    [toast, getApiErrorMessage],
+    [],
   );
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setIsLoading(false);
       return;
     }
     void loadSessions(true, { force: true });
-  }, [loadSessions, user]);
+  }, [loadSessions, user?.id]);
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
-    if (!user || sessionPage === 1) return;
+    if (!user?.id || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
     void loadSessions(true, { force: true });
-  }, [sessionPage, loadSessions]);
+  }, [sessionPage, loadSessions, user?.id]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const retryLoad = () => {
       if (document.visibilityState !== "visible") return;

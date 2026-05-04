@@ -90,6 +90,7 @@ const StudentChat = () => {
   const hasLoadedCounselorsRef = useRef(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+  const profileAnonymousMode = Boolean(user?.profile?.anonymous_mode);
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -143,6 +144,10 @@ const StudentChat = () => {
 
   const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
   const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
+
+  useEffect(() => {
+    setAnonymousStartMode(profileAnonymousMode);
+  }, [profileAnonymousMode]);
 
   const {
     sendFileMessage,
@@ -321,6 +326,7 @@ const StudentChat = () => {
         scheduled_at: scheduledAt,
         duration_minutes: 30,
         notes: "Online",
+        is_anonymous: Boolean(activeSession.is_anonymous),
       });
       navigate(`/student/video-call?appointment_id=${created.id}&counselor_id=${activeSession.counselor_id}&mode=video&autostart=1`);
     } catch {
@@ -384,7 +390,7 @@ const StudentChat = () => {
   }, []); // Empty deps - uses refs for changing values
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar
         items={navItems}
         userType="student"
@@ -393,7 +399,7 @@ const StudentChat = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden lg:pl-72">
+      <div className="flex h-full min-w-0 flex-col overflow-hidden lg:pl-72">
         {!activeSession && (
           <DashboardHeader
             title="Clinical Support"
@@ -402,9 +408,9 @@ const StudentChat = () => {
         )}
 
         <ErrorBoundary>
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Chat Sidebar */}
-            <div className="hidden lg:block">
+            <div className="hidden w-80 shrink-0 lg:flex">
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
@@ -428,7 +434,7 @@ const StudentChat = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative min-h-0">
+            <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-secondary/5">
               {/* Handshake Indicator - non-blocking inline banner */}
               {activeSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                 <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
@@ -476,28 +482,39 @@ const StudentChat = () => {
               {activeSession ? (
                 <>
                   {/* Chat Header */}
-                  <div className="shrink-0 p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between relative z-0">
-                    <div className="flex items-center gap-2">
+                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-4 border-b border-border/50 bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
                       <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
                       </Button>
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => selectSession(null)}>
-                          <X className="h-5 w-5" />
-                        </Button>
-                        <div className="min-w-0">
-                          <h2 className="text-lg font-bold truncate">
-                            {activeSession.counselor?.profile?.full_name || "Support Session"}
-                          </h2>
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
-                          </div>
+                      <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => selectSession(null)}>
+                        <X className="h-5 w-5" />
+                      </Button>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+                        {(activeSession.counselor?.profile?.full_name || "Support")
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join("")
+                          .toUpperCase() || "SC"}
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="truncate text-base font-bold leading-tight lg:text-lg">
+                          {activeSession.counselor?.profile?.full_name || "Support Session"}
+                        </h2>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 lg:flex">
+                        <Shield className="h-3 w-3" />
+                        <span>{isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
+                      </div>
                       <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
                       </Button>

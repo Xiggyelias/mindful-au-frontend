@@ -30,7 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { api } from "@/lib/api";
-import { Appointment, Session } from "@/hooks/useChatSession";
+import { Appointment } from "@/hooks/useChatSession";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -504,8 +504,7 @@ const CounselorVideo = () => {
 
   const remoteParticipantName = useMemo(() => {
     if (activeSession?.is_anonymous) {
-      const fallbackId = String(activeSession?.id || "").slice(-4) || "----";
-      return `Anonymous Student #${fallbackId}`;
+      return activeSession.anonymous_id || `Anonymous Student #${String(activeSession?.id || "").slice(-4) || "----"}`;
     }
     return getParticipantName(activeSession?.student, "Student");
   }, [activeSession]);

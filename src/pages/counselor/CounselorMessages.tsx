@@ -25,7 +25,6 @@ import {
   Play,
   Pause,
   Square,
-  Trash2,
   Menu,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -38,7 +37,6 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
-import { useChatSession, Session } from "@/hooks/useChatSession";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -210,7 +208,7 @@ const CounselorMessages = () => {
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [chatPage, setChatPage] = useState(1);
   const [chatTotalPages, setChatTotalPages] = useState(1);
-  const [chatTotalItems, setChatTotalItems] = useState(0);
+  const [, setChatTotalItems] = useState(0);
   const [isEscalating, setIsEscalating] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
@@ -887,7 +885,6 @@ const CounselorMessages = () => {
     return formatChatFileSize(bytes);
   };
 
-  const canSend = Boolean(message.trim() || selectedFile || recording);
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
@@ -1020,8 +1017,6 @@ const CounselorMessages = () => {
 
     return <p>{content}</p>;
   };
-
-  const isLoading = isLoadingChats || (Boolean(selectedSessionId) && messagesLoading);
 
   return (
     <div className="min-h-screen bg-background">

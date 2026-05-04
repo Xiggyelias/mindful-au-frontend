@@ -47,13 +47,15 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
       setUploadProgress(100);
       return message as ChatMessage;
     } catch (err) {
-      console.error('Chat attachment upload failed:', err);
+      if (import.meta.env.DEV) {
+        console.error('Chat attachment upload failed:', err);
+      }
       setError(getApiErrorMessage(err, 'Failed to upload file'));
       return null;
     } finally {
       setIsUploading(false);
     }
-  }, [sessionId, getApiErrorMessage]);
+  }, [sessionId]);
 
   const sendFileMessage = useCallback(async (
     file: File,

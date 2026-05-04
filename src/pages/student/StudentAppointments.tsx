@@ -11,6 +11,7 @@ import {
   Heart,
   Plus,
   Clock,
+  Shield,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -20,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,6 +70,7 @@ const StudentAppointments = () => {
     scheduled_at: "",
     mode: "online",
     duration_minutes: 60,
+    is_anonymous: false,
   });
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const counselorsRequestInFlightRef = useRef<Promise<void> | null>(null);
@@ -80,6 +83,7 @@ const StudentAppointments = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+  const profileAnonymousMode = Boolean(user?.profile?.anonymous_mode);
 
   useEffect(() => {
     setAppointmentPage(1);
@@ -95,6 +99,13 @@ const StudentAppointments = () => {
     setAppointments([]);
     setCounselors([]);
   }, [user?.id]);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      is_anonymous: profileAnonymousMode,
+    }));
+  }, [profileAnonymousMode]);
 
   const loadAppointments = useCallback(
     async (showErrorToast = true, options?: { force?: boolean }) => {
@@ -392,6 +403,7 @@ const StudentAppointments = () => {
         scheduled_at: scheduledAt,
         duration_minutes: form.duration_minutes || 60,
         notes: form.mode === "online" ? "Online" : "Physical",
+        is_anonymous: form.is_anonymous,
       });
       toast({ title: "Appointment booked!" });
       setOpenDialog(false);
@@ -400,6 +412,7 @@ const StudentAppointments = () => {
         scheduled_at: "",
         mode: "online",
         duration_minutes: 60,
+        is_anonymous: profileAnonymousMode,
       });
       await loadAppointments(false, { force: true });
     } catch (err: unknown) {
@@ -660,6 +673,26 @@ const StudentAppointments = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center justify-between rounded-2xl border border-primary/10 bg-primary/5 p-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <div>
+                        <Label htmlFor="appointment-anonymous-mode" className="cursor-pointer text-sm font-medium">
+                          Book anonymously
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Your counselor sees an anonymous ID unless identity is revealed for safety.
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="appointment-anonymous-mode"
+                      checked={form.is_anonymous}
+                      onCheckedChange={(checked) =>
+                        setForm((prev) => ({ ...prev, is_anonymous: Boolean(checked) }))
+                      }
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label>Date & Time</Label>
                     <Input
@@ -790,6 +823,7 @@ const StudentAppointments = () => {
             ) : (
             sortedAppointments.map((apt) => {
               const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
+              const isAnonymous = Boolean(apt.is_anonymous);
 
               return (
                 <Card key={apt.id} variant="glass">
@@ -805,6 +839,7 @@ const StudentAppointments = () => {
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {isPhysical ? "Physical" : "Online"}
+                            {isAnonymous ? " • Anonymous" : ""}
                           </p>
                           {apt.status === "cancelled" && apt.cancellation_reason && (
                             <p className="text-xs text-muted-foreground mt-1">

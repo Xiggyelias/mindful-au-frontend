@@ -60,12 +60,12 @@ const CounselorNotes = () => {
       setIsLoading(true);
       const data = await api.getSessions({ limit: 300 });
       setSessions(data);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load sessions");
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadSessions();
@@ -103,7 +103,7 @@ const CounselorNotes = () => {
       await api.updateSessionNote(selectedSessionId, noteText);
       toast.success(status === "final" ? "Note saved successfully" : "Draft saved");
       await loadSessions();
-    } catch (error) {
+    } catch {
       toast.error("Failed to save note");
     } finally {
       setIsSaving(false);
@@ -117,7 +117,7 @@ const CounselorNotes = () => {
       await api.deleteSessionNote(sessionId);
       toast.success("Note cleared");
       await loadSessions();
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete note");
     } finally {
       setIsDeleting(false);

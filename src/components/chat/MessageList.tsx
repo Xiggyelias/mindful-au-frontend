@@ -139,12 +139,9 @@ export const MessageList: React.FC<MessageListProps> = ({
   if (isLoading && messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-700">
-          <div className="relative">
-            <div className="absolute inset-0 blur-2xl bg-primary/20 rounded-full" />
-            <Loader2 className="h-12 w-12 animate-spin text-primary relative" />
-          </div>
-          <p className="text-muted-foreground font-medium">Securing your safe space...</p>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm font-medium text-muted-foreground">Loading conversation...</p>
         </div>
       </div>
     );
@@ -153,8 +150,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-md w-full text-center space-y-6 animate-in zoom-in-95 duration-500">
-          <div className="inline-flex p-5 rounded-[2rem] bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 shadow-2xl shadow-primary/5">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="inline-flex rounded-[2rem] border border-primary/10 bg-primary/10 p-5">
             <Shield className="h-12 w-12 text-primary" />
           </div>
           <div className="space-y-2">

@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -74,8 +73,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   };
 
   return (
-    <div className="w-full lg:w-80 border-r border-border/50 flex flex-col h-full bg-background/50 backdrop-blur-xl">
-      <div className="p-4 lg:p-6 space-y-6">
+    <div className="flex h-full w-full flex-col border-r border-border/50 bg-background">
+      <div className="space-y-5 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-display font-bold tracking-tight">Conversations</h2>
           <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More options">
@@ -87,13 +86,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input 
             placeholder="Search counselors..." 
-            className="pl-10 bg-secondary/30 border-none rounded-2xl h-11 focus-visible:ring-4 focus-visible:ring-primary/5 transition-all"
+            className="h-11 rounded-2xl border-border/60 bg-secondary/20 pl-10 focus-visible:ring-2 focus-visible:ring-primary/10"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
 
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-primary/5 border border-primary/10">
+        <div className="flex items-center justify-between rounded-2xl border border-primary/10 bg-primary/5 p-3">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
             <Label htmlFor="anon-mode" className="text-xs font-bold uppercase tracking-wider cursor-pointer">Stay Anonymous</Label>
@@ -182,13 +181,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <button
                     key={session.id}
                     onClick={() => onSelectSession(String(session.id))}
-                    className={`w-full flex items-center gap-3 p-3 rounded-[1.5rem] transition-all duration-300 group ${
+                    className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-colors group ${
                       isActive 
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]" 
+                        ? "bg-primary text-primary-foreground shadow-sm" 
                         : "hover:bg-secondary/50 text-foreground"
                     }`}
                   >
-                    <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 font-bold text-sm shadow-inner ${
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ${
                       isActive ? "bg-white/20" : getUserColor(name) + " text-white"
                     }`}>
                       {getInitials(name)}
@@ -236,9 +235,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 counselors.map((counselor) => {
                   const name = counselor.profile?.full_name || "Counselor";
                   return (
-                    <div key={counselor.id} className="p-3 rounded-[1.5rem] bg-secondary/20 border border-border/50 group hover:border-primary/20 transition-all duration-300">
+                    <div key={counselor.id} className="rounded-2xl border border-border/50 bg-secondary/20 p-3 transition-colors group hover:border-primary/20">
                       <div className="flex items-center gap-3">
-                        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-xs text-white ${getUserColor(name)}`}>
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-xs text-white ${getUserColor(name)}`}>
                           {getInitials(name)}
                         </div>
                         <div className="flex-1 min-w-0">

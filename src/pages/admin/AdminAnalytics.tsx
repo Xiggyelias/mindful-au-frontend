@@ -112,7 +112,7 @@ const AdminAnalytics = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (user) void loadAnalytics();

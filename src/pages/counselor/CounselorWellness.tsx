@@ -139,7 +139,7 @@ const CounselorWellness = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadWellnessData();
@@ -255,20 +255,6 @@ const CounselorWellness = () => {
       : "High";
 
   const checkInProgress = Math.round((answeredCount / checkInQuestions.length) * 100);
-
-  const getWellnessBarColor = (score: number | null) => {
-    if (typeof score !== "number") return "bg-muted";
-    if (score >= 70) return "bg-success";
-    if (score >= 50) return "bg-warning";
-    return "bg-destructive";
-  };
-
-  const getPressureBarColor = (score: number | null, low: number, med: number) => {
-    if (typeof score !== "number") return "bg-muted";
-    if (score < low) return "bg-success";
-    if (score < med) return "bg-warning";
-    return "bg-destructive";
-  };
 
   return (
     <div className="min-h-screen bg-background">

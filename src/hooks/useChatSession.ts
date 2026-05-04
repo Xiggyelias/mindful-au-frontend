@@ -42,6 +42,8 @@ export interface Appointment {
   duration_minutes: number;
   status: 'pending' | 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
   is_anonymous?: boolean;
+  anonymous_id?: string | null;
+  identity_visible_to_viewer?: boolean;
   notes?: string;
   cancellation_reason?: string;
   created_at?: string;
@@ -400,7 +402,7 @@ export const useChatSession = (userId: number | undefined) => {
     if (!userId || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
     void loadSessions(true, { force: true });
-  }, [sessionPage, userId]);
+  }, [loadSessions, sessionPage, userId]);
 
   useEffect(() => {
     if (!userId) return;

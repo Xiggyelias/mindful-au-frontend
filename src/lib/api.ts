@@ -1170,7 +1170,13 @@ class ApiClient {
     return response.data;
   }
 
-  async createAppointment(data: { counselor_id: number; scheduled_at: string; duration_minutes?: number; notes?: string }) {
+  async createAppointment(data: {
+    counselor_id: number;
+    scheduled_at: string;
+    duration_minutes?: number;
+    notes?: string;
+    is_anonymous?: boolean;
+  }) {
     const response = await this.client.post('/appointments', data);
     return response.data;
   }

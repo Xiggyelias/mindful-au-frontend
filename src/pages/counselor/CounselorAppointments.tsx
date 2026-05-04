@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -152,13 +152,13 @@ const CounselorAppointments = () => {
         appointmentsRequestInFlightRef.current = null;
       }
     },
-    [toast]
+    []
   );
 
   const hasInitiallyLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || hasInitiallyLoadedRef.current) {
-      if (!user) setIsLoading(false);
+    if (!user?.id || hasInitiallyLoadedRef.current) {
+      if (!user?.id) setIsLoading(false);
       return;
     }
 
@@ -168,13 +168,13 @@ const CounselorAppointments = () => {
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
-    if (!user || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
+    if (!user?.id || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
     appointmentPageRef.current = appointmentPage;
     void loadAppointments(true, { force: true });
   }, [appointmentPage, loadAppointments, user?.id]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const retryLoad = () => {
       if (document.visibilityState !== "visible") return;
@@ -196,7 +196,7 @@ const CounselorAppointments = () => {
       window.removeEventListener("online", retryLoad);
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
     };
-  }, [loadAppointments, user]);
+  }, [loadAppointments, user?.id]);
 
   const today = useMemo(() => new Date(), []);
 

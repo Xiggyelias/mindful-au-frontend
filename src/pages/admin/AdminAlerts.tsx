@@ -136,7 +136,7 @@ const AdminAlerts = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (user) {

@@ -87,7 +87,7 @@ const AdminAIReports = () => {
     } finally {
       setIsLoadingAnalytics(false);
     }
-  }, [toast]);
+  }, []);
 
   const loadReports = useCallback(async () => {
     try {
@@ -103,7 +103,7 @@ const AdminAIReports = () => {
     } finally {
       setIsLoadingReports(false);
     }
-  }, [toast]);
+  }, []);
 
   const refreshAll = useCallback(async () => {
     setErrorMessage(null);

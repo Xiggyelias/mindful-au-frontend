@@ -93,7 +93,9 @@ const StudentAISupport = () => {
           });
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
         } catch (geoError) {
-          console.log("Could not get location:", geoError);
+          if (import.meta.env.DEV) {
+            console.info("Could not get location:", geoError);
+          }
         }
       }
 

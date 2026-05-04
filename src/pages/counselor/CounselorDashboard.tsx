@@ -160,7 +160,7 @@ const CounselorDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [isApprovedCounselor, toast, getApiErrorMessage]);
+  }, [isApprovedCounselor, toast]);
 
   useEffect(() => {
     if (!user?.id) {

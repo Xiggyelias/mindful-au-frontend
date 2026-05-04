@@ -194,7 +194,7 @@ const StudentDashboard = () => {
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
         } catch (err) {
           if (import.meta.env.DEV) {
-            console.log('Could not get location:', err);
+            console.info('Could not get location:', err);
           }
           toast.warning("Location unavailable - we'll send your alert without location data.");
         }

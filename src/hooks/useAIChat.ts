@@ -113,7 +113,9 @@ export const useAIChat = () => {
         })
       );
     } catch (err) {
-      console.error("Failed to load AI chat history:", err);
+      if (import.meta.env.DEV) {
+        console.error("Failed to load AI chat history:", err);
+      }
       const fallbackRaw = localStorage.getItem(AI_HISTORY_CACHE_KEY);
       if (fallbackRaw) {
         try {
@@ -142,7 +144,7 @@ export const useAIChat = () => {
       setMlSignals(null);
       setError(getApiErrorMessage(err, "Failed to load previous AI conversation."));
     }
-  }, [getApiErrorMessage]);
+  }, []);
 
   useEffect(() => {
     void loadHistory();
@@ -236,7 +238,9 @@ export const useAIChat = () => {
 
         setMessages((prev) => [...prev, aiMessage]);
       } catch (err: any) {
-        console.error("AI chat error:", err);
+        if (import.meta.env.DEV) {
+          console.error("AI chat error:", err);
+        }
         setError("Failed to get response. Please try again.");
       } finally {
         setIsLoading(false);

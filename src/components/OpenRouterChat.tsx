@@ -56,7 +56,7 @@ export const OpenRouterChat: React.FC<OpenRouterChatProps> = ({
       }
       toast.error(getApiErrorMessage(error, 'Failed to load conversations'));
     }
-  }, [conversationsCacheKey, openRouterService, toast, getApiErrorMessage]);
+  }, [conversationsCacheKey, openRouterService]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {

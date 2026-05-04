@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import { 
   Send, 
   Paperclip, 
@@ -74,8 +74,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="p-4 lg:p-6 bg-background border-t border-border/50">
-      <form onSubmit={onSubmit} className="max-w-4xl mx-auto space-y-4">
+    <div className="border-t border-border/50 bg-background/95 p-4">
+      <form onSubmit={onSubmit} className="space-y-4">
         {isUploading && (
           <div className="space-y-2 animate-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
