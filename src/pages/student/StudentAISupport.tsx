@@ -143,9 +143,9 @@ const StudentAISupport = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6">
-          <Card className="h-[calc(100vh-140px)] border-none shadow-2xl shadow-primary/5 rounded-[2rem] overflow-hidden bg-background">
-            <CardHeader className="border-b border-border/50 bg-secondary/5 py-6">
+        <main className="p-2 sm:p-4 lg:p-5">
+          <Card className="h-[calc(100vh-120px)] w-full border-none shadow-2xl shadow-primary/5 rounded-[1.5rem] overflow-hidden bg-background">
+            <CardHeader className="border-b border-border/50 bg-secondary/5 px-5 py-4 sm:px-6">
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-info flex items-center justify-center shadow-lg shadow-primary/20">
@@ -159,14 +159,14 @@ const StudentAISupport = () => {
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => toast.info("Your conversation is private and encrypted.")}>
+                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => toast.info("Your conversation is private and handled securely.")}>
                   <Heart className="h-5 w-5 text-primary" />
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col h-[calc(100%-90px)] p-0">
-              <ScrollArea className="flex-1 px-8 py-8">
-                <div className="space-y-6 max-w-6xl mx-auto">
+            <CardContent className="flex flex-col h-[calc(100%-80px)] p-0">
+              <ScrollArea className="flex-1 px-3 py-5 sm:px-5 lg:px-8">
+                <div className="w-full max-w-none space-y-5">
                   {messages.length === 0 && !isLoading && (
                     <div className="p-5 rounded-2xl border border-dashed border-border/70 bg-secondary/20 text-center text-sm text-muted-foreground">
                       No conversation yet. Send a message to start live AI support.
@@ -178,13 +178,13 @@ const StudentAISupport = () => {
                       className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`group relative max-w-[90%] sm:max-w-[85%] p-5 rounded-[1.5rem] transition-all duration-300 ${
+                        className={`group relative max-w-[94%] break-words p-4 sm:p-5 rounded-[1.35rem] transition-all duration-300 ${
                           msg.sender === "user"
-                            ? "bg-primary text-primary-foreground rounded-br-none shadow-lg shadow-primary/10"
-                            : "bg-secondary/50 text-foreground rounded-bl-none border border-border/50"
+                            ? "sm:max-w-[82%] lg:max-w-[70%] bg-primary text-primary-foreground rounded-br-none shadow-lg shadow-primary/10"
+                            : "sm:max-w-[92%] lg:max-w-[86%] xl:max-w-[78%] bg-secondary/50 text-foreground rounded-bl-none border border-border/50"
                         }`}
                       >
-                        <p className="text-lg leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                        <p className="text-base sm:text-[1.05rem] leading-7 whitespace-pre-wrap">{msg.content}</p>
                         <div className={`flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                           <p className={`text-[10px] font-medium uppercase tracking-wider ${msg.sender === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                             {msg.time}
@@ -208,8 +208,8 @@ const StudentAISupport = () => {
                 </div>
               </ScrollArea>
               
-              <div className="p-8 bg-background border-t border-border/50">
-                <div className="max-w-6xl mx-auto space-y-6">
+              <div className="bg-background border-t border-border/50 p-4 sm:p-5 lg:p-6">
+                <div className="w-full max-w-none space-y-4">
                   {supportSignal?.requiresImmediateHelp && (
                     <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

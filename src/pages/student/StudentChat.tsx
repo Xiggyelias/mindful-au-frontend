@@ -410,7 +410,7 @@ const StudentChat = () => {
         <ErrorBoundary>
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Chat Sidebar */}
-            <div className="hidden w-80 shrink-0 lg:flex">
+            <div className="hidden w-80 shrink-0 xl:flex">
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
@@ -484,10 +484,10 @@ const StudentChat = () => {
                   {/* Chat Header */}
                   <div className="relative z-10 flex shrink-0 items-center justify-between gap-4 border-b border-border/50 bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
                     <div className="flex min-w-0 items-center gap-3">
-                      <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
+                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => selectSession(null)}>
+                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => selectSession(null)}>
                         <X className="h-5 w-5" />
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
@@ -511,7 +511,7 @@ const StudentChat = () => {
                     </div>
                     
                     <div className="flex shrink-0 items-center gap-2">
-                      <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 lg:flex">
+                      <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
                         <span>{isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
                       </div>
@@ -593,7 +593,7 @@ const StudentChat = () => {
 
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-4 lg:hidden overflow-y-auto">
+                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-4 xl:hidden">
                   <ChatSidebar
                     sessions={sessions}
                     activeSession={activeSession}
@@ -618,7 +618,7 @@ const StudentChat = () => {
               )}
               
               {!activeSession && (
-                 <div className="hidden lg:flex flex-1 flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-700">
+                 <div className="hidden xl:flex flex-1 flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-700">
                     <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 shadow-2xl shadow-primary/5 mb-6">
                       <Shield className="h-16 w-16 text-primary" />
                     </div>
