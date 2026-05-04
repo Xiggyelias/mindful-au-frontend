@@ -1282,7 +1282,7 @@ const CounselorMessages = () => {
                     </Button>
                   </div>
                 )}
-                <ScrollArea ref={messageScrollAreaRef} className="flex-1 p-4 lg:p-6">
+                <ScrollArea ref={messageScrollAreaRef} className="flex-1">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
                       <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
@@ -1310,7 +1310,7 @@ const CounselorMessages = () => {
                       <p className="text-xs">Start the conversation by sending a message</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="flex min-h-full flex-col justify-end space-y-4 px-4 py-4 lg:px-6 lg:py-6">
                       {selectedSessionId && hasOlderMessages && (
                         <div className="flex justify-center">
                           <Button
