@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Shield,
   Loader2,
   X,
-  Phone,
   Video,
   AlertTriangle,
   LayoutDashboard,
@@ -25,7 +24,7 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
-import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -79,7 +78,6 @@ const StudentChat = () => {
   const [isCounselorsLoading, setIsCounselorsLoading] = useState(false);
   const [counselorPage, setCounselorPage] = useState(1);
   const [counselorTotalPages, setCounselorTotalPages] = useState(1);
-  const [counselorTotalItems, setCounselorTotalItems] = useState(0);
   const counselorPageRef = useRef(counselorPage);
   const [searchQuery, setSearchQuery] = useState("");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -118,8 +116,6 @@ const StudentChat = () => {
     sessions, 
     sessionPage,
     sessionTotalPages,
-    isLoading: sessionLoading, 
-    error: sessionError,
     selectSession,
     goToPrevPage: goToPrevSessionPage,
     goToNextPage: goToNextSessionPage,
@@ -152,8 +148,6 @@ const StudentChat = () => {
     sendFileMessage,
     isUploading,
     uploadProgress,
-    error: uploadError,
-    clearError: clearUploadError,
   } = useFileAttachment({
     sessionId: sessionId || "",
   });
@@ -209,7 +203,6 @@ const StudentChat = () => {
         if (Date.now() - savedAt <= COUNSELOR_CACHE_TTL_MS) {
           setCounselors(parsed.counselors || []);
           setCounselorTotalPages(parsed.total_pages || 1);
-          setCounselorTotalItems(parsed.total_items || 0);
           setIsCounselorsLoading(false);
           hasLoadedCounselorsRef.current = true;
           cacheLoaded = true;
@@ -233,7 +226,6 @@ const StudentChat = () => {
         if (active) {
           setCounselors(nextCounselors);
           setCounselorTotalPages(paged.meta?.total_pages || 1);
-          setCounselorTotalItems(paged.meta?.total || nextCounselors.length);
           localStorage.setItem(cacheKey, JSON.stringify({
             saved_at: Date.now(),
             counselors: nextCounselors,
@@ -331,7 +323,7 @@ const StudentChat = () => {
         notes: "Online",
       });
       navigate(`/student/video-call?appointment_id=${created.id}&counselor_id=${activeSession.counselor_id}&mode=video&autostart=1`);
-    } catch (error) {
+    } catch {
       toast.error("Unable to start video call");
     } finally {
       setIsPreparingCall(false);
@@ -344,7 +336,7 @@ const StudentChat = () => {
       setIsTriggeringEmergency(true);
       await api.triggerEmergencyAlert();
       toast.success("Emergency alert triggered. Please stay on the line.");
-    } catch (error) {
+    } catch {
       toast.error("Failed to trigger alert. Please call emergency services directly.");
     } finally {
       setIsTriggeringEmergency(false);
@@ -401,7 +393,7 @@ const StudentChat = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden lg:pl-72">
         {!activeSession && (
           <DashboardHeader
             title="Clinical Support"
@@ -518,7 +510,7 @@ const StudentChat = () => {
                   {/* Message List */}
                   <MessageList
                     messages={messages}
-                    isLoading={messagesLoading}
+                    isLoading={messagesLoading && isEncryptionReady}
                     isLoadingOlderMessages={isLoadingOlderMessages}
                     hasOlderMessages={hasOlderMessages}
                     isAtBottom={isAtBottom}

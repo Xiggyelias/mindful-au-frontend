@@ -39,10 +39,10 @@ export const MessageList: React.FC<MessageListProps> = ({
   isLoading,
   isLoadingOlderMessages,
   hasOlderMessages,
-  isAtBottom,
+  isAtBottom: _isAtBottom,
   showScrollToBottom,
   user,
-  activeSession,
+  activeSession: _activeSession,
   isPeerTyping,
   deletingMessageIds,
   onScroll,
@@ -52,6 +52,24 @@ export const MessageList: React.FC<MessageListProps> = ({
   messageScrollAreaRef,
   scrollRef,
 }) => {
+  React.useEffect(() => {
+    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]"
+    );
+    if (!viewport) return;
+
+    const handleViewportScroll = () => {
+      onScroll({ currentTarget: viewport } as React.UIEvent<HTMLDivElement>);
+    };
+
+    viewport.addEventListener("scroll", handleViewportScroll, { passive: true });
+    handleViewportScroll();
+
+    return () => {
+      viewport.removeEventListener("scroll", handleViewportScroll);
+    };
+  }, [messageScrollAreaRef, onScroll]);
+
   const formatTime = (dateString: string) => {
     try {
       return format(new Date(dateString), "h:mm a");
@@ -173,7 +191,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         ref={messageScrollAreaRef}
         className="flex-1"
       >
-        <div className="py-6 px-4 lg:px-6 space-y-6">
+        <div className="flex min-h-full flex-col justify-end space-y-6 px-4 py-6 lg:px-6">
           {hasOlderMessages && (
             <div className="flex justify-center pb-4">
               <Button 
