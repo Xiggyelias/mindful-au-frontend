@@ -166,73 +166,90 @@ const StudentAISupport = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-2 sm:p-4 lg:p-5">
-          <Card className="h-[calc(100vh-120px)] w-full border-none shadow-2xl shadow-primary/5 rounded-[1.5rem] overflow-hidden bg-background">
-            <CardHeader className="border-b border-border/50 bg-secondary/5 px-5 py-4 sm:px-6">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-info flex items-center justify-center shadow-lg shadow-primary/20">
+        <main className="flex justify-center px-4 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-8">
+          <Card className="flex h-[calc(100vh-120px)] w-full max-w-[min(100%,52rem)] flex-col border-none shadow-2xl shadow-primary/5 rounded-[1.75rem] overflow-hidden bg-background">
+            <CardHeader className="border-b border-border/50 bg-secondary/5 px-6 py-5 sm:px-8 sm:py-6">
+              <CardTitle className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-12 w-12 shrink-0 rounded-2xl bg-gradient-to-br from-primary to-info flex items-center justify-center shadow-lg shadow-primary/20">
                     <Sparkles className="h-6 w-6 text-primary-foreground" />
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-foreground">AI Wellness Assistant</h2>
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-bold text-foreground tracking-tight">AI Wellness Assistant</h2>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-success animate-pulse" />
                       <p className="text-sm font-medium text-muted-foreground">Always here for you</p>
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => toast.info("Your conversation is private and handled securely.")}>
+                <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={() => toast.info("Your conversation is private and handled securely.")}>
                   <Heart className="h-5 w-5 text-primary" />
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col h-[calc(100%-80px)] p-0">
-              <ScrollArea className="flex-1 px-3 py-5 sm:px-5 lg:px-8">
-                <div className="w-full max-w-none space-y-5">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+              <ScrollArea className="flex-1 min-h-0 px-5 py-7 sm:px-8 sm:py-9">
+                <div className="mx-auto w-full max-w-[42rem] space-y-8">
                   {messages.length === 0 && !isLoading && (
-                    <div className="p-5 rounded-2xl border border-dashed border-border/70 bg-secondary/20 text-center text-sm text-muted-foreground">
+                    <div className="rounded-2xl border border-dashed border-border/70 bg-secondary/20 px-6 py-10 text-center text-sm text-muted-foreground leading-relaxed">
                       No conversation yet. Send a message to start live AI support.
                     </div>
                   )}
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`group relative max-w-[94%] break-words p-4 sm:p-5 rounded-[1.35rem] transition-all duration-300 ${
-                          msg.sender === "user"
-                            ? "sm:max-w-[82%] lg:max-w-[70%] bg-primary text-primary-foreground rounded-br-none shadow-lg shadow-primary/10"
-                            : "sm:max-w-[92%] lg:max-w-[86%] xl:max-w-[78%] bg-secondary/50 text-foreground rounded-bl-none border border-border/50"
-                        }`}
-                      >
-                        <p className="text-base sm:text-[1.05rem] leading-7 whitespace-pre-wrap">{msg.content}</p>
-                        <div className={`flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                          <p className={`text-[10px] font-medium uppercase tracking-wider ${msg.sender === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                            {msg.time}
-                          </p>
+                  {messages.map((msg) =>
+                    msg.sender === "user" ? (
+                      <div key={msg.id} className="flex w-full justify-end">
+                        <div className="flex w-full max-w-[min(75%,20rem)] flex-col items-end gap-1.5 sm:max-w-[min(72%,22rem)]">
+                          <span className="text-[11px] font-medium text-muted-foreground pr-0.5">You</span>
+                          <div className="group relative w-full break-words rounded-[1.25rem] bg-primary px-5 py-4 text-primary-foreground shadow-lg shadow-primary/10 transition-all duration-300 sm:px-5 sm:py-4">
+                            <p className="text-base leading-7 whitespace-pre-wrap sm:text-[1.05rem]">{msg.content}</p>
+                            <p className="mt-2 text-[10px] font-medium uppercase tracking-wider text-primary-foreground/60 opacity-0 transition-opacity group-hover:opacity-100">
+                              {msg.time}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ) : (
+                      <div key={msg.id} className="flex w-full justify-start gap-3 sm:gap-3.5">
+                        <div
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground shadow-md shadow-primary/15 sm:h-10 sm:w-10"
+                          aria-hidden
+                        >
+                          <Sparkles className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" />
+                        </div>
+                        <div className="min-w-0 flex-1 max-w-[min(75%,28rem)]">
+                          <div className="group relative break-words rounded-[1.25rem] border border-border/50 bg-secondary/50 px-5 py-4 text-foreground transition-all duration-300 sm:px-[1.125rem] sm:py-[1.125rem]">
+                            <p className="text-base leading-7 whitespace-pre-wrap sm:text-[1.05rem]">{msg.content}</p>
+                            <p className="mt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                              {msg.time}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
                   {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-secondary/50 p-4 rounded-[1.5rem] rounded-bl-none border border-border/50">
-                        <div className="flex gap-1">
-                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="flex justify-start gap-3 sm:gap-3.5">
+                      <div
+                        className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground opacity-80 sm:h-10 sm:w-10"
+                        aria-hidden
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <div className="rounded-[1.25rem] border border-border/50 bg-secondary/50 px-5 py-4">
+                        <div className="flex gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "300ms" }} />
                         </div>
                       </div>
                     </div>
                   )}
-                  <div ref={scrollRef} />
+                  <div ref={scrollRef} className="h-2 shrink-0" />
                 </div>
               </ScrollArea>
-              
-              <div className="bg-background border-t border-border/50 p-4 sm:p-5 lg:p-6">
-                <div className="w-full max-w-none space-y-4">
+
+              <div className="border-t border-border/50 bg-background px-5 py-6 sm:px-8 sm:py-7">
+                <div className="mx-auto w-full max-w-[42rem] space-y-5">
                   {supportSignal?.requiresImmediateHelp && (
                     <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -276,13 +293,13 @@ const StudentAISupport = () => {
                       </div>
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-center gap-2.5 sm:justify-start sm:gap-3">
                     {quickPrompts.map((prompt) => (
                       <Button
                         key={prompt}
                         variant="outline"
                         size="sm"
-                        className="rounded-full bg-secondary/30 border-none hover:bg-primary/10 hover:text-primary transition-all duration-300"
+                        className="rounded-full border border-border/40 bg-background/80 px-4 py-2 h-auto min-h-9 text-sm shadow-none hover:bg-primary/10 hover:text-primary transition-all duration-300"
                         onClick={() => handleQuickPrompt(prompt)}
                         disabled={isLoading}
                       >
@@ -290,19 +307,19 @@ const StudentAISupport = () => {
                       </Button>
                     ))}
                   </div>
-                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
+                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 pt-1">
                     <Input
                       placeholder="Share what's on your mind..."
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
-                      className="h-14 pl-6 pr-16 rounded-2xl bg-secondary/30 border-none focus-visible:ring-primary/20 text-base"
+                      className="h-[3.25rem] pl-6 pr-16 rounded-full bg-secondary/30 border border-border/30 focus-visible:ring-primary/20 text-base shadow-sm"
                       disabled={isLoading}
                     />
                     <Button 
                       type="submit" 
                       variant="hero" 
                       size="icon"
-                      className="absolute right-2 h-10 w-10 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95"
+                      className="absolute right-1.5 h-11 w-11 rounded-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95"
                       disabled={!message.trim() || isLoading}
                     >
                       {isLoading ? (
@@ -312,7 +329,7 @@ const StudentAISupport = () => {
                       )}
                     </Button>
                   </form>
-                  <p className="text-[10px] text-center text-muted-foreground">
+                  <p className="text-center text-xs leading-relaxed text-muted-foreground pt-1 pb-0.5">
                     I'm here to listen. Remember, I'm an AI assistant and not a replacement for professional clinical help.
                   </p>
                 </div>
