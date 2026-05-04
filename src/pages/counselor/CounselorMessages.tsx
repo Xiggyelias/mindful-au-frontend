@@ -76,10 +76,10 @@ const peerCounselorNavItems = [
 
 const SESSION_POLL_INTERVAL_MS = 10000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
-const CHAT_LIST_PAGE_SIZE = 40;
-const CHAT_LIST_RETRY_PAGE_SIZE = 20;
+const CHAT_LIST_PAGE_SIZE = 64;
+const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 2;
+const CHAT_LIST_CACHE_VERSION = 3;
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 
 type RawSession = {
@@ -184,6 +184,19 @@ const resolveAnonymousLabel = (session: RawSession) => {
   return `User_${String(Number(session.id) % 10000).padStart(4, "0")}`;
 };
 
+const isSessionAnonymous = (session: Pick<RawSession, "is_anonymous">) => {
+  const v = session.is_anonymous as unknown;
+  return v === true || v === 1 || v === "1";
+};
+
+const conversationStudentKey = (session: RawSession) => {
+  if (isSessionAnonymous(session)) {
+    const tag = String(session.anonymous_id || "").trim();
+    return tag !== "" ? tag : `session:${session.id}`;
+  }
+  return String(session.student_id ?? "");
+};
+
 const getUserColor = (name: string) => {
   const colors = [
     "bg-blue-500", "bg-purple-500", "bg-emerald-500", 
@@ -220,7 +233,7 @@ const CounselorMessages = () => {
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
   const lastRenderedTailMessageIdRef = useRef<number | null>(null);
   const hasShownLoadErrorRef = useRef(false);
-  const isLoadingSessionsRef = useRef(false);
+  const loadSessionsGenerationRef = useRef(0);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
@@ -308,10 +321,10 @@ const CounselorMessages = () => {
   const loadSessions = useCallback(
     async (silent = false) => {
       if (!user?.id) return;
-      if (isLoadingSessionsRef.current) return;
+
+      const generation = ++loadSessionsGenerationRef.current;
 
       try {
-        isLoadingSessionsRef.current = true;
         if (!silent) {
           setIsLoadingChats(true);
         }
@@ -404,22 +417,12 @@ const CounselorMessages = () => {
         const nextTotal = Number.isFinite(receivedTotal) && receivedTotal >= 0
           ? Math.floor(receivedTotal)
           : normalized.length;
-        setChatTotalPages(nextTotalPages);
-        setChatTotalItems(nextTotal);
-        if (!pagedPayload && chatPage !== 1) {
-          setChatPage(1);
-        } else if (pagedPayload && nextPage !== chatPage) {
-          setChatPage(nextPage);
-        }
 
         const chatSessions = normalized
           .filter(
             (session) =>
               session.session_type === "chat" &&
-              (
-                Boolean(session.is_anonymous) ||
-                (Number.isInteger(Number(session.student_id)) && Number(session.student_id) > 0)
-              )
+              (isSessionAnonymous(session) || Number(session.student_id) > 0)
           )
           .sort((a, b) => {
             const aTime = toTimestamp(a.updated_at || a.created_at);
@@ -429,10 +432,10 @@ const CounselorMessages = () => {
 
         const dedupedByConversation = new Map<string, RawSession>();
         for (const session of chatSessions) {
-          const isAnon = Boolean(session.is_anonymous);
-          const studentId = isAnon ? String(session.anonymous_id || "") : String(session.student_id || "");
+          const isAnon = isSessionAnonymous(session);
+          const studentKey = conversationStudentKey(session);
           const assignedRole = session.assigned_role || "counselor";
-          const conversationKey = `s:${studentId}:a:${isAnon ? 1 : 0}:r:${assignedRole}`;
+          const conversationKey = `s:${studentKey}:a:${isAnon ? 1 : 0}:r:${assignedRole}`;
           const existing = dedupedByConversation.get(conversationKey);
           if (!existing) {
             dedupedByConversation.set(conversationKey, session);
@@ -459,7 +462,7 @@ const CounselorMessages = () => {
 
         const nextChats = Array.from(dedupedByConversation.values())
           .map((session): ChatListItem => {
-            const isAnonymous = Boolean(session.is_anonymous);
+            const isAnonymous = isSessionAnonymous(session);
             const anonymousLabel = resolveAnonymousLabel(session);
             const numericStudentId = Number(session.student_id);
             const visibleStudentId =
@@ -511,6 +514,18 @@ const CounselorMessages = () => {
         const targetSessionId = targetSessionParam ? Number(targetSessionParam) : null;
         const targetStudentId = targetStudentParam ? Number(targetStudentParam) : null;
 
+        if (generation !== loadSessionsGenerationRef.current) {
+          return;
+        }
+
+        setChatTotalPages(nextTotalPages);
+        setChatTotalItems(nextTotal);
+        if (!pagedPayload && chatPage !== 1) {
+          setChatPage(1);
+        } else if (pagedPayload && nextPage !== chatPage) {
+          setChatPage(nextPage);
+        }
+
         setChats(nextChats);
         setSelectedChatId((current) => {
           if (current && nextChats.some((chat) => chat.id === current)) {
@@ -537,6 +552,7 @@ const CounselorMessages = () => {
 
           return nextChats[0]?.id ?? null;
         });
+
         localStorage.setItem(
           cacheKey,
           JSON.stringify({
@@ -562,7 +578,6 @@ const CounselorMessages = () => {
           hasShownLoadErrorRef.current = true;
         }
       } finally {
-        isLoadingSessionsRef.current = false;
         if (!silent) {
           setIsLoadingChats(false);
         }
