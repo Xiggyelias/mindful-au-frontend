@@ -13,6 +13,7 @@ import {
   Send,
   Shield,
   ShieldCheck,
+  ArrowUpCircle,
   Loader2,
   Paperclip,
   AlertTriangle,
@@ -26,6 +27,7 @@ import {
   Pause,
   Square,
   Menu,
+  MoreHorizontal,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -45,10 +47,18 @@ import {
   resolveMessageAttachment,
   validateChatAttachment,
 } from "@/lib/chatAttachments";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Popover, 
   PopoverContent, 
@@ -1119,50 +1129,65 @@ const CounselorMessages = () => {
                       No conversations found
                     </div>
                   ) : (
-                    filteredChats.map((chat) => (
+                    filteredChats.map((chat) => {
+                      const isActive = selectedChat?.id === chat.id;
+                      return (
                       <div
                         key={chat.id}
-                        className={`p-3 cursor-pointer transition-all border-b border-border/50 group ${
-                          selectedChat?.id === chat.id 
-                            ? "bg-accent border-l-4 border-l-accent-foreground/30" 
-                            : "hover:bg-secondary/30"
-                        }`}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedChatId(chat.id);
+                          }
+                        }}
+                        className={cn(
+                          "mx-2 my-1 cursor-pointer rounded-2xl border border-transparent px-3 py-2.5 transition-colors outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary/35",
+                          isActive
+                            ? "border-primary/20 bg-primary/[0.08] shadow-sm dark:bg-primary/10"
+                            : "hover:bg-muted/60 dark:hover:bg-muted/25"
+                        )}
                         onClick={() => setSelectedChatId(chat.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-sm ${chat.isAnonymous ? "bg-slate-500" : getUserColor(chat.studentName)}`}>
-                            <span className="text-white text-xs font-bold">
+                          <div className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background ${chat.isAnonymous ? "bg-muted-foreground/55" : getUserColor(chat.studentName)}`}>
+                            <span className="text-white text-[11px] font-bold tracking-tight">
                               {chat.isAnonymous ? "??" : getInitials(chat.studentName)}
                             </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start mb-0.5">
-                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                <p className={`text-[13px] font-bold truncate tracking-tight ${selectedChat?.id === chat.id ? "text-accent-foreground" : "text-foreground"}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-0.5 flex items-start justify-between gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                                <p className={cn(
+                                  "truncate text-[13px] font-semibold tracking-tight",
+                                  isActive ? "text-foreground" : "text-foreground/90"
+                                )}>
                                   {chat.isAnonymous ? "Anonymous Student" : chat.studentName}
                                 </p>
                                 {chat.isAnonymous && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase tracking-tight">
+                                  <span className="rounded-md bg-muted px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                                     Anon
                                   </span>
                                 )}
                                 {chat.isPeerAssigned && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-tight">
+                                  <span className="rounded-md bg-primary/12 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
                                     Peer
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] font-bold text-muted-foreground/60 tabular-nums uppercase">
+                              <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground">
                                 {formatTime(chat.lastActivity)}
                               </span>
                             </div>
-                            <p className="text-[12px] text-muted-foreground/80 truncate leading-snug">
+                            <p className="line-clamp-2 text-[12px] leading-snug text-muted-foreground">
                               {chat.preview}
                             </p>
                           </div>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </ScrollArea>
               </CardContent>
@@ -1172,117 +1197,127 @@ const CounselorMessages = () => {
               variant="glass"
               className={`flex min-h-0 flex-1 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
-              <CardHeader className="border-b border-border/50 space-y-3 shrink-0">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
+              <CardHeader className="shrink-0 space-y-0 border-b border-border/50 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                       <Menu className="h-5 w-5" />
                     </Button>
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSelectedChatId(null)}>
                       <X className="h-5 w-5" />
                     </Button>
-                    <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center shadow-sm ${selectedChat?.isAnonymous ? "bg-slate-500" : getUserColor(selectedChat?.studentName || "Student")}`}>
-                      <span className="text-white text-xs font-bold">
-                        {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4" />}
+                    <div
+                      className={cn(
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-inner ring-2 ring-background",
+                        selectedChat?.isAnonymous ? "bg-muted-foreground/50" : getUserColor(selectedChat?.studentName || "Student")
+                      )}
+                    >
+                      <span className="text-[11px] font-bold text-white">
+                        {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-base lg:text-lg leading-tight truncate">{selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName || "Select a conversation")}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="truncate text-base font-semibold leading-tight">
+                          {selectedChat?.isAnonymous ? "Anonymous Student" : selectedChat?.studentName || "Select a conversation"}
+                        </p>
+                        {selectedChat?.isAnonymous && (
+                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Anonymous
+                          </span>
+                        )}
+                        {selectedChat?.isPeerAssigned && (
+                          <span className="rounded-md bg-primary/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                            Peer
+                          </span>
+                        )}
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                          <Shield className="h-3 w-3 shrink-0" />
+                          <span className="whitespace-nowrap">
+                            {isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing…"}
+                          </span>
+                        </div>
+                        {encryptionTimedOut && !isEncryptionReady && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 shrink-0 rounded-full border-amber-500/35 px-2 text-[10px] text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
+                            onClick={handleRetryEncryption}
+                            disabled={isRetryingEncryption}
+                          >
+                            {isRetryingEncryption ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
+                            Retry
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
                         <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${
-                            selectedChatIsOnline
-                              ? "bg-emerald-500 animate-pulse"
-                              : "bg-muted-foreground/40"
-                          }`}
+                          className={cn(
+                            "h-2 w-2 shrink-0 rounded-full",
+                            selectedChatIsOnline ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40"
+                          )}
                         />
-                        <p className={`truncate text-[11px] font-bold tracking-tight ${selectedChatIsOnline ? "text-emerald-500" : "text-muted-foreground/60"}`}>
+                        <p
+                          className={cn(
+                            "truncate text-[11px] font-medium",
+                            selectedChatIsOnline ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                          )}
+                        >
                           {selectedChat ? (selectedChatIsOnline ? "Online" : "Away") : ""}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end sm:pb-0.5">
-                    {selectedChat?.isAnonymous && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase tracking-wide">
-                        Anonymous
-                      </span>
-                    )}
-                    {selectedChat?.isPeerAssigned && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary uppercase tracking-wide">
-                        Peer Case
-                      </span>
-                    )}
-                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900 px-2.5 py-1 rounded-full border border-emerald-100 dark:border-emerald-800">
-                      <Shield className="h-3 w-3 shrink-0" />
-                      <span className="whitespace-nowrap">
-                        {isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}
-                      </span>
+                  {selectedSessionId && (
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 gap-1.5 rounded-xl border-destructive/25 bg-destructive/5 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={handleEmergencyEscalation}
+                        disabled={isTriggeringEmergency}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span className="text-xs font-semibold">{isTriggeringEmergency ? "Alerting…" : "Emergency"}</span>
+                      </Button>
+                      {(selectedChat?.isAnonymous || isPeerCounselor) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-9 shrink-0 gap-2 rounded-xl px-3">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="hidden font-semibold sm:inline">Actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            {selectedChat?.isAnonymous && (
+                              <DropdownMenuItem onClick={() => void handleRevealIdentity()} disabled={isRevealingIdentity}>
+                                <Shield className="mr-2 h-4 w-4" />
+                                {isRevealingIdentity ? "Revealing…" : "Reveal identity"}
+                              </DropdownMenuItem>
+                            )}
+                            {selectedChat?.isAnonymous && isPeerCounselor && <DropdownMenuSeparator />}
+                            {isPeerCounselor && (
+                              <>
+                                <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>
+                                  <ArrowUpCircle className="mr-2 h-4 w-4" />
+                                  {isEscalating ? "Escalating…" : "Escalate to counselor"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-orange-700 focus:text-orange-800 dark:text-orange-300 dark:focus:text-orange-200"
+                                  onClick={() => void handleFlagUrgent()}
+                                  disabled={isFlaggingUrgent}
+                                >
+                                  <AlertTriangle className="mr-2 h-4 w-4" />
+                                  {isFlaggingUrgent ? "Flagging…" : "Flag as urgent"}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
-                    {encryptionTimedOut && !isEncryptionReady && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10 shrink-0"
-                        onClick={handleRetryEncryption}
-                        disabled={isRetryingEncryption}
-                      >
-                        {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                        Retry
-                      </Button>
-                    )}
-                  </div>
+                  )}
                 </div>
-                {selectedSessionId && (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-3 sm:border-0 sm:pt-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-9 rounded-xl bg-destructive/5 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive border border-destructive/10 gap-1.5 shrink-0"
-                      onClick={handleEmergencyEscalation}
-                      disabled={isTriggeringEmergency}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      <span className="text-xs font-bold uppercase tracking-tight">{isTriggeringEmergency ? "Alerting" : "Emergency"}</span>
-                    </Button>
-                    {selectedChat?.isAnonymous && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-9 shrink-0 rounded-xl px-3 gap-1.5"
-                        onClick={handleRevealIdentity}
-                        disabled={isRevealingIdentity}
-                      >
-                        <Shield className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-tight">{isRevealingIdentity ? "Revealing" : "Reveal Identity"}</span>
-                      </Button>
-                    )}
-                    {isPeerCounselor && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 shrink-0 rounded-xl px-3 gap-1.5"
-                        onClick={handleEscalateToCounselor}
-                        disabled={isEscalating}
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-tight">{isEscalating ? "Escalating" : "Escalate"}</span>
-                      </Button>
-                    )}
-                    {isPeerCounselor && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 shrink-0 rounded-xl border-orange-500/30 px-3 text-orange-700 hover:bg-orange-500/10 gap-1.5"
-                        onClick={handleFlagUrgent}
-                        disabled={isFlaggingUrgent}
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-tight">{isFlaggingUrgent ? "Flagging" : "Flag Urgent"}</span>
-                      </Button>
-                    )}
-                  </div>
-                )}
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col p-0 bg-gradient-to-b from-background to-secondary/5 pt-0">
                 {/* Mobile encryption status banner */}
@@ -1350,7 +1385,7 @@ const CounselorMessages = () => {
                       <p className="text-xs">Start the conversation by sending a message</p>
                     </div>
                   ) : (
-                    <div className="flex min-h-full flex-col justify-end space-y-4 px-4 py-4 lg:px-6 lg:py-6">
+                    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end space-y-3 px-3 py-4 sm:space-y-3.5 md:max-w-none md:px-6 lg:py-6">
                       {selectedSessionId && hasOlderMessages && (
                         <div className="flex justify-center">
                           <Button
@@ -1374,54 +1409,67 @@ const CounselorMessages = () => {
                         </div>
                       )}
                       {messages.map((msg, idx) => {
-                        const isMine = msg.sender_id === currentUserId;
+                        const isMine =
+                          currentUserId > 0 &&
+                          String(msg.sender_id) === String(currentUserId);
                         const prevMsg = messages[idx - 1];
-                        const showAvatar = !isMine && (!prevMsg || prevMsg.sender_id !== msg.sender_id);
-                        const senderName = isMine ? "You" : selectedChat?.studentName || "Student";
+                        const sameSenderAsPrev =
+                          !!prevMsg && String(prevMsg.sender_id) === String(msg.sender_id);
+                        const showAvatar = !sameSenderAsPrev;
+                        const studentLabel =
+                          selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName ?? "Student");
+                        const incomingInitials =
+                          selectedChat?.isAnonymous ? "??" : getInitials(studentLabel);
 
                         return (
                           <div
                             key={msg.id}
-                            className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
-                          >
-                            {!isMine && (
-                              <div className="w-8 shrink-0">
-                                {showAvatar && (
-                                  <div className={`h-8 w-8 rounded-full ${getUserColor(senderName)} flex items-center justify-center text-[10px] font-bold text-white shadow-sm ring-2 ring-background`}>
-                                    {getInitials(senderName)}
-                                  </div>
-                                )}
-                              </div>
+                            className={cn(
+                              "flex items-end gap-2.5",
+                              isMine ? "flex-row-reverse justify-end" : "justify-start"
                             )}
-                            
-                            <div className={`group flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${isMine ? "items-end" : "items-start"}`}>
-                              <div
-                                className={`p-4 rounded-[1.5rem] transition-all duration-300 shadow-sm border ${
-                                  isMine
-                                    ? "bg-primary text-primary-foreground rounded-br-none border-primary/20 shadow-primary/10"
-                                    : "bg-background text-foreground rounded-bl-none border-border/50"
-                                }`}
-                              >
-                                <div className="text-[15px] leading-relaxed">
-                                  {renderMessageContent(msg, isMine)}
+                          >
+                            <div className="flex w-9 shrink-0 justify-center">
+                              {showAvatar ? (
+                                <div
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${
+                                    isMine ? getUserColor(userName) : getUserColor(studentLabel)
+                                  }`}
+                                  title={isMine ? userName : studentLabel}
+                                >
+                                  {isMine ? getInitials(userName) : incomingInitials}
                                 </div>
+                              ) : (
+                                <div className="h-9 w-9" aria-hidden />
+                              )}
+                            </div>
+
+                            <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
+                              <div
+                                className={cn(
+                                  "rounded-2xl border px-4 py-3 shadow-sm transition-colors duration-200",
+                                  isMine
+                                    ? "rounded-br-md border-primary/30 bg-primary text-primary-foreground"
+                                    : "rounded-bl-md border-border/60 bg-muted/80 text-foreground dark:bg-muted/40"
+                                )}
+                              >
+                                <div className="text-[15px] leading-relaxed">{renderMessageContent(msg, isMine)}</div>
                               </div>
-                              <div className="flex items-center gap-1 px-1 mt-0.5">
-                                <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                              <div className="flex items-center gap-1.5 px-0.5">
+                                <span className="text-[10px] font-medium text-muted-foreground">
                                   {formatTime(msg.created_at)}
                                 </span>
                                 {isMine && (
-                                  <div className="flex ml-1">
-                                    <span
-                                      className={`text-[10px] font-black ${
-                                        msg.seen_at ? "text-emerald-500" : "text-muted-foreground/40"
-                                      }`}
-                                      aria-label={msg.seen_at ? "Seen" : "Sent"}
-                                      title={msg.seen_at ? "Seen" : "Sent"}
-                                    >
-                                      {msg.seen_at ? "✓✓" : "✓"}
-                                    </span>
-                                  </div>
+                                  <span
+                                    className={cn(
+                                      "text-[11px]",
+                                      msg.seen_at ? "text-emerald-500" : "text-muted-foreground/50"
+                                    )}
+                                    aria-label={msg.seen_at ? "Seen" : "Sent"}
+                                    title={msg.seen_at ? "Seen" : "Sent"}
+                                  >
+                                    {msg.seen_at ? "✓✓" : "✓"}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -1429,12 +1477,20 @@ const CounselorMessages = () => {
                         );
                       })}
                       {isPeerTyping && (
-                        <div className="flex justify-start">
-                          <div className="max-w-[70%] p-3 rounded-2xl bg-secondary text-secondary-foreground rounded-bl-md border border-border/50">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-primary/45 animate-bounce" style={{ animationDelay: "0ms" }} />
-                              <span className="h-2 w-2 rounded-full bg-primary/45 animate-bounce" style={{ animationDelay: "120ms" }} />
-                              <span className="h-2 w-2 rounded-full bg-primary/45 animate-bounce" style={{ animationDelay: "240ms" }} />
+                        <div className="flex items-end gap-2.5">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(
+                              selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName ?? "Student")
+                            )}`}
+                          >
+                            {selectedChat?.isAnonymous ? "??" : getInitials(selectedChat?.studentName ?? "Student")}
+                          </div>
+                          <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-muted/40 px-4 py-2.5 dark:bg-muted/25">
+                            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Student is typing…</p>
+                            <div className="flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "120ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "240ms" }} />
                             </div>
                           </div>
                         </div>
