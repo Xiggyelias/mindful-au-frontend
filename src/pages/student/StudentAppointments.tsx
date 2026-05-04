@@ -9,6 +9,7 @@ import {
   Video,
   History,
   Heart,
+  Mic,
   Plus,
   Clock,
   Shield,
@@ -21,13 +22,18 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
-import { getVideoCallWindowStatus, isVideoEnabledAppointment } from "@/lib/videoCall";
+import {
+  getVideoCallWindowStatus,
+  isVideoEnabledAppointment,
+  prefersAudioOnlyOnlineCall,
+} from "@/lib/videoCall";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -72,6 +78,7 @@ const StudentAppointments = () => {
     counselor_id: "",
     scheduled_at: "",
     mode: "online",
+    online_media: "video" as "video" | "audio",
     duration_minutes: 60,
     is_anonymous: false,
   });
@@ -401,11 +408,18 @@ const StudentAppointments = () => {
       }
 
       const scheduledAt = parsedScheduledAt.toISOString();
+      const sessionNotes =
+        form.mode === "physical"
+          ? "Physical"
+          : form.online_media === "audio"
+            ? "Online audio"
+            : "Online";
+
       await api.createAppointment({
         counselor_id: Number(form.counselor_id),
         scheduled_at: scheduledAt,
         duration_minutes: form.duration_minutes || 60,
-        notes: form.mode === "online" ? "Online" : "Physical",
+        notes: sessionNotes,
         is_anonymous: form.is_anonymous,
       });
       toast({ title: "Appointment booked!" });
@@ -414,6 +428,7 @@ const StudentAppointments = () => {
         counselor_id: "",
         scheduled_at: "",
         mode: "online",
+        online_media: "video",
         duration_minutes: 60,
         is_anonymous: profileAnonymousMode,
       });
@@ -536,6 +551,10 @@ const StudentAppointments = () => {
 
     if (apt.counselor_id) {
       params.set("counselor_id", String(apt.counselor_id));
+    }
+
+    if (isVideoEnabledAppointment(apt.notes)) {
+      params.set("mode", prefersAudioOnlyOnlineCall(apt.notes) ? "audio" : "video");
     }
 
     navigate(`/student/video-call?${params.toString()}`);
@@ -677,6 +696,56 @@ const StudentAppointments = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {form.mode === "online" && (
+                    <div className="space-y-2">
+                      <Label>Session format</Label>
+                      <RadioGroup
+                        value={form.online_media}
+                        onValueChange={(value) =>
+                          setForm((previous) => ({
+                            ...previous,
+                            online_media: value as "video" | "audio",
+                          }))
+                        }
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        <label
+                          htmlFor="book-online-video"
+                          className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-3 transition-colors ${
+                            form.online_media === "video"
+                              ? "border-primary bg-primary/5"
+                              : "border-border bg-secondary/20 hover:border-primary/25"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem value="video" id="book-online-video" />
+                            <Video className="h-4 w-4 text-muted-foreground" aria-hidden />
+                            <span className="text-sm font-medium">Video</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground pl-6">
+                            Camera and microphone (default for online sessions).
+                          </p>
+                        </label>
+                        <label
+                          htmlFor="book-online-audio"
+                          className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-3 transition-colors ${
+                            form.online_media === "audio"
+                              ? "border-primary bg-primary/5"
+                              : "border-border bg-secondary/20 hover:border-primary/25"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem value="audio" id="book-online-audio" />
+                            <Mic className="h-4 w-4 text-muted-foreground" aria-hidden />
+                            <span className="text-sm font-medium">Audio only</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground pl-6">
+                            Voice only—no camera required.
+                          </p>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between rounded-2xl border border-primary/10 bg-primary/5 p-3">
                     <div className="flex items-center gap-2">
                       <Shield className="h-4 w-4 text-primary" />
@@ -826,7 +895,7 @@ const StudentAppointments = () => {
               <p className="text-muted-foreground text-sm">No appointments yet. Book your first session.</p>
             ) : (
             sortedAppointments.map((apt) => {
-              const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
+              const isPhysical = String(apt.notes || "").trim().toLowerCase().startsWith("physical");
               const isAnonymous = Boolean(apt.is_anonymous);
               const status = String(apt.status || "").toLowerCase();
               const videoWindow =
@@ -852,7 +921,11 @@ const StudentAppointments = () => {
                             {apt.counselor?.profile?.full_name || apt.counselor?.email || "Counselor"}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {isPhysical ? "Physical" : "Online"}
+                            {isPhysical
+                              ? "Physical"
+                              : prefersAudioOnlyOnlineCall(apt.notes)
+                                ? "Online • Audio only"
+                                : "Online • Video"}
                             {isAnonymous ? " • Anonymous" : ""}
                           </p>
                           {status === "cancelled" && apt.cancellation_reason && (

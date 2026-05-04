@@ -1,17 +1,10 @@
 import React from "react";
-import { 
-  Shield, 
-  Loader2, 
-  Trash2, 
-  FileText, 
-  Mic, 
-  MessageSquare,
-  ArrowDown
-} from "lucide-react";
+import { Shield, Loader2, Trash2, FileText, MessageSquare, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { resolveMessageAttachment, getAttachmentKind, formatChatFileSize } from "@/lib/chatAttachments";
+import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
 import { Session } from "@/hooks/useChatSession";
 
@@ -78,7 +71,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
-  const renderMessageContent = (msg: ChatMessage) => {
+  const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
     const content = msg.decryptedContent || msg.content;
     const attachment = resolveMessageAttachment(msg);
 
@@ -105,17 +98,15 @@ export const MessageList: React.FC<MessageListProps> = ({
       }
 
       if (kind === "audio") {
+        const isVoiceMemo = msg.message_type === "voice";
         return (
-          <div className="space-y-2">
-            <audio controls preload="none" className="w-full max-w-xs h-8">
-              <source src={resolvedUrl} type={attachment.file_type} />
-            </audio>
-            <div className="flex items-center gap-2 text-[10px] opacity-80 mt-1">
-              <Mic className="h-3 w-3" />
-              <span className="truncate">{attachment.file_name}</span>
-              {hasSize && <span>{formatChatFileSize(attachment.file_size)}</span>}
-            </div>
-          </div>
+          <VoiceMemoPlayer
+            src={resolvedUrl}
+            mimeType={attachment.file_type}
+            headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
+            fileSizeBytes={hasSize ? Number(attachment.file_size) : undefined}
+            bubbleRole={isOutgoing ? "outgoing" : "incoming"}
+          />
         );
       }
 
@@ -240,7 +231,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       ? "bg-primary text-primary-foreground rounded-tr-none" 
                       : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50"
                   }`}>
-                    {renderMessageContent(msg)}
+                    {renderMessageContent(msg, isMe)}
                   </div>
                 </div>
               </div>

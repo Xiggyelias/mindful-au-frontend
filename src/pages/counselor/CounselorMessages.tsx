@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -54,6 +54,7 @@ import {
   PopoverContent, 
   PopoverTrigger 
 } from "@/components/ui/popover";
+import { VoiceMemoPlayer, VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 
 const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -968,7 +969,7 @@ const CounselorMessages = () => {
     };
   }, [handleLoadOlderMessages, hasOlderMessages, isLoadingOlderMessages, selectedSessionId]);
 
-  const renderMessageContent = (msg: ChatMessage) => {
+  const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
     const content = msg.decryptedContent || msg.content || "";
 
     const attachment = resolveMessageAttachment(msg);
@@ -1007,17 +1008,15 @@ const CounselorMessages = () => {
       }
 
       if (kind === "audio") {
+        const isVoiceMemo = msg.message_type === "voice";
         return (
-          <div className="space-y-2">
-            <audio controls preload="none" className="w-full max-w-xs">
-              <source src={resolvedUrl} type={attachment.file_type} />
-              Your browser does not support the audio element.
-            </audio>
-            <div className="flex items-center gap-2 text-xs opacity-80">
-              <span className="truncate">{attachment.file_name}</span>
-              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
-            </div>
-          </div>
+          <VoiceMemoPlayer
+            src={resolvedUrl}
+            mimeType={attachment.file_type}
+            headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
+            fileSizeBytes={hasSize ? Number(attachment.file_size) : undefined}
+            bubbleRole={isOutgoing ? "outgoing" : "incoming"}
+          />
         );
       }
 
@@ -1066,7 +1065,7 @@ const CounselorMessages = () => {
         )}
 
         <main className="p-0 overflow-hidden h-full">
-          <div className={`grid lg:grid-cols-3 ${selectedSessionId ? "h-screen" : "h-[calc(100vh-80px)]"}`}>
+          <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-screen" : "h-[calc(100vh-80px)]"}`}>
             <Card variant="glass" className={`lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
@@ -1169,38 +1168,41 @@ const CounselorMessages = () => {
               </CardContent>
             </Card>
 
-            <Card variant="glass" className={`lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
-              <CardHeader className="border-b border-border/50">
-                <CardTitle className="text-lg flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
+            <Card
+              variant="glass"
+              className={`flex min-h-0 flex-1 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
+            >
+              <CardHeader className="border-b border-border/50 space-y-3 shrink-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                       <Menu className="h-5 w-5" />
                     </Button>
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSelectedChatId(null)}>
                       <X className="h-5 w-5" />
                     </Button>
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center shadow-sm ${selectedChat?.isAnonymous ? "bg-slate-500" : getUserColor(selectedChat?.studentName || "Student")}`}>
+                    <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center shadow-sm ${selectedChat?.isAnonymous ? "bg-slate-500" : getUserColor(selectedChat?.studentName || "Student")}`}>
                       <span className="text-white text-xs font-bold">
                         {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4" />}
                       </span>
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-base lg:text-lg leading-tight truncate">{selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName || "Select a conversation")}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span
-                          className={`h-2 w-2 rounded-full ${
+                          className={`h-2 w-2 shrink-0 rounded-full ${
                             selectedChatIsOnline
                               ? "bg-emerald-500 animate-pulse"
                               : "bg-muted-foreground/40"
                           }`}
                         />
-                        <p className={`text-[11px] font-bold tracking-tight ${selectedChatIsOnline ? "text-emerald-500" : "text-muted-foreground/60"}`}>
+                        <p className={`truncate text-[11px] font-bold tracking-tight ${selectedChatIsOnline ? "text-emerald-500" : "text-muted-foreground/60"}`}>
                           {selectedChat ? (selectedChatIsOnline ? "Online" : "Away") : ""}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end sm:pb-0.5">
                     {selectedChat?.isAnonymous && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase tracking-wide">
                         Anonymous
@@ -1211,9 +1213,9 @@ const CounselorMessages = () => {
                         Peer Case
                       </span>
                     )}
-                    <div className="hidden lg:flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                      <Shield className="h-3 w-3" />
-                      <span>
+                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900 px-2.5 py-1 rounded-full border border-emerald-100 dark:border-emerald-800">
+                      <Shield className="h-3 w-3 shrink-0" />
+                      <span className="whitespace-nowrap">
                         {isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}
                       </span>
                     </div>
@@ -1221,7 +1223,7 @@ const CounselorMessages = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                        className="h-7 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10 shrink-0"
                         onClick={handleRetryEncryption}
                         disabled={isRetryingEncryption}
                       >
@@ -1229,58 +1231,60 @@ const CounselorMessages = () => {
                         Retry
                       </Button>
                     )}
-                    {selectedSessionId && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 px-3 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive border border-destructive/10 gap-1.5"
-                        onClick={handleEmergencyEscalation}
-                        disabled={isTriggeringEmergency}
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        <span className="text-xs font-bold uppercase tracking-tight">{isTriggeringEmergency ? "Alerting" : "Emergency"}</span>
-                      </Button>
-                    )}
-                    {selectedSessionId && selectedChat?.isAnonymous && (
+                  </div>
+                </div>
+                {selectedSessionId && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-3 sm:border-0 sm:pt-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 rounded-xl bg-destructive/5 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive border border-destructive/10 gap-1.5 shrink-0"
+                      onClick={handleEmergencyEscalation}
+                      disabled={isTriggeringEmergency}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-xs font-bold uppercase tracking-tight">{isTriggeringEmergency ? "Alerting" : "Emergency"}</span>
+                    </Button>
+                    {selectedChat?.isAnonymous && (
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="h-9 px-3 rounded-xl gap-1.5"
+                        className="h-9 shrink-0 rounded-xl px-3 gap-1.5"
                         onClick={handleRevealIdentity}
                         disabled={isRevealingIdentity}
                       >
-                        <Shield className="h-3.5 w-3.5" />
+                        <Shield className="h-3.5 w-3.5 shrink-0" />
                         <span className="text-xs font-bold uppercase tracking-tight">{isRevealingIdentity ? "Revealing" : "Reveal Identity"}</span>
                       </Button>
                     )}
-                    {isPeerCounselor && selectedSessionId && (
+                    {isPeerCounselor && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-3 rounded-xl gap-1.5"
+                        className="h-9 shrink-0 rounded-xl px-3 gap-1.5"
                         onClick={handleEscalateToCounselor}
                         disabled={isEscalating}
                       >
-                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         <span className="text-xs font-bold uppercase tracking-tight">{isEscalating ? "Escalating" : "Escalate"}</span>
                       </Button>
                     )}
-                    {isPeerCounselor && selectedSessionId && (
+                    {isPeerCounselor && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-3 rounded-xl gap-1.5 border-orange-500/30 text-orange-700 hover:bg-orange-500/10"
+                        className="h-9 shrink-0 rounded-xl border-orange-500/30 px-3 text-orange-700 hover:bg-orange-500/10 gap-1.5"
                         onClick={handleFlagUrgent}
                         disabled={isFlaggingUrgent}
                       >
-                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         <span className="text-xs font-bold uppercase tracking-tight">{isFlaggingUrgent ? "Flagging" : "Flag Urgent"}</span>
                       </Button>
                     )}
                   </div>
-                </CardTitle>
+                )}
               </CardHeader>
-              <CardContent className="flex flex-col h-[calc(100%-80px)] p-0 bg-gradient-to-b from-background to-secondary/5">
+              <CardContent className="flex min-h-0 flex-1 flex-col p-0 bg-gradient-to-b from-background to-secondary/5 pt-0">
                 {/* Mobile encryption status banner */}
                 {selectedSessionId && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
@@ -1318,7 +1322,7 @@ const CounselorMessages = () => {
                     </Button>
                   </div>
                 )}
-                <ScrollArea ref={messageScrollAreaRef} className="flex-1">
+                <ScrollArea ref={messageScrollAreaRef} className="min-h-0 flex-1">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
                       <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
@@ -1399,7 +1403,7 @@ const CounselorMessages = () => {
                                 }`}
                               >
                                 <div className="text-[15px] leading-relaxed">
-                                  {renderMessageContent(msg)}
+                                  {renderMessageContent(msg, isMine)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 px-1 mt-0.5">
@@ -1558,37 +1562,38 @@ const CounselorMessages = () => {
                         <div className="flex items-center gap-2 h-10 px-1">
                           {isRecording ? (
                             <>
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-                                <span className="text-xs font-bold tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                              <VoiceRecordingPresenceStrip className="h-9 shrink-0" />
+                              <span className="text-xs tabular-nums text-muted-foreground font-medium">{formatRecordingTime(recordingTime)}</span>
+                              <div className="flex-1 h-1.5 rounded-full bg-muted/70 overflow-hidden">
+                                <div
+                                  className="h-full w-full origin-left animate-pulse bg-primary/40"
+                                  aria-hidden
+                                />
                               </div>
-                              <div className="flex-1 h-1 bg-secondary rounded-full overflow-hidden">
-                                <div className="h-full bg-primary animate-progress" style={{ width: '100%' }} />
-                              </div>
-                              <div className="flex gap-1">
-                                <Button 
-                                  type="button" 
-                                  variant="ghost" 
+                              <div className="flex gap-1 shrink-0">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
                                   size="icon"
                                   className="h-7 w-7 rounded-full"
                                   onClick={isPaused ? resumeRecording : pauseRecording}
                                 >
                                   {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                                 </Button>
-                                <Button 
-                                  type="button" 
-                                  variant="ghost" 
+                                <Button
+                                  type="button"
+                                  variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                                   onClick={handleVoiceCancel}
                                 >
                                   <X className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button 
-                                  type="button" 
-                                  variant="hero" 
+                                <Button
+                                  type="button"
+                                  variant="outline"
                                   size="icon"
-                                  className="h-7 w-7 rounded-lg bg-primary hover:bg-primary/90 shadow-md shadow-primary/20"
+                                  className="h-7 w-7 rounded-lg border-primary/35"
                                   onClick={handleVoiceToggle}
                                 >
                                   <Square className="h-3.5 w-3.5" />
@@ -1597,7 +1602,9 @@ const CounselorMessages = () => {
                             </>
                           ) : (
                             <div className="flex-1 flex items-center justify-between">
-                              <span className="text-[13px] font-medium text-muted-foreground">Voice message ready</span>
+                              <span className="text-[13px] font-medium text-muted-foreground">
+                                Voice memo ready to send
+                              </span>
                               <Button 
                                 type="button" 
                                 variant="ghost" 

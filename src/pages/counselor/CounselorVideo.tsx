@@ -37,6 +37,7 @@ import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
   normalizeVideoCallDuration,
+  prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -95,7 +96,6 @@ const CounselorVideo = () => {
     const parsed = Number(searchParams.get("appointment_id"));
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
-  const requestedMode = searchParams.get("mode") === "audio" ? "audio" : "video";
   const shouldAutostart = searchParams.get("autostart") === "1";
 
   const {
@@ -238,6 +238,24 @@ const CounselorVideo = () => {
     () => upcomingSessions.find((session) => String(session.id) === activeSessionId),
     [activeSessionId, upcomingSessions]
   );
+
+  const requestedMode = useMemo((): "video" | "audio" => {
+    const rawMode = searchParams.get("mode");
+    if (rawMode === "audio") {
+      return "audio";
+    }
+    if (rawMode === "video") {
+      return "video";
+    }
+    if (
+      activeSession?.notes &&
+      isVideoEnabledAppointment(activeSession.notes) &&
+      prefersAudioOnlyOnlineCall(activeSession.notes)
+    ) {
+      return "audio";
+    }
+    return "video";
+  }, [searchParams, activeSession?.notes]);
 
   useEffect(() => {
     if (upcomingSessions.length === 0) {

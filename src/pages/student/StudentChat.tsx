@@ -361,7 +361,7 @@ const StudentChat = () => {
           reason: "Student-triggered emergency from active chat",
           location,
         });
-        toast.success("Emergency alert sent to your counselor and the crisis team. Please stay on the line.");
+        toast.success("Emergency alert sent to professional counseling staff. Please stay on the line.");
       } else {
         // No active session: log a generic panic alert for the crisis team.
         const response = await api.createPanicLog({ location });

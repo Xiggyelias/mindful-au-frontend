@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ShieldCheck, KeyRound, ArrowLeft } from "lucide-react";
 import { BackgroundEffects } from "@/components/BackgroundEffects";
 import { Logo } from "@/components/Logo";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 const CounselorTwoFactor = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     user,
     role,
@@ -29,13 +30,17 @@ const CounselorTwoFactor = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingUp, setIsSettingUp] = useState(false);
 
+  const loginHomePath = useMemo(() => {
+    return location.pathname.startsWith("/peer") ? "/peer/login" : "/counselor/login";
+  }, [location.pathname]);
+
   const nextPath = useMemo(() => {
     return role === "peer_counselor" ? "/peer/dashboard" : "/counselor/dashboard";
   }, [role]);
 
   useEffect(() => {
     if (!user) {
-      navigate("/counselor/login", { replace: true });
+      navigate(loginHomePath, { replace: true });
       return;
     }
 
@@ -47,7 +52,7 @@ const CounselorTwoFactor = () => {
     };
 
     void loadStatus();
-  }, [nextPath, navigate, refreshTwoFactorStatus, user]);
+  }, [loginHomePath, nextPath, navigate, refreshTwoFactorStatus, user]);
 
   const handleSetup = async () => {
     try {
@@ -94,7 +99,7 @@ const CounselorTwoFactor = () => {
             <ThemeToggle />
             <Button
               variant="ghost"
-              onClick={() => navigate("/counselor/login")}
+              onClick={() => navigate(loginHomePath)}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -111,7 +116,7 @@ const CounselorTwoFactor = () => {
               </div>
               <CardTitle className="text-2xl">Two-Factor Verification</CardTitle>
               <CardDescription>
-                Counselor access requires a second authentication factor.
+                Secure sign-in requires a second verification step when enabled for your account.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">

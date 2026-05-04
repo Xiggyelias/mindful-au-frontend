@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { BandwidthProvider } from "@/hooks/useBandwidthMode";
@@ -34,6 +34,7 @@ const CounselorLogin = lazyWithRetry(() => import("./pages/counselor/CounselorLo
 const CounselorRegister = lazyWithRetry(() => import("./pages/counselor/CounselorRegister"));
 const CounselorDashboard = lazyWithRetry(() => import("./pages/counselor/CounselorDashboard"));
 const CounselorMessages = lazyWithRetry(() => import("./pages/counselor/CounselorMessages"));
+const CounselorMessagesPortal = lazyWithRetry(() => import("./pages/counselor/CounselorMessagesPortal"));
 const CounselorAppointments = lazyWithRetry(() => import("./pages/counselor/CounselorAppointments"));
 const CounselorStudents = lazyWithRetry(() => import("./pages/counselor/CounselorStudents"));
 const CounselorAIInsights = lazyWithRetry(() => import("./pages/counselor/CounselorAIInsights"));
@@ -164,6 +165,8 @@ const App = () => (
                 />
                 <Route path="/counselor/login" element={<CounselorLogin />} />
                 <Route path="/peer/login" element={<PeerLogin />} />
+                <Route path="/peer/messages" element={<Navigate to="/peer/chats" replace />} />
+                <Route path="/peer/chat" element={<Navigate to="/peer/chats" replace />} />
                 <Route
                   path="/peer/dashboard"
                   element={
@@ -206,12 +209,17 @@ const App = () => (
                 />
                 <Route path="/counselor/register" element={<CounselorRegister />} />
                 <Route
+                  path="/peer/2fa"
+                  element={
+                    <ProtectedRoute allowedRoles={["peer_counselor"]} redirectTo="/peer/login">
+                      <CounselorTwoFactor />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/counselor/2fa"
                   element={
-                    <ProtectedRoute
-                      allowedRoles={["counselor", "peer_counselor"]}
-                      redirectTo="/counselor/login"
-                    >
+                    <ProtectedRoute allowedRoles={["counselor"]} redirectTo="/counselor/login">
                       <CounselorTwoFactor />
                     </ProtectedRoute>
                   }
@@ -227,11 +235,8 @@ const App = () => (
                 <Route
                   path="/counselor/messages"
                   element={
-                    <ProtectedRoute
-                      allowedRoles={["counselor", "peer_counselor"]}
-                      redirectTo="/counselor/login"
-                    >
-                      <CounselorMessages />
+                    <ProtectedRoute allowedRoles={["counselor", "peer_counselor"]} redirectTo="/counselor/login">
+                      <CounselorMessagesPortal />
                     </ProtectedRoute>
                   }
                 />

@@ -13,6 +13,7 @@ import {
   decryptMessage,
 } from '@/lib/encryption';
 import type { ChatAttachment } from '@/lib/chatAttachments';
+import type { Session } from '@/hooks/useChatSession';
 
 export interface ChatMessage {
   id: number;
@@ -546,8 +547,9 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       sessionKeyStorageKeyRef.current = null;
       setIsEncryptionReady(false);
 
-      const session = await api.getSession(sessionId);
-      const studentId = Number(session?.student_id);
+      const session = (await api.getSession(sessionId)) as Session | null | undefined;
+      // Anonymous sessions mask student_id in JSON for counselors; backend sends chat_peer_student_id for E2E.
+      const studentId = Number(session?.chat_peer_student_id ?? session?.student_id);
       const counselorId = Number(session?.counselor_id);
       const peerCounselorId = Number(session?.peer_counselor_id);
       const assignedRole = String(session?.assigned_role || "").toLowerCase();
@@ -698,8 +700,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         return true;
       }
 
-      const actualSenderId = Number(message.sender_id);
-      if (!Number.isFinite(actualSenderId)) {
+      const rawSenderFromApi = Number(message.sender_id);
+      if (!Number.isFinite(rawSenderFromApi)) {
         return true;
       }
       const envelopeFrom = Number(envelope.from);
@@ -707,12 +709,20 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         return true;
       }
 
-      if (envelope.kind === 'pub') {
-        if (envelopeFrom !== actualSenderId) {
-          return true;
-        }
+      // DB row sender_id vs JSON envelope.from normally match; when anonymous sessions hide
+      // the student's id on list payloads, APIs may expose sender_id=0 while preserving from.
+      const trustedSenderId =
+        envelopeFrom === rawSenderFromApi
+          ? envelopeFrom
+          : rawSenderFromApi === 0 && envelopeFrom > 0
+            ? envelopeFrom
+            : null;
+      if (!trustedSenderId) {
+        return true;
+      }
 
-        if (actualSenderId === numericUserId) {
+      if (envelope.kind === 'pub') {
+        if (trustedSenderId === numericUserId) {
           return true;
         }
 
@@ -724,28 +734,28 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           return true;
         }
 
-        peerIdRef.current = actualSenderId;
+        peerIdRef.current = trustedSenderId;
         localStorage.setItem(
-          getPeerKeyStorageKey(sessionId, actualSenderId),
+          getPeerKeyStorageKey(sessionId, trustedSenderId),
           envelope.publicKey
         );
         peerPublicKeyRef.current = await importPeerPublicKey(envelope.publicKey);
         hasSentSessionKeyRef.current = false;
 
         if (!hasSentPublicKeyRef.current) {
-          await sendPublicKeyEnvelope(actualSenderId);
+          await sendPublicKeyEnvelope(trustedSenderId);
         }
 
-        const shouldInitiate = numericUserId < actualSenderId;
+        const shouldInitiate = numericUserId < trustedSenderId;
         if (shouldInitiate) {
-          await sendSessionKeyEnvelope(actualSenderId);
+          await sendSessionKeyEnvelope(trustedSenderId);
         }
 
         return true;
       }
 
       if (envelope.kind === 'key') {
-        if (envelopeFrom !== actualSenderId) {
+        if (trustedSenderId === numericUserId) {
           return true;
         }
 
@@ -765,16 +775,16 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           envelope.encryptedSessionKey,
           deviceKeyPairRef.current.privateKey
         );
-        peerIdRef.current = actualSenderId;
+        peerIdRef.current = trustedSenderId;
         sessionKeyStorageKeyRef.current = getSessionKeyStorageKey(
           sessionId,
           numericUserId,
-          actualSenderId
+          trustedSenderId
         );
         encryptionKeyRef.current = await importKey(decryptedKey);
         keyStringRef.current = decryptedKey;
         localStorage.setItem(sessionKeyStorageKeyRef.current, decryptedKey);
-        localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(actualSenderId));
+        localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(trustedSenderId));
         setIsEncryptionReady(true);
         setError(null);
         hasUndecryptedMessagesRef.current = true;

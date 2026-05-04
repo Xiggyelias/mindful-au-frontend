@@ -19,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CHAT_ATTACHMENT_ACCEPT } from "@/lib/chatAttachments";
+import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 
 interface ChatInputProps {
   message: string;
@@ -107,24 +108,48 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
 
         <div className="flex items-end gap-3">
-          <div className="flex-1 relative flex items-center bg-secondary/30 rounded-[2rem] border border-border/50 focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/5 transition-all duration-300">
+          <div
+            className={`flex-1 relative flex bg-secondary/30 rounded-[2rem] border border-border/50 focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/5 transition-all duration-300 ${
+              isVoiceMode ? "items-stretch py-2 min-h-[5.25rem]" : "items-center"
+            }`}
+          >
             {isVoiceMode ? (
-              <div className="flex-1 flex items-center h-12 px-4 gap-4 animate-in slide-in-from-left-2 duration-300">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-                    <span className="text-sm font-mono font-bold">{formatRecordingTime(recordingTime)}</span>
+              <div className="flex-1 flex flex-col gap-1.5 pl-4 pr-3 animate-in slide-in-from-left-2 duration-300">
+                <div className="flex items-center gap-2">
+                  <VoiceRecordingPresenceStrip className="h-8 shrink-0" />
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Recording voice memo
+                  </span>
+                  <span className="text-sm tabular-nums text-foreground font-medium ml-auto">{formatRecordingTime(recordingTime)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted/80 overflow-hidden">
+                    <div className="h-full w-[45%] rounded-full bg-primary/35" aria-hidden />
                   </div>
-                  <div className="flex-1 h-1 bg-destructive/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-destructive animate-progress" style={{ width: '100%' }} />
-                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0">Clinical session recording</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={isPaused ? onVoiceResume : onVoicePause} aria-label={isPaused ? "Resume recording" : "Pause recording"}>
-                    {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={isPaused ? onVoiceResume : onVoicePause}
+                    aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                  >
+                    {isPaused ? <Play className="h-3.5 w-3.5 mr-1" /> : <Pause className="h-3.5 w-3.5 mr-1" />}
+                    {isPaused ? "Resume" : "Pause"}
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onVoiceCancel} aria-label="Cancel voice recording">
-                    <Trash2 className="h-4 w-4" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={onVoiceCancel}
+                    aria-label="Discard voice recording"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Discard
                   </Button>
                 </div>
               </div>
@@ -162,12 +187,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="flex items-center gap-2">
             <Button
               type="button"
-              variant={isVoiceMode ? "destructive" : "secondary"}
+              variant={isVoiceMode ? "outline" : "secondary"}
               size="icon"
-              className={`h-12 w-12 rounded-full shadow-lg transition-all duration-300 ${isVoiceMode ? "animate-pulse" : "hover:bg-primary/10 hover:text-primary"}`}
+              className={`h-12 w-12 rounded-full shadow-sm transition-all duration-300 ${
+                isVoiceMode
+                  ? "border-primary/40 text-primary hover:bg-primary/10"
+                  : "hover:bg-primary/10 hover:text-primary shadow-lg"
+              }`}
               onClick={onVoiceToggle}
               disabled={isSending}
-              aria-label={isVoiceMode ? "Stop recording" : "Start voice message"}
+              aria-label={isVoiceMode ? "Stop and send recording" : "Record voice memo"}
             >
               {isVoiceMode ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </Button>

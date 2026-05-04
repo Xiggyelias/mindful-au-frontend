@@ -51,9 +51,11 @@ export const ProtectedRoute = ({
   }
 
   const isCounselingRole = role === "counselor" || role === "peer_counselor";
-  const isTwoFactorPage = location.pathname === "/counselor/2fa";
+  const isTwoFactorPage =
+    location.pathname === "/counselor/2fa" || location.pathname === "/peer/2fa";
   if (isCounselingRole && twoFactor.required && !isTwoFactorPage) {
-    return <Navigate to="/counselor/2fa" replace />;
+    const twoFactorPath = role === "peer_counselor" ? "/peer/2fa" : "/counselor/2fa";
+    return <Navigate to={twoFactorPath} replace />;
   }
 
   return <>{children}</>;

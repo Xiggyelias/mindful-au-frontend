@@ -23,7 +23,7 @@ const CounselorLogin = () => {
 
   useEffect(() => {
     if (user && (role === "counselor" || role === "peer_counselor") && twoFactor.required) {
-      navigate("/counselor/2fa", { replace: true });
+      navigate(role === "peer_counselor" ? "/peer/2fa" : "/counselor/2fa", { replace: true });
       return;
     }
 
@@ -68,20 +68,23 @@ const CounselorLogin = () => {
       return;
     }
 
+    const isPeerCounselor = loggedInUser?.roles?.some(
+      (r) => r.role === "peer_counselor" && r.approved
+    );
+
     if (twoFactorRequired) {
       toast.success(
         twoFactorSetupRequired
           ? "Set up two-factor authentication to continue."
           : "Enter your two-factor verification code."
       );
-      navigate("/counselor/2fa", { replace: true });
+      navigate(
+        isPeerCounselor ? "/peer/2fa" : "/counselor/2fa",
+        { replace: true }
+      );
       setIsLoading(false);
       return;
     }
-
-    const isPeerCounselor = loggedInUser?.roles?.some(
-      (r) => r.role === "peer_counselor" && r.approved
-    );
 
     toast.success("Welcome back! Redirecting...");
     navigate(isPeerCounselor ? "/peer/dashboard" : "/counselor/dashboard", {

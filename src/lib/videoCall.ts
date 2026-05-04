@@ -136,6 +136,23 @@ export const isVideoEnabledAppointment = (notes?: string | null): boolean => {
   return !normalized.startsWith("physical");
 };
 
+/** Booking form stores online audio-only as notes starting with `Online audio`. */
+export const prefersAudioOnlyOnlineCall = (notes?: string | null): boolean => {
+  if (!isVideoEnabledAppointment(notes)) {
+    return false;
+  }
+  return (notes || "").trim().toLowerCase().startsWith("online audio");
+};
+
+export function describeOnlineAppointmentFormat(
+  notes?: string | null
+): "In-person" | "Audio / online" | "Video / online" {
+  if (!isVideoEnabledAppointment(notes)) {
+    return "In-person";
+  }
+  return prefersAudioOnlyOnlineCall(notes) ? "Audio / online" : "Video / online";
+}
+
 export const getVideoCallWindowStatus = (
   scheduledAt: string | Date | null | undefined,
   durationMinutes?: number | null,

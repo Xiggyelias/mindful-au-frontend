@@ -3,6 +3,8 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 
 export interface Session {
   id: number;
+  /** Real student user id for routing when `student_id` is masked (anonymous). */
+  chat_peer_student_id?: number;
   student_id: number;
   counselor_id: number | null;
   peer_counselor_id?: number | null;

@@ -108,7 +108,9 @@ export const DashboardSidebar = ({
           {/* Navigation */}
           <nav className="flex-1 space-y-1">
             {items.map((item) => {
-              const isActive = location.pathname === item.path;
+              const isActive =
+                location.pathname === item.path ||
+                (item.path !== "/" && location.pathname.startsWith(`${item.path}/`));
               return (
                 <button
                   key={item.path}

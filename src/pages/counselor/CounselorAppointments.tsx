@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
-import { getVideoCallWindowStatus } from "@/lib/videoCall";
+import { getVideoCallWindowStatus, isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -329,6 +329,10 @@ const CounselorAppointments = () => {
       appointment_id: String(apt.id),
       autostart: "1",
     });
+
+    if (isVideoEnabledAppointment(apt.notes)) {
+      params.set("mode", prefersAudioOnlyOnlineCall(apt.notes) ? "audio" : "video");
+    }
 
     navigate(`/counselor/video?${params.toString()}`);
   };

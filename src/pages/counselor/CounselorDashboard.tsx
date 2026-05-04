@@ -12,6 +12,7 @@ import {
   Heart,
   Bell,
   TrendingUp,
+  AlertTriangle,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -22,7 +23,12 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle } from "lucide-react";
+import { isSameDay, isValid, parseISO } from "date-fns";
+import {
+  describeOnlineAppointmentFormat,
+  isVideoEnabledAppointment,
+  prefersAudioOnlyOnlineCall,
+} from "@/lib/videoCall";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -134,7 +140,8 @@ const CounselorDashboard = () => {
           setDiagnosticsSummary(summaryResult.value || null);
         }
 
-        const sessionRows = sessionsResult.status === "fulfilled" ? toList<any>(sessionsResult.value) : [];
+        const sessionRows =
+          sessionsResult.status === "fulfilled" ? toList<Record<string, unknown>>(sessionsResult.value) : [];
         const uniqueStudentIds = Array.from(
           new Set(
             sessionRows
@@ -143,6 +150,9 @@ const CounselorDashboard = () => {
           )
         );
         setActiveSessionStudentIds(uniqueStudentIds);
+        if (sessionsResult.status === "rejected" && import.meta.env.DEV) {
+          console.warn("Counselor dashboard: open sessions snapshot failed", sessionsResult.reason);
+        }
       })();
     } catch (err: unknown) {
       if (import.meta.env.DEV) {
@@ -170,21 +180,30 @@ const CounselorDashboard = () => {
     void loadDashboardData();
   }, [loadDashboardData, user?.id]);
 
-  const today = useMemo(() => new Date(), []);
-  const isSameDay = useCallback((dateStr?: string) => {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    return (
-      d.getFullYear() === today.getFullYear() &&
-      d.getMonth() === today.getMonth() &&
-      d.getDate() === today.getDate()
-    );
-  }, [today]);
+  /** Keeps “today’s schedule” correct across midnight and long-lived tabs. */
+  const [nowTicker, setNowTicker] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setNowTicker(Date.now());
+    const id = window.setInterval(tick, 60_000);
+    const onFocus = () => tick();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, []);
 
-  const todaysAppointments = useMemo(
-    () => appointments.filter((a) => isSameDay(a.scheduled_at)),
-    [appointments, isSameDay]
-  );
+  const todayAnchor = useMemo(() => new Date(nowTicker), [nowTicker]);
+
+  const todaysAppointments = useMemo(() => {
+    return appointments.filter((a) => {
+      if (!a.scheduled_at) return false;
+      const d = parseISO(a.scheduled_at);
+      return isValid(d) && isSameDay(d, todayAnchor);
+    });
+  }, [appointments, todayAnchor]);
 
   const completedToday = todaysAppointments.filter((a) => a.status === "completed").length;
   const pendingToday = todaysAppointments.filter(
@@ -242,11 +261,16 @@ const CounselorDashboard = () => {
   };
 
   const handleJoinSession = (apt: Appointment) => {
-    if (apt.notes?.includes("Physical")) {
+    if (!isVideoEnabledAppointment(apt.notes)) {
       navigate("/counselor/appointments");
-    } else {
-      navigate("/counselor/video");
+      return;
     }
+    const params = new URLSearchParams({
+      appointment_id: String(apt.id),
+      autostart: "1",
+    });
+    params.set("mode", prefersAudioOnlyOnlineCall(apt.notes) ? "audio" : "video");
+    navigate(`/counselor/video?${params.toString()}`);
   };
 
   const handleViewAlerts = () => {
@@ -311,9 +335,9 @@ const CounselorDashboard = () => {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {stats.map((s, idx) => (
+            {stats.map((s) => (
               <StatsCard
-                key={idx}
+                key={s.title}
                 title={s.title}
                 value={s.value}
                 change={s.change}
@@ -348,13 +372,18 @@ const CounselorDashboard = () => {
                         className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30"
                       >
                         <div className="text-center min-w-[90px]">
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-sm font-medium text-foreground tabular-nums">
                             {apt.scheduled_at
-                              ? new Date(apt.scheduled_at).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : ""}
+                              ? (() => {
+                                  const t = parseISO(apt.scheduled_at);
+                                  return isValid(t)
+                                    ? t.toLocaleTimeString(undefined, {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
+                                    : "—";
+                                })()
+                              : "—"}
                           </p>
                         </div>
                         <div className="flex-1">
@@ -362,7 +391,7 @@ const CounselorDashboard = () => {
                             {apt.student?.profile?.full_name || apt.student?.email || "Student"}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {apt.notes?.includes("Physical") ? "Physical" : "Online"}
+                            {describeOnlineAppointmentFormat(apt.notes)}
                           </p>
                         </div>
                         <span
@@ -374,12 +403,9 @@ const CounselorDashboard = () => {
                         >
                           {apt.status}
                         </span>
-                        {apt.status === "scheduled" && (
-                          <Button 
-                            size="sm" 
-                            onClick={() => handleJoinSession(apt)}
-                          >
-                            {apt.notes?.includes("Physical") ? "Details" : "Join"}
+                        {(apt.status === "scheduled" || apt.status === "confirmed") && (
+                          <Button size="sm" onClick={() => handleJoinSession(apt)}>
+                            {isVideoEnabledAppointment(apt.notes) ? "Join" : "Details"}
                           </Button>
                         )}
                       </div>
@@ -463,9 +489,9 @@ const CounselorDashboard = () => {
                     { label: "Medium", count: Number(byRisk.medium || 0), color: "bg-warning/20 text-warning" },
                     { label: "High", count: Number(byRisk.high || 0), color: "bg-info/20 text-info" },
                     { label: "Critical", count: Number(byRisk.critical || 0), color: "bg-primary/20 text-primary" },
-                  ].map((item, i) => (
+                  ].map((item) => (
                     <Button
-                      key={i}
+                      key={item.label}
                       variant="ghost"
                       className="h-auto p-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 flex-col gap-2"
                       onClick={handleViewStudents}

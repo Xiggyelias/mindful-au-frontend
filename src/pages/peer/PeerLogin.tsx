@@ -23,7 +23,7 @@ const PeerLogin = () => {
 
   useEffect(() => {
     if (user && role === "peer_counselor" && twoFactor.required) {
-      navigate("/counselor/2fa", { replace: true });
+      navigate("/peer/2fa", { replace: true });
       return;
     }
 
@@ -63,7 +63,7 @@ const PeerLogin = () => {
           ? "Set up two-factor authentication to continue."
           : "Enter your two-factor verification code."
       );
-      navigate("/counselor/2fa", { replace: true });
+      navigate("/peer/2fa", { replace: true });
       setIsLoading(false);
       return;
     }

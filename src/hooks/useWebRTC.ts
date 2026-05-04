@@ -10,6 +10,8 @@ import {
 interface WebRTCState {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
+  /** Bumps when remote tracks change so React effects re-bind `srcObject` even if the MediaStream reference is reused. */
+  remoteMediaEpoch: number;
   remoteHasVideo: boolean;
   isConnected: boolean;
   isConnecting: boolean;
@@ -128,6 +130,7 @@ type WebRTCEngine = {
 const DEFAULT_ENGINE_STATE: WebRTCState = {
   localStream: null,
   remoteStream: null,
+  remoteMediaEpoch: 0,
   remoteHasVideo: false,
   isConnected: false,
   isConnecting: false,
@@ -232,9 +235,15 @@ const clearPersistedActiveCall = () => {
   }
 };
 
-const playMediaElement = (element: HTMLVideoElement | null) => {
+const playMediaElement = (element: HTMLVideoElement | null, muted?: boolean) => {
   if (!element) {
     return;
+  }
+  if (typeof muted === "boolean") {
+    element.muted = muted;
+    if (!muted && element.volume !== 1) {
+      element.volume = 1;
+    }
   }
 
   const playPromise = element.play();
@@ -384,6 +393,7 @@ const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
   setEngineState((prev) => ({
     ...prev,
     remoteStream: nextStream,
+    remoteMediaEpoch: prev.remoteMediaEpoch + 1,
     remoteHasVideo: hasVideoTrack,
     isConnecting: false,
     error: null,
@@ -393,7 +403,7 @@ const updateEngineRemoteStreamState = (stream: MediaStream | null) => {
   if (nextStream) {
     for (const element of engine.remoteVideoElements) {
       element.srcObject = nextStream;
-      playMediaElement(element);
+      playMediaElement(element, false);
     }
   }
 };
@@ -654,7 +664,17 @@ const createEnginePeerConnection = () => {
         const localExpectsVideo = Boolean(stream && stream.getVideoTracks().length > 0);
         const remoteHasVideo = Boolean(engine.remoteStream?.getVideoTracks().some((t) => t.readyState !== "ended"));
         const remoteHasAudio = Boolean(engine.remoteStream?.getAudioTracks().some((t) => t.readyState !== "ended"));
-        const remoteMissingMedia = !engine.remoteStream || (localExpectsVideo && !remoteHasVideo) || (!localExpectsVideo && !remoteHasAudio);
+        const hasAnyLiveRemoteTrack = Boolean(
+          engine.remoteStream?.getTracks().some((t) => t.readyState !== "ended")
+        );
+        // Only treat "missing media" as a stalled negotiation when we expect video but have neither
+        // video nor audio, or when there is no stream / no live tracks at all. For audio-only calls,
+        // do not key off `remoteHasAudio` alone — audio tracks often arrive shortly after "connected",
+        // and an ICE restart here spuriously breaks one-way audio.
+        const remoteMissingMedia =
+          !engine.remoteStream ||
+          !hasAnyLiveRemoteTrack ||
+          (localExpectsVideo && !remoteHasVideo && !remoteHasAudio);
 
         if (canRenegotiate && remoteMissingMedia) {
           logWebRTC("[WebRTC] Remote media missing after connect; restarting ICE/negotiation");
@@ -709,13 +729,10 @@ const createEnginePeerConnection = () => {
     }
   };
 
-  connection.onnegotiationneeded = async () => {
-    try {
-      logWebRTC("[WebRTC] Negotiation needed event fired");
-      await sendEngineOffer(connection);
-    } catch (err) {
-      console.error("[WebRTC] Error during onnegotiationneeded:", err);
-    }
+  // Offers are sent explicitly (call-accepted, rejoin, toggle video, ICE restart). Auto-offers here
+  // race with that flow and cause glare / duplicate SDP, which breaks audio-only calls especially.
+  connection.onnegotiationneeded = () => {
+    logWebRTC("[WebRTC] Negotiation needed (ignored; using explicit offer flow)");
   };
 
   connection.oniceconnectionstatechange = () => {
@@ -767,7 +784,7 @@ const initializeEngineMedia = async (audioOnlyRequested = false) => {
 
     for (const element of engine.localVideoElements) {
       element.srcObject = stream;
-      playMediaElement(element);
+      playMediaElement(element, true);
     }
 
     return stream;
@@ -866,6 +883,7 @@ const cleanupEngineCall = (broadcastEnd = true, clearMedia = true) => {
     ...prev,
     localStream: null,
     remoteStream: null,
+    remoteMediaEpoch: 0,
     remoteHasVideo: false,
     isConnected: false,
     isConnecting: false,
@@ -1135,6 +1153,21 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
           const politePeer = isPolitePeer(normalizedUserId, senderId);
           engine.ignoreOffer = !politePeer && offerCollision;
           if (engine.ignoreOffer) {
+            logWebRTC(
+              "[WebRTC] Ignoring incoming offer during glare negotiation (impolite peer defers)."
+            );
+            engine.ignoreOffer = false;
+            if (needsAttach) {
+              closeEnginePeerConnection(connection);
+              if (engine.peerConnection === connection) {
+                engine.peerConnection = null;
+              }
+              engine.pendingIceCandidates = [];
+            }
+            if (engine.remotePeerId === senderId) {
+              engine.remotePeerId = null;
+            }
+            setEngineState((prev) => ({ ...prev, isConnecting: false }));
             return;
           }
 
@@ -1612,7 +1645,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         track.enabled = shouldEnableVideo;
       });
 
-      setState((prev) => ({
+      setEngineState((prev) => ({
         ...prev,
         isLocalVideoEnabled: shouldEnableVideo,
         error: null,
@@ -1645,6 +1678,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         isSignalingReady: false,
         notice: null,
         remoteStream: null,
+        remoteMediaEpoch: 0,
         remoteHasVideo: false,
       }));
       return;
@@ -1704,7 +1738,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     if (currentLocalRef && state.localStream) {
       engine.localVideoElements.add(currentLocalRef);
       currentLocalRef.srcObject = state.localStream;
-      playMediaElement(currentLocalRef);
+      playMediaElement(currentLocalRef, true);
     }
     return () => {
       if (currentLocalRef) {
@@ -1718,14 +1752,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     if (currentRemoteRef && state.remoteStream) {
       engine.remoteVideoElements.add(currentRemoteRef);
       currentRemoteRef.srcObject = state.remoteStream;
-      playMediaElement(currentRemoteRef);
+      playMediaElement(currentRemoteRef, false);
     }
     return () => {
       if (currentRemoteRef) {
         engine.remoteVideoElements.delete(currentRemoteRef);
       }
     };
-  }, [state.remoteHasVideo, state.remoteStream]);
+  }, [state.remoteHasVideo, state.remoteStream, state.remoteMediaEpoch]);
 
   useEffect(() => {
     if (typeof AudioContext === "undefined") {
@@ -1744,6 +1778,9 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     }
 
     const context = new AudioContext();
+    void context.resume().catch(() => {
+      /* May stay suspended until a user gesture on some browsers; tick retries. */
+    });
     const localAnalyser = localTrack ? context.createAnalyser() : null;
     const remoteAnalyser = remoteTrack ? context.createAnalyser() : null;
     if (localAnalyser) {
@@ -1784,6 +1821,9 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
     let animationFrameId = 0;
     const tick = () => {
+      if (context.state === "suspended") {
+        void context.resume().catch(() => {});
+      }
       const now = Date.now();
       const localLevel = sample(localAnalyser);
       const remoteLevel = sample(remoteAnalyser);
@@ -1824,12 +1864,15 @@ export const useWebRTC = (sessionId: string, userId: string) => {
   }, [
     state.localStream,
     state.remoteStream,
+    state.remoteMediaEpoch,
+    state.isAudioOnly,
+    state.isLocalVideoEnabled,
   ]);
 
   useEffect(() => {
     const connection = engine.peerConnection;
     if (!connection || !state.isConnected) {
-      setState((prev) => ({
+      setEngineState((prev) => ({
         ...prev,
         callQuality: {
           latencyMs: null,
@@ -1868,7 +1911,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           totalPackets > 0 ? Number(((packetsLost / totalPackets) * 100).toFixed(1)) : null;
 
         if (!cancelled) {
-          setState((prev) => ({
+          setEngineState((prev) => ({
             ...prev,
             callQuality: {
               latencyMs,

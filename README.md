@@ -2,12 +2,13 @@
 
 Mindful AU is a counseling platform with role-based access for students, staff, and admins.
 
-Full cross-repo manual: `../CMS_MANUAL.md`
+Full cross-repo manual: `../CMS_MANUAL.md`  
+If this repository sits next to `mindful-au-backend` under a shared parent, see also `../README.md` for a workspace overview.
 
 ## Portals
 
-- `Student Portal`: chat, appointments, wellness check-ins, AI support, video sessions.
-- `Staff Portal`: counselor and peer counselor workflows, case assignment, escalations, session notes.
+- `Student Portal`: dashboard, chat, appointments, wellness check-ins, AI support, video sessions, diagnostic assessment, history.
+- `Staff Portal`: **counselors** use `/counselor/*` (including `/counselor/2fa` when two-factor is required). **Peer counselors** use `/peer/*` (including `/peer/2fa`) and the peer messaging experience (e.g. `/peer/chats`). Case assignment, escalations, and session notes follow role permissions.
 - `Admin Portal`: account approval, analytics, settings, and platform oversight.
 
 ## Key Features
@@ -26,6 +27,7 @@ Full cross-repo manual: `../CMS_MANUAL.md`
 - Speaking-activity indicators and low-bandwidth call handling.
 - Screen-capture deterrence on sensitive routes (watermark, blur-on-inactive, copy/context restrictions, warning overlay).
 - Daily student mood check-in enforcement (once per day).
+- **Student dashboard** (`/student/dashboard`): aggregates open chat sessions, truly upcoming appointments (status + future `scheduled_at`), wellness score, and **AI assistant usage (30 days)** from the wellness summary ML snapshot when available; tolerates partial API failures (`Promise.allSettled`); optional **soft refresh** when returning to the tab (throttled, e.g. 45s); daily mood buttons; panic support strip with **`988`** hotline shortcut and emergency log action (server notifies **professional staff**, not peers).
 - API resilience: retry on transient failures, base URL failover, and stale-if-error cache fallback.
 
 ## Tech Stack
@@ -269,8 +271,8 @@ composer --working-dir=../mindful-au-backend test
 
 ## Project Structure
 
-- `src/pages/student/`: student pages
-- `src/pages/counselor/`: counselor and peer counselor pages
+- `src/pages/student/`: student pages (including `StudentDashboard.tsx`)
+- `src/pages/counselor/`: counselor UI; peer-specific flows live under peer routes/components as configured in `src/App.tsx`
 - `src/pages/admin/`: admin pages
 - `src/hooks/`: frontend hooks
 - `src/lib/api.ts`: API client

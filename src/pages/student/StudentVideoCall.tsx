@@ -38,6 +38,7 @@ import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
   normalizeVideoCallDuration,
+  prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 
@@ -105,8 +106,6 @@ const StudentVideoCall = () => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
 
-  const requestedMode: CallMode =
-    searchParams.get("mode") === "audio" ? "audio" : "video";
   const shouldAutostart = searchParams.get("autostart") === "1";
   const sessionId = activeAppointmentId || "";
 
@@ -230,6 +229,24 @@ const StudentVideoCall = () => {
     () => upcomingAppointments.find((appointment) => String(appointment.id) === activeAppointmentId),
     [activeAppointmentId, upcomingAppointments]
   );
+
+  const requestedMode: CallMode = useMemo(() => {
+    const rawMode = searchParams.get("mode");
+    if (rawMode === "audio") {
+      return "audio";
+    }
+    if (rawMode === "video") {
+      return "video";
+    }
+    if (
+      activeAppointment?.notes &&
+      isVideoEnabledAppointment(activeAppointment.notes) &&
+      prefersAudioOnlyOnlineCall(activeAppointment.notes)
+    ) {
+      return "audio";
+    }
+    return "video";
+  }, [searchParams, activeAppointment?.notes]);
 
   useEffect(() => {
     if (upcomingAppointments.length === 0) {
