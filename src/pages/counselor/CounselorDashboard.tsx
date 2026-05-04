@@ -62,13 +62,8 @@ const CounselorDashboard = () => {
   const loadRequestRef = useRef(0);
   const { user } = useAuth();
   const { toast } = useToast();
-  const toastRef = useRef(toast);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const isApprovedCounselor = user?.roles?.some((r: { role: string; approved: boolean }) => r.role === "counselor" && r.approved);
-
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -154,7 +149,7 @@ const CounselorDashboard = () => {
         console.error("Failed to load counselor dashboard data", err);
       }
       if (loadRequestRef.current === requestId) {
-        toastRef.current({
+        toast({
           title: "Could not load dashboard data",
           description: getApiErrorMessage(err, "Please try again."),
           variant: "destructive",
@@ -165,7 +160,7 @@ const CounselorDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [isApprovedCounselor]);
+  }, [isApprovedCounselor, toast, getApiErrorMessage]);
 
   useEffect(() => {
     if (!user?.id) {

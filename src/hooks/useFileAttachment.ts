@@ -53,7 +53,7 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
     } finally {
       setIsUploading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, getApiErrorMessage]);
 
   const sendFileMessage = useCallback(async (
     file: File,

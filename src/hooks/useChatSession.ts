@@ -400,7 +400,7 @@ export const useChatSession = (userId: number | undefined) => {
     if (!userId || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
     void loadSessions(true, { force: true });
-  }, [sessionPage, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionPage, userId]);
 
   useEffect(() => {
     if (!userId) return;

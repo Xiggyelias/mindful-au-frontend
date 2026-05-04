@@ -152,7 +152,7 @@ const CounselorAppointments = () => {
         appointmentsRequestInFlightRef.current = null;
       }
     },
-    []
+    [toast]
   );
 
   const hasInitiallyLoadedRef = useRef(false);

@@ -151,7 +151,7 @@ const AdminDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (user) {

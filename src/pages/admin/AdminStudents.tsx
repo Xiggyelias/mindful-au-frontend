@@ -74,7 +74,7 @@ const AdminStudents = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (user) {

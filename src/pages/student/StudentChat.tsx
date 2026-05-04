@@ -139,10 +139,14 @@ const StudentChat = () => {
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
+    retryEncryption,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
   });
+
+  const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
+  const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
 
   const {
     sendFileMessage,
@@ -158,6 +162,31 @@ const StudentChat = () => {
   useEffect(() => {
     return cleanup;
   }, [cleanup]);
+
+  // Encryption timeout: if not ready after 15s, show fallback UI
+  useEffect(() => {
+    if (!activeSession || isEncryptionReady || chatError) {
+      setEncryptionTimedOut(false);
+      return;
+    }
+    setEncryptionTimedOut(false);
+    const timer = window.setTimeout(() => {
+      if (!isEncryptionReady && !chatError) {
+        setEncryptionTimedOut(true);
+      }
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, [activeSession, isEncryptionReady, chatError]);
+
+  const handleRetryEncryption = useCallback(async () => {
+    setIsRetryingEncryption(true);
+    setEncryptionTimedOut(false);
+    try {
+      await retryEncryption();
+    } finally {
+      setIsRetryingEncryption(false);
+    }
+  }, [retryEncryption]);
 
   // Load counselors
   useEffect(() => {
@@ -407,27 +436,55 @@ const StudentChat = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative">
-              {/* Handshake Indicator */}
-              {activeSession && !isEncryptionReady && !chatError && (
-                <div className="absolute top-0 left-0 right-0 z-20 bg-primary/10 backdrop-blur-md border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
+            <div className="flex-1 flex flex-col bg-gradient-to-b from-background to-secondary/10 relative min-h-0">
+              {/* Handshake Indicator - non-blocking inline banner */}
+              {activeSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
+                <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection...</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection…</span>
                 </div>
               )}
-              
+
+              {/* Encryption Timeout Fallback */}
+              {activeSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
+                <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-amber-700">Connection is taking longer than expected</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-3 text-xs rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                    onClick={handleRetryEncryption}
+                    disabled={isRetryingEncryption}
+                  >
+                    {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    {isRetryingEncryption ? "Retrying…" : "Retry Connection"}
+                  </Button>
+                </div>
+              )}
+
               {/* Encryption Error */}
               {activeSession && chatError && (
-                <div className="absolute top-0 left-0 right-0 z-20 bg-destructive/10 backdrop-blur-md border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-3 animate-in slide-in-from-top duration-500">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                <div className="shrink-0 bg-destructive/10 border-b border-destructive/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                   <span className="text-xs font-bold uppercase tracking-widest text-destructive/80">{chatError}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-3 text-xs rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
+                    onClick={handleRetryEncryption}
+                    disabled={isRetryingEncryption}
+                  >
+                    {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    {isRetryingEncryption ? "Retrying…" : "Retry"}
+                  </Button>
                 </div>
               )}
 
               {activeSession ? (
                 <>
                   {/* Chat Header */}
-                  <div className="p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
+                  <div className="shrink-0 p-4 lg:px-8 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between relative z-0">
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
@@ -527,7 +584,7 @@ const StudentChat = () => {
 
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 lg:hidden">
+                <div className="flex-1 flex flex-col items-center justify-center p-4 lg:hidden overflow-y-auto">
                   <ChatSidebar
                     sessions={sessions}
                     activeSession={activeSession}

@@ -139,7 +139,7 @@ const CounselorWellness = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadWellnessData();
@@ -299,7 +299,6 @@ const CounselorWellness = () => {
                 <Progress 
                   value={typeof moodScore === "number" ? moodScore : 0} 
                   className="h-2 mt-3" 
-                  indicatorClassName={getWellnessBarColor(moodScore)}
                 />
               </CardContent>
             </Card>
@@ -317,7 +316,6 @@ const CounselorWellness = () => {
                 <Progress 
                   value={typeof stressLevel === "number" ? stressLevel : 0} 
                   className="h-2 mt-3" 
-                  indicatorClassName={getPressureBarColor(stressLevel, 40, 70)}
                 />
               </CardContent>
             </Card>
@@ -335,7 +333,6 @@ const CounselorWellness = () => {
                 <Progress 
                   value={typeof burnoutIndex === "number" ? burnoutIndex : 0} 
                   className="h-2 mt-3" 
-                  indicatorClassName={getPressureBarColor(burnoutIndex, 30, 60)}
                 />
               </CardContent>
             </Card>

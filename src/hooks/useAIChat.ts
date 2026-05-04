@@ -142,7 +142,7 @@ export const useAIChat = () => {
       setMlSignals(null);
       setError(getApiErrorMessage(err, "Failed to load previous AI conversation."));
     }
-  }, []);
+  }, [getApiErrorMessage]);
 
   useEffect(() => {
     void loadHistory();

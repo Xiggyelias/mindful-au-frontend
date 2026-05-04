@@ -214,6 +214,8 @@ const CounselorMessages = () => {
   const [isEscalating, setIsEscalating] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
+  const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
+  const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -271,6 +273,7 @@ const CounselorMessages = () => {
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
+    retryEncryption,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
@@ -654,6 +657,31 @@ const CounselorMessages = () => {
   useEffect(() => {
     lastRenderedTailMessageIdRef.current = null;
   }, [selectedSessionId]);
+
+  // Encryption timeout: if not ready after 15s, show fallback UI
+  useEffect(() => {
+    if (!selectedSessionId || isEncryptionReady || chatError) {
+      setEncryptionTimedOut(false);
+      return;
+    }
+    setEncryptionTimedOut(false);
+    const timer = window.setTimeout(() => {
+      if (!isEncryptionReady && !chatError) {
+        setEncryptionTimedOut(true);
+      }
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, [selectedSessionId, isEncryptionReady, chatError]);
+
+  const handleRetryEncryption = useCallback(async () => {
+    setIsRetryingEncryption(true);
+    setEncryptionTimedOut(false);
+    try {
+      await retryEncryption();
+    } finally {
+      setIsRetryingEncryption(false);
+    }
+  }, [retryEncryption]);
 
   useEffect(() => {
     if (chatError) {
@@ -1162,9 +1190,21 @@ const CounselorMessages = () => {
                     <div className="hidden lg:flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
                       <Shield className="h-3 w-3" />
                       <span>
-                        {isEncryptionReady ? "Encrypted" : "Securing..."}
+                        {isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}
                       </span>
                     </div>
+                    {encryptionTimedOut && !isEncryptionReady && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                        onClick={handleRetryEncryption}
+                        disabled={isRetryingEncryption}
+                      >
+                        {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Retry
+                      </Button>
+                    )}
                     {selectedSessionId && (
                       <Button
                         variant="ghost"
@@ -1205,6 +1245,43 @@ const CounselorMessages = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col h-[calc(100%-80px)] p-0 bg-gradient-to-b from-background to-secondary/5">
+                {/* Mobile encryption status banner */}
+                {selectedSessionId && !isEncryptionReady && !chatError && !encryptionTimedOut && (
+                  <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securing…</span>
+                  </div>
+                )}
+                {selectedSessionId && !isEncryptionReady && !chatError && encryptionTimedOut && (
+                  <div className="shrink-0 lg:hidden bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-2">
+                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Connection timeout</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10 ml-1"
+                      onClick={handleRetryEncryption}
+                      disabled={isRetryingEncryption}
+                    >
+                      {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
+                    </Button>
+                  </div>
+                )}
+                {selectedSessionId && chatError && (
+                  <div className="shrink-0 lg:hidden bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-2">
+                    <AlertTriangle className="h-3 w-3 text-destructive" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-destructive/80 truncate">{chatError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] rounded-full border-destructive/30 text-destructive hover:bg-destructive/10 ml-1"
+                      onClick={handleRetryEncryption}
+                      disabled={isRetryingEncryption}
+                    >
+                      {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
+                    </Button>
+                  </div>
+                )}
                 <ScrollArea ref={messageScrollAreaRef} className="flex-1 p-4 lg:p-6">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">

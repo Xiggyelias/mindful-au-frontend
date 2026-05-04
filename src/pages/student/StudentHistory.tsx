@@ -144,7 +144,7 @@ const StudentHistory = () => {
         requestInFlightRef.current = null;
       }
     },
-    [],
+    [toast, getApiErrorMessage],
   );
 
   useEffect(() => {
@@ -160,7 +160,7 @@ const StudentHistory = () => {
     if (!user || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
     void loadSessions(true, { force: true });
-  }, [sessionPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionPage, loadSessions]);
 
   useEffect(() => {
     if (!user) return;

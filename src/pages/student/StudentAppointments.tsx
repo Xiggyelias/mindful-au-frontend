@@ -76,10 +76,6 @@ const StudentAppointments = () => {
   const appointmentPageRef = useRef(appointmentPage);
   const hasInitiallyLoadedRef = useRef(false);
   const { toast } = useToast();
-  const toastRef = useRef(toast);
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -162,7 +158,7 @@ const StudentAppointments = () => {
         } catch (err: unknown) {
           console.error("Failed to load appointments", err);
           if (showErrorToast) {
-            toastRef.current({
+            toast({
               title: "Could not load appointments",
               description: getApiErrorMessage(err, "Please try again."),
               variant: "destructive",
@@ -181,7 +177,7 @@ const StudentAppointments = () => {
         appointmentsRequestInFlightRef.current = null;
       }
     },
-    [] // Stable
+    [toast] // Add toast dependency
   );
 
   const loadCounselors = useCallback(
@@ -216,7 +212,7 @@ const StudentAppointments = () => {
         } catch (err: any) {
           console.error("Failed to load counselors", err);
           if (showErrorToast) {
-            toastRef.current({
+            toast({
               title: "Could not load counselors",
               description: getApiErrorMessage(err, "Please try again."),
               variant: "destructive",
@@ -234,7 +230,7 @@ const StudentAppointments = () => {
         counselorsRequestInFlightRef.current = null;
       }
     },
-    [] // Stable
+    [toast] // Add toast dependency
   );
 
   useEffect(() => {
@@ -341,7 +337,7 @@ const StudentAppointments = () => {
         console.error("Failed to load counselor matches", err);
         setCounselorMatches([]);
         if (showErrorToast) {
-          toastRef.current({
+          toast({
             title: "Could not load counselor matches",
             description: getApiErrorMessage(err, "Please try again."),
             variant: "destructive",
@@ -351,7 +347,7 @@ const StudentAppointments = () => {
         setIsLoadingMatches(false);
       }
     },
-    [user]
+    [user, toast]
   );
 
   useEffect(() => {

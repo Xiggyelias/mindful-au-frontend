@@ -647,8 +647,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
       }
 
-      // Deterministic initiator can prepare the session key even before peer public key arrives.
-      if (!storedKey && isSessionKeyInitiator()) {
+      // Both initiator and non-initiator need a session key so the UI is not stuck
+      // on "Securing your connection…" while waiting for the peer's envelope.
+      // The initiator will also encrypt and send the key to the peer; the
+      // non-initiator's locally-generated key will be replaced once the peer's
+      // encrypted session key envelope arrives (handled in handleEnvelope).
+      if (!storedKey) {
         await ensureSessionKey();
       }
 
@@ -1517,6 +1521,16 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getKeyForSharing = useCallback(() => keyStringRef.current, []);
 
+  const retryEncryption = useCallback(async () => {
+    if (!sessionId || !hasValidUserId) return;
+    setError(null);
+    isInitializedRef.current = false;
+    await initializeEncryption();
+    if (isInitializedRef.current) {
+      await loadMessages(true);
+    }
+  }, [hasValidUserId, initializeEncryption, loadMessages, sessionId]);
+
   return {
     messages,
     isLoading,
@@ -1533,5 +1547,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     getEncryptionKey,
     refreshMessages,
     registerServerMessage,
+    retryEncryption,
   };
 };

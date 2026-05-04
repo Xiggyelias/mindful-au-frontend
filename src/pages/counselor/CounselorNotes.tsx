@@ -65,7 +65,7 @@ const CounselorNotes = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadSessions();

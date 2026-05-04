@@ -660,7 +660,7 @@ const StudentVideoCall = () => {
     Boolean(localStream && activeAppointmentId && activeAppointmentId !== appointmentId);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar
         items={navItems}
         userType="student"
