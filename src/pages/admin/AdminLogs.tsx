@@ -33,6 +33,7 @@ const navItems = [
 ];
 
 type LogType = "all" | "auth" | "session" | "alert" | "system";
+type LogTab = "activity" | "data_access";
 
 const typeFilters: Array<{ label: string; value: LogType }> = [
   { label: "All", value: "all" },
@@ -41,6 +42,21 @@ const typeFilters: Array<{ label: string; value: LogType }> = [
   { label: "Alert", value: "alert" },
   { label: "System", value: "system" },
 ];
+
+const ACTIVITY_STREAM_INTERVAL_MS = 15000;
+
+type DataAccessRow = {
+  id: number;
+  timestamp?: string;
+  user?: string | null;
+  user_id?: number | null;
+  method?: string;
+  path?: string;
+  status_code?: number;
+  resource_type?: string | null;
+  resource_id?: number | null;
+  ip_address?: string | null;
+};
 
 const csvEscape = (value: unknown): string => {
   const stringValue = String(value ?? "");
@@ -59,6 +75,10 @@ const AdminLogs = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<LogType>("all");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<LogTab>("activity");
+  const [dataAccessLogs, setDataAccessLogs] = useState<DataAccessRow[]>([]);
+  const [isLoadingDataAccess, setIsLoadingDataAccess] = useState(false);
+  const [isLiveTail, setIsLiveTail] = useState(false);
 
   const loadLogs = useCallback(async () => {
     try {
@@ -89,11 +109,65 @@ const AdminLogs = () => {
     }
   }, [filterType, searchQuery]);
 
-  useEffect(() => {
-    if (user) {
-      void loadLogs();
+  const loadDataAccessLogs = useCallback(async () => {
+    try {
+      setIsLoadingDataAccess(true);
+      const response = await api.getDataAccessLogs({ limit: 100 });
+      const list = Array.isArray(response)
+        ? response
+        : Array.isArray((response as any)?.data)
+        ? (response as any).data
+        : [];
+      setDataAccessLogs(list);
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Failed to load data access logs";
+      toast.error(message);
+    } finally {
+      setIsLoadingDataAccess(false);
     }
-  }, [user, loadLogs]);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab === "activity") {
+      void loadLogs();
+    } else {
+      void loadDataAccessLogs();
+    }
+  }, [user, loadLogs, loadDataAccessLogs, activeTab]);
+
+  // Live tail polling for activity logs
+  useEffect(() => {
+    if (!user || !isLiveTail || activeTab !== "activity") return;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const lastId = logs.reduce((max, log) => {
+          const id = Number(log?.id);
+          return Number.isFinite(id) && id > max ? id : max;
+        }, 0);
+        const response = await api.streamActivityLogs({ since_id: lastId, limit: 50 });
+        const incoming: any[] = Array.isArray((response as any)?.logs) ? (response as any).logs : [];
+        if (incoming.length > 0) {
+          setLogs((prev) => {
+            const ids = new Set(prev.map((log) => Number(log?.id)));
+            const merged = [...prev];
+            for (const entry of incoming) {
+              const id = Number(entry?.id);
+              if (Number.isFinite(id) && !ids.has(id)) {
+                merged.unshift(entry);
+              }
+            }
+            return merged;
+          });
+        }
+      } catch {
+        // Ignore transient stream errors; user can refresh manually.
+      }
+    }, ACTIVITY_STREAM_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [user, isLiveTail, activeTab, logs]);
 
   const handleSearch = () => {
     const nextQuery = searchInput.trim();
@@ -204,98 +278,201 @@ const AdminLogs = () => {
             </Card>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {typeFilters.map((filter) => (
-                <Button
-                  key={filter.value}
-                  size="sm"
-                  variant={filterType === filter.value ? "default" : "outline"}
-                  onClick={() => setFilterType(filter.value)}
-                >
-                  {filter.label}
-                </Button>
-              ))}
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 justify-between">
-              <div className="flex flex-col md:flex-row gap-4 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search logs..."
-                    className="pl-9"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  />
-                </div>
-                <Button variant="outline" className="gap-2" onClick={handleSearch}>
-                  <Search className="h-4 w-4" />
-                  Search
-                </Button>
-              </div>
-
-              <div className="flex gap-3">
-                <Button variant="outline" className="gap-2" onClick={() => void loadLogs()} disabled={isLoading}>
-                  <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                  Refresh
-                </Button>
-                <Button variant="outline" className="gap-2" onClick={handleExportLogs}>
-                  <Download className="h-4 w-4" />
-                  Export Logs
-                </Button>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={activeTab === "activity" ? "default" : "outline"}
+              onClick={() => setActiveTab("activity")}
+            >
+              Activity Logs
+            </Button>
+            <Button
+              size="sm"
+              variant={activeTab === "data_access" ? "default" : "outline"}
+              onClick={() => setActiveTab("data_access")}
+            >
+              Data Access Logs
+            </Button>
           </div>
 
-          <Card variant="glass">
-            <CardHeader>
-              <CardTitle className="text-lg">Activity Logs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading logs...</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border/50">
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Action</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Description</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">User</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {logs.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                            No logs found
-                          </td>
+          {activeTab === "activity" && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {typeFilters.map((filter) => (
+                  <Button
+                    key={filter.value}
+                    size="sm"
+                    variant={filterType === filter.value ? "default" : "outline"}
+                    onClick={() => setFilterType(filter.value)}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-4 justify-between">
+                <div className="flex flex-col md:flex-row gap-4 flex-1">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search logs..."
+                      className="pl-9"
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    />
+                  </div>
+                  <Button variant="outline" className="gap-2" onClick={handleSearch}>
+                    <Search className="h-4 w-4" />
+                    Search
+                  </Button>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant={isLiveTail ? "default" : "outline"}
+                    className="gap-2"
+                    onClick={() => setIsLiveTail((prev) => !prev)}
+                  >
+                    <RefreshCcw className={`h-4 w-4 ${isLiveTail ? "animate-spin" : ""}`} />
+                    {isLiveTail ? "Live Tail On" : "Live Tail"}
+                  </Button>
+                  <Button variant="outline" className="gap-2" onClick={() => void loadLogs()} disabled={isLoading}>
+                    <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                  <Button variant="outline" className="gap-2" onClick={handleExportLogs}>
+                    <Download className="h-4 w-4" />
+                    Export Logs
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "data_access" && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => void loadDataAccessLogs()}
+                disabled={isLoadingDataAccess}
+              >
+                <RefreshCcw className={`h-4 w-4 ${isLoadingDataAccess ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+          )}
+
+          {activeTab === "activity" && (
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg">Activity Logs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading logs...</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border/50">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Action</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Description</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">User</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Type</th>
                         </tr>
-                      ) : (
-                        logs.map((log) => (
-                          <tr key={log.id} className="border-b border-border/30 hover:bg-secondary/20">
-                            <td className="py-3 px-4 text-sm text-muted-foreground font-mono">{log.timestamp}</td>
-                            <td className="py-3 px-4 text-sm text-foreground">{log.action}</td>
-                            <td className="py-3 px-4 text-sm text-muted-foreground">{log.description || "--"}</td>
-                            <td className="py-3 px-4 text-sm text-foreground">{log.user}</td>
-                            <td className="py-3 px-4">
-                              <span className={`text-sm font-medium capitalize ${getLogTypeColor(log.type)}`}>
-                                {log.type}
-                              </span>
+                      </thead>
+                      <tbody>
+                        {logs.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                              No logs found
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                        ) : (
+                          logs.map((log) => (
+                            <tr key={log.id} className="border-b border-border/30 hover:bg-secondary/20">
+                              <td className="py-3 px-4 text-sm text-muted-foreground font-mono">{log.timestamp}</td>
+                              <td className="py-3 px-4 text-sm text-foreground">{log.action}</td>
+                              <td className="py-3 px-4 text-sm text-muted-foreground">{log.description || "--"}</td>
+                              <td className="py-3 px-4 text-sm text-foreground">{log.user}</td>
+                              <td className="py-3 px-4">
+                                <span className={`text-sm font-medium capitalize ${getLogTypeColor(log.type)}`}>
+                                  {log.type}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "data_access" && (
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg">Data Access Logs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoadingDataAccess ? (
+                  <p className="text-sm text-muted-foreground">Loading data access logs...</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border/50">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">User</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Method</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Path</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Resource</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">IP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dataAccessLogs.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                              No data access logs found
+                            </td>
+                          </tr>
+                        ) : (
+                          dataAccessLogs.map((log) => (
+                            <tr key={log.id} className="border-b border-border/30 hover:bg-secondary/20">
+                              <td className="py-3 px-4 text-sm text-muted-foreground font-mono">
+                                {log.timestamp ? new Date(log.timestamp).toLocaleString() : "--"}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-foreground">{log.user || "--"}</td>
+                              <td className="py-3 px-4 text-sm text-foreground font-mono">{log.method || "--"}</td>
+                              <td className="py-3 px-4 text-sm text-muted-foreground font-mono break-all max-w-[260px]">
+                                {log.path || "--"}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-foreground">{log.status_code ?? "--"}</td>
+                              <td className="py-3 px-4 text-sm text-muted-foreground">
+                                {log.resource_type
+                                  ? `${log.resource_type}${log.resource_id ? `#${log.resource_id}` : ""}`
+                                  : "--"}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-muted-foreground font-mono">
+                                {log.ip_address || "--"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </main>
       </div>
     </div>

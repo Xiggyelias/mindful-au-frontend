@@ -443,8 +443,9 @@ class ApiClient {
       normalizedPath.startsWith('/users/counselors') ||
       normalizedPath === '/sessions' ||
       normalizedPath.startsWith('/sessions/chat-list') ||
-      normalizedPath.startsWith('/ai/wellness-chat/history') ||
-      normalizedPath.startsWith('/openrouter/conversations')
+      normalizedPath.startsWith('/ai/wellness-chat/history')
+      // Note: /openrouter/* requests use raw fetch (services/openrouter.ts),
+      // so they don't go through this axios cache. Don't list them here.
     );
   }
 
@@ -1729,8 +1730,44 @@ class ApiClient {
     return response.data;
   }
 
-  async triggerEmergencyAlert(data: { session_id?: number; notes?: string } = {}) {
-    const response = await this.client.post('/panic-logs', data);
+  // Activity Logs streaming (Admin)
+  async streamActivityLogs(params?: { since_id?: number; limit?: number }) {
+    const response = await this.client.get('/activity-logs/stream', { params });
+    return response.data;
+  }
+
+  // Data Access Logs (Admin)
+  async getDataAccessLogs(params?: {
+    user_id?: number;
+    method?: string;
+    path?: string;
+    status_code?: number;
+    from?: string;
+    to?: string;
+    limit?: number;
+    page?: number;
+    per_page?: number;
+  }) {
+    const response = await this.client.get('/data-access-logs', { params });
+    return response.data;
+  }
+
+  // Peer counselor: flag urgent concern on assigned session
+  async flagUrgentConcern(sessionId: number | string, reason: string) {
+    const response = await this.client.post(`/sessions/${sessionId}/flag-urgent`, {
+      reason,
+    });
+    return response.data;
+  }
+
+  // Admin: broadcast / create a notification for a specific user
+  async createBroadcastNotification(data: {
+    user_id: number;
+    title: string;
+    message: string;
+    type?: 'info' | 'warning' | 'success' | 'error' | 'panic';
+  }) {
+    const response = await this.client.post('/notifications', data);
     return response.data;
   }
 }

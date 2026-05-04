@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { getVideoCallWindowStatus } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -178,7 +179,7 @@ const CounselorAppointments = () => {
 
     const retryLoad = () => {
       if (document.visibilityState !== "visible") return;
-      void loadAppointments(false);
+      void loadAppointments(false, { force: true });
     };
 
     const intervalId = window.setInterval(() => {
@@ -286,16 +287,17 @@ const CounselorAppointments = () => {
   };
 
   const statusClassName = (status: string) => {
-    if (status === "confirmed") {
+    const s = String(status || "").toLowerCase();
+    if (s === "confirmed") {
       return "bg-success/20 text-success";
     }
-    if (status === "scheduled" || status === "pending") {
+    if (s === "scheduled" || s === "pending") {
       return "bg-warning/20 text-warning";
     }
-    if (status === "completed") {
+    if (s === "completed") {
       return "bg-info/20 text-info";
     }
-    if (status === "cancelled") {
+    if (s === "cancelled") {
       return "bg-destructive/20 text-destructive";
     }
     return "bg-muted text-muted-foreground";
@@ -486,6 +488,14 @@ const CounselorAppointments = () => {
                       `Student #${String(apt.student_id || apt.id).slice(-4)}`;
                     const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
                     const isUpdating = String(activeActionId) === String(apt.id);
+                    const status = String(apt.status || "").toLowerCase();
+                    const videoWindow = !isPhysical
+                      ? getVideoCallWindowStatus(apt.scheduled_at, apt.duration_minutes)
+                      : null;
+                    const showVideoStart =
+                      !isPhysical &&
+                      (status === "confirmed" || status === "scheduled") &&
+                      Boolean(videoWindow?.canStart);
 
                     return (
                       <div
@@ -520,7 +530,7 @@ const CounselorAppointments = () => {
                           >
                             {apt.status}
                           </span>
-                          {(apt.status === "pending" || apt.status === "scheduled") && (
+                          {(status === "pending" || status === "scheduled") && (
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
@@ -542,7 +552,7 @@ const CounselorAppointments = () => {
                               </Button>
                             </div>
                           )}
-                          {(apt.status === "confirmed" || apt.status === "scheduled") && !isPhysical && (
+                          {showVideoStart && (
                             <Button size="sm" onClick={() => openSessionRoom(apt)}>
                               Start
                             </Button>

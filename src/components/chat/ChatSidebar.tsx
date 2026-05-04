@@ -26,6 +26,12 @@ interface ChatSidebarProps {
   onSearchChange: (val: string) => void;
   onSelectSession: (id: string) => void;
   onStartSession: (id: number, isAnon: boolean) => void;
+  /**
+   * Optional callback fired when a Recent Support row is clicked while its
+   * latest session is anonymous. Should ALWAYS open a brand-new anonymous
+   * chat session with the same counselor (do not resume the old one).
+   */
+  onStartFreshAnonymousSession?: (counselorId: number) => void;
   anonymousStartMode: boolean;
   onToggleAnonymous: (val: boolean) => void;
   counselorPage: number;
@@ -47,6 +53,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onSearchChange,
   onSelectSession,
   onStartSession,
+  onStartFreshAnonymousSession,
   anonymousStartMode,
   onToggleAnonymous,
   counselorPage,
@@ -71,6 +78,66 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
   };
+
+  // Deduplicate "Recent Support" so each counselor (regardless of whether
+  // they engaged as a professional counselor or peer counselor, or whether
+  // some sessions were anonymous) appears exactly once. The displayed row
+  // reflects that counselor's MOST RECENT session, and the "(Session N)"
+  // label reflects the total number of sessions the user has had with them.
+  const recentSupportRows = useMemo(() => {
+    if (!sessions || sessions.length === 0) return [];
+
+    type GroupRow = {
+      counselorId: number;
+      counselorName: string;
+      sessions: Session[];
+      latest: Session;
+    };
+
+    const groups = new Map<string, GroupRow>();
+
+    for (const session of sessions) {
+      const counselorId = Number(session.counselor_id || session.peer_counselor_id || 0);
+      const counselorName =
+        session.counselor?.profile?.full_name ||
+        session.peer_counselor?.profile?.full_name ||
+        "Counselor";
+      const groupKey = counselorId !== 0 ? `id:${counselorId}` : `name:${counselorName}`;
+
+      const existing = groups.get(groupKey);
+      if (!existing) {
+        groups.set(groupKey, {
+          counselorId,
+          counselorName,
+          sessions: [session],
+          latest: session,
+        });
+        continue;
+      }
+
+      existing.sessions.push(session);
+      const currentLatestTime = new Date(existing.latest.created_at).getTime();
+      const candidateTime = new Date(session.created_at).getTime();
+      if (Number.isFinite(candidateTime) && candidateTime > currentLatestTime) {
+        existing.latest = session;
+      }
+    }
+
+    const rows = Array.from(groups.values()).map((group) => ({
+      counselorId: group.counselorId,
+      session: group.latest,
+      totalSessions: group.sessions.length,
+    }));
+
+    // Most recently active counselors first.
+    rows.sort(
+      (a, b) =>
+        new Date(b.session.created_at).getTime() -
+        new Date(a.session.created_at).getTime()
+    );
+
+    return rows;
+  }, [sessions]);
 
   return (
     <div className="flex h-full w-full flex-col border-r border-border/50 bg-background">
@@ -119,71 +186,42 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="space-y-1">
-              {useMemo(() => {
-                if (!sessions || sessions.length === 0) return [];
-
-                // 1. Group sessions by counselor to identify multiple sessions
-                const sessionsByCounselor: Record<string, Session[]> = {};
-                sessions.forEach(s => {
-                  const counselorId = s.counselor_id || s.peer_counselor_id || 0;
-                  const counselorName = s.counselor?.profile?.full_name || s.peer_counselor?.profile?.full_name || "Counselor";
-                  const groupKey = counselorId !== 0 ? String(counselorId) : counselorName;
-                  
-                  if (!sessionsByCounselor[groupKey]) sessionsByCounselor[groupKey] = [];
-                  sessionsByCounselor[groupKey].push(s);
-                });
-
-                const finalSessionsList: (Session & { sessionLabel?: string })[] = [];
-
-                Object.values(sessionsByCounselor).forEach(group => {
-                  // Sort group by created_at ASC to identify duplicates and assign numbers
-                  const sortedGroup = [...group].sort((a, b) => 
-                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                  );
-
-                  // Keep only the latest for each "logical conversation" (same role and anon status)
-                  const seenLogicalKeys = new Set<string>();
-                  const keptInGroup: Session[] = [];
-                  
-                  // Process from newest to oldest for deduplication
-                  [...sortedGroup].reverse().forEach(s => {
-                    const logicalKey = `${s.assigned_role}-${s.is_anonymous ? 'anon' : 'clear'}`;
-                    if (!seenLogicalKeys.has(logicalKey)) {
-                      seenLogicalKeys.add(logicalKey);
-                      keptInGroup.push(s);
-                    }
-                  });
-
-                  // If multiple sessions remain for this counselor, assign them labels
-                  if (keptInGroup.length > 1) {
-                    // Sort by original creation time again for stable numbering
-                    const labeled = keptInGroup.sort((a, b) => 
-                      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                    );
-                    labeled.forEach((s, idx) => {
-                      finalSessionsList.push({ ...s, sessionLabel: `(Session ${idx + 1})` });
-                    });
-                  } else if (keptInGroup.length === 1) {
-                    finalSessionsList.push(keptInGroup[0]);
-                  }
-                });
-
-                // 2. Final sort by timestamp DESC (most recent first)
-                return finalSessionsList.sort((a, b) => 
-                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                );
-              }, [sessions]).map((session) => {
-                const name = session.counselor?.profile?.full_name || session.peer_counselor?.profile?.full_name || "Counselor";
+              {recentSupportRows.map(({ session, totalSessions, counselorId }) => {
+                const name =
+                  session.counselor?.profile?.full_name ||
+                  session.peer_counselor?.profile?.full_name ||
+                  "Counselor";
                 const isActive = activeSession?.id === session.id;
                 const isPeer = session.assigned_role === "peer_counselor";
+                const isAnon = Boolean(session.is_anonymous);
+
+                const handleRowClick = () => {
+                  // Anonymous rows must always open a brand-new chat session so
+                  // an old anonymous thread is never silently resumed (which
+                  // would re-link the student's previous anonymous identity to
+                  // the counselor for a longer window than expected).
+                  if (isAnon && counselorId > 0 && onStartFreshAnonymousSession) {
+                    onStartFreshAnonymousSession(counselorId);
+                    return;
+                  }
+                  if (isAnon && counselorId > 0) {
+                    // Fallback: if the parent didn't supply a fresh-start
+                    // callback, still avoid resuming the existing anonymous
+                    // thread by going through the regular start flow with
+                    // anonymity flagged on.
+                    onStartSession(counselorId, true);
+                    return;
+                  }
+                  onSelectSession(String(session.id));
+                };
 
                 return (
                   <button
-                    key={session.id}
-                    onClick={() => onSelectSession(String(session.id))}
+                    key={`recent-${counselorId || session.id}`}
+                    onClick={handleRowClick}
                     className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-colors group ${
-                      isActive 
-                        ? "bg-primary text-primary-foreground shadow-sm" 
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
                         : "hover:bg-secondary/50 text-foreground"
                     }`}
                   >
@@ -194,12 +232,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     </div>
                     <div className="flex-1 text-left min-w-0">
                       <p className="font-bold truncate text-sm">
-                        {name} {session.sessionLabel && <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">{session.sessionLabel}</span>}
+                        {name}
+                        <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">
+                          (Session {totalSessions})
+                        </span>
                       </p>
-                      <p className={`text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1`}>
+                      <p className="text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1">
                         {isPeer && <Users className="h-2.5 w-2.5" />}
                         {isPeer ? "Peer Support" : "Professional"}
-                        {session.is_anonymous ? " • Anon" : ""}
+                        {isAnon ? " \u2022 Anon" : ""}
                       </p>
                     </div>
                   </button>

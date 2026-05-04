@@ -12,6 +12,7 @@ import {
   Phone,
   Clock,
   Users,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -33,6 +34,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 const moodOptions = [
@@ -184,7 +186,7 @@ const StudentDashboard = () => {
     setIsPanicLoading(true);
     try {
       let location: string | undefined;
-      
+
       // Try to get location
       if (navigator.geolocation) {
         try {
@@ -200,13 +202,34 @@ const StudentDashboard = () => {
         }
       }
 
-      await api.createPanicLog({ location });
-      toast.success("Emergency alert sent! A counselor will contact you shortly.");
+      const response = await api.createPanicLog({ location });
+      const recipientsNotified = Number(
+        (response as { recipients_notified?: unknown })?.recipients_notified
+      );
+      const alertsEnabled = Boolean(
+        (response as { alerts_enabled?: unknown })?.alerts_enabled ?? true
+      );
+
+      if (!alertsEnabled) {
+        toast.warning(
+          "Your emergency alert was logged, but server-side panic alerts are currently disabled. Please call the 24/7 hotline now."
+        );
+      } else if (Number.isFinite(recipientsNotified) && recipientsNotified === 0) {
+        toast.warning(
+          "Alert logged, but no on-call counselors were reachable. Please call the 24/7 hotline immediately."
+        );
+      } else if (Number.isFinite(recipientsNotified) && recipientsNotified > 0) {
+        toast.success(
+          `Emergency alert sent to ${recipientsNotified} responder${recipientsNotified === 1 ? "" : "s"}. They will contact you shortly.`
+        );
+      } else {
+        toast.success("Emergency alert sent! A counselor will contact you shortly.");
+      }
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error('Panic button error:', error);
       }
-      toast.error(getApiErrorMessage(error, "Failed to send emergency alert. Please try again."));
+      toast.error(getApiErrorMessage(error, "Failed to send emergency alert. Please call the hotline directly."));
     } finally {
       setIsPanicLoading(false);
     }

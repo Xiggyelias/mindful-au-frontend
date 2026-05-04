@@ -24,6 +24,11 @@ const StudentAISupport = lazyWithRetry(() => import("./pages/student/StudentAISu
 const StudentVideoCall = lazyWithRetry(() => import("./pages/student/StudentVideoCall"));
 const StudentHistory = lazyWithRetry(() => import("./pages/student/StudentHistory"));
 const StudentWellness = lazyWithRetry(() => import("./pages/student/StudentWellness"));
+const StudentDiagnosticAssessment = lazyWithRetry(() => import("./pages/student/StudentDiagnosticAssessment"));
+// Dev-only OpenRouter chat tester. Tree-shaken out of production builds.
+const ChatTestPage = import.meta.env.DEV
+  ? lazyWithRetry(() => import("./pages/ChatTestPage").then((mod) => ({ default: mod.ChatTestPage })))
+  : null;
 
 const CounselorLogin = lazyWithRetry(() => import("./pages/counselor/CounselorLogin"));
 const CounselorRegister = lazyWithRetry(() => import("./pages/counselor/CounselorRegister"));
@@ -146,6 +151,14 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
                       <StudentWellness />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/student/diagnostic-assessment"
+                  element={
+                    <ProtectedRoute allowedRoles={["student"]} redirectTo="/student/login">
+                      <StudentDiagnosticAssessment />
                     </ProtectedRoute>
                   }
                 />
@@ -336,6 +349,9 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {import.meta.env.DEV && ChatTestPage && (
+                  <Route path="/chat-test" element={<ChatTestPage />} />
+                )}
                 <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>

@@ -66,8 +66,21 @@ const AdminStudents = () => {
         api.getStudents(),
         api.getAIDiagnostics().catch(() => []),
       ]);
-      setStudents(Array.isArray(studentData) ? studentData : []);
-      setDiagnostics(Array.isArray(diagnosticData) ? diagnosticData : []);
+
+      const studentList = Array.isArray(studentData)
+        ? studentData
+        : Array.isArray((studentData as any)?.data)
+        ? (studentData as any).data
+        : [];
+
+      const diagnosticList = Array.isArray(diagnosticData)
+        ? diagnosticData
+        : Array.isArray((diagnosticData as any)?.data)
+        ? (diagnosticData as any).data
+        : [];
+
+      setStudents(studentList);
+      setDiagnostics(diagnosticList);
     } catch (error: any) {
       const message = error?.response?.data?.message || "Failed to load students";
       toast.error(message);

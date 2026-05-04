@@ -12,9 +12,9 @@ import {
   CheckCircle2,
   Trash2,
   Search,
-  Plus,
+  Mic,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,29 +40,139 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
 ];
 
+type ApiStudent = {
+  profile?: { full_name?: string };
+  email?: string;
+};
+
+type ApiSessionBlob = Record<string, unknown> & {
+  id?: unknown;
+  student_id?: unknown;
+  student?: ApiStudent;
+  is_anonymous?: unknown;
+  anonymous_id?: string | null;
+  anonymous_display_id?: string | null;
+  notes?: unknown;
+  session_type?: unknown;
+  status?: unknown;
+  current_risk_level?: unknown;
+  updated_at?: unknown;
+  started_at?: unknown;
+  ended_at?: unknown;
+  created_at?: unknown;
+};
+
+type CounselorSessionNoteRow = {
+  id: string;
+  studentLabel: string;
+  notes: string;
+  sessionType: string;
+  status: string;
+  riskLevel: string;
+  updatedAtIso: string;
+  sessionTimingLabel: string;
+  hasClinicalNote: boolean;
+};
+
+function extractSessionsPayload(data: unknown): ApiSessionBlob[] {
+  if (Array.isArray(data)) return data as ApiSessionBlob[];
+  if (data && typeof data === "object" && Array.isArray((data as { data?: unknown }).data)) {
+    return (data as { data: ApiSessionBlob[] }).data;
+  }
+  return [];
+}
+
+function coerceString(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function formatSessionTimestamp(value: unknown): string {
+  const raw = coerceString(value);
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return format(d, "MMM d, yyyy • h:mm a");
+}
+
+function formatRelativeUpdated(value: unknown): string {
+  const raw = coerceString(value);
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return formatDistanceToNow(d, { addSuffix: true });
+}
+
+function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
+  const id = String(s.id ?? "");
+  const student = s.student;
+  const isAnon =
+    s.is_anonymous === true || s.is_anonymous === 1 || s.is_anonymous === "1";
+
+  let studentLabel = "Student";
+  if (isAnon) {
+    const tag = coerceString(s.anonymous_display_id || s.anonymous_id).trim();
+    studentLabel = tag ? `Anonymous (${tag})` : "Anonymous student";
+  } else {
+    studentLabel =
+      student?.profile?.full_name?.trim() ||
+      student?.email?.split("@")[0]?.trim() ||
+      (s.student_id != null ? `Student #${s.student_id}` : "Student");
+  }
+
+  const rawNotes =
+    typeof s.notes === "string" ? s.notes : s.notes == null ? "" : coerceString(s.notes);
+  const trimmedNotes = rawNotes.trim();
+  const sessionTypeRaw = coerceString(s.session_type || "chat").toLowerCase() || "chat";
+  const risk = coerceString(s.current_risk_level || "low").toLowerCase() || "low";
+  const status = coerceString(s.status || "unknown").toLowerCase();
+
+  const whenSource = s.started_at || s.created_at;
+  const timing =
+    coerceString(whenSource) !== ""
+      ? formatSessionTimestamp(whenSource)
+      : `${formatSessionTimestamp(s.created_at)} · not started`;
+
+  const updatedIso = coerceString(s.updated_at) || coerceString(s.created_at) || "";
+
+  return {
+    id,
+    studentLabel,
+    notes: rawNotes,
+    sessionType: sessionTypeRaw,
+    status,
+    riskLevel: risk,
+    updatedAtIso: updatedIso,
+    sessionTimingLabel: timing,
+    hasClinicalNote: trimmedNotes.length > 0,
+  };
+}
+
 const CounselorNotes = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<CounselorSessionNoteRow[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  
-  // Note content state
   const [noteText, setNoteText] = useState("");
-  const [sessionDate, setSessionDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
+  const canEditNotes = role === "counselor";
 
   const loadSessions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await api.getSessions({ limit: 300 });
-      setSessions(data);
+      const payload = await api.getSessions({ limit: 300 });
+      const raw = extractSessionsPayload(payload)
+        .map(sessionRowFromApi)
+        .filter((row) => row.id !== "");
+      setSessions(raw);
     } catch {
       toast.error("Failed to load sessions");
+      setSessions([]);
     } finally {
       setIsLoading(false);
     }
@@ -72,36 +183,44 @@ const CounselorNotes = () => {
   }, [loadSessions]);
 
   const selectedSession = useMemo(
-    () => sessions.find((s) => s.id === selectedSessionId),
+    () => sessions.find((s) => s.id === selectedSessionId) ?? null,
     [sessions, selectedSessionId]
   );
 
   useEffect(() => {
     if (selectedSession) {
-      setNoteText(selectedSession.noteText || "");
-      setSessionDate(
-        selectedSession.sessionDate 
-          ? format(new Date(selectedSession.sessionDate), "yyyy-MM-dd") 
-          : format(new Date(), "yyyy-MM-dd")
-      );
+      setNoteText(selectedSession.notes || "");
     } else {
       setNoteText("");
-      setSessionDate(format(new Date(), "yyyy-MM-dd"));
     }
   }, [selectedSession]);
 
   const filteredSessions = useMemo(() => {
-    return sessions.filter((s) =>
-      s.studentName?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sessions;
+
+    return sessions.filter((row) => {
+      const haystack = `${row.studentLabel} ${row.notes} ${row.id} ${row.status} ${row.sessionType}`.toLowerCase();
+      return haystack.includes(q);
+    });
   }, [sessions, searchQuery]);
 
-  const saveNote = async (status: "draft" | "final") => {
-    if (!selectedSessionId) return;
+  const saveNote = async () => {
+    if (!selectedSessionId || !canEditNotes) return;
+    const trimmed = noteText.trim();
+    if (trimmed === "") {
+      toast.error("Notes cannot be empty.");
+      return;
+    }
+    if (trimmed.length > 5000) {
+      toast.error("Notes must be 5000 characters or less.");
+      return;
+    }
+
     try {
       setIsSaving(true);
-      await api.updateSessionNote(selectedSessionId, noteText);
-      toast.success(status === "final" ? "Note saved successfully" : "Draft saved");
+      await api.updateSessionNote(selectedSessionId, trimmed);
+      toast.success("Note saved");
       await loadSessions();
     } catch {
       toast.error("Failed to save note");
@@ -111,7 +230,8 @@ const CounselorNotes = () => {
   };
 
   const deleteNote = async (sessionId: string) => {
-    if (!confirm("Are you sure you want to delete this note?")) return;
+    if (!canEditNotes) return;
+    if (!confirm("Clear this session’s clinical notes?")) return;
     try {
       setIsDeleting(true);
       await api.deleteSessionNote(sessionId);
@@ -133,12 +253,6 @@ const CounselorNotes = () => {
     setNoteText((prev) => (prev ? prev + "\n\n" + templates[type] : templates[type]));
   };
 
-  const handleNewNote = () => {
-    setSelectedSessionId(null);
-    setNoteText("");
-    setSessionDate(format(new Date(), "yyyy-MM-dd"));
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -155,32 +269,50 @@ const CounselorNotes = () => {
         <main className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="space-y-1">
-              <h2 className="text-2xl font-bold tracking-tight">Clinical Workspace</h2>
-              <p className="text-sm text-muted-foreground">Review sessions, analyze insights, and document outcomes.</p>
+              <h2 className="text-2xl font-bold tracking-tight">Session notes</h2>
+              <p className="text-sm text-muted-foreground">
+                Read and edit encrypted clinical notes tied to each counseling session (same field as Messages / video
+                session metadata).
+              </p>
             </div>
             <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
+              <div className="relative flex-1 md:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search sessions..."
+                  placeholder="Search by student, note text, or session ID…"
                   className="pl-9 bg-background/50 border-border/40 focus:bg-background transition-all"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button variant="hero" className="gap-2 shadow-lg shadow-primary/20" onClick={handleNewNote}>
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New Note</span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isLoading}
+                className="shrink-0"
+                onClick={() => void loadSessions()}
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
               </Button>
             </div>
           </div>
 
+          {!canEditNotes ? (
+            <Alert>
+              <AlertTitle>View only</AlertTitle>
+              <AlertDescription>
+                {role === "admin"
+                  ? "Administrators can review session metadata here; only the assigned counselor can add or change clinical notes (API policy)."
+                  : "Only assigned counselors can edit session notes. If you are a peer counselor, open the session in Messages for context—note edits are limited to the lead counselor."}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* LEFT PANE: Session List */}
             <div className="xl:col-span-3 space-y-4">
               <Card variant="glass" className="border-border/40 overflow-hidden">
                 <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                       Sessions
                     </CardTitle>
@@ -194,59 +326,73 @@ const CounselorNotes = () => {
                     {isLoading ? (
                       <div className="p-8 text-center space-y-3">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                        <p className="text-xs text-muted-foreground">Loading session index...</p>
+                        <p className="text-xs text-muted-foreground">Loading sessions…</p>
                       </div>
                     ) : filteredSessions.length === 0 ? (
                       <div className="p-8 text-center text-muted-foreground">
-                        <p className="text-sm">No sessions found.</p>
+                        <p className="text-sm">
+                          {sessions.length === 0 ? "No sessions yet." : "No sessions match your search."}
+                        </p>
                       </div>
                     ) : (
-                      filteredSessions.map((session) => (
+                      filteredSessions.map((row) => (
                         <button
-                          key={session.id}
+                          key={row.id}
                           type="button"
                           className={cn(
                             "w-full text-left p-3 rounded-xl transition-all group relative overflow-hidden",
-                            selectedSessionId === session.id
+                            selectedSessionId === row.id
                               ? "bg-primary/10 border border-primary/20"
                               : "hover:bg-secondary/40 border border-transparent"
                           )}
-                          onClick={() => setSelectedSessionId(session.id)}
+                          onClick={() => setSelectedSessionId(row.id)}
                         >
                           <div className="flex justify-between items-start mb-1 gap-2">
                             <span className="font-semibold text-sm truncate text-foreground group-hover:text-primary transition-colors">
-                              {session.studentName}
+                              {row.studentLabel}
                             </span>
-                            <Badge 
-                              className={cn(
-                                "text-[10px] px-1.5 py-0 uppercase font-bold",
-                                session.riskLevel === "critical" ? "bg-destructive/20 text-destructive border-destructive/20" :
-                                session.riskLevel === "high" ? "bg-orange-500/20 text-orange-500 border-orange-500/20" :
-                                "bg-emerald-500/20 text-emerald-500 border-emerald-500/20"
-                              )}
-                            >
-                              {session.riskLevel || "low"}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {format(new Date(session.updatedAt), "MMM d")}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {session.sessionType === "physical" ? (
-                                <Users className="h-3 w-3 text-emerald-500" />
-                              ) : session.sessionType === "chat" ? (
-                                <MessageSquare className="h-3 w-3 text-blue-500" />
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              <Badge variant="outline" className="text-[9px] px-1.5 uppercase">
+                                {row.status}
+                              </Badge>
+                              {row.hasClinicalNote ? (
+                                <span className="text-[10px] text-success font-medium">Has note</span>
                               ) : (
-                                <Video className="h-3 w-3 text-purple-500" />
+                                <span className="text-[10px] text-muted-foreground">No clinical note</span>
                               )}
-                              <span className="capitalize">{session.sessionType}</span>
                             </div>
                           </div>
-                          {selectedSessionId === session.id && (
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Calendar className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{formatRelativeUpdated(row.updatedAtIso)}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {row.sessionType === "video" ? (
+                                <Video className="h-3 w-3 text-purple-500" />
+                              ) : row.sessionType === "voice" ? (
+                                <Mic className="h-3 w-3 text-amber-500" />
+                              ) : (
+                                <MessageSquare className="h-3 w-3 text-blue-500" />
+                              )}
+                              <span className="capitalize">{row.sessionType}</span>
+                            </div>
+                          </div>
+                          <Badge
+                            className={cn(
+                              "mt-2 text-[10px] px-1.5 py-0 uppercase font-bold w-fit border",
+                              row.riskLevel === "critical"
+                                ? "bg-destructive/20 text-destructive border-destructive/20"
+                                : row.riskLevel === "high"
+                                  ? "bg-orange-500/20 text-orange-500 border-orange-500/20"
+                                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            )}
+                          >
+                            Risk: {row.riskLevel || "low"}
+                          </Badge>
+                          {selectedSessionId === row.id ? (
                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                          )}
+                          ) : null}
                         </button>
                       ))
                     )}
@@ -255,20 +401,17 @@ const CounselorNotes = () => {
               </Card>
             </div>
 
-            {/* MIDDLE PANE: Editor */}
             <div className="xl:col-span-9 space-y-4">
               <Card variant="glass" className="border-border/40 shadow-xl">
                 <CardHeader className="pb-3 border-b border-border/20">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <FileText className="h-5 w-5 text-primary" />
-                      Note Editor
+                      Note editor
                     </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="bg-background/80">
-                        ID #{selectedSessionId || "---"}
-                      </Badge>
-                    </div>
+                    <Badge variant="secondary" className="bg-background/80 w-fit">
+                      Session #{selectedSessionId ?? "—"}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-5">
@@ -278,71 +421,119 @@ const CounselorNotes = () => {
                         <FileText className="h-8 w-8 text-primary/40" />
                       </div>
                       <div className="space-y-1">
-                        <p className="font-medium text-foreground">No session selected</p>
-                        <p className="text-sm text-muted-foreground">Select a session from the list to start documenting.</p>
+                        <p className="font-medium text-foreground">Select a session</p>
+                        <p className="text-sm text-muted-foreground">
+                          Choose a row on the left. Notes save to the counseling session record (visible here and in chat
+                          context where your role allows).
+                        </p>
                       </div>
                     </div>
-                  ) : (
+                  ) : selectedSession ? (
                     <>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Session Date</label>
-                          <Input 
-                            value={sessionDate} 
-                            type="date" 
-                            onChange={(e) => setSessionDate(e.target.value)} 
-                            className="bg-background/50 border-border/40 h-10"
-                          />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                        <div className="rounded-lg border border-border/40 bg-secondary/10 p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Student</p>
+                          <p className="font-medium text-foreground">{selectedSession.studentLabel}</p>
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Templates</label>
-                          <div className="flex gap-1">
-                            <Button variant="outline" size="sm" className="h-10 flex-1 text-[10px] uppercase font-bold tracking-tight" onClick={() => insertTemplate("soap")}>SOAP</Button>
-                            <Button variant="outline" size="sm" className="h-10 flex-1 text-[10px] uppercase font-bold tracking-tight" onClick={() => insertTemplate("dap")}>DAP</Button>
-                            <Button variant="outline" size="sm" className="h-10 flex-1 text-[10px] uppercase font-bold tracking-tight" onClick={() => insertTemplate("basic")}>Basic</Button>
-                          </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/10 p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Timing</p>
+                          <p className="font-medium text-foreground">{selectedSession.sessionTimingLabel}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Last activity {formatRelativeUpdated(selectedSession.updatedAtIso)}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="space-y-1.5 relative">
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Clinical Observations & Plan</label>
-                        <Textarea
-                          placeholder="Document your observations, assessment, and care plan here..."
-                          className="min-h-[550px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-none p-4"
-                          value={noteText}
-                          onChange={(e) => setNoteText(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="flex gap-3 pt-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button
-                          variant="hero"
-                          className="flex-1 shadow-lg shadow-primary/20 h-12"
-                          onClick={() => void saveNote("final")}
-                          disabled={isSaving || isDeleting}
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="text-[10px] uppercase font-bold tracking-tight"
+                          disabled={!canEditNotes}
+                          onClick={() => insertTemplate("soap")}
                         >
-                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                          Save Note
+                          SOAP
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-12 px-6"
-                          onClick={() => void saveNote("draft")}
-                          disabled={isSaving || isDeleting}
+                          size="sm"
+                          type="button"
+                          className="text-[10px] uppercase font-bold tracking-tight"
+                          disabled={!canEditNotes}
+                          onClick={() => insertTemplate("dap")}
                         >
-                          Save Draft
+                          DAP
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="text-[10px] uppercase font-bold tracking-tight"
+                          disabled={!canEditNotes}
+                          onClick={() => insertTemplate("basic")}
+                        >
+                          Basic
+                        </Button>
+                      </div>
+
+                      <div className="space-y-1.5 relative">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between gap-2">
+                          <span>Clinical notes</span>
+                          <span className="font-normal text-muted-foreground">
+                            {noteText.length} / 5000
+                          </span>
+                        </label>
+                        <Textarea
+                          placeholder="SOAP, interventions, safety planning, referrals…"
+                          className="min-h-[420px] sm:min-h-[520px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-y p-4"
+                          value={noteText}
+                          disabled={!canEditNotes}
+                          onChange={(e) => setNoteText(e.target.value)}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Backend stores this in the session <code className="text-xs">notes</code> field. System lines
+                          like &quot;Video appointment #123&quot; are still notes—add your clinical summary below them or
+                          replace when appropriate.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                        <Button
+                          variant="hero"
+                          type="button"
+                          className="flex-1 sm:flex-none shadow-lg shadow-primary/20 h-12 sm:min-w-[200px]"
+                          onClick={() => void saveNote()}
+                          disabled={
+                            !canEditNotes || isSaving || isDeleting || selectedSession.status === "cancelled"
+                          }
+                        >
+                          {isSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                          )}
+                          Save note
                         </Button>
                         <Button
                           variant="destructive"
                           size="icon"
-                          className="h-12 w-12 shrink-0 shadow-lg shadow-destructive/20"
+                          type="button"
+                          className="h-12 w-12 shrink-0 shadow-lg shadow-destructive/20 sm:ml-auto"
                           onClick={() => selectedSessionId && void deleteNote(selectedSessionId)}
-                          disabled={selectedSession?.noteText.trim() === "" || isSaving || isDeleting}
+                          disabled={
+                            !canEditNotes ||
+                            selectedSession.notes.trim() === "" ||
+                            isSaving ||
+                            isDeleting
+                          }
                         >
                           <Trash2 className="h-5 w-5" />
                         </Button>
                       </div>
                     </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-12 text-center">Session could not be loaded.</p>
                   )}
                 </CardContent>
               </Card>

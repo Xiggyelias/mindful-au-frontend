@@ -62,20 +62,40 @@ const normalizeNotificationPayload = (value: unknown): NotificationsState => {
     };
   }
 
-  if (isRecord(value) && Array.isArray(value.notifications)) {
-    const notifications = value.notifications
-      .map((item) => normalizeNotification(item))
-      .filter((item): item is AppNotification => item !== null);
+  if (isRecord(value)) {
+    // Non-paginated branch: { notifications, unread_count }
+    if (Array.isArray(value.notifications)) {
+      const notifications = value.notifications
+        .map((item) => normalizeNotification(item))
+        .filter((item): item is AppNotification => item !== null);
 
-    const unreadCountRaw = Number(value.unread_count);
-    const unreadCount = Number.isFinite(unreadCountRaw)
-      ? unreadCountRaw
-      : notifications.filter((notification) => !notification.read).length;
+      const unreadCountRaw = Number(value.unread_count);
+      const unreadCount = Number.isFinite(unreadCountRaw)
+        ? unreadCountRaw
+        : notifications.filter((notification) => !notification.read).length;
 
-    return {
-      notifications,
-      unreadCount,
-    };
+      return {
+        notifications,
+        unreadCount,
+      };
+    }
+
+    // Paginated branch (PaginationPayload): { data: [...], meta: {...}, unread_count }
+    if (Array.isArray(value.data)) {
+      const notifications = value.data
+        .map((item) => normalizeNotification(item))
+        .filter((item): item is AppNotification => item !== null);
+
+      const unreadCountRaw = Number(value.unread_count);
+      const unreadCount = Number.isFinite(unreadCountRaw)
+        ? unreadCountRaw
+        : notifications.filter((notification) => !notification.read).length;
+
+      return {
+        notifications,
+        unreadCount,
+      };
+    }
   }
 
   return { notifications: [], unreadCount: 0 };
@@ -139,9 +159,38 @@ export const useNotifications = () => {
           );
           if (hasPrimedNotificationCacheRef.current && newUnreadNotifications.length > 0) {
             newUnreadNotifications.slice(0, 3).forEach((notification) => {
-              toast(notification.title, {
-                description: notification.message,
-              });
+              if (notification.type === "panic") {
+                // Panic notifications are surfaced with an error-style toast,
+                // a long duration, and optional vibration so responders cannot
+                // miss them.
+                toast.error(notification.title, {
+                  description: notification.message,
+                  duration: 30000,
+                });
+                if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+                  try {
+                    navigator.vibrate([200, 100, 200, 100, 200]);
+                  } catch {
+                    // Vibration is best-effort; ignore platform errors.
+                  }
+                }
+              } else if (notification.type === "error") {
+                toast.error(notification.title, {
+                  description: notification.message,
+                });
+              } else if (notification.type === "warning") {
+                toast.warning(notification.title, {
+                  description: notification.message,
+                });
+              } else if (notification.type === "success") {
+                toast.success(notification.title, {
+                  description: notification.message,
+                });
+              } else {
+                toast(notification.title, {
+                  description: notification.message,
+                });
+              }
             });
           }
 

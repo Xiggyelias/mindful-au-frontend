@@ -13,6 +13,7 @@ import {
   History,
   Heart,
   Menu,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -37,6 +38,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 // Note: Using placeholders for nav icons to keep this file cleaner, 
@@ -340,8 +342,44 @@ const StudentChat = () => {
     if (!window.confirm("Trigger emergency alert? Our crisis team will be notified immediately.")) return;
     try {
       setIsTriggeringEmergency(true);
-      await api.triggerEmergencyAlert();
-      toast.success("Emergency alert triggered. Please stay on the line.");
+
+      let location: string | undefined;
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+          });
+          location = `${position.coords.latitude}, ${position.coords.longitude}`;
+        } catch {
+          // Location is optional; proceed without it.
+        }
+      }
+
+      if (sessionId) {
+        // Active conversation: escalate to counselors and mark this session as panic.
+        await api.panicEscalateSession(sessionId, {
+          reason: "Student-triggered emergency from active chat",
+          location,
+        });
+        toast.success("Emergency alert sent to your counselor and the crisis team. Please stay on the line.");
+      } else {
+        // No active session: log a generic panic alert for the crisis team.
+        const response = await api.createPanicLog({ location });
+        const recipientsNotified = Number(
+          (response as { recipients_notified?: unknown })?.recipients_notified
+        );
+        if (Number.isFinite(recipientsNotified) && recipientsNotified === 0) {
+          toast.warning(
+            "Alert logged, but no on-call responders were reachable. Please call the hotline now."
+          );
+        } else if (Number.isFinite(recipientsNotified) && recipientsNotified > 0) {
+          toast.success(
+            `Emergency alert sent to ${recipientsNotified} responder${recipientsNotified === 1 ? "" : "s"}. Please stay on the line.`
+          );
+        } else {
+          toast.success("Emergency alert triggered. Please stay on the line.");
+        }
+      }
     } catch {
       toast.error("Failed to trigger alert. Please call emergency services directly.");
     } finally {
@@ -360,6 +398,12 @@ const StudentChat = () => {
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
     void startSessionWithCounselor(id, { isAnonymous: isAnon });
+  }, [startSessionWithCounselor]);
+
+  const handleStartFreshAnonymousSession = useCallback((counselorId: number) => {
+    // Always force a brand-new anonymous session here so the anonymity
+    // contract is preserved (no silent reuse of an old anonymous thread).
+    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true });
   }, [startSessionWithCounselor]);
 
   const handleDeleteMessageWrapper = useCallback(async (id: number) => {
@@ -420,6 +464,7 @@ const StudentChat = () => {
                 onSearchChange={setSearchQuery}
                 onSelectSession={handleSelectSessionById}
                 onStartSession={handleStartSessionWrapper}
+                onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                 anonymousStartMode={anonymousStartMode}
                 onToggleAnonymous={setAnonymousStartMode}
                 counselorPage={counselorPage}
@@ -603,6 +648,7 @@ const StudentChat = () => {
                     onSearchChange={setSearchQuery}
                     onSelectSession={handleSelectSessionById}
                     onStartSession={handleStartSessionWrapper}
+                    onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                     anonymousStartMode={anonymousStartMode}
                     onToggleAnonymous={setAnonymousStartMode}
                     counselorPage={counselorPage}

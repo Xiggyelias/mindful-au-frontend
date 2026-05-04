@@ -150,7 +150,8 @@ const CounselorVideo = () => {
         .filter((apt: Appointment) => {
           if (!apt?.scheduled_at) return false;
           if (!isVideoEnabledAppointment(apt.notes)) return false;
-          if (!(apt.status === "scheduled" || apt.status === "confirmed")) return false;
+          const st = String(apt.status || "").toLowerCase();
+          if (!(st === "scheduled" || st === "confirmed")) return false;
           const callWindow = getVideoCallWindowStatus(
             apt.scheduled_at,
             apt.duration_minutes
@@ -301,17 +302,22 @@ const CounselorVideo = () => {
   }, []);
 
   const finalizeEndedSession = useCallback(
-    async (sessionIdToEnd: string) => {
+    async (appointmentIdToEnd: string) => {
       try {
-        const result = await api.endVideoCall(sessionIdToEnd);
-        if (result?.appointment_status === "completed") {
-          removeSessionFromQueue(sessionIdToEnd);
+        const result = await api.endVideoCall(appointmentIdToEnd);
+        if (
+          result?.appointment_status === "completed" ||
+          result?.status === "completed"
+        ) {
+          removeSessionFromQueue(appointmentIdToEnd);
         }
       } catch {
         // Best effort: the local call has already been closed.
+      } finally {
+        void loadSessions();
       }
     },
-    [removeSessionFromQueue]
+    [loadSessions, removeSessionFromQueue]
   );
 
   const handleEndCall = async () => {

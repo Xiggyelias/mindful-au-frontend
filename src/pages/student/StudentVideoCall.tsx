@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bot,
   Calendar,
+  ClipboardCheck,
   Clock,
   Heart,
   History,
@@ -48,6 +49,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 type CallMode = "video" | "audio";
@@ -152,73 +154,77 @@ const StudentVideoCall = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const loadAppointments = async () => {
-      try {
-        setIsLoading(true);
-        const appointments = await api.getAppointments();
-        const availableNow = appointments
-          .filter((appointment: Appointment) => {
-            if (!appointment.scheduled_at) return false;
-            if (!isVideoEnabledAppointment(appointment.notes)) return false;
-            if (!(appointment.status === "scheduled" || appointment.status === "confirmed")) {
-              return false;
-            }
+  const loadUpcomingVideoAppointments = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
-            const callWindow = getVideoCallWindowStatus(
-              appointment.scheduled_at,
-              appointment.duration_minutes
-            );
-
-            return !callWindow.isExpired;
-          })
-          .sort(
-            (left: Appointment, right: Appointment) =>
-              new Date(left.scheduled_at).getTime() - new Date(right.scheduled_at).getTime()
-          )
-          .slice(0, 5);
-
-        setUpcomingAppointments(availableNow);
-        if (availableNow.length === 0) {
-          setActiveAppointmentId(null);
-          return;
-        }
-
-        const matchingRequestedAppointment =
-          requestedAppointmentId !== null
-            ? availableNow.find((appointment: Appointment) => Number(appointment.id) === requestedAppointmentId)
-            : null;
-        const matchingRequestedCounselor =
-          requestedCounselorId !== null
-            ? availableNow.find((appointment: Appointment) => Number(appointment.counselor_id) === requestedCounselorId)
-            : null;
-
-        setActiveAppointmentId((previous) => {
-          if (previous && availableNow.some((appointment: Appointment) => String(appointment.id) === previous)) {
-            return previous;
+    try {
+      setIsLoading(true);
+      const appointments = await api.getAppointments();
+      const availableNow = appointments
+        .filter((appointment: Appointment) => {
+          if (!appointment.scheduled_at) return false;
+          if (!isVideoEnabledAppointment(appointment.notes)) return false;
+          const st = String(appointment.status || "").toLowerCase();
+          if (!(st === "scheduled" || st === "confirmed")) {
+            return false;
           }
-          if (matchingRequestedAppointment) {
-            return String(matchingRequestedAppointment.id);
-          }
-          if (matchingRequestedCounselor) {
-            return String(matchingRequestedCounselor.id);
-          }
-          return String(availableNow[0].id);
-        });
-      } catch (loadError: unknown) {
-        if (import.meta.env.DEV) {
-          console.error("Failed to load appointments:", loadError);
-        }
-        toast.error(getApiErrorMessage(loadError, "Failed to load upcoming appointments"));
-      } finally {
-        setIsLoading(false);
+
+          const callWindow = getVideoCallWindowStatus(
+            appointment.scheduled_at,
+            appointment.duration_minutes
+          );
+
+          return !callWindow.isExpired;
+        })
+        .sort(
+          (left: Appointment, right: Appointment) =>
+            new Date(left.scheduled_at).getTime() - new Date(right.scheduled_at).getTime()
+        )
+        .slice(0, 5);
+
+      setUpcomingAppointments(availableNow);
+      if (availableNow.length === 0) {
+        setActiveAppointmentId(null);
+        return;
       }
-    };
 
-    if (user) {
-      void loadAppointments();
+      const matchingRequestedAppointment =
+        requestedAppointmentId !== null
+          ? availableNow.find((appointment: Appointment) => Number(appointment.id) === requestedAppointmentId)
+          : null;
+      const matchingRequestedCounselor =
+        requestedCounselorId !== null
+          ? availableNow.find((appointment: Appointment) => Number(appointment.counselor_id) === requestedCounselorId)
+          : null;
+
+      setActiveAppointmentId((previous) => {
+        if (previous && availableNow.some((appointment: Appointment) => String(appointment.id) === previous)) {
+          return previous;
+        }
+        if (matchingRequestedAppointment) {
+          return String(matchingRequestedAppointment.id);
+        }
+        if (matchingRequestedCounselor) {
+          return String(matchingRequestedCounselor.id);
+        }
+        return String(availableNow[0].id);
+      });
+    } catch (loadError: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to load appointments:", loadError);
+      }
+      toast.error(getApiErrorMessage(loadError, "Failed to load upcoming appointments"));
+    } finally {
+      setIsLoading(false);
     }
   }, [requestedAppointmentId, requestedCounselorId, user]);
+
+  useEffect(() => {
+    void loadUpcomingVideoAppointments();
+  }, [loadUpcomingVideoAppointments]);
 
   const activeAppointment = useMemo(
     () => upcomingAppointments.find((appointment) => String(appointment.id) === activeAppointmentId),
@@ -427,14 +433,19 @@ const StudentVideoCall = () => {
     async (appointmentIdToEnd: string) => {
       try {
         const result = await api.endVideoCall(appointmentIdToEnd);
-        if (result?.appointment_status === "completed") {
+        if (
+          result?.appointment_status === "completed" ||
+          result?.status === "completed"
+        ) {
           removeAppointmentFromQueue(appointmentIdToEnd);
         }
       } catch {
         // Best-effort cleanup for the server-side session.
+      } finally {
+        void loadUpcomingVideoAppointments();
       }
     },
-    [removeAppointmentFromQueue]
+    [loadUpcomingVideoAppointments, removeAppointmentFromQueue]
   );
 
   const beginCall = useCallback(

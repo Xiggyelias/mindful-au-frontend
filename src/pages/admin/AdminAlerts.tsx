@@ -72,10 +72,18 @@ const AdminAlerts = () => {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const [panicLogs, diagnostics] = await Promise.all([
+      const [panicLogs, diagnosticsResponse] = await Promise.all([
         api.getPanicLogs(),
         api.getAIDiagnostics().catch(() => []),
       ]);
+
+      // Backend returns either an array (non-paginated) or a PaginationPayload
+      // ({ data, meta }) when page/per_page are passed. Normalize both shapes.
+      const diagnostics: any[] = Array.isArray(diagnosticsResponse)
+        ? diagnosticsResponse
+        : Array.isArray((diagnosticsResponse as any)?.data)
+        ? (diagnosticsResponse as any).data
+        : [];
 
       const mappedPanic: PanicAlert[] = (panicLogs || []).map((log: any) => {
         const studentName = log.student?.profile?.full_name || `Student #${log.student_id ?? "N/A"}`;
@@ -94,7 +102,7 @@ const AdminAlerts = () => {
       });
 
       const latestRiskByStudent = new Map<string, any>();
-      for (const diagnostic of diagnostics || []) {
+      for (const diagnostic of diagnostics) {
         const level = String(diagnostic?.risk_level || "").toLowerCase();
         if (level !== "high" && level !== "critical") continue;
 
@@ -139,9 +147,36 @@ const AdminAlerts = () => {
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+
+    void loadAlerts();
+
+    // Live refresh: panic alerts must surface promptly. Poll every 15s while
+    // the tab is visible. NotificationCreated events broadcast in real-time
+    // for individual user toasts; this poll keeps the list in sync regardless
+    // of broadcaster availability.
+    const intervalId = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       void loadAlerts();
+    }, 15000);
+
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadAlerts();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
     }
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [user, loadAlerts]);
 
   const allAlerts = useMemo<AlertItem[]>(() => {

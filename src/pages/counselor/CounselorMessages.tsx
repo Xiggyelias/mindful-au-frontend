@@ -210,6 +210,7 @@ const CounselorMessages = () => {
   const [chatTotalPages, setChatTotalPages] = useState(1);
   const [, setChatTotalItems] = useState(0);
   const [isEscalating, setIsEscalating] = useState(false);
+  const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
   const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
@@ -288,34 +289,20 @@ const CounselorMessages = () => {
   });
 
   const filteredChats = useMemo(() => {
-    // Deduplicate by counselorId, keeping the most recent one per counselor
-    const dedupedByCounselor = new Map<number, ChatListItem>();
-    for (const chat of chats) {
-      const existing = dedupedByCounselor.get(chat.counselorId);
-      if (!existing || new Date(chat.lastActivity).getTime() > new Date(existing.lastActivity).getTime()) {
-        dedupedByCounselor.set(chat.counselorId, chat);
-      }
-    }
-    
-    // Convert to array and sort by lastActivity descending
-    let result = Array.from(dedupedByCounselor.values()).sort((a, b) => {
-      const aTime = new Date(a.lastActivity).getTime();
-      const bTime = new Date(b.lastActivity).getTime();
-      return bTime - aTime;
-    });
-    
-    // Apply search filter if present
+    // `chats` is already de-duplicated per conversation in loadSessions (student + anonymity + role).
+    // Never de-dupe by counselorId here — every row shares the same counselor id and that would hide
+    // all but one student thread.
     const needle = searchQuery.trim().toLowerCase();
-    if (needle) {
-      result = result.filter((chat) => {
-        return (
-          chat.studentName.toLowerCase().includes(needle) ||
-          chat.studentEmail.toLowerCase().includes(needle)
-        );
-      });
+    if (!needle) {
+      return chats;
     }
-    
-    return result;
+    return chats.filter((chat) => {
+      return (
+        chat.studentName.toLowerCase().includes(needle) ||
+        (chat.studentEmail || "").toLowerCase().includes(needle) ||
+        String(chat.id).includes(needle)
+      );
+    });
   }, [chats, searchQuery]);
 
   const loadSessions = useCallback(
@@ -783,6 +770,33 @@ const CounselorMessages = () => {
     }
   };
 
+  const handleFlagUrgent = async () => {
+    if (!selectedSessionId || !isPeerCounselor || isFlaggingUrgent) return;
+
+    const reason = window.prompt(
+      "Describe the urgent concern (required). This will hand the case off to a counselor immediately:",
+      ""
+    );
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < 5) {
+      toast.error("Please provide at least 5 characters describing the urgent concern.");
+      return;
+    }
+
+    try {
+      setIsFlaggingUrgent(true);
+      await api.flagUrgentConcern(selectedSessionId, trimmed);
+      toast.success("Urgent concern flagged. Case handed off to a counselor.");
+      setSelectedChatId(null);
+      await loadSessions(false);
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to flag urgent concern"));
+    } finally {
+      setIsFlaggingUrgent(false);
+    }
+  };
+
   const handleEmergencyEscalation = async () => {
     if (!selectedSessionId || isTriggeringEmergency) return;
 
@@ -1234,6 +1248,18 @@ const CounselorMessages = () => {
                       >
                         <AlertTriangle className="h-3.5 w-3.5" />
                         <span className="text-xs font-bold uppercase tracking-tight">{isEscalating ? "Escalating" : "Escalate"}</span>
+                      </Button>
+                    )}
+                    {isPeerCounselor && selectedSessionId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-3 rounded-xl gap-1.5 border-orange-500/30 text-orange-700 hover:bg-orange-500/10"
+                        onClick={handleFlagUrgent}
+                        disabled={isFlaggingUrgent}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="text-xs font-bold uppercase tracking-tight">{isFlaggingUrgent ? "Flagging" : "Flag Urgent"}</span>
                       </Button>
                     )}
                   </div>

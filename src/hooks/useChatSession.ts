@@ -333,22 +333,28 @@ export const useChatSession = (userId: number | undefined) => {
 
   const startSessionWithCounselor = async (
     counselorId: number,
-    options?: { isAnonymous?: boolean }
+    options?: { isAnonymous?: boolean; forceNew?: boolean }
   ) => {
     try {
       const shouldBeAnonymous = Boolean(options?.isAnonymous);
-      // Check if session already exists
-      const existing = sessions.find(
-        (s) =>
-          s.counselor_id === counselorId &&
-          s.session_type === "chat" &&
-          !isPeerAssignedSession(s) &&
-          Boolean(s.is_anonymous) === shouldBeAnonymous &&
-          isOpenChatSession(s)
-      );
-      if (existing) {
-        setActiveSession(existing);
-        return existing;
+      const forceNew = Boolean(options?.forceNew);
+
+      // Check if session already exists. When forceNew is set (e.g. clicking
+      // an anonymous entry from "Recent Support"), we always create a fresh
+      // session so the anonymity contract isn't broken by resuming an old one.
+      if (!forceNew) {
+        const existing = sessions.find(
+          (s) =>
+            s.counselor_id === counselorId &&
+            s.session_type === "chat" &&
+            !isPeerAssignedSession(s) &&
+            Boolean(s.is_anonymous) === shouldBeAnonymous &&
+            isOpenChatSession(s)
+        );
+        if (existing) {
+          setActiveSession(existing);
+          return existing;
+        }
       }
 
       // Create new session - set loading to show activity but don't block UI

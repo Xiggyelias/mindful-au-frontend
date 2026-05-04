@@ -135,7 +135,14 @@ const AdminCounselors = () => {
     if (selectedIds.size === 0) return;
     try {
       setIsSaving(true);
-      await api.approveCounselorsBulk(Array.from(selectedIds));
+      const numericIds = Array.from(selectedIds)
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (numericIds.length === 0) {
+        toast.error("No valid counselor selections to approve");
+        return;
+      }
+      await api.approveCounselorsBulk(numericIds);
       toast.success("Selected accounts approved");
       await refreshCounselors();
     } catch (error: any) {

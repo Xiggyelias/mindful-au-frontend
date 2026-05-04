@@ -12,6 +12,7 @@ import {
   Plus,
   Clock,
   Shield,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -26,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { getVideoCallWindowStatus, isVideoEnabledAppointment } from "@/lib/videoCall";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -35,6 +37,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 type PagedMeta = {
@@ -263,7 +266,7 @@ const StudentAppointments = () => {
 
     const retryLoad = () => {
       if (document.visibilityState !== "visible") return;
-      void loadAppointments(false);
+      void loadAppointments(false, { force: true });
       void loadCounselors(false);
     };
 
@@ -484,7 +487,8 @@ const StudentAppointments = () => {
       completed: "bg-success/20 text-success",
       cancelled: "bg-destructive/20 text-destructive",
     };
-    return map[status] || "bg-secondary/40 text-foreground";
+    const key = String(status || "").toLowerCase();
+    return map[key] || "bg-secondary/40 text-foreground";
   };
 
   const sortedAppointments = useMemo(() => {
@@ -824,6 +828,16 @@ const StudentAppointments = () => {
             sortedAppointments.map((apt) => {
               const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
               const isAnonymous = Boolean(apt.is_anonymous);
+              const status = String(apt.status || "").toLowerCase();
+              const videoWindow =
+                !isPhysical && isVideoEnabledAppointment(apt.notes)
+                  ? getVideoCallWindowStatus(apt.scheduled_at, apt.duration_minutes)
+                  : null;
+              const showVideoJoin =
+                !isPhysical &&
+                isVideoEnabledAppointment(apt.notes) &&
+                (status === "scheduled" || status === "confirmed") &&
+                Boolean(videoWindow?.canStart);
 
               return (
                 <Card key={apt.id} variant="glass">
@@ -841,7 +855,7 @@ const StudentAppointments = () => {
                             {isPhysical ? "Physical" : "Online"}
                             {isAnonymous ? " • Anonymous" : ""}
                           </p>
-                          {apt.status === "cancelled" && apt.cancellation_reason && (
+                          {status === "cancelled" && apt.cancellation_reason && (
                             <p className="text-xs text-muted-foreground mt-1">
                               Reason: {apt.cancellation_reason}
                             </p>
@@ -868,9 +882,9 @@ const StudentAppointments = () => {
                         >
                           {apt.status}
                         </span>
-                        {(apt.status === "scheduled" || apt.status === "confirmed") && (
+                        {(status === "scheduled" || status === "confirmed") && (
                           <div className="flex items-center gap-2">
-                            {!isPhysical && (
+                            {showVideoJoin && (
                               <Button size="sm" onClick={() => openVideoCallRoom(apt)}>
                                 Join
                               </Button>
@@ -884,7 +898,7 @@ const StudentAppointments = () => {
                             </Button>
                           </div>
                         )}
-                        {apt.status === "completed" && (
+                        {status === "completed" && (
                           <p className="text-xs font-medium text-success">Session completed</p>
                         )}
                       </div>

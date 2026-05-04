@@ -9,6 +9,7 @@ import {
   Heart,
   Clock,
   FileText,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -53,6 +54,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 const StudentHistory = () => {

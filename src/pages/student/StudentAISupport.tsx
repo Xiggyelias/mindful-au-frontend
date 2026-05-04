@@ -12,6 +12,7 @@ import {
   Loader2,
   AlertTriangle,
   Phone,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -32,6 +33,7 @@ const navItems = [
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
 const StudentAISupport = () => {
@@ -99,8 +101,29 @@ const StudentAISupport = () => {
         }
       }
 
-      await api.createPanicLog({ location });
-      toast.success("Emergency alert sent. A counselor or responder will be notified.");
+      const response = await api.createPanicLog({ location });
+      const recipientsNotified = Number(
+        (response as { recipients_notified?: unknown })?.recipients_notified
+      );
+      const alertsEnabled = Boolean(
+        (response as { alerts_enabled?: unknown })?.alerts_enabled ?? true
+      );
+
+      if (!alertsEnabled) {
+        toast.warning(
+          "Alert logged, but server-side panic alerts are disabled. Please call the hotline now."
+        );
+      } else if (Number.isFinite(recipientsNotified) && recipientsNotified === 0) {
+        toast.warning(
+          "Alert logged, but no on-call responders were reachable. Please call the hotline now."
+        );
+      } else if (Number.isFinite(recipientsNotified) && recipientsNotified > 0) {
+        toast.success(
+          `Emergency alert sent to ${recipientsNotified} responder${recipientsNotified === 1 ? "" : "s"}.`
+        );
+      } else {
+        toast.success("Emergency alert sent. A counselor or responder will be notified.");
+      }
     } catch (triggerError: unknown) {
       if (import.meta.env.DEV) {
         console.error("Emergency alert error:", triggerError);
