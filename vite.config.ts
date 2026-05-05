@@ -25,6 +25,9 @@ export default defineConfig({
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("@tanstack/react-query")) return "react-query";
           if (id.includes("recharts")) return "charts";
+          if (id.includes("lucide-react")) return "icons-lucide";
+          if (id.includes("date-fns")) return "date-fns";
+          if (id.includes("axios")) return "axios";
           return "vendor";
         },
       },

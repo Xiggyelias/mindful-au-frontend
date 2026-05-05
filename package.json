@@ -9,8 +9,11 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "verify": "npm run lint && npx tsc --noEmit",
+    "verify:ci": "npm run verify && npm run test:e2e",
     "preview": "vite preview",
-    "check:prod": "npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend test"
+    "check:prod": "npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend audit && composer --working-dir=../mindful-au-backend test",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:ui": "npm run build && playwright test --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -69,6 +72,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
