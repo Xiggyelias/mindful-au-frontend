@@ -1427,8 +1427,10 @@ const CounselorMessages = () => {
                           <div
                             key={msg.id}
                             className={cn(
-                              "flex items-end gap-2.5",
-                              isMine ? "flex-row-reverse justify-end" : "justify-start"
+                              // `row-reverse` flips main-start to the right; use justify-start so outgoing
+                              // messages anchor to the right. `justify-end` here packed them to the left.
+                              "flex w-full min-w-0 items-end gap-2.5",
+                              isMine ? "flex-row-reverse justify-start" : "flex-row justify-start"
                             )}
                           >
                             <div className="flex w-9 shrink-0 justify-center">

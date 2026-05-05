@@ -8,14 +8,12 @@ test.describe("landing", () => {
   test("shows counseling hero and crisis helpline", async ({ page }) => {
     await page.goto("/");
 
-    await expect(
-      page.getByRole("heading", { name: /Counseling/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Counseling/i })).toBeVisible();
 
-    const helpline = page.getByRole("link", {
-      name: /Youth Advocates Helpline: Call 393/i,
-    });
-    await expect(helpline).toBeVisible();
-    await expect(helpline).toHaveAttribute("href", "tel:393");
+    await expect(page.getByText(/Youth Advocates Helpline/i)).toBeVisible();
+
+    const call = page.getByRole("link", { name: /Call 393/i });
+    await expect(call).toBeVisible();
+    await expect(call).toHaveAttribute("href", "tel:393");
   });
 });
