@@ -11,7 +11,7 @@
     "verify": "npm run lint && npx tsc --noEmit",
     "verify:ci": "npm run verify && npm run test:e2e",
     "preview": "vite preview",
-    "check:prod": "npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend audit && composer --working-dir=../mindful-au-backend test",
+    "check:prod": "npm audit && npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend audit && composer --working-dir=../mindful-au-backend test",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:ui": "npm run build && playwright test --ui"
   },

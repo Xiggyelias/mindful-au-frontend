@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 interface Props {
   children?: ReactNode;
   fallback?: ReactNode;
+  title?: string;
+  description?: string;
 }
 
 interface State {
@@ -23,7 +25,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    if (import.meta.env.DEV) {
+      console.error("Uncaught error:", error, errorInfo);
+    }
   }
 
   private handleReset = () => {
@@ -37,16 +41,19 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const title = this.props.title ?? "Something went wrong";
+      const description =
+        this.props.description ??
+        "An unexpected error occurred. Try reloading the page. If the problem continues, sign out and sign in again.";
+
       return (
         <div className="flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in duration-500 min-h-[400px]">
           <div className="p-4 rounded-full bg-destructive/10 text-destructive">
             <AlertCircle className="h-12 w-12" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-bold tracking-tight">Something went wrong</h2>
-            <p className="text-muted-foreground max-w-xs mx-auto">
-              The clinical chat encountered an unexpected error. This might be due to a connection issue or an encryption sync failure.
-            </p>
+            <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">{description}</p>
           </div>
           <Button 
             onClick={this.handleReset}
@@ -55,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <RotateCcw className="h-4 w-4" />
             Reload Page
           </Button>
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.DEV && (
             <pre className="mt-4 p-4 rounded-lg bg-secondary/50 text-[10px] text-left overflow-auto max-w-full">
               {this.state.error?.toString()}
             </pre>

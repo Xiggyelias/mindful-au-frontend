@@ -14,6 +14,8 @@ export default defineConfig({
   plugins: [react()],
   build: {
     cssCodeSplit: true,
+    // Largest shared vendor chunk after manualChunks; tune before raising further.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks(id) {

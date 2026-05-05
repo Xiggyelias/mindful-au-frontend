@@ -448,7 +448,10 @@ const StudentChat = () => {
           />
         )}
 
-        <ErrorBoundary>
+        <ErrorBoundary
+          title="Something went wrong"
+          description="The clinical chat encountered an unexpected error. This might be due to a connection issue or an encryption sync failure."
+        >
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Chat Sidebar */}
             <div className="hidden w-80 shrink-0 xl:flex">
