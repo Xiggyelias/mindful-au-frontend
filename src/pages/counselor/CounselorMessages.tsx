@@ -96,6 +96,8 @@ const ONLINE_WINDOW_SECONDS = 10 * 60;
 type RawSession = {
   id: number;
   student_id: number | null;
+  /** When anonymous, real student id for E2E if `student_id` is 0 in list payloads */
+  chat_peer_student_id?: number | null;
   counselor_id: number;
   peer_counselor_id?: number | null;
   assigned_role?: string | null;
