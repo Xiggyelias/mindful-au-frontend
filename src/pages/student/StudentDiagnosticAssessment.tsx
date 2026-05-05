@@ -19,6 +19,8 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
@@ -34,13 +36,25 @@ const navItems = [
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
+interface QuestionOption {
+  value: string;
+  label: string;
+  score?: number;
+  severity?: number;
+  weight?: number;
+}
+
 interface Question {
   id: string;
   category: string;
   type: string;
   question: string;
   description: string;
-  options?: Array<{ value: string; label: string; score?: number }>;
+  section?: string;
+  section_title?: string;
+  required?: boolean;
+  options?: QuestionOption[];
+  scoring?: { polarity?: string };
 }
 
 interface DiagnosticResult {
@@ -52,6 +66,10 @@ interface DiagnosticResult {
     primary: string;
     actions: string[];
     category_alerts?: Record<string, string>;
+    counselor_summary?: string;
+    focus_areas?: string[];
+    risk_flags?: string[];
+    scoring_model?: string;
   };
   created_at: string;
 }
@@ -79,6 +97,34 @@ function extractQuestionList(data: unknown): Question[] {
   return [];
 }
 
+function isRequired(question: Question): boolean {
+  return question.required !== false;
+}
+
+function isAnswered(question: Question, value: unknown): boolean {
+  if (!isRequired(question)) {
+    return true;
+  }
+
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  switch (question.type) {
+    case "multi_select":
+      return Array.isArray(value) && value.length > 0;
+    case "text":
+    case "textarea":
+      return String(value).trim().length > 0;
+    case "scale":
+    case "scale_1_5":
+    case "scale_1_10":
+      return typeof value === "number" && Number.isFinite(value);
+    default:
+      return String(value).trim() !== "";
+  }
+}
+
 const StudentDiagnosticAssessment = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,7 +136,6 @@ const StudentDiagnosticAssessment = () => {
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isAnonymous, setIsAnonymous] = useState(false);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [questionnaireId, setQuestionnaireId] = useState<number | null>(null);
   const [history, setHistory] = useState<DiagnosticResult[]>([]);
@@ -176,7 +221,7 @@ const StudentDiagnosticAssessment = () => {
     setCurrentQuestionIndex(0);
   };
 
-  const handleResponseChange = (value: any) => {
+  const handleResponseChange = (value: unknown) => {
     const currentQuestion = questions[currentQuestionIndex];
     setResponses({
       ...responses,
@@ -184,7 +229,59 @@ const StudentDiagnosticAssessment = () => {
     });
   };
 
+  const toggleMultiSelect = (optionValue: string) => {
+    const currentQuestion = questions[currentQuestionIndex];
+    const raw = responses[currentQuestion.id];
+    const current: string[] = Array.isArray(raw) ? raw : [];
+    const next = current.includes(optionValue)
+      ? current.filter((v) => v !== optionValue)
+      : [...current, optionValue];
+    setResponses({
+      ...responses,
+      [currentQuestion.id]: next,
+    });
+  };
+
+  const validateResponses = (map: Record<string, unknown>): boolean => {
+    for (const q of questions) {
+      if (!isRequired(q)) {
+        continue;
+      }
+      if (!isAnswered(q, map[q.id])) {
+        toast.error(`Please answer: ${q.question.slice(0, 80)}${q.question.length > 80 ? "…" : ""}`);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const validateAllRequired = (): boolean => validateResponses(responses);
+
+  const handleSkipOptional = () => {
+    const q = questions[currentQuestionIndex];
+    if (isRequired(q)) {
+      toast.error("This question is required.");
+      return;
+    }
+    const copy = { ...responses };
+    delete copy[q.id];
+    setResponses(copy);
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      return;
+    }
+    if (validateResponses(copy)) {
+      void runSubmit(copy);
+    }
+  };
+
   const handleNextQuestion = () => {
+    const q = questions[currentQuestionIndex];
+    const v = responses[q.id];
+    if (!isAnswered(q, v)) {
+      toast.error("Please answer this question before continuing.");
+      return;
+    }
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     }
@@ -196,7 +293,7 @@ const StudentDiagnosticAssessment = () => {
     }
   };
 
-  const handleSubmitAssessment = async () => {
+  const runSubmit = async (payload: Record<string, any>) => {
     if (!questionnaireId) {
       toast.error("Questionnaire not loaded");
       return;
@@ -204,11 +301,7 @@ const StudentDiagnosticAssessment = () => {
 
     setIsLoading(true);
     try {
-      const data = await api.submitDiagnosticAssessment(
-        responses,
-        questionnaireId,
-        isAnonymous
-      );
+      const data = await api.submitDiagnosticAssessment(payload, questionnaireId, false);
 
       setResult(data.diagnostic);
       setStep("results");
@@ -221,6 +314,13 @@ const StudentDiagnosticAssessment = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmitAssessment = async () => {
+    if (!validateAllRequired()) {
+      return;
+    }
+    await runSubmit(responses);
   };
 
   const getRiskColor = (riskLevel: string) => {
@@ -248,35 +348,65 @@ const StudentDiagnosticAssessment = () => {
 
     const question = questions[currentQuestionIndex];
     const response = responses[question.id];
+    const prevQ = questions[currentQuestionIndex - 1];
+    const sectionChanged =
+      Boolean(question.section_title) &&
+      (!prevQ || prevQ.section_title !== question.section_title);
+
+    const isOptional = question.required === false;
+    const isSafetySection =
+      question.section === "10" || question.section_title?.toLowerCase().includes("safety");
 
     return (
       <div className="space-y-6">
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center gap-2 justify-between mb-2">
             <h3 className="text-lg font-semibold text-foreground">
               Question {currentQuestionIndex + 1} of {questions.length}
             </h3>
-            <span className="text-sm text-muted-foreground">
-              {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%
-            </span>
+            <div className="flex items-center gap-2">
+              {isOptional && (
+                <Badge variant="outline" className="text-muted-foreground font-normal">
+                  Optional — you can skip
+                </Badge>
+              )}
+              <span className="text-sm text-muted-foreground">
+                {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%
+              </span>
+            </div>
           </div>
           <Progress value={((currentQuestionIndex + 1) / questions.length) * 100} className="h-2" />
         </div>
 
+        {sectionChanged ? (
+          <div className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Section</p>
+            <p className="font-medium text-foreground">{question.section_title}</p>
+          </div>
+        ) : null}
+
+        {isSafetySection ? (
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-foreground">
+            If you’re in immediate danger, contact local emergency services. Honest answers help us prioritise care.
+          </div>
+        ) : null}
+
         <div className="space-y-3">
           <h4 className="text-base font-medium text-foreground">{question.question}</h4>
-          <p className="text-sm text-muted-foreground">{question.description}</p>
+          {question.description ? (
+            <p className="text-sm text-muted-foreground">{question.description}</p>
+          ) : null}
         </div>
 
         <div className="space-y-3">
-          {question.type === "scale" && (
-            <div className="flex gap-2">
+          {(question.type === "scale" || question.type === "scale_1_5") && (
+            <div className="flex gap-2 flex-wrap">
               {[1, 2, 3, 4, 5].map((value) => (
                 <Button
                   key={value}
                   variant={response === value ? "default" : "outline"}
                   onClick={() => handleResponseChange(value)}
-                  className="flex-1"
+                  className="min-w-[2.5rem]"
                 >
                   {value}
                 </Button>
@@ -284,20 +414,72 @@ const StudentDiagnosticAssessment = () => {
             </div>
           )}
 
-          {question.type === "multiple_choice" && (
+          {question.type === "scale_1_10" && (
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={response === value ? "default" : "outline"}
+                  onClick={() => handleResponseChange(value)}
+                  className="min-w-[2rem]"
+                >
+                  {value}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {(question.type === "frequency_5" || question.type === "multiple_choice") && question.options?.length ? (
             <div className="space-y-2">
-              {question.options?.map((option) => (
+              {question.options.map((option) => (
                 <Button
                   key={option.value}
                   variant={response === option.value ? "default" : "outline"}
                   onClick={() => handleResponseChange(option.value)}
-                  className="w-full justify-start text-left"
+                  className="w-full justify-start text-left h-auto whitespace-normal py-3"
                 >
                   {option.label}
                 </Button>
               ))}
             </div>
-          )}
+          ) : null}
+
+          {question.type === "single_choice" && question.options?.length ? (
+            <div className="space-y-2">
+              {question.options.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={response === option.value ? "default" : "outline"}
+                  onClick={() => handleResponseChange(option.value)}
+                  className="w-full justify-start text-left h-auto whitespace-normal py-3"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
+          {question.type === "multi_select" && question.options?.length ? (
+            <div className="space-y-3">
+              {question.options.map((option) => {
+                const selected = Array.isArray(response) && response.includes(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    className="flex items-start gap-3 rounded-lg border border-border/80 bg-background/80 px-3 py-3 cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={() => toggleMultiSelect(option.value)}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-foreground leading-snug">{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
 
           {question.type === "yes_no" && (
             <div className="flex gap-2">
@@ -318,45 +500,44 @@ const StudentDiagnosticAssessment = () => {
             </div>
           )}
 
-          {question.type === "text" && (
+          {(question.type === "text" || question.type === "textarea") && (
             <textarea
-              value={response || ""}
+              value={(response as string) || ""}
               onChange={(e) => handleResponseChange(e.target.value)}
               placeholder="Type your response here..."
               className="w-full p-3 rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              rows={4}
+              rows={question.type === "textarea" ? 5 : 4}
             />
           )}
         </div>
 
-        <div className="flex gap-2 justify-between">
-          <Button
-            variant="outline"
-            onClick={handlePreviousQuestion}
-            disabled={currentQuestionIndex === 0}
-          >
+        <div className="flex flex-wrap gap-2 justify-between items-center">
+          <Button variant="outline" onClick={handlePreviousQuestion} disabled={currentQuestionIndex === 0}>
             Previous
           </Button>
-          {currentQuestionIndex === questions.length - 1 ? (
-            <Button
-              variant="hero"
-              onClick={handleSubmitAssessment}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Analyzing...
-                </>
-              ) : (
-                "Submit Assessment"
-              )}
-            </Button>
-          ) : (
-            <Button variant="default" onClick={handleNextQuestion}>
-              Next
-            </Button>
-          )}
+          <div className="flex gap-2 flex-wrap justify-end">
+            {isOptional ? (
+              <Button type="button" variant="ghost" size="sm" onClick={handleSkipOptional}>
+                Skip
+              </Button>
+            ) : null}
+            {currentQuestionIndex === questions.length - 1 ? (
+              <Button variant="hero" onClick={() => void handleSubmitAssessment()} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Analyzing...
+                  </>
+                ) : (
+                  "Submit Assessment"
+                )}
+              </Button>
+            ) : (
+              <Button variant="default" onClick={handleNextQuestion}>
+                Next
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -399,7 +580,7 @@ const StudentDiagnosticAssessment = () => {
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>15 questions covering anxiety, depression, stress, sleep, and more</span>
+                      <span>Structured sections from context and study load through coping, support, safety, and counselling goals</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
@@ -409,10 +590,6 @@ const StudentDiagnosticAssessment = () => {
                       <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
                       <span>Personalized insights based on your responses</span>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>Option to remain anonymous if you prefer</span>
-                    </li>
                   </ul>
                 </div>
 
@@ -421,19 +598,6 @@ const StudentDiagnosticAssessment = () => {
                   <p className="text-sm text-info">
                     Your responses are confidential and secure. If you're in crisis, please contact emergency services.
                   </p>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
-                  <input
-                    type="checkbox"
-                    id="anonymous"
-                    checked={isAnonymous}
-                    onChange={(e) => setIsAnonymous(e.target.checked)}
-                    className="rounded"
-                  />
-                  <label htmlFor="anonymous" className="text-sm text-foreground cursor-pointer">
-                    Complete this assessment anonymously
-                  </label>
                 </div>
 
                 {isQuestionnaireLoading && (
@@ -523,6 +687,37 @@ const StudentDiagnosticAssessment = () => {
                       </div>
                     ))}
                   </div>
+
+                  {result.ai_recommendations.counselor_summary ? (
+                    <div className="space-y-2 p-4 rounded-lg border border-border bg-background/60">
+                      <h4 className="font-semibold text-foreground text-sm">Counselor-oriented summary</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {result.ai_recommendations.counselor_summary}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {result.ai_recommendations.focus_areas && result.ai_recommendations.focus_areas.length > 0 ? (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-foreground text-sm">Suggested focus areas</h4>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                        {result.ai_recommendations.focus_areas.map((area) => (
+                          <li key={area}>{area}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {result.ai_recommendations.risk_flags && result.ai_recommendations.risk_flags.length > 0 ? (
+                    <div className="space-y-2 p-4 rounded-lg bg-destructive/10 border border-destructive/25">
+                      <h4 className="font-semibold text-destructive text-sm">Follow-up flags</h4>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
+                        {result.ai_recommendations.risk_flags.map((flag) => (
+                          <li key={flag}>{flag}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
 
                   <div className="space-y-4 p-4 rounded-lg bg-secondary/30">
                     <h4 className="font-semibold text-foreground flex items-center gap-2">
