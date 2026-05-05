@@ -1,5 +1,6 @@
 import React from "react";
 import { Shield, Loader2, Trash2, FileText, MessageSquare, ArrowDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
@@ -240,6 +241,22 @@ export const MessageList: React.FC<MessageListProps> = ({
                     {renderMessageContent(msg, isMe)}
                   </div>
                 </div>
+                {isMe && (
+                  <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">
+                    <div className="flex items-center gap-1.5 px-0.5">
+                      <span
+                        className={cn(
+                          "text-[11px]",
+                          msg.seen_at ? "text-emerald-500" : "text-muted-foreground/60"
+                        )}
+                        aria-label={msg.seen_at ? "Seen" : "Sent"}
+                        title={msg.seen_at ? "Seen" : "Sent"}
+                      >
+                        {msg.seen_at ? "✓✓" : "✓"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
