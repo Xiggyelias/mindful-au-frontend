@@ -1032,6 +1032,17 @@ class ApiClient {
     return response.data;
   }
 
+  /**
+   * Verifies crisis keywords server-side (same dictionary as plaintext path) and notifies staff.
+   * Used when the chat message body is stored encrypted so the server cannot scan content.
+   */
+  async reportCrisisSignal(sessionId: string, keywords: string[]) {
+    const response = await this.client.post(`/sessions/${sessionId}/crisis-signal`, {
+      keywords,
+    });
+    return response.data as { ok?: boolean; matched?: string[] };
+  }
+
   async uploadChatFile(
     sessionId: string,
     file: File,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getApiErrorMessage } from '@/lib/api';
+import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from '@/lib/crisisTerms';
 import {
   getOrCreateDeviceKeyPair,
   importPeerPublicKey,
@@ -1122,6 +1123,19 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
       if (!encryptionKeyRef.current) {
         throw new Error('Secure channel is still initializing. Please retry in a few seconds.');
+      }
+
+      if (
+        messageType === 'text' &&
+        content.trim() !== ''
+        && !isE2EHandshakeEnvelopeContent(content)
+      ) {
+        const crisisTerms = detectCrisisTermsInText(content);
+        if (crisisTerms.length > 0) {
+          void api.reportCrisisSignal(sessionId, crisisTerms).catch(() => {
+            // Best-effort: encrypted message still sends; alerting is secondary.
+          });
+        }
       }
 
       const encryptedContent = await encryptMessage(content, encryptionKeyRef.current);

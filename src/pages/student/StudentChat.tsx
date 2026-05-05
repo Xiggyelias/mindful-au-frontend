@@ -41,9 +41,6 @@ const navItems = [
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
-// Note: Using placeholders for nav icons to keep this file cleaner, 
-// DashboardSidebar handles the icon components if they match the label/path.
-
 type Counselor = {
   id: number;
   email?: string;

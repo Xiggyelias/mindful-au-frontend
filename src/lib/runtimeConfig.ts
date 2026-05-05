@@ -43,3 +43,18 @@ export const resolveApiBaseUrl = (): string => {
 
   return "http://127.0.0.1:8000/api";
 };
+
+/**
+ * Optional `tel:` link for the public landing page crisis line (E.164 or tel: URL).
+ * Returns null when unset so we never ship a dummy/invalid hotline number in production.
+ */
+export const resolveCrisisHotlineTelHref = (): string | null => {
+  const raw = String(import.meta.env.VITE_CRISIS_HOTLINE_TEL ?? "").trim();
+  if (raw === "") {
+    return null;
+  }
+  if (raw.toLowerCase().startsWith("tel:")) {
+    return raw;
+  }
+  return `tel:${raw.replace(/\s+/g, "")}`;
+};

@@ -35,7 +35,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   isAtBottom: _isAtBottom,
   showScrollToBottom,
   user,
-  activeSession: _activeSession,
+  activeSession,
   isPeerTyping,
   deletingMessageIds,
   onScroll,
@@ -62,6 +62,11 @@ export const MessageList: React.FC<MessageListProps> = ({
       viewport.removeEventListener("scroll", handleViewportScroll);
     };
   }, [messageScrollAreaRef, onScroll]);
+
+  const typingLabel =
+    activeSession?.assigned_role === "peer_counselor" && Number(activeSession?.peer_counselor_id) > 0
+      ? "Peer supporter is typing…"
+      : "Counselor is typing…";
 
   const formatTime = (dateString: string) => {
     try {
@@ -201,12 +206,13 @@ export const MessageList: React.FC<MessageListProps> = ({
           )}
 
           {messages.map((msg, idx) => {
-            const isMe = Number(msg.sender_id) === Number(user?.id);
+            const isMe =
+              user?.id != null && String(msg.sender_id) === String(user.id);
             const showTime = idx === 0 || formatTime(msg.created_at) !== formatTime(messages[idx-1].created_at);
             const isDeleting = deletingMessageIds.has(msg.id);
 
             return (
-              <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"} group animate-in slide-in-from-bottom-2 duration-300`}>
+              <div key={msg.id !== undefined && msg.id !== null ? msg.id : `m-${idx}`} className={`flex flex-col ${isMe ? "items-end" : "items-start"} group animate-in slide-in-from-bottom-2 duration-300`}>
                 {showTime && (
                   <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">
                     {formatTime(msg.created_at)}
@@ -246,7 +252,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                Counselor is typing
+                {typingLabel}
               </span>
             </div>
           )}
