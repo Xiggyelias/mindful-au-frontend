@@ -63,6 +63,22 @@ interface DiagnosticTrend {
   categories: Record<string, number>;
 }
 
+/** Normalize API `questions` shape: array, or { questions: [...] }. */
+function extractQuestionList(data: unknown): Question[] {
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+  const record = data as Record<string, unknown>;
+  const nested = record.questions;
+  if (Array.isArray(nested)) {
+    return nested as Question[];
+  }
+  if (nested && typeof nested === "object" && Array.isArray((nested as Record<string, unknown>).questions)) {
+    return (nested as Record<string, unknown>).questions as Question[];
+  }
+  return [];
+}
+
 const StudentDiagnosticAssessment = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -80,6 +96,8 @@ const StudentDiagnosticAssessment = () => {
   const [history, setHistory] = useState<DiagnosticResult[]>([]);
   const [trends, setTrends] = useState<DiagnosticTrend[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isQuestionnaireLoading, setIsQuestionnaireLoading] = useState(false);
+  const [questionnaireError, setQuestionnaireError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -94,21 +112,31 @@ const StudentDiagnosticAssessment = () => {
   }, [step]);
 
   const loadQuestionnaire = async () => {
+    setQuestionnaireError(null);
+    setIsQuestionnaireLoading(true);
     try {
       const data = await api.getDiagnosticQuestionnaire();
-      const questionList = Array.isArray(data.questions?.questions)
-        ? data.questions.questions
-        : Array.isArray(data.questions)
-        ? data.questions
-        : [];
+      const questionList = extractQuestionList(data);
+      const id = typeof (data as Record<string, unknown>)?.id === "number" ? (data as { id: number }).id : Number((data as { id?: unknown })?.id ?? 0);
+
       setQuestions(questionList);
-      setQuestionnaireId(data.id);
+      setQuestionnaireId(Number.isFinite(id) && id > 0 ? id : null);
+
       if (questionList.length === 0) {
         toast.error("No questions available for this questionnaire yet.");
       }
-    } catch (error) {
-      console.error("Failed to load questionnaire:", error);
-      toast.error("Failed to load diagnostic questionnaire");
+    } catch (error: unknown) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to load questionnaire:", error);
+      }
+      const message = getApiErrorMessage(
+        error,
+        "Could not load the assessment. Try again or contact support if this continues.",
+      );
+      setQuestionnaireError(message);
+      toast.error(message);
+    } finally {
+      setIsQuestionnaireLoading(false);
     }
   };
 
@@ -136,6 +164,14 @@ const StudentDiagnosticAssessment = () => {
   };
 
   const handleStartAssessment = () => {
+    if (isQuestionnaireLoading) {
+      toast.info("Still loading the questionnaire — please wait.");
+      return;
+    }
+    if (questionnaireError || questions.length === 0) {
+      toast.error("The assessment is not ready yet. Use Retry or refresh the page.");
+      return;
+    }
     setStep("form");
     setCurrentQuestionIndex(0);
   };
@@ -400,13 +436,37 @@ const StudentDiagnosticAssessment = () => {
                   </label>
                 </div>
 
+                {isQuestionnaireLoading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading questionnaire…
+                  </div>
+                )}
+
+                {questionnaireError && !isQuestionnaireLoading && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    <p className="font-medium mb-2">{questionnaireError}</p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void loadQuestionnaire()}>
+                      Retry
+                    </Button>
+                  </div>
+                )}
+
                 <Button
                   variant="hero"
                   size="lg"
                   onClick={handleStartAssessment}
                   className="w-full"
+                  disabled={isQuestionnaireLoading || questions.length === 0 || Boolean(questionnaireError)}
                 >
-                  Start Assessment
+                  {isQuestionnaireLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Loading…
+                    </>
+                  ) : (
+                    "Start Assessment"
+                  )}
                 </Button>
               </CardContent>
             </Card>
