@@ -3,6 +3,14 @@
  * (e.g. multiple pending/active rows) into one list entry with combined unread counts.
  */
 
+export function isValidChatListRow(row: unknown): row is Record<string, unknown> {
+  if (row === null || typeof row !== "object" || Array.isArray(row)) {
+    return false;
+  }
+  const id = Number((row as Record<string, unknown>).id);
+  return Number.isInteger(id) && id > 0;
+}
+
 export function chatListRowTimeMs(row: { updated_at?: unknown; created_at?: unknown }): number {
   const raw = row.updated_at ?? row.created_at;
   if (raw == null || raw === "") return 0;
@@ -45,10 +53,11 @@ export function counselorChatListDedupeKey(row: Record<string, unknown>): string
 }
 
 export function dedupeCounselorChatListRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const safe = rows.filter(isValidChatListRow);
   type Bucket = { row: Record<string, unknown>; timeMs: number; unread: number };
   const map = new Map<string, Bucket>();
 
-  for (const row of rows) {
+  for (const row of safe) {
     const key = counselorChatListDedupeKey(row);
     const unread = Math.max(0, Math.floor(Number(row.unread_count ?? 0)));
     const timeMs = chatListRowTimeMs(row);

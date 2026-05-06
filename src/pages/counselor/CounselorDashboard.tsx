@@ -34,7 +34,7 @@ import { CounselorIncomingCallBanner } from "@/components/counselor/CounselorInc
 import { CounselorSessionReminderBanner } from "@/components/counselor/CounselorSessionReminderBanner";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
-import { dedupeCounselorChatListRows } from "@/lib/counselorChatListDedupe";
+import { dedupeCounselorChatListRows, isValidChatListRow } from "@/lib/counselorChatListDedupe";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -52,6 +52,8 @@ const DASHBOARD_SESSION_PAGE_SIZE = 200;
 const DASHBOARD_SESSION_RETRY_PAGE_SIZE = 100;
 const DASHBOARD_SESSION_TIMEOUT_MS = 20000;
 const DASHBOARD_CONVERSATIONS_PAGE_SIZE = 8;
+/** Fetch more raw sessions before dedupe so the strip still fills after merging duplicates. */
+const DASHBOARD_CONVERSATIONS_FETCH_SIZE = 48;
 
 type DashboardOpenConversation = {
   sessionId: number;
@@ -74,15 +76,26 @@ function mapChatListRowsToOpenConversations(
   rows: Record<string, unknown>[],
   maxItems: number
 ): DashboardOpenConversation[] {
-  return rows.slice(0, maxItems).map((row) => {
+  return rows
+    .filter(isValidChatListRow)
+    .slice(0, maxItems)
+    .map((row) => {
     const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
     const student = row.student as Record<string, unknown> | undefined;
     const profile = student?.profile as Record<string, unknown> | undefined;
     const fromApiName = String(profile?.full_name ?? "").trim();
     const email = typeof student?.email === "string" ? student.email : "";
+    const sid = Number(row.student_id ?? 0);
+    const peerSid = Number(row.chat_peer_student_id ?? 0);
+    const idFallback =
+      Number.isInteger(sid) && sid > 0
+        ? sid
+        : Number.isInteger(peerSid) && peerSid > 0
+          ? peerSid
+          : row.id;
     const label = isAnon
       ? "Anonymous User"
-      : fromApiName || (email ? email.split("@")[0] : "") || `Student #${row.student_id}`;
+      : fromApiName || (email ? email.split("@")[0] : "") || `Student #${idFallback}`;
     return {
       sessionId: Number(row.id),
       label,
@@ -167,7 +180,7 @@ const CounselorDashboard = () => {
           api.getChatSessions({
             open_only: true,
             page: 1,
-            per_page: DASHBOARD_CONVERSATIONS_PAGE_SIZE,
+            per_page: DASHBOARD_CONVERSATIONS_FETCH_SIZE,
             as_role: "counselor",
             timeout_ms: 15000,
           }),
@@ -186,10 +199,25 @@ const CounselorDashboard = () => {
         }
 
         if (chatListResult.status === "fulfilled") {
-          const chatRows = dedupeCounselorChatListRows(
-            toList<Record<string, unknown>>(chatListResult.value)
-          );
-          setOpenConversations(mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE));
+          try {
+            const rawList = toList<Record<string, unknown>>(chatListResult.value);
+            const chatRows = dedupeCounselorChatListRows(rawList);
+            setOpenConversations(
+              mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
+            );
+          } catch (chatMapErr) {
+            if (import.meta.env.DEV) {
+              console.warn("Counselor dashboard: chat list dedupe/map failed, using raw list", chatMapErr);
+            }
+            try {
+              const rawList = toList<Record<string, unknown>>(chatListResult.value).filter(isValidChatListRow);
+              setOpenConversations(
+                mapChatListRowsToOpenConversations(rawList, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
+              );
+            } catch {
+              setOpenConversations([]);
+            }
+          }
         } else {
           setOpenConversations([]);
           if (import.meta.env.DEV) {
@@ -249,12 +277,29 @@ const CounselorDashboard = () => {
         const chatListResult = await api.getChatSessions({
           open_only: true,
           page: 1,
-          per_page: DASHBOARD_CONVERSATIONS_PAGE_SIZE,
+          per_page: DASHBOARD_CONVERSATIONS_FETCH_SIZE,
           as_role: "counselor",
           timeout_ms: 15000,
         });
-        const chatRows = dedupeCounselorChatListRows(toList<Record<string, unknown>>(chatListResult));
-        setOpenConversations(mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE));
+        try {
+          const rawList = toList<Record<string, unknown>>(chatListResult);
+          const chatRows = dedupeCounselorChatListRows(rawList);
+          setOpenConversations(
+            mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
+          );
+        } catch (chatMapErr) {
+          if (import.meta.env.DEV) {
+            console.warn("Counselor dashboard: strip refresh dedupe failed", chatMapErr);
+          }
+          try {
+            const rawList = toList<Record<string, unknown>>(chatListResult).filter(isValidChatListRow);
+            setOpenConversations(
+              mapChatListRowsToOpenConversations(rawList, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
+            );
+          } catch {
+            // keep previous strip
+          }
+        }
       } catch {
         // Background refresh
       }
