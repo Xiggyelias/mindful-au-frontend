@@ -145,6 +145,19 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string => {
   return getApiErrorMessage(error, fallback);
 };
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * True when replaying history should not fail the whole messages sync (network / crypto).
+ */
+const runHandshakeOutbound = async (fn: () => Promise<void>): Promise<void> => {
+  try {
+    await fn();
+  } catch {
+    // Outbound handshake is best-effort during history replay; polling will retry.
+  }
+};
+
 const isLikelyEncryptedPayload = (content: string): boolean => {
   const trimmed = content.trim();
   return (
@@ -735,21 +748,26 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           return true;
         }
 
-        peerIdRef.current = trustedSenderId;
-        localStorage.setItem(
-          getPeerKeyStorageKey(sessionId, trustedSenderId),
-          envelope.publicKey
-        );
-        peerPublicKeyRef.current = await importPeerPublicKey(envelope.publicKey);
+        try {
+          peerIdRef.current = trustedSenderId;
+          localStorage.setItem(
+            getPeerKeyStorageKey(sessionId, trustedSenderId),
+            envelope.publicKey
+          );
+          peerPublicKeyRef.current = await importPeerPublicKey(envelope.publicKey);
+        } catch {
+          // Corrupt or legacy key material — do not fail loading the whole thread.
+          return true;
+        }
         hasSentSessionKeyRef.current = false;
 
         if (!hasSentPublicKeyRef.current) {
-          await sendPublicKeyEnvelope(trustedSenderId);
+          await runHandshakeOutbound(() => sendPublicKeyEnvelope(trustedSenderId));
         }
 
         const shouldInitiate = numericUserId < trustedSenderId;
         if (shouldInitiate) {
-          await sendSessionKeyEnvelope(trustedSenderId);
+          await runHandshakeOutbound(() => sendSessionKeyEnvelope(trustedSenderId));
         }
 
         return true;
@@ -772,23 +790,33 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           return true;
         }
 
-        const decryptedKey = await decryptSessionKeyFromPeer(
-          envelope.encryptedSessionKey,
-          deviceKeyPairRef.current.privateKey
-        );
-        peerIdRef.current = trustedSenderId;
-        sessionKeyStorageKeyRef.current = getSessionKeyStorageKey(
-          sessionId,
-          numericUserId,
-          trustedSenderId
-        );
-        encryptionKeyRef.current = await importKey(decryptedKey);
-        keyStringRef.current = decryptedKey;
-        localStorage.setItem(sessionKeyStorageKeyRef.current, decryptedKey);
-        localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(trustedSenderId));
-        setIsEncryptionReady(true);
-        setError(null);
-        hasUndecryptedMessagesRef.current = true;
+        let decryptedKey: string;
+        try {
+          decryptedKey = await decryptSessionKeyFromPeer(
+            envelope.encryptedSessionKey,
+            deviceKeyPairRef.current.privateKey
+          );
+        } catch {
+          return true;
+        }
+
+        try {
+          peerIdRef.current = trustedSenderId;
+          sessionKeyStorageKeyRef.current = getSessionKeyStorageKey(
+            sessionId,
+            numericUserId,
+            trustedSenderId
+          );
+          encryptionKeyRef.current = await importKey(decryptedKey);
+          keyStringRef.current = decryptedKey;
+          localStorage.setItem(sessionKeyStorageKeyRef.current, decryptedKey);
+          localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(trustedSenderId));
+          setIsEncryptionReady(true);
+          setError(null);
+          hasUndecryptedMessagesRef.current = true;
+        } catch {
+          return true;
+        }
 
         return true;
       }
@@ -804,7 +832,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       const visibleMessages: ChatMessage[] = [];
 
       for (const message of ordered) {
-        const isHandshakeMessage = await handleEnvelope(message);
+        let isHandshakeMessage = false;
+        try {
+          isHandshakeMessage = await handleEnvelope(message);
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn('[chat] Skipped message during envelope processing', message.id, err);
+          }
+          isHandshakeMessage = parseEnvelope(message.content) !== null;
+        }
         if (isHandshakeMessage) {
           continue;
         }
@@ -893,15 +929,27 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             timeout_ms: timeoutMs,
           });
 
-        let data: RawMessage[];
-        try {
-          data = (await fetchMessages(limit, MESSAGE_POLL_TIMEOUT_MS)) as RawMessage[];
-        } catch (err) {
-          if (!isTimeoutError(err)) {
+        const maxFetchAttempts = pollCountRef.current === 0 && shouldReloadAll ? 3 : 1;
+        let data: RawMessage[] = [];
+
+        for (let attempt = 0; attempt < maxFetchAttempts; attempt++) {
+          try {
+            try {
+              data = (await fetchMessages(limit, MESSAGE_POLL_TIMEOUT_MS)) as RawMessage[];
+            } catch (err) {
+              if (!isTimeoutError(err)) {
+                throw err;
+              }
+              data = (await fetchMessages(MESSAGE_RETRY_BATCH_LIMIT, MESSAGE_POLL_RETRY_TIMEOUT_MS)) as RawMessage[];
+            }
+            break;
+          } catch (err) {
+            if (attempt < maxFetchAttempts - 1) {
+              await sleep(400 * (attempt + 1));
+              continue;
+            }
             throw err;
           }
-
-          data = (await fetchMessages(MESSAGE_RETRY_BATCH_LIMIT, MESSAGE_POLL_RETRY_TIMEOUT_MS)) as RawMessage[];
         }
 
         const rawMessages = normalizeMessagePayload(data);
