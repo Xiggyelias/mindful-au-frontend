@@ -540,7 +540,7 @@ const CounselorMessages = () => {
               studentName: name,
               studentEmail: email,
               isAnonymous,
-              anonymousId: anonymousLabel,
+              anonymousId: String(session.anonymous_id ?? "").trim(),
               status: session.status || null,
               lastActivity: session.updated_at || session.created_at || "",
               preview: !isOpenSession(session.status)

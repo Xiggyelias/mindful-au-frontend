@@ -24,6 +24,8 @@ interface MessageListProps {
   onLoadOlder: () => Promise<void>;
   onDeleteMessage: (id: number) => Promise<void>;
   scrollToBottom: () => void;
+  /** When set, empty-state starter lines fill the composer instead of being inert. */
+  onStarterPrompt?: (draft: string) => void;
   messageScrollAreaRef: React.RefObject<HTMLDivElement>;
   scrollRef: React.RefObject<HTMLDivElement>;
 }
@@ -43,6 +45,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   onLoadOlder,
   onDeleteMessage,
   scrollToBottom,
+  onStarterPrompt,
   messageScrollAreaRef,
   scrollRef,
 }) => {
@@ -161,20 +164,39 @@ export const MessageList: React.FC<MessageListProps> = ({
             </p>
           </div>
           <div className="grid gap-3 pt-4">
-             <button 
-                className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left hover:bg-secondary/50 transition-colors"
-                onClick={() => {}} // Could be wired to set input message
-                aria-label="Prompt: I'm feeling a bit overwhelmed lately"
-             >
-                "I'm feeling a bit overwhelmed lately..."
-             </button>
-             <button 
-                className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left hover:bg-secondary/50 transition-colors"
-                onClick={() => {}}
-                aria-label="Prompt: I'd like to check in on my wellness goals"
-             >
-                "I'd like to check in on my wellness goals."
-             </button>
+            {(
+              [
+                {
+                  draft: "I'm feeling a bit overwhelmed lately.",
+                  label: 'Prompt: I\'m feeling a bit overwhelmed lately',
+                  display: '"I\'m feeling a bit overwhelmed lately..."',
+                },
+                {
+                  draft: "I'd like to check in on my wellness goals.",
+                  label: "Prompt: I'd like to check in on my wellness goals",
+                  display: '"I\'d like to check in on my wellness goals."',
+                },
+              ] as const
+            ).map((prompt) =>
+              onStarterPrompt ? (
+                <button
+                  key={prompt.draft}
+                  type="button"
+                  className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left hover:bg-secondary/50 transition-colors"
+                  onClick={() => onStarterPrompt(prompt.draft)}
+                  aria-label={prompt.label}
+                >
+                  {prompt.display}
+                </button>
+              ) : (
+                <p
+                  key={prompt.draft}
+                  className="p-4 rounded-2xl bg-secondary/30 border border-border/50 text-sm font-medium text-muted-foreground italic text-left"
+                >
+                  {prompt.display}
+                </p>
+              )
+            )}
           </div>
         </div>
       </div>

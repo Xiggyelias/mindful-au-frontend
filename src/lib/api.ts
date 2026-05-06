@@ -442,7 +442,6 @@ class ApiClient {
       normalizedPath.startsWith('/ml/counselor-matches') ||
       normalizedPath.startsWith('/users/counselors') ||
       normalizedPath === '/sessions' ||
-      normalizedPath.startsWith('/sessions/chat-list') ||
       normalizedPath.startsWith('/ai/wellness-chat/history')
       // Note: /openrouter/* requests use raw fetch (services/openrouter.ts),
       // so they don't go through this axios cache. Don't list them here.

@@ -10,6 +10,7 @@ import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
@@ -94,6 +95,7 @@ const App = () => (
           >
             <AuthProvider>
               <ChatIncomingNotificationHost />
+              <PwaInstallBanner />
               <ScreenshotShield />
               <Suspense fallback={<RouteLoader />}>
                 <Routes>

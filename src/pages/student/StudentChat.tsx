@@ -686,6 +686,7 @@ const StudentChat = () => {
                     onScroll={handleScroll}
                     onLoadOlder={loadOlderMessages}
                     onDeleteMessage={handleDeleteMessageWrapper}
+                    onStarterPrompt={setMessage}
                     scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                     messageScrollAreaRef={messageScrollAreaRef as any}
                     scrollRef={scrollRef}
