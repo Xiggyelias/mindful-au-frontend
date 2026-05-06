@@ -132,6 +132,8 @@ export function ChatIncomingNotificationHost() {
       return;
     }
 
+    const timersForCleanup = timersRef.current;
+
     let cancelled = false;
 
     const tick = async () => {
@@ -207,8 +209,8 @@ export function ChatIncomingNotificationHost() {
       cancelled = true;
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVis);
-      timersRef.current.forEach((id) => window.clearTimeout(id));
-      timersRef.current.clear();
+      timersForCleanup.forEach((id) => window.clearTimeout(id));
+      timersForCleanup.clear();
     };
   }, [dismiss, role, user?.id]);
 
