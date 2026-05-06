@@ -34,6 +34,7 @@ import { CounselorIncomingCallBanner } from "@/components/counselor/CounselorInc
 import { CounselorSessionReminderBanner } from "@/components/counselor/CounselorSessionReminderBanner";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
+import { dedupeCounselorChatListRows } from "@/lib/counselorChatListDedupe";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -185,7 +186,9 @@ const CounselorDashboard = () => {
         }
 
         if (chatListResult.status === "fulfilled") {
-          const chatRows = toList<Record<string, unknown>>(chatListResult.value);
+          const chatRows = dedupeCounselorChatListRows(
+            toList<Record<string, unknown>>(chatListResult.value)
+          );
           setOpenConversations(mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE));
         } else {
           setOpenConversations([]);
@@ -250,7 +253,7 @@ const CounselorDashboard = () => {
           as_role: "counselor",
           timeout_ms: 15000,
         });
-        const chatRows = toList<Record<string, unknown>>(chatListResult);
+        const chatRows = dedupeCounselorChatListRows(toList<Record<string, unknown>>(chatListResult));
         setOpenConversations(mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE));
       } catch {
         // Background refresh

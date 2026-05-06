@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/popover";
 import { VoiceMemoPlayer, VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
 
 const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -97,7 +98,7 @@ const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 4;
+const CHAT_LIST_CACHE_VERSION = 5;
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 
 type RawSession = {
@@ -232,13 +233,6 @@ const isSessionAnonymous = (session: Pick<RawSession, "is_anonymous">) => {
 
 const resolveAnonymousLabel = (_session: RawSession) => "Anonymous User";
 
-const conversationStudentKey = (session: RawSession) => {
-  if (isSessionAnonymous(session)) {
-    return `session:${session.id}`;
-  }
-  return String(session.student_id ?? "");
-};
-
 const getUserColor = (name: string) => {
   const colors = [
     "bg-blue-500", "bg-purple-500", "bg-emerald-500", 
@@ -344,9 +338,7 @@ const CounselorMessages = () => {
   });
 
   const filteredChats = useMemo(() => {
-    // `chats` is already de-duplicated per conversation in loadSessions (student + anonymity + role).
-    // Never de-dupe by counselorId here — every row shares the same counselor id and that would hide
-    // all but one student thread.
+    // `chats` is de-duplicated in loadSessions (same student + anonymity + role lane).
     const needle = searchQuery.trim().toLowerCase();
     if (!needle) {
       return chats;
@@ -477,22 +469,26 @@ const CounselorMessages = () => {
             return bTime - aTime;
           });
 
-        const dedupedByConversation = new Map<string, RawSession>();
+        const dedupedByConversation = new Map<
+          string,
+          { session: RawSession; totalUnread: number }
+        >();
+
         for (const session of chatSessions) {
-          const isAnon = isSessionAnonymous(session);
-          const studentKey = conversationStudentKey(session);
-          const assignedRole = session.assigned_role || "counselor";
-          const conversationKey = `s:${studentKey}:a:${isAnon ? 1 : 0}:r:${assignedRole}`;
-          const existing = dedupedByConversation.get(conversationKey);
-          if (!existing) {
-            dedupedByConversation.set(conversationKey, session);
+          const conversationKey = counselorChatDedupeKeyFromSession(session);
+          const unread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
+          const bucket = dedupedByConversation.get(conversationKey);
+          if (!bucket) {
+            dedupedByConversation.set(conversationKey, { session, totalUnread: unread });
             continue;
           }
+          bucket.totalUnread += unread;
 
+          const existing = bucket.session;
           const existingOpen = isOpenSession(existing.status);
           const currentOpen = isOpenSession(session.status);
           if (currentOpen && !existingOpen) {
-            dedupedByConversation.set(conversationKey, session);
+            bucket.session = session;
             continue;
           }
 
@@ -503,12 +499,12 @@ const CounselorMessages = () => {
           const existingTime = toTimestamp(existing.updated_at || existing.created_at);
           const currentTime = toTimestamp(session.updated_at || session.created_at);
           if (currentTime > existingTime) {
-            dedupedByConversation.set(conversationKey, session);
+            bucket.session = session;
           }
         }
 
         const nextChats = Array.from(dedupedByConversation.values())
-          .map((session): ChatListItem => {
+          .map(({ session, totalUnread }): ChatListItem => {
             const isAnonymous = isSessionAnonymous(session);
             const anonymousLabel = resolveAnonymousLabel(session);
             const numericStudentId = Number(session.student_id);
@@ -554,7 +550,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
-              unreadCount: Math.max(0, Math.floor(Number(session.unread_count ?? 0))),
+              unreadCount: totalUnread,
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));
