@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { formatInDisplayZone } from "@/lib/displayTimezone";
 
 interface Message {
   id: string | number;
@@ -36,16 +37,11 @@ interface MlSignals {
 const AI_HISTORY_CACHE_KEY = "ai_chat_history_v1";
 
 const formatTime = (value?: string | number | Date) => {
-  if (!value) {
-    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  const date = new Date(value);
+  const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) {
-    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return formatInDisplayZone(new Date(), "h:mm a");
   }
-
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatInDisplayZone(date, "h:mm a");
 };
 
 export const useAIChat = () => {

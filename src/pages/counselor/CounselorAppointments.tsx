@@ -22,9 +22,20 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
-import { getVideoCallWindowStatus, isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
+import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -61,6 +72,10 @@ const CounselorAppointments = () => {
   const [appointmentTotalItems, setAppointmentTotalItems] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | number | null>(null);
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [bulkCancelScope, setBulkCancelScope] = useState<"all" | "remaining">("all");
+  const [bulkCancelReason, setBulkCancelReason] = useState("");
+  const [bulkCancelSubmitting, setBulkCancelSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<AppointmentFilter>("all");
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
@@ -268,6 +283,38 @@ const CounselorAppointments = () => {
       });
   }, [appointments, searchQuery, statusFilter]);
 
+  const openBulkCancelModal = (scope: "all" | "remaining") => {
+    setBulkCancelScope(scope);
+    setBulkCancelReason("");
+    setBulkCancelOpen(true);
+  };
+
+  const handleBulkCancelConfirm = async () => {
+    try {
+      setBulkCancelSubmitting(true);
+      const data = await api.bulkCancelCounselorAppointments({
+        scope: bulkCancelScope,
+        reason: bulkCancelReason,
+      });
+      const count = Number(data?.cancelled_count ?? 0);
+      const msg =
+        typeof data?.message === "string" && data.message.length > 0
+          ? data.message
+          : "Sessions successfully cancelled.";
+      if (count > 0) {
+        toast.success(msg);
+      } else {
+        toast.message(msg);
+      }
+      setBulkCancelOpen(false);
+      await loadAppointments(true, { force: true });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to cancel sessions"));
+    } finally {
+      setBulkCancelSubmitting(false);
+    }
+  };
+
   const updateAppointmentStatus = async (
     appointmentId: number | string,
     status: "confirmed" | "cancelled"
@@ -331,7 +378,7 @@ const CounselorAppointments = () => {
     });
 
     if (isVideoEnabledAppointment(apt.notes)) {
-      params.set("mode", prefersAudioOnlyOnlineCall(apt.notes) ? "audio" : "video");
+      params.set("mode", isAppointmentAudioOnly(apt) ? "audio" : "video");
     }
 
     navigate(`/counselor/video?${params.toString()}`);
@@ -371,6 +418,78 @@ const CounselorAppointments = () => {
               </CardContent>
             </Card>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
+              onClick={() => openBulkCancelModal("all")}
+            >
+              Cancel All Sessions
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
+              onClick={() => openBulkCancelModal("remaining")}
+            >
+              Cancel Remaining Sessions
+            </Button>
+          </div>
+
+          <Dialog
+            open={bulkCancelOpen}
+            onOpenChange={(open) => {
+              setBulkCancelOpen(open);
+              if (!open) {
+                setBulkCancelReason("");
+                setBulkCancelSubmitting(false);
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Bulk cancel sessions</DialogTitle>
+                <DialogDescription>
+                  {bulkCancelScope === "all"
+                    ? "Are you sure you want to cancel all sessions?"
+                    : "Are you sure you want to cancel all remaining upcoming sessions?"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="bulk-cancel-reason">Reason (optional)</Label>
+                <Textarea
+                  id="bulk-cancel-reason"
+                  placeholder="Students may see this in their notification."
+                  value={bulkCancelReason}
+                  onChange={(e) => setBulkCancelReason(e.target.value)}
+                  className="min-h-[88px] resize-y"
+                  disabled={bulkCancelSubmitting}
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBulkCancelOpen(false)}
+                  disabled={bulkCancelSubmitting}
+                >
+                  ❌ No, Go Back
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => void handleBulkCancelConfirm()}
+                  disabled={bulkCancelSubmitting}
+                >
+                  ✅ Yes, Cancel
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center">
             <div className="relative w-full xl:max-w-md group">
@@ -486,10 +605,12 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    const studentName =
-                      apt.student?.profile?.full_name ||
-                      apt.student?.email ||
-                      `Student #${String(apt.student_id || apt.id).slice(-4)}`;
+                    const isAnonymousApt = Boolean(apt.is_anonymous);
+                    const studentName = isAnonymousApt
+                      ? "Anonymous User"
+                      : apt.student?.profile?.full_name ||
+                        apt.student?.email ||
+                        `Student #${String(apt.student_id || apt.id).slice(-4)}`;
                     const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
                     const isUpdating = String(activeActionId) === String(apt.id);
                     const status = String(apt.status || "").toLowerCase();
@@ -512,6 +633,11 @@ const CounselorAppointments = () => {
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-foreground truncate">{studentName}</p>
+                            {isAnonymousApt && (
+                              <div className="mt-1.5">
+                                <AnonymousModeIndicator variant="badge" audience="counselor" />
+                              </div>
+                            )}
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mt-0.5">
                               {isPhysical ? "In-person" : "Secure Video"}
                             </p>

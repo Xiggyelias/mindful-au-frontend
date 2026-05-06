@@ -167,7 +167,7 @@ const StudentAISupport = () => {
         />
 
         <main className="flex justify-center px-4 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-8">
-          <Card className="flex h-[calc(100vh-120px)] w-full max-w-[min(100%,52rem)] flex-col border-none shadow-2xl shadow-primary/5 rounded-[1.75rem] overflow-hidden bg-background">
+          <Card className="flex h-[calc(100vh-120px)] w-full max-w-7xl flex-col border-none shadow-2xl shadow-primary/5 rounded-[1.75rem] overflow-hidden bg-background">
             <CardHeader className="border-b border-border/50 bg-secondary/5 px-6 py-5 sm:px-8 sm:py-6">
               <CardTitle className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4 min-w-0">
@@ -189,7 +189,7 @@ const StudentAISupport = () => {
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <ScrollArea className="flex-1 min-h-0 px-5 py-7 sm:px-8 sm:py-9">
-                <div className="mx-auto w-full max-w-[42rem] space-y-8">
+                <div className="mx-auto w-full max-w-6xl space-y-8">
                   {messages.length === 0 && !isLoading && (
                     <div className="rounded-2xl border border-dashed border-border/70 bg-secondary/20 px-6 py-10 text-center text-sm text-muted-foreground leading-relaxed">
                       No conversation yet. Send a message to start live AI support.
@@ -198,7 +198,7 @@ const StudentAISupport = () => {
                   {messages.map((msg) =>
                     msg.sender === "user" ? (
                       <div key={msg.id} className="flex w-full justify-end">
-                        <div className="flex w-full max-w-[min(75%,20rem)] flex-col items-end gap-1.5 sm:max-w-[min(72%,22rem)]">
+                        <div className="flex w-full max-w-[min(80%,32rem)] flex-col items-end gap-1.5 sm:max-w-[min(76%,38rem)]">
                           <span className="text-[11px] font-medium text-muted-foreground pr-0.5">You</span>
                           <div className="group relative w-full break-words rounded-[1.25rem] bg-primary px-5 py-4 text-primary-foreground shadow-lg shadow-primary/10 transition-all duration-300 sm:px-5 sm:py-4">
                             <p className="text-base leading-7 whitespace-pre-wrap sm:text-[1.05rem]">{msg.content}</p>
@@ -216,7 +216,7 @@ const StudentAISupport = () => {
                         >
                           <Sparkles className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" />
                         </div>
-                        <div className="min-w-0 flex-1 max-w-[min(75%,28rem)]">
+                        <div className="min-w-0 flex-1 max-w-[min(92%,48rem)] lg:max-w-[min(90%,56rem)]">
                           <div className="group relative break-words rounded-[1.25rem] border border-border/50 bg-secondary/50 px-5 py-4 text-foreground transition-all duration-300 sm:px-[1.125rem] sm:py-[1.125rem]">
                             <p className="text-base leading-7 whitespace-pre-wrap sm:text-[1.05rem]">{msg.content}</p>
                             <p className="mt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
@@ -249,7 +249,7 @@ const StudentAISupport = () => {
               </ScrollArea>
 
               <div className="border-t border-border/50 bg-background px-5 py-6 sm:px-8 sm:py-7">
-                <div className="mx-auto w-full max-w-[42rem] space-y-5">
+                <div className="mx-auto w-full max-w-6xl space-y-5">
                   {supportSignal?.requiresImmediateHelp && (
                     <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

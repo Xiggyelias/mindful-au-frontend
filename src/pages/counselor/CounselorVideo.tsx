@@ -11,6 +11,7 @@ import {
   FileText,
   Heart,
   Clock,
+  MapPin,
   Mic,
   MicOff,
   VideoOff,
@@ -31,13 +32,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { api } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
   getVideoCallWindowStatus,
+  isAppointmentAudioOnly,
   isVideoEnabledAppointment,
   normalizeVideoCallDuration,
   prefersAudioOnlyOnlineCall,
+  getAppointmentWhereLabel,
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -204,10 +208,6 @@ const CounselorVideo = () => {
     setIsMuted((previous) => !previous);
   };
 
-  const handleToggleVideo = () => {
-    void toggleVideo();
-  };
-
   const handleAcceptIncomingCall = () => {
     void acceptIncomingCall();
   };
@@ -239,7 +239,23 @@ const CounselorVideo = () => {
     [activeSessionId, upcomingSessions]
   );
 
+  const activeSessionAudioOnly = useMemo(
+    () => isAppointmentAudioOnly(activeSession ?? null),
+    [activeSession]
+  );
+
+  const handleToggleVideo = () => {
+    if (activeSessionAudioOnly) {
+      toast.message("This session is audio-only.");
+      return;
+    }
+    void toggleVideo();
+  };
+
   const requestedMode = useMemo((): "video" | "audio" => {
+    if (activeSession && isAppointmentAudioOnly(activeSession)) {
+      return "audio";
+    }
     const rawMode = searchParams.get("mode");
     if (rawMode === "audio") {
       return "audio";
@@ -255,7 +271,7 @@ const CounselorVideo = () => {
       return "audio";
     }
     return "video";
-  }, [searchParams, activeSession?.notes]);
+  }, [searchParams, activeSession]);
 
   useEffect(() => {
     if (upcomingSessions.length === 0) {
@@ -306,8 +322,10 @@ const CounselorVideo = () => {
         return;
       }
 
+      const resolvedMode = isAppointmentAudioOnly(session) ? "audio" : mode;
+
       setActiveSessionId(sessionId);
-      setPendingCallMode(mode);
+      setPendingCallMode(resolvedMode);
       setPendingSessionStartId(sessionId);
     },
     [activeSessionId, isOnline, localStream, upcomingSessions]
@@ -528,7 +546,7 @@ const CounselorVideo = () => {
 
   const remoteParticipantName = useMemo(() => {
     if (activeSession?.is_anonymous) {
-      return activeSession.anonymous_id || `Anonymous Student #${String(activeSession?.id || "").slice(-4) || "----"}`;
+      return "Anonymous User";
     }
     return getParticipantName(activeSession?.student, "Student");
   }, [activeSession]);
@@ -763,6 +781,16 @@ const CounselorVideo = () => {
                               {formatScheduleLabel(activeSession.scheduled_at)}
                             </Badge>
                           )}
+                          {activeSession && (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full px-3 py-1 max-w-[min(100%,280px)] gap-1"
+                              title={getAppointmentWhereLabel(activeSession.notes)}
+                            >
+                              <MapPin className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                              <span className="truncate">{getAppointmentWhereLabel(activeSession.notes)}</span>
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
@@ -907,7 +935,7 @@ const CounselorVideo = () => {
                     size="lg"
                     className="h-14 w-14 rounded-full"
                     onClick={handleToggleVideo}
-                    disabled={!localStream}
+                    disabled={!localStream || activeSessionAudioOnly}
                   >
                     {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
                   </Button>
@@ -943,7 +971,12 @@ const CounselorVideo = () => {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate">{remoteParticipantName}</p>
-                        <p className="text-[10px] text-muted-foreground">Active Online Session</p>
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          <span className="truncate">
+                            {activeSession ? getAppointmentWhereLabel(activeSession.notes) : "Session"}
+                          </span>
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1011,6 +1044,7 @@ const CounselorVideo = () => {
                     upcomingSessions.map((session) => {
                       const sessionId = String(session.id);
                       const isActive = activeSessionId === sessionId;
+                      const sessionAudioOnly = isAppointmentAudioOnly(session);
                       const callWindow = getVideoCallWindowStatus(
                         session.scheduled_at,
                         session.duration_minutes
@@ -1035,14 +1069,28 @@ const CounselorVideo = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">
-                                {getParticipantName(
-                                  session.student,
-                                  `Student #${String(session.id).slice(-4)}`
-                                )}
+                                {session.is_anonymous
+                                  ? "Anonymous User"
+                                  : getParticipantName(
+                                      session.student,
+                                      `Student #${String(session.id).slice(-4)}`
+                                    )}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {formatScheduleLabel(session.scheduled_at)}
                               </p>
+                              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                <span className="line-clamp-2">{getAppointmentWhereLabel(session.notes)}</span>
+                              </p>
+                              {session.is_anonymous && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <AnonymousModeIndicator variant="badge" audience="counselor" />
+                                  <span className="text-[10px] font-medium text-muted-foreground">
+                                    Audio only · identity hidden
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <Badge
                               variant={callWindow.canStart ? "secondary" : "outline"}
@@ -1062,6 +1110,7 @@ const CounselorVideo = () => {
                               className="w-full gap-1 h-8 text-[11px]"
                               onClick={() => handleStartSession(sessionId, "video")}
                               disabled={
+                                sessionAudioOnly ||
                                 isBusyWithOtherCall ||
                                 isStarting ||
                                 !callWindow.canStart ||

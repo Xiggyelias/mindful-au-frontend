@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
+import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
 
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
@@ -92,6 +93,7 @@ const App = () => (
             }}
           >
             <AuthProvider>
+              <ChatIncomingNotificationHost />
               <ScreenshotShield />
               <Suspense fallback={<RouteLoader />}>
                 <Routes>

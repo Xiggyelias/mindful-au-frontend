@@ -40,6 +40,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   formatChatFileSize,
@@ -49,7 +50,12 @@ import {
 } from "@/lib/chatAttachments";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { formatDistanceToNowStrict } from "date-fns";
+import {
+  formatInDisplayZone,
+  isThisYearInDisplayZone,
+  isTodayInDisplayZone,
+  isYesterdayInDisplayZone,
+} from "@/lib/displayTimezone";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import {
@@ -65,6 +71,7 @@ import {
   PopoverTrigger 
 } from "@/components/ui/popover";
 import { VoiceMemoPlayer, VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 
 const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -85,12 +92,12 @@ const peerCounselorNavItems = [
   { label: "Profile", icon: UserCircle2, path: "/peer/profile" },
 ];
 
-const SESSION_POLL_INTERVAL_MS = 10000;
+const SESSION_POLL_INTERVAL_MS = 12000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 3;
+const CHAT_LIST_CACHE_VERSION = 4;
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 
 type RawSession = {
@@ -108,6 +115,7 @@ type RawSession = {
   identity_visible_to_viewer?: boolean;
   created_at?: string;
   updated_at?: string;
+  unread_count?: number;
   student?: {
     id?: number;
     email?: string;
@@ -141,6 +149,7 @@ type ChatListItem = {
   lastSeenAt: string | null;
   isPeerAssigned: boolean;
   peerCounselorName: string;
+  unreadCount: number;
 };
 
 type ChatListMeta = {
@@ -160,10 +169,23 @@ const getChatListCacheKey = (isPeerCounselor: boolean, page: number) =>
 const isOpenSession = (status: string | null | undefined) =>
   status !== "completed" && status !== "cancelled";
 
+/** Parse API / session timestamps (ISO8601, or legacy `Y-m-d H:i:s`) into local `Date`. */
+const parseBackendDate = (value?: string | null): Date | null => {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (s === "") return null;
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
+    const legacy = new Date(s.replace(" ", "T"));
+    if (!Number.isNaN(legacy.getTime())) return legacy;
+  }
+  return null;
+};
+
 const toTimestamp = (value?: string) => {
-  if (!value) return 0;
-  const ts = new Date(value).getTime();
-  return Number.isFinite(ts) ? ts : 0;
+  const d = parseBackendDate(value);
+  return d ? d.getTime() : 0;
 };
 
 const isOnlineFromLastSeen = (lastSeenAt?: string | null) => {
@@ -177,11 +199,23 @@ const resolveChatOnline = (chat?: Pick<ChatListItem, "isOnline" | "lastSeenAt"> 
   return chat.isOnline || isOnlineFromLastSeen(chat.lastSeenAt);
 };
 
-const formatTime = (dateString?: string) => {
-  if (!dateString) return "";
-  const timestamp = toTimestamp(dateString);
-  if (!timestamp) return "";
-  return formatDistanceToNowStrict(new Date(timestamp), { addSuffix: true });
+/** Sidebar / session list: clock time in display zone (default Africa/Harare). */
+const formatChatListTime = (dateString?: string) => {
+  const d = parseBackendDate(dateString);
+  if (!d) return "";
+  if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
+  if (isYesterdayInDisplayZone(d)) return `Yesterday · ${formatInDisplayZone(d, "h:mm a")}`;
+  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d · h:mm a");
+  return formatInDisplayZone(d, "MMM d, yyyy · h:mm a");
+};
+
+/** In-thread message footer: sent time in display zone. */
+const formatMessageTime = (dateString?: string) => {
+  const d = parseBackendDate(dateString);
+  if (!d) return "";
+  if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
+  if (isYesterdayInDisplayZone(d)) return `Yesterday ${formatInDisplayZone(d, "h:mm a")}`;
+  return formatInDisplayZone(d, "MMM d, h:mm a");
 };
 
 const getInitials = (name: string) => {
@@ -191,21 +225,16 @@ const getInitials = (name: string) => {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 };
 
-const resolveAnonymousLabel = (session: RawSession) => {
-  const candidate = String(session.anonymous_id || "").trim();
-  if (candidate) return candidate;
-  return `User_${String(Number(session.id) % 10000).padStart(4, "0")}`;
-};
-
 const isSessionAnonymous = (session: Pick<RawSession, "is_anonymous">) => {
   const v = session.is_anonymous as unknown;
   return v === true || v === 1 || v === "1";
 };
 
+const resolveAnonymousLabel = (_session: RawSession) => "Anonymous User";
+
 const conversationStudentKey = (session: RawSession) => {
   if (isSessionAnonymous(session)) {
-    const tag = String(session.anonymous_id || "").trim();
-    return tag !== "" ? tag : `session:${session.id}`;
+    return `session:${session.id}`;
   }
   return String(session.student_id ?? "");
 };
@@ -357,8 +386,13 @@ const CounselorMessages = () => {
               const cachedChats = Array.isArray(parsed?.chats)
                 ? parsed.chats.map((chat) => {
                     const lastSeenAt = typeof chat?.lastSeenAt === "string" ? chat.lastSeenAt : null;
+                    const unreadCount = Math.max(
+                      0,
+                      Math.floor(Number((chat as ChatListItem)?.unreadCount ?? 0))
+                    );
                     return {
                       ...chat,
+                      unreadCount,
                       isOnline:
                         typeof chat?.isOnline === "boolean"
                           ? chat.isOnline || isOnlineFromLastSeen(lastSeenAt)
@@ -520,6 +554,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
+              unreadCount: Math.max(0, Math.floor(Number(session.unread_count ?? 0))),
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));
@@ -627,6 +662,30 @@ const CounselorMessages = () => {
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
   }, [loadSessions, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const onDigest = () => {
+      void loadSessions(true);
+    };
+    window.addEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+    return () => window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+  }, [loadSessions, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const onAnon = () => void loadSessions(true);
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnon);
+    return () => window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnon);
+  }, [loadSessions, user?.id]);
+
+  const prevMessagesLoadingRef = useRef(false);
+  useEffect(() => {
+    if (prevMessagesLoadingRef.current && !messagesLoading && selectedSessionId) {
+      void loadSessions(true);
+    }
+    prevMessagesLoadingRef.current = messagesLoading;
+  }, [messagesLoading, selectedSessionId, loadSessions]);
 
   // Optimized scroll management using refs to avoid re-binding on every message change
   const messagesLengthRef = useRef(messages.length);
@@ -1153,9 +1212,16 @@ const CounselorMessages = () => {
                         onClick={() => setSelectedChatId(chat.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background ${chat.isAnonymous ? "bg-muted-foreground/55" : getUserColor(chat.studentName)}`}>
+                          <div
+                            className={cn(
+                              "h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background",
+                              chat.isAnonymous
+                                ? "bg-black ring-red-600/70"
+                                : getUserColor(chat.studentName)
+                            )}
+                          >
                             <span className="text-white text-[11px] font-bold tracking-tight">
-                              {chat.isAnonymous ? "??" : getInitials(chat.studentName)}
+                              {chat.isAnonymous ? "AU" : getInitials(chat.studentName)}
                             </span>
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1165,21 +1231,27 @@ const CounselorMessages = () => {
                                   "truncate text-[13px] font-semibold tracking-tight",
                                   isActive ? "text-foreground" : "text-foreground/90"
                                 )}>
-                                  {chat.isAnonymous ? "Anonymous Student" : chat.studentName}
+                                  {chat.isAnonymous ? "Anonymous User" : chat.studentName}
                                 </p>
-                                {chat.isAnonymous && (
-                                  <span className="rounded-md bg-muted px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    Anon
-                                  </span>
-                                )}
+                                {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
                                 {chat.isPeerAssigned && (
                                   <span className="rounded-md bg-primary/12 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
                                     Peer
                                   </span>
                                 )}
                               </div>
-                              <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground">
-                                {formatTime(chat.lastActivity)}
+                              <span className="flex shrink-0 items-center gap-1.5">
+                                {chat.unreadCount > 0 && (
+                                  <span
+                                    className="flex h-[1.35rem] min-w-[1.35rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm ring-2 ring-background"
+                                    aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
+                                  >
+                                    {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                                  </span>
+                                )}
+                                <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground">
+                                  {formatChatListTime(chat.lastActivity)}
+                                </span>
                               </span>
                             </div>
                             <p className="line-clamp-2 text-[12px] leading-snug text-muted-foreground">
@@ -1211,22 +1283,20 @@ const CounselorMessages = () => {
                     <div
                       className={cn(
                         "flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-inner ring-2 ring-background",
-                        selectedChat?.isAnonymous ? "bg-muted-foreground/50" : getUserColor(selectedChat?.studentName || "Student")
+                        selectedChat?.isAnonymous ? "bg-black ring-red-600/70" : getUserColor(selectedChat?.studentName || "Student")
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">
-                        {selectedChat ? (selectedChat.isAnonymous ? "??" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
+                        {selectedChat ? (selectedChat.isAnonymous ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="truncate text-base font-semibold leading-tight">
-                          {selectedChat?.isAnonymous ? "Anonymous Student" : selectedChat?.studentName || "Select a conversation"}
+                          {selectedChat?.isAnonymous ? "Anonymous User" : selectedChat?.studentName || "Select a conversation"}
                         </p>
                         {selectedChat?.isAnonymous && (
-                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Anonymous
-                          </span>
+                          <AnonymousModeIndicator variant="badge" audience="counselor" />
                         )}
                         {selectedChat?.isPeerAssigned && (
                           <span className="rounded-md bg-primary/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
@@ -1368,7 +1438,7 @@ const CounselorMessages = () => {
                       <h3 className="text-2xl font-bold text-foreground">Student Conversations</h3>
                       <p className="max-w-xs">
                         {selectedChat?.lastActivity 
-                          ? `Last conversation was ${formatTime(selectedChat.lastActivity)}`
+                          ? `Last activity ${formatChatListTime(selectedChat.lastActivity)}`
                           : "Select a student conversation to start chatting"}
                       </p>
                       <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-full text-xs">
@@ -1419,34 +1489,34 @@ const CounselorMessages = () => {
                           !!prevMsg && String(prevMsg.sender_id) === String(msg.sender_id);
                         const showAvatar = !sameSenderAsPrev;
                         const studentLabel =
-                          selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName ?? "Student");
+                          selectedChat?.isAnonymous ? "Anonymous User" : (selectedChat?.studentName ?? "Student");
                         const incomingInitials =
-                          selectedChat?.isAnonymous ? "??" : getInitials(studentLabel);
+                          selectedChat?.isAnonymous ? "AU" : getInitials(studentLabel);
 
                         return (
                           <div
                             key={msg.id}
                             className={cn(
-                              // `row-reverse` flips main-start to the right; use justify-start so outgoing
-                              // messages anchor to the right. `justify-end` here packed them to the left.
                               "flex w-full min-w-0 items-end gap-2.5",
-                              isMine ? "flex-row-reverse justify-start" : "flex-row justify-start"
+                              isMine ? "justify-end" : "justify-start"
                             )}
                           >
-                            <div className="flex w-9 shrink-0 justify-center">
-                              {showAvatar ? (
-                                <div
-                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${
-                                    isMine ? getUserColor(userName) : getUserColor(studentLabel)
-                                  }`}
-                                  title={isMine ? userName : studentLabel}
-                                >
-                                  {isMine ? getInitials(userName) : incomingInitials}
-                                </div>
-                              ) : (
-                                <div className="h-9 w-9" aria-hidden />
-                              )}
-                            </div>
+                            {!isMine && (
+                              <div className="flex w-9 shrink-0 justify-center">
+                                {showAvatar ? (
+                                  <div
+                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(
+                                      studentLabel
+                                    )}`}
+                                    title={studentLabel}
+                                  >
+                                    {incomingInitials}
+                                  </div>
+                                ) : (
+                                  <div className="h-9 w-9" aria-hidden />
+                                )}
+                              </div>
+                            )}
 
                             <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
                               <div
@@ -1461,7 +1531,7 @@ const CounselorMessages = () => {
                               </div>
                               <div className="flex items-center gap-1.5 px-0.5">
                                 <span className="text-[10px] font-medium text-muted-foreground">
-                                  {formatTime(msg.created_at)}
+                                  {formatMessageTime(msg.created_at)}
                                 </span>
                                 {isMine && (
                                   <span
@@ -1484,10 +1554,10 @@ const CounselorMessages = () => {
                         <div className="flex items-end gap-2.5">
                           <div
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(
-                              selectedChat?.isAnonymous ? "Anonymous Student" : (selectedChat?.studentName ?? "Student")
+                              selectedChat?.isAnonymous ? "Anonymous User" : (selectedChat?.studentName ?? "Student")
                             )}`}
                           >
-                            {selectedChat?.isAnonymous ? "??" : getInitials(selectedChat?.studentName ?? "Student")}
+                            {selectedChat?.isAnonymous ? "AU" : getInitials(selectedChat?.studentName ?? "Student")}
                           </div>
                           <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-muted/40 px-4 py-2.5 dark:bg-muted/25">
                             <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Student is typing…</p>

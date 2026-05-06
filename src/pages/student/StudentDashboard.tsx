@@ -13,16 +13,20 @@ import {
   Clock,
   Users,
   ClipboardCheck,
+  Shield,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
 import { DailyTipCard } from "@/components/DailyTipCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
@@ -133,7 +137,8 @@ const StudentDashboard = () => {
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const { user } = useAuth();
+  const [isSavingAnonymousMode, setIsSavingAnonymousMode] = useState(false);
+  const { user, refreshUser } = useAuth();
   const {
     tip: dailyTip,
     isLoading: tipLoading,
@@ -409,6 +414,31 @@ const StudentDashboard = () => {
     }
   };
 
+  const handleAnonymousModeToggle = async (checked: boolean) => {
+    if (!user?.id) return;
+
+    if (user.profile?.anonymous_mode && !checked) {
+      const ok = window.confirm(
+        "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
+      );
+      if (!ok) return;
+    }
+
+    try {
+      setIsSavingAnonymousMode(true);
+      await api.updateProfile({ anonymous_mode: checked });
+      await refreshUser();
+      dispatchChatAnonymitySync();
+      await loadStats();
+      toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.");
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error, "Failed to update anonymous mode");
+      toast.error(message || "Could not update anonymous mode.");
+    } finally {
+      setIsSavingAnonymousMode(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
@@ -611,6 +641,34 @@ const StudentDashboard = () => {
             />
           </div>
 
+          <Card className="border border-border/60 shadow-sm mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Chat anonymity
+              </CardTitle>
+              <CardDescription>
+                When on, counselors see you as &quot;Anonymous&quot; until you turn it off.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="student-anonymous-mode"
+                  checked={user?.profile?.anonymous_mode ?? false}
+                  onCheckedChange={handleAnonymousModeToggle}
+                  disabled={isSavingAnonymousMode}
+                />
+                <Label htmlFor="student-anonymous-mode" className="text-sm font-medium cursor-pointer">
+                  Anonymous mode
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground max-w-md">
+                This applies to active chat sessions. You can also change this from an open chat.
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-8 lg:grid-cols-2">
             {/* Recent Conversations */}
             <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
@@ -643,7 +701,7 @@ const StudentDashboard = () => {
                         sessionStatus === "active" ||
                         sessionStatus === "pending" ||
                         sessionStatus === "open";
-                      const goResumeChat = () => navigate(`/student/chat?session_id=${session.id}`);
+                      const goResumeChat = () => navigate(`/student/chat?session=${session.id}`);
 
                       return (
                         <div

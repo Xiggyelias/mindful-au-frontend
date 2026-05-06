@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 interface ChatSidebarProps {
   sessions: Session[];
@@ -159,10 +160,25 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-2xl border border-primary/10 bg-primary/5 p-3">
+        <div
+          className={cn(
+            "flex items-center justify-between rounded-2xl border p-3 transition-colors",
+            anonymousStartMode
+              ? "border-red-600 bg-black text-white shadow-[inset_0_0_0_1px_rgba(220,38,38,0.35)]"
+              : "border-primary/10 bg-primary/5"
+          )}
+        >
           <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-primary" />
-            <Label htmlFor="anon-mode" className="text-xs font-bold uppercase tracking-wider cursor-pointer">Stay Anonymous</Label>
+            <Shield className={cn("h-4 w-4 shrink-0", anonymousStartMode ? "text-red-500" : "text-primary")} />
+            <Label
+              htmlFor="anon-mode"
+              className={cn(
+                "cursor-pointer text-xs font-bold uppercase tracking-wider",
+                anonymousStartMode ? "text-white" : ""
+              )}
+            >
+              Anonymous mode
+            </Label>
           </div>
           <Switch 
             id="anon-mode" 

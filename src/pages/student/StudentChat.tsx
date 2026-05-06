@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Shield,
   Loader2,
@@ -18,6 +18,8 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
@@ -25,10 +27,12 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
+import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -67,6 +71,8 @@ const COUNSELOR_PAGE_SIZE = 24;
 
 const StudentChat = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionFromUrl = searchParams.get("session");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -82,12 +88,13 @@ const StudentChat = () => {
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
+  const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
   const lastRenderedTailMessageIdRef = useRef<number | null>(null);
   const hasLoadedCounselorsRef = useRef(false);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const profileAnonymousMode = Boolean(user?.profile?.anonymous_mode);
 
@@ -121,6 +128,16 @@ const StudentChat = () => {
     goToNextPage: goToNextSessionPage,
     startSessionWithCounselor
   } = useChatSession(user?.id);
+
+  useEffect(() => {
+    if (!sessionFromUrl || !sessions?.length) {
+      return;
+    }
+    const found = sessions.find((s) => String(s.id) === String(sessionFromUrl));
+    if (found) {
+      selectSession(found);
+    }
+  }, [sessionFromUrl, sessions, selectSession]);
 
   const {
     messages,
@@ -317,6 +334,7 @@ const StudentChat = () => {
 
   const handleStartVideoCall = async () => {
     if (!activeSession?.counselor_id) return toast.error("No active conversation");
+    const chatAnonymous = Boolean(activeSession.is_anonymous);
     try {
       setIsPreparingCall(true);
       const scheduledAt = new Date(Date.now() + 60 * 1000).toISOString();
@@ -324,10 +342,12 @@ const StudentChat = () => {
         counselor_id: activeSession.counselor_id,
         scheduled_at: scheduledAt,
         duration_minutes: 30,
-        notes: "Online",
-        is_anonymous: Boolean(activeSession.is_anonymous),
+        notes: chatAnonymous ? "Online audio" : "Online",
+        is_anonymous: chatAnonymous,
+        call_type: chatAnonymous ? "audio" : "video",
       });
-      navigate(`/student/video-call?appointment_id=${created.id}&counselor_id=${activeSession.counselor_id}&mode=video&autostart=1`);
+      const mode = chatAnonymous ? "audio" : "video";
+      navigate(`/student/video-call?appointment_id=${created.id}&counselor_id=${activeSession.counselor_id}&mode=${mode}&autostart=1`);
     } catch {
       toast.error("Unable to start video call");
     } finally {
@@ -430,6 +450,34 @@ const StudentChat = () => {
     }
   }, []); // Empty deps - uses refs for changing values
 
+  const handleActiveChatAnonymityToggle = async (checked: boolean) => {
+    if (!sessionId || !activeSession) return;
+
+    if (activeSession.is_anonymous && !checked) {
+      const ok = window.confirm(
+        "Turning this off will show your real name to this counselor for active chats. Continue?",
+      );
+      if (!ok) return;
+    }
+
+    try {
+      setIsSavingChatAnonymity(true);
+      await api.updateSessionChatAnonymity(sessionId, checked);
+      await refreshUser();
+      dispatchChatAnonymitySync();
+      toast.success(
+        checked
+          ? "Counselors now see this conversation as anonymous."
+          : "Your profile name is visible in chat again.",
+      );
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error, "Could not update anonymity");
+      toast.error(message || "Could not update anonymity.");
+    } finally {
+      setIsSavingChatAnonymity(false);
+    }
+  };
+
   return (
     <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar
@@ -524,6 +572,12 @@ const StudentChat = () => {
                 </div>
               )}
 
+              {activeSession?.is_anonymous && (
+                <div className="shrink-0 border-b border-red-600/50 bg-black px-4 py-2">
+                  <AnonymousModeIndicator variant="banner" audience="student" />
+                </div>
+              )}
+
               {activeSession ? (
                 <>
                   {/* Chat Header */}
@@ -556,6 +610,21 @@ const StudentChat = () => {
                     </div>
                     
                     <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-2 py-1 sm:px-2.5 sm:py-1">
+                        <Switch
+                          id="active-chat-anonymous"
+                          checked={Boolean(activeSession.is_anonymous)}
+                          onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
+                          disabled={isSavingChatAnonymity}
+                          aria-label="Anonymous mode for this chat"
+                        />
+                        <Label
+                          htmlFor="active-chat-anonymous"
+                          className="hidden cursor-pointer text-[10px] font-bold uppercase tracking-widest text-muted-foreground sm:inline"
+                        >
+                          Anon
+                        </Label>
+                      </div>
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
                         <span>{isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>

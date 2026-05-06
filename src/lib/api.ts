@@ -942,6 +942,28 @@ class ApiClient {
     return response.data;
   }
 
+  async getChatIncomingDigest(params: { after_id: number; timeout_ms?: number }) {
+    const timeoutMs =
+      typeof params.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : 12_000;
+    const afterId = Math.max(0, Math.floor(Number(params.after_id) || 0));
+    const response = await this.client.get('/chat/incoming-digest', {
+      params: { after_id: afterId },
+      timeout: timeoutMs,
+    });
+    return response.data as {
+      after_id: number;
+      messages: Array<{
+        id: number;
+        session_id: number;
+        sender_label: string;
+        preview: string;
+        created_at: string;
+      }>;
+    };
+  }
+
   async getSession(id: string) {
     const response = await this.client.get(`/sessions/${id}`);
     return response.data;
@@ -949,6 +971,11 @@ class ApiClient {
 
   async createSession(data: { counselor_id?: number; session_type: string; is_anonymous?: boolean }) {
     const response = await this.client.post('/sessions', data);
+    return response.data;
+  }
+
+  async updateSessionChatAnonymity(sessionId: string | number, is_anonymous: boolean) {
+    const response = await this.client.patch(`/sessions/${sessionId}/chat-anonymity`, { is_anonymous });
     return response.data;
   }
 
@@ -1188,6 +1215,7 @@ class ApiClient {
     duration_minutes?: number;
     notes?: string;
     is_anonymous?: boolean;
+    call_type?: 'audio' | 'video';
   }) {
     const response = await this.client.post('/appointments', data);
     return response.data;
@@ -1204,6 +1232,20 @@ class ApiClient {
       data: payload,
     });
     return response.data;
+  }
+
+  async bulkCancelCounselorAppointments(data: { scope: 'all' | 'remaining'; reason?: string | null }) {
+    const body: { scope: 'all' | 'remaining'; reason?: string } = { scope: data.scope };
+    const trimmed = typeof data.reason === 'string' ? data.reason.trim() : '';
+    if (trimmed !== '') {
+      body.reason = trimmed;
+    }
+    const response = await this.client.post('/appointments/bulk-cancel', body);
+    return response.data as {
+      message?: string;
+      cancelled_count?: number;
+      appointment_ids?: Array<number | string>;
+    };
   }
 
   // Notifications
@@ -1298,9 +1340,35 @@ class ApiClient {
   }
 
   // Video Calls
-  async authorizeVideoCall(appointmentId: number | string) {
-    const response = await this.client.post('/video-calls/authorize', {
+  async authorizeVideoCall(
+    appointmentId: number | string,
+    options?: { call_type?: "video" | "audio" }
+  ) {
+    const response = await this.client.post("/video-calls/authorize", {
       appointment_id: Number(appointmentId),
+      ...(options?.call_type ? { call_type: options.call_type } : {}),
+    });
+    return response.data;
+  }
+
+  async getCounselorIncomingCalls() {
+    const response = await this.client.get("/counselor/incoming-calls", {
+      timeout: 12_000,
+    });
+    return response.data;
+  }
+
+  async updateCounselorIncomingCall(
+    callId: number | string,
+    status: "accepted" | "declined"
+  ) {
+    const response = await this.client.patch(`/counselor/incoming-calls/${callId}`, { status });
+    return response.data;
+  }
+
+  async getCounselorSessionReminders() {
+    const response = await this.client.get("/counselor/session-reminders", {
+      timeout: 12_000,
     });
     return response.data;
   }

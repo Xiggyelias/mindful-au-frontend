@@ -10,6 +10,7 @@ import {
   History,
   LayoutDashboard,
   Loader2,
+  MapPin,
   MessageSquare,
   Mic,
   MicOff,
@@ -37,10 +38,12 @@ import {
   formatCallDuration,
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
+  isAppointmentAudioOnly,
   normalizeVideoCallDuration,
   prefersAudioOnlyOnlineCall,
+  getAppointmentWhereLabel,
 } from "@/lib/videoCall";
-import { toast } from "sonner";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -230,7 +233,15 @@ const StudentVideoCall = () => {
     [activeAppointmentId, upcomingAppointments]
   );
 
+  const audioOnlyAppointment = useMemo(
+    () => isAppointmentAudioOnly(activeAppointment ?? null),
+    [activeAppointment]
+  );
+
   const requestedMode: CallMode = useMemo(() => {
+    if (activeAppointment && isAppointmentAudioOnly(activeAppointment)) {
+      return "audio";
+    }
     const rawMode = searchParams.get("mode");
     if (rawMode === "audio") {
       return "audio";
@@ -246,7 +257,7 @@ const StudentVideoCall = () => {
       return "audio";
     }
     return "video";
-  }, [searchParams, activeAppointment?.notes]);
+  }, [searchParams, activeAppointment]);
 
   useEffect(() => {
     if (upcomingAppointments.length === 0) {
@@ -382,7 +393,9 @@ const StudentVideoCall = () => {
       ? "Camera off"
       : "Preview live"
     : isStartingMode
-    ? "Opening camera"
+    ? isStartingMode === "audio"
+      ? "Preparing audio…"
+      : "Opening camera"
     : "Preview appears here";
   const emptyStageMessage = activeAppointment
     ? remoteVideoStatusMessage
@@ -394,6 +407,10 @@ const StudentVideoCall = () => {
   };
 
   const handleToggleVideo = () => {
+    if (audioOnlyAppointment) {
+      toast.message("This session is audio-only.");
+      return;
+    }
     void toggleVideo();
   };
 
@@ -497,20 +514,21 @@ const StudentVideoCall = () => {
         return;
       }
 
-      setIsStartingMode(mode);
+      const effectiveMode: CallMode = isAppointmentAudioOnly(activeAppointment) ? "audio" : mode;
+      setIsStartingMode(effectiveMode);
       try {
-        const authorization = await api.authorizeVideoCall(activeAppointmentId);
+        const authorization = await api.authorizeVideoCall(activeAppointmentId, { call_type: effectiveMode });
         const serverDuration = Number(authorization?.max_duration_minutes);
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null
         );
 
         const started =
-          mode === "audio" ? await startAudioCall() : await startCall();
+          effectiveMode === "audio" ? await startAudioCall() : await startCall();
 
         if (started) {
           toast.success(
-            mode === "audio"
+            effectiveMode === "audio"
               ? "Audio call started. Waiting for your counselor."
               : "Video call started. Waiting for your counselor."
           );
@@ -862,6 +880,23 @@ const StudentVideoCall = () => {
                                 {formatScheduleLabel(activeAppointment.scheduled_at)}
                               </div>
                             )}
+                            {activeAppointment && (
+                              <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
+                                <MapPin className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                                <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
+                              </div>
+                            )}
+                            {activeAppointment?.is_anonymous && (
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <AnonymousModeIndicator variant="badge" />
+                                <Badge
+                                  variant="outline"
+                                  className="border-red-600/80 bg-black/50 text-[10px] font-medium text-white"
+                                >
+                                  Audio only
+                                </Badge>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex flex-col items-end gap-2">
@@ -940,7 +975,9 @@ const StudentVideoCall = () => {
                                 </div>
                               ) : activeWindowStatus?.canStart && !localStream ? (
                                 <p className="text-xs font-medium uppercase tracking-[0.24em] text-emerald-200/80">
-                                  Tap start video below when you are ready
+                                  {audioOnlyAppointment
+                                    ? "Tap start audio below when you are ready"
+                                    : "Tap start video below when you are ready"}
                                 </p>
                               ) : null}
                             </div>
@@ -975,6 +1012,7 @@ const StudentVideoCall = () => {
                                       : "bg-white/10 hover:bg-white/20"
                                   )}
                                   onClick={handleToggleVideo}
+                                  disabled={!localStream || audioOnlyAppointment}
                                 >
                                   {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
                                 </Button>
@@ -1000,24 +1038,31 @@ const StudentVideoCall = () => {
                               </>
                             ) : (
                               <>
+                                {!audioOnlyAppointment && (
+                                  <Button
+                                    variant="default"
+                                    size="lg"
+                                    className="h-14 rounded-full bg-emerald-500 px-6 text-white shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
+                                    onClick={handleStartCall}
+                                    disabled={!canStartSelectedCall || isConnecting}
+                                  >
+                                    {isStartingMode === "video" ? (
+                                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    ) : (
+                                      <Video className="mr-2 h-5 w-5" />
+                                    )}
+                                    {isStartingMode === "video" ? "Starting..." : "Start Video"}
+                                  </Button>
+                                )}
                                 <Button
-                                  variant="default"
+                                  variant={audioOnlyAppointment ? "default" : "ghost"}
                                   size="lg"
-                                  className="h-14 rounded-full bg-emerald-500 px-6 text-white shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
-                                  onClick={handleStartCall}
-                                  disabled={!canStartSelectedCall || isConnecting}
-                                >
-                                  {isStartingMode === "video" ? (
-                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                  ) : (
-                                    <Video className="mr-2 h-5 w-5" />
+                                  className={cn(
+                                    "h-14 rounded-full px-6 text-white",
+                                    audioOnlyAppointment
+                                      ? "bg-emerald-500 shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
+                                      : "border border-white/10 bg-white/10 hover:bg-white/20"
                                   )}
-                                  {isStartingMode === "video" ? "Starting..." : "Start Video"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="lg"
-                                  className="h-14 rounded-full border border-white/10 bg-white/10 px-6 text-white hover:bg-white/20"
                                   onClick={handleStartAudioCall}
                                   disabled={!canStartSelectedCall || isConnecting}
                                 >
@@ -1026,7 +1071,7 @@ const StudentVideoCall = () => {
                                   ) : (
                                     <Mic className="mr-2 h-5 w-5" />
                                   )}
-                                  {isStartingMode === "audio" ? "Starting..." : "Audio only"}
+                                  {isStartingMode === "audio" ? "Starting..." : "Start audio call"}
                                 </Button>
                               </>
                             )}
@@ -1107,6 +1152,10 @@ const StudentVideoCall = () => {
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground whitespace-nowrap">
                                 {formatScheduleLabel(appointment.scheduled_at)}
+                              </p>
+                              <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
+                                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span className="line-clamp-2">{getAppointmentWhereLabel(appointment.notes)}</span>
                               </p>
                             </div>
                             <Badge

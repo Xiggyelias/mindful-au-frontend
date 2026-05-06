@@ -3,7 +3,7 @@ import { Shield, Loader2, Trash2, FileText, MessageSquare, ArrowDown } from "luc
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { format } from "date-fns";
+import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { resolveMessageAttachment, getAttachmentKind, formatChatFileSize } from "@/lib/chatAttachments";
 import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
@@ -71,7 +71,9 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   const formatTime = (dateString: string) => {
     try {
-      return format(new Date(dateString), "h:mm a");
+      const d = new Date(dateString);
+      if (Number.isNaN(d.getTime())) return "";
+      return formatInDisplayZone(d, "h:mm a");
     } catch {
       return "";
     }

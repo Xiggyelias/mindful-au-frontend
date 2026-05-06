@@ -144,6 +144,22 @@ export const prefersAudioOnlyOnlineCall = (notes?: string | null): boolean => {
   return (notes || "").trim().toLowerCase().startsWith("online audio");
 };
 
+/** Audio-only WebRTC for this appointment (anonymous bookings, explicit call_type, or legacy notes). */
+export const isAppointmentAudioOnly = (
+  apt?: { is_anonymous?: boolean; call_type?: string | null; notes?: string | null } | null
+): boolean => {
+  if (!apt) {
+    return false;
+  }
+  if (apt.is_anonymous) {
+    return true;
+  }
+  if (String(apt.call_type || "").toLowerCase() === "audio") {
+    return true;
+  }
+  return prefersAudioOnlyOnlineCall(apt.notes);
+};
+
 export function describeOnlineAppointmentFormat(
   notes?: string | null
 ): "In-person" | "Audio / online" | "Video / online" {
@@ -151,6 +167,22 @@ export function describeOnlineAppointmentFormat(
     return "In-person";
   }
   return prefersAudioOnlyOnlineCall(notes) ? "Audio / online" : "Video / online";
+}
+
+/**
+ * Where/how the session takes place — same categories as the appointments dashboard,
+ * with optional extra text for in-person notes (e.g. `Physical — Room 12`).
+ */
+export function getAppointmentWhereLabel(notes?: string | null): string {
+  const raw = (notes || "").trim();
+  if (!raw) {
+    return describeOnlineAppointmentFormat(notes);
+  }
+  if (!isVideoEnabledAppointment(notes)) {
+    const detail = raw.replace(/^physical\b\s*[:\-–—|·]\s*/i, "").trim();
+    return detail ? `${describeOnlineAppointmentFormat(notes)} · ${detail}` : describeOnlineAppointmentFormat(notes);
+  }
+  return describeOnlineAppointmentFormat(notes);
 }
 
 export const getVideoCallWindowStatus = (

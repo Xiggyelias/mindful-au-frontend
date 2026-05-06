@@ -18,7 +18,9 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +34,7 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
+  isAppointmentAudioOnly,
   prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
 
@@ -415,12 +418,16 @@ const StudentAppointments = () => {
             ? "Online audio"
             : "Online";
 
+      const callTypeForApi =
+        form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
+
       await api.createAppointment({
         counselor_id: Number(form.counselor_id),
         scheduled_at: scheduledAt,
         duration_minutes: form.duration_minutes || 60,
         notes: sessionNotes,
         is_anonymous: form.is_anonymous,
+        ...(callTypeForApi ? { call_type: callTypeForApi } : {}),
       });
       toast({ title: "Appointment booked!" });
       setOpenDialog(false);
@@ -554,7 +561,7 @@ const StudentAppointments = () => {
     }
 
     if (isVideoEnabledAppointment(apt.notes)) {
-      params.set("mode", prefersAudioOnlyOnlineCall(apt.notes) ? "audio" : "video");
+      params.set("mode", isAppointmentAudioOnly(apt) ? "audio" : "video");
     }
 
     navigate(`/student/video-call?${params.toString()}`);
@@ -711,14 +718,16 @@ const StudentAppointments = () => {
                       >
                         <label
                           htmlFor="book-online-video"
-                          className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-3 transition-colors ${
+                          className={`flex flex-col gap-2 rounded-2xl border p-3 transition-colors ${
+                            form.is_anonymous ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                          } ${
                             form.online_media === "video"
                               ? "border-primary bg-primary/5"
                               : "border-border bg-secondary/20 hover:border-primary/25"
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <RadioGroupItem value="video" id="book-online-video" />
+                            <RadioGroupItem value="video" id="book-online-video" disabled={form.is_anonymous} />
                             <Video className="h-4 w-4 text-muted-foreground" aria-hidden />
                             <span className="text-sm font-medium">Video</span>
                           </div>
@@ -746,15 +755,31 @@ const StudentAppointments = () => {
                       </RadioGroup>
                     </div>
                   )}
-                  <div className="flex items-center justify-between rounded-2xl border border-primary/10 bg-primary/5 p-3">
+                  <div
+                    className={`flex items-center justify-between rounded-2xl border p-3 transition-colors ${
+                      form.is_anonymous
+                        ? "border-red-600 bg-black text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
+                        : "border-primary/10 bg-primary/5"
+                    }`}
+                  >
                     <div className="flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-primary" />
+                      <Shield
+                        className={`h-4 w-4 shrink-0 ${form.is_anonymous ? "text-red-500" : "text-primary"}`}
+                      />
                       <div>
-                        <Label htmlFor="appointment-anonymous-mode" className="cursor-pointer text-sm font-medium">
+                        <Label
+                          htmlFor="appointment-anonymous-mode"
+                          className={`cursor-pointer text-sm font-medium ${form.is_anonymous ? "text-white" : ""}`}
+                        >
                           Book anonymously
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Your counselor sees an anonymous ID unless identity is revealed for safety.
+                        <p
+                          className={`text-xs ${form.is_anonymous ? "text-white/75" : "text-muted-foreground"}`}
+                        >
+                          Your name, photo, and contact details stay hidden from your counselor unless a safety reveal applies.
+                          {form.mode === "online" && form.is_anonymous
+                            ? " Anonymous online sessions are audio-only."
+                            : ""}
                         </p>
                       </div>
                     </div>
@@ -762,10 +787,17 @@ const StudentAppointments = () => {
                       id="appointment-anonymous-mode"
                       checked={form.is_anonymous}
                       onCheckedChange={(checked) =>
-                        setForm((prev) => ({ ...prev, is_anonymous: Boolean(checked) }))
+                        setForm((prev) => ({
+                          ...prev,
+                          is_anonymous: Boolean(checked),
+                          ...(prev.mode === "online" && checked ? { online_media: "audio" as const } : {}),
+                        }))
                       }
                     />
                   </div>
+                  {form.is_anonymous && (
+                    <AnonymousModeIndicator variant="banner" className="mt-1" />
+                  )}
                   <div className="space-y-2">
                     <Label>Date & Time</Label>
                     <Input
@@ -923,11 +955,22 @@ const StudentAppointments = () => {
                           <p className="text-sm text-muted-foreground">
                             {isPhysical
                               ? "Physical"
-                              : prefersAudioOnlyOnlineCall(apt.notes)
+                              : prefersAudioOnlyOnlineCall(apt.notes) || isAppointmentAudioOnly(apt)
                                 ? "Online • Audio only"
                                 : "Online • Video"}
                             {isAnonymous ? " • Anonymous" : ""}
                           </p>
+                          {isAnonymous && !isPhysical && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <AnonymousModeIndicator variant="badge" />
+                              <Badge
+                                variant="outline"
+                                className="border-red-600/80 bg-black text-[11px] font-medium text-white"
+                              >
+                                Audio only
+                              </Badge>
+                            </div>
+                          )}
                           {status === "cancelled" && apt.cancellation_reason && (
                             <p className="text-xs text-muted-foreground mt-1">
                               Reason: {apt.cancellation_reason}

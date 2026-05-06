@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 
 export interface Session {
   id: number;
@@ -46,6 +47,8 @@ export interface Appointment {
   is_anonymous?: boolean;
   anonymous_id?: string | null;
   identity_visible_to_viewer?: boolean;
+  /** Booked media: `audio` | `video` (anonymous online is always audio). */
+  call_type?: string | null;
   notes?: string;
   cancellation_reason?: string;
   created_at?: string;
@@ -66,7 +69,7 @@ export interface Appointment {
   };
 }
 
-const SESSION_POLL_INTERVAL_MS = 10000;
+const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
@@ -441,6 +444,28 @@ export const useChatSession = (userId: number | undefined) => {
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
   }, [hydrateCachedSessions, loadSessions, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+    const refresh = () => {
+      void loadSessions(true, { force: true });
+    };
+    window.addEventListener(CHAT_INCOMING_DIGEST_EVENT, refresh as EventListener);
+    return () => window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT, refresh as EventListener);
+  }, [loadSessions, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+    const refresh = () => {
+      void loadSessions(true, { force: true });
+    };
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, refresh);
+    return () => window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, refresh);
+  }, [loadSessions, userId]);
 
   return {
     activeSession,
