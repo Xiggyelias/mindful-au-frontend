@@ -1054,6 +1054,18 @@ class ApiClient {
     return response.data;
   }
 
+  /** Marks all messages in the thread addressed to the current user as read (seen_at set). Unread badges use the DB count. */
+  async markSessionInboundRead(
+    sessionId: string,
+    params?: { timeout_ms?: number }
+  ): Promise<void> {
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+    await this.client.post(`/sessions/${sessionId}/messages/read`, {}, { timeout: timeoutMs });
+  }
+
   async sendMessage(sessionId: string, data: { content: string; message_type?: string; file_url?: string; is_encrypted?: boolean }) {
     const response = await this.client.post(`/sessions/${sessionId}/messages`, data);
     return response.data;

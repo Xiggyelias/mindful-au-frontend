@@ -35,6 +35,8 @@ interface ChatSidebarProps {
   onStartFreshAnonymousSession?: (counselorId: number) => void;
   anonymousStartMode: boolean;
   onToggleAnonymous: (val: boolean) => void;
+  /** True while profile anonymous_mode is saving (sidebar switch only updated local state before). */
+  anonymousToggleDisabled?: boolean;
   counselorPage: number;
   counselorTotalPages: number;
   onNextCounselorPage: () => void;
@@ -57,6 +59,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onStartFreshAnonymousSession,
   anonymousStartMode,
   onToggleAnonymous,
+  anonymousToggleDisabled = false,
   counselorPage,
   counselorTotalPages,
   onNextCounselorPage,
@@ -184,6 +187,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             id="anon-mode" 
             checked={anonymousStartMode} 
             onCheckedChange={onToggleAnonymous}
+            disabled={anonymousToggleDisabled}
           />
         </div>
       </div>

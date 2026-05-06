@@ -503,6 +503,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       return;
     }
 
+    // Only the lower user id invents the AES key. The other party must receive it via a `kind:key` envelope;
+    // otherwise they hold a random key that can never decrypt the peer's ciphertext (shown as "unavailable").
+    if (!isSessionKeyInitiator()) {
+      return;
+    }
+
     const generatedKey = await generateEncryptionKey();
     const generatedKeyString = await exportKey(generatedKey);
 
@@ -510,7 +516,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     keyStringRef.current = generatedKeyString;
     localStorage.setItem(sessionKeyStorageKeyRef.current, generatedKeyString);
     setIsEncryptionReady(true);
-  }, []);
+  }, [isSessionKeyInitiator]);
 
   const sendSessionKeyEnvelope = useCallback(
     async (targetUserId: number) => {
@@ -1161,10 +1167,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           await sendPublicKeyEnvelope(peerIdRef.current ?? undefined);
         }
 
-        // Opportunistic key bootstrap:
-        // once peer public key is known, either side can seed a session key
-        // to avoid deadlocks when only one side attempts to send first.
-        if (peerIdRef.current !== null && peerPublicKeyRef.current) {
+        // Opportunistic key bootstrap (initiator only): once peer public key is known, send the session key.
+        if (
+          peerIdRef.current !== null &&
+          peerPublicKeyRef.current &&
+          isSessionKeyInitiator()
+        ) {
           await sendSessionKeyEnvelope(peerIdRef.current);
         }
       }
@@ -1554,6 +1562,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
 
     const bootstrap = async () => {
+      if (hasValidUserId) {
+        await api.markSessionInboundRead(sessionId).catch(() => {
+          // index() also marks read; this is best-effort for faster badge sync.
+        });
+      }
       await initializeEncryption();
       if (isDisposed) return;
       await loadMessages(true);
@@ -1584,6 +1597,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
   }, [
     detachRealtimeChannel,
+    hasValidUserId,
     initializeEncryption,
     loadMessages,
     refreshPeerTypingStatus,
@@ -1601,12 +1615,19 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const retryEncryption = useCallback(async () => {
     if (!sessionId || !hasValidUserId) return;
     setError(null);
+
+    const peer = peerIdRef.current;
+    if (peer !== null && Number.isFinite(peer) && peer > 0) {
+      localStorage.removeItem(getSessionKeyStorageKey(sessionId, numericUserId, peer));
+    }
+    localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId));
+
     isInitializedRef.current = false;
     await initializeEncryption();
     if (isInitializedRef.current) {
       await loadMessages(true);
     }
-  }, [hasValidUserId, initializeEncryption, loadMessages, sessionId]);
+  }, [hasValidUserId, initializeEncryption, loadMessages, numericUserId, sessionId]);
 
   return {
     messages,

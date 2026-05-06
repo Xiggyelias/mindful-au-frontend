@@ -18,47 +18,103 @@ export function chatListRowTimeMs(row: { updated_at?: unknown; created_at?: unkn
   return Number.isFinite(t) ? t : 0;
 }
 
+/** Most reliable numeric student id on a row (anonymous masked rows may still carry chat_peer_student_id). */
+function realStudentId(row: Record<string, unknown>): number {
+  const a = _numberOrZero(row.chat_peer_student_id);
+  const b = _numberOrZero(row.student_id);
+  const student = row.student as Record<string, unknown> | undefined;
+  const c = _numberOrZero(student?.id);
+  return Math.max(a, b, c);
+}
+
+function _numberOrZero(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function normalizedNameKey(row: Record<string, unknown>): string {
+  const student = row.student as Record<string, unknown> | undefined;
+  const profile = student?.profile as Record<string, unknown> | undefined;
+  let nm = String(profile?.full_name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  if (!nm && student && typeof student.email === "string") {
+    nm = student.email.split("@")[0]?.trim().toLowerCase() ?? "";
+  }
+  return nm;
+}
+
 /**
- * Stable key: same real student + anonymity + assignment lane → one row.
- * Mirrors Counselor Messages sidebar semantics so dashboard and messages stay aligned.
+ * One row per student on the counselor home strip (ignores peer-vs-pro split so duplicates disappear).
  */
-export function counselorChatListDedupeKey(row: Record<string, unknown>): string {
+function counselorChatListDashboardKey(row: Record<string, unknown>): string {
   const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
-  const role = String(row.assigned_role || "counselor");
+  const rid = realStudentId(row);
+  if (isAnon) {
+    if (rid > 0) return `dash:anon:u:${rid}`;
+    const handle = String(row.anonymous_id ?? "").trim();
+    if (handle) return `dash:anon:h:${handle}`;
+    return `dash:anon:id:${row.id}`;
+  }
+  if (rid > 0) return `dash:named:u:${rid}`;
+  const nk = normalizedNameKey(row);
+  if (nk) return `dash:named:nm:${nk}`;
+  return `dash:named:id:${row.id}`;
+}
+
+export type CounselorChatDedupeMode = "messages" | "dashboard";
+
+/**
+ * Stable key: same real student + anonymity + assignment lane → one row (messages sidebar).
+ */
+export function counselorChatListDedupeKey(
+  row: Record<string, unknown>,
+  mode: CounselorChatDedupeMode = "messages",
+): string {
+  if (mode === "dashboard") {
+    return counselorChatListDashboardKey(row);
+  }
+
+  const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
+  const assigned = String(row.assigned_role || "").toLowerCase();
   const targetPeer = Number(row.peer_counselor_id ?? 0);
   const peerSuffix =
-    role === "peer_counselor" && Number.isFinite(targetPeer) && targetPeer > 0 ? `:pc:${targetPeer}` : "";
+    assigned === "peer_counselor" && Number.isFinite(targetPeer) && targetPeer > 0 ? `:pc:${targetPeer}` : "";
 
   if (isAnon) {
-    const peerStudent = Number(row.chat_peer_student_id ?? 0);
-    if (Number.isFinite(peerStudent) && peerStudent > 0) {
-      return `anon:${role}${peerSuffix}:stu:${peerStudent}`;
+    const rid = realStudentId(row);
+    if (rid > 0) {
+      // Anonymous + real peer id: never split by delegation lane — otherwise the same student
+      // appears as several "Anonymous User" rows (direct vs peer-counselor sessions).
+      return `anon:stu:${rid}`;
     }
     const handle = String(row.anonymous_id ?? "").trim();
     if (handle) {
-      return `anon:${role}${peerSuffix}:h:${handle}`;
+      return `anon:h:${handle}`;
     }
-    return `anon:${role}${peerSuffix}:sid:${row.id}`;
+    return `anon:sid:${row.id}`;
   }
 
-  const sid = Number(row.student_id ?? 0);
-  if (Number.isFinite(sid) && sid > 0) {
-    return `id:${role}${peerSuffix}:stu:${sid}`;
+  const sid = realStudentId(row);
+  if (sid > 0) {
+    return `id${peerSuffix}:stu:${sid}`;
   }
-  const fallbackPeer = Number(row.chat_peer_student_id ?? 0);
-  if (Number.isFinite(fallbackPeer) && fallbackPeer > 0) {
-    return `id:${role}${peerSuffix}:stu:${fallbackPeer}`;
-  }
-  return `id:${role}${peerSuffix}:sid:${row.id}`;
+  const nk = normalizedNameKey(row);
+  if (nk) return `id${peerSuffix}:nm:${nk}`;
+  return `id${peerSuffix}:sid:${row.id}`;
 }
 
-export function dedupeCounselorChatListRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+export function dedupeCounselorChatListRows(
+  rows: Record<string, unknown>[],
+  mode: CounselorChatDedupeMode = "messages",
+): Record<string, unknown>[] {
   const safe = rows.filter(isValidChatListRow);
   type Bucket = { row: Record<string, unknown>; timeMs: number; unread: number };
   const map = new Map<string, Bucket>();
 
   for (const row of safe) {
-    const key = counselorChatListDedupeKey(row);
+    const key = counselorChatListDedupeKey(row, mode);
     const unread = Math.max(0, Math.floor(Number(row.unread_count ?? 0)));
     const timeMs = chatListRowTimeMs(row);
     const existing = map.get(key);
@@ -99,5 +155,5 @@ export function counselorChatDedupeKeyFromSession(session: {
     peer_counselor_id: session.peer_counselor_id,
     is_anonymous: session.is_anonymous,
     anonymous_id: session.anonymous_id,
-  });
+  }, "messages");
 }

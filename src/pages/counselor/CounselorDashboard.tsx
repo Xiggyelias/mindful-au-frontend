@@ -201,7 +201,7 @@ const CounselorDashboard = () => {
         if (chatListResult.status === "fulfilled") {
           try {
             const rawList = toList<Record<string, unknown>>(chatListResult.value);
-            const chatRows = dedupeCounselorChatListRows(rawList);
+            const chatRows = dedupeCounselorChatListRows(rawList, "dashboard");
             setOpenConversations(
               mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
             );
@@ -283,7 +283,7 @@ const CounselorDashboard = () => {
         });
         try {
           const rawList = toList<Record<string, unknown>>(chatListResult);
-          const chatRows = dedupeCounselorChatListRows(rawList);
+          const chatRows = dedupeCounselorChatListRows(rawList, "dashboard");
           setOpenConversations(
             mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
           );

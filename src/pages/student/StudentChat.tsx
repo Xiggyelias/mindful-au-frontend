@@ -89,6 +89,7 @@ const StudentChat = () => {
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
+  const [isSavingProfileAnonymous, setIsSavingProfileAnonymous] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -164,6 +165,37 @@ const StudentChat = () => {
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
   }, [profileAnonymousMode]);
+
+  const handleSidebarAnonymousToggle = useCallback(
+    async (checked: boolean) => {
+      if (!user?.id) return;
+
+      if (user.profile?.anonymous_mode && !checked) {
+        const ok = window.confirm(
+          "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
+        );
+        if (!ok) return;
+      }
+
+      const revertTo = Boolean(user?.profile?.anonymous_mode);
+      setAnonymousStartMode(checked);
+
+      try {
+        setIsSavingProfileAnonymous(true);
+        await api.updateProfile({ anonymous_mode: checked });
+        await refreshUser();
+        dispatchChatAnonymitySync();
+        toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.");
+      } catch (error: unknown) {
+        setAnonymousStartMode(revertTo);
+        const message = getApiErrorMessage(error, "Failed to update anonymous mode");
+        toast.error(message || "Could not update anonymous mode.");
+      } finally {
+        setIsSavingProfileAnonymous(false);
+      }
+    },
+    [user?.id, user?.profile?.anonymous_mode, refreshUser],
+  );
 
   const {
     sendFileMessage,
@@ -514,7 +546,8 @@ const StudentChat = () => {
                 onStartSession={handleStartSessionWrapper}
                 onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                 anonymousStartMode={anonymousStartMode}
-                onToggleAnonymous={setAnonymousStartMode}
+                onToggleAnonymous={handleSidebarAnonymousToggle}
+                anonymousToggleDisabled={isSavingProfileAnonymous}
                 counselorPage={counselorPage}
                 counselorTotalPages={counselorTotalPages}
                 onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
@@ -719,7 +752,8 @@ const StudentChat = () => {
                     onStartSession={handleStartSessionWrapper}
                     onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                     anonymousStartMode={anonymousStartMode}
-                    onToggleAnonymous={setAnonymousStartMode}
+                    onToggleAnonymous={handleSidebarAnonymousToggle}
+                    anonymousToggleDisabled={isSavingProfileAnonymous}
                     counselorPage={counselorPage}
                     counselorTotalPages={counselorTotalPages}
                     onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}

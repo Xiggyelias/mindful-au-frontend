@@ -93,12 +93,12 @@ const peerCounselorNavItems = [
   { label: "Profile", icon: UserCircle2, path: "/peer/profile" },
 ];
 
-const SESSION_POLL_INTERVAL_MS = 12000;
+const SESSION_POLL_INTERVAL_MS = 5000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 5;
+const CHAT_LIST_CACHE_VERSION = 6;
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 
 type RawSession = {
@@ -351,6 +351,13 @@ const CounselorMessages = () => {
       );
     });
   }, [chats, searchQuery]);
+
+  const selectConversationById = useCallback((id: number) => {
+    if (!Number.isFinite(id) || id <= 0) return;
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
+    setSelectedChatId(id);
+    void api.markSessionInboundRead(String(id)).catch(() => {});
+  }, []);
 
   const loadSessions = useCallback(
     async (silent = false) => {
@@ -1196,7 +1203,7 @@ const CounselorMessages = () => {
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            setSelectedChatId(chat.id);
+                            selectConversationById(chat.id);
                           }
                         }}
                         className={cn(
@@ -1205,7 +1212,7 @@ const CounselorMessages = () => {
                             ? "border-primary/20 bg-primary/[0.08] shadow-sm dark:bg-primary/10"
                             : "hover:bg-muted/60 dark:hover:bg-muted/25"
                         )}
-                        onClick={() => setSelectedChatId(chat.id)}
+                        onClick={() => selectConversationById(chat.id)}
                       >
                         <div className="flex items-center gap-3">
                           <div
