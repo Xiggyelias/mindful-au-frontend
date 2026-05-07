@@ -36,6 +36,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -590,9 +591,9 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    const isAnonymousApt = Boolean(apt.is_anonymous);
+                    const isAnonymousApt = isAnonymousSessionFlag(apt.is_anonymous);
                     const studentName = isAnonymousApt
-                      ? "Anonymous User"
+                      ? anonymousLabelForCounselor()
                       : apt.student?.profile?.full_name ||
                         apt.student?.email ||
                         `Student #${String(apt.student_id || apt.id).slice(-4)}`;

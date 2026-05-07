@@ -17,6 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 
 interface ChatSidebarProps {
   sessions: Session[];
@@ -213,7 +214,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   "Counselor";
                 const isActive = activeSession?.id === session.id;
                 const isPeer = session.assigned_role === "peer_counselor";
-                const isAnon = Boolean(session.is_anonymous);
+                const isAnon = isAnonymousSessionFlag(session.is_anonymous);
 
                 const handleRowClick = () => {
                   // Anonymous rows must always open a brand-new chat session so

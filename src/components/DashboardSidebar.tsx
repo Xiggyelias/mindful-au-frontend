@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { LucideIcon, LogOut, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { isProfileAnonymousMode } from "@/lib/anonymousMode";
 
 interface NavItem {
   label: string;
@@ -32,7 +33,7 @@ export const DashboardSidebar = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut, user } = useAuth();
-  const studentPrivacyAnonymous = userType === "student" && Boolean(user?.profile?.anonymous_mode);
+  const studentPrivacyAnonymous = userType === "student" && isProfileAnonymousMode(user?.profile?.anonymous_mode);
   const logoutPathByRole: Record<DashboardSidebarProps["userType"], string> = {
     student: "/student/login",
     counselor: "/counselor/login",

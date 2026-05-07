@@ -35,6 +35,7 @@ import { CounselorSessionReminderBanner } from "@/components/counselor/Counselor
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { dedupeCounselorChatListRows, isValidChatListRow } from "@/lib/counselorChatListDedupe";
+import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -80,7 +81,7 @@ function mapChatListRowsToOpenConversations(
     .filter(isValidChatListRow)
     .slice(0, maxItems)
     .map((row) => {
-    const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
+    const isAnon = isAnonymousSessionFlag(row.is_anonymous);
     const student = row.student as Record<string, unknown> | undefined;
     const profile = student?.profile as Record<string, unknown> | undefined;
     const fromApiName = String(profile?.full_name ?? "").trim();
@@ -94,7 +95,7 @@ function mapChatListRowsToOpenConversations(
           ? peerSid
           : row.id;
     const label = isAnon
-      ? "Anonymous User"
+      ? anonymousLabelForCounselor()
       : fromApiName || (email ? email.split("@")[0] : "") || `Student #${idFallback}`;
     return {
       sessionId: Number(row.id),
@@ -620,15 +621,15 @@ const CounselorDashboard = () => {
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
-                            {apt.is_anonymous
-                              ? "Anonymous User"
+                            {isAnonymousSessionFlag(apt.is_anonymous)
+                              ? anonymousLabelForCounselor()
                               : apt.student?.profile?.full_name || apt.student?.email || "Student"}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <p className="text-sm text-muted-foreground">
                               {describeOnlineAppointmentFormat(apt.notes)}
                             </p>
-                            {apt.is_anonymous && (
+                            {isAnonymousSessionFlag(apt.is_anonymous) && (
                               <AnonymousModeIndicator variant="badge" audience="counselor" />
                             )}
                           </div>

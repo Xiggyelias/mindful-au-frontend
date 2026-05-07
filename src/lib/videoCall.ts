@@ -1,3 +1,5 @@
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+
 export const VIDEO_CALL_LIMITS = {
   minDurationMinutes: 15,
   maxDurationMinutes: 120,
@@ -151,7 +153,7 @@ export const isAppointmentAudioOnly = (
   if (!apt) {
     return false;
   }
-  if (apt.is_anonymous) {
+  if (isAnonymousSessionFlag(apt.is_anonymous)) {
     return true;
   }
   if (String(apt.call_type || "").toLowerCase() === "audio") {

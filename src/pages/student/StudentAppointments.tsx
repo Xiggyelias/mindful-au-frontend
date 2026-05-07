@@ -37,6 +37,7 @@ import {
   isAppointmentAudioOnly,
   prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
+import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -96,7 +97,7 @@ const StudentAppointments = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
-  const profileAnonymousMode = Boolean(user?.profile?.anonymous_mode);
+  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
 
   useEffect(() => {
     setAppointmentPage(1);
@@ -119,6 +120,15 @@ const StudentAppointments = () => {
       is_anonymous: profileAnonymousMode,
     }));
   }, [profileAnonymousMode]);
+
+  useEffect(() => {
+    setForm((prev) => {
+      if (prev.mode !== "online" || !prev.is_anonymous || prev.online_media !== "video") {
+        return prev;
+      }
+      return { ...prev, online_media: "audio" };
+    });
+  }, [form.mode, form.is_anonymous, form.online_media]);
 
   const loadAppointments = useCallback(
     async (showErrorToast = true, options?: { force?: boolean }) => {
@@ -414,7 +424,7 @@ const StudentAppointments = () => {
       const sessionNotes =
         form.mode === "physical"
           ? "Physical"
-          : form.online_media === "audio"
+          : form.is_anonymous || form.online_media === "audio"
             ? "Online audio"
             : "Online";
 
@@ -692,7 +702,18 @@ const StudentAppointments = () => {
                     <Label>Mode</Label>
                     <Select
                       value={form.mode}
-                      onValueChange={(val) => setForm({ ...form, mode: val })}
+                      onValueChange={(val) =>
+                        setForm((prev) => {
+                          const mode = val as "online" | "physical";
+                          return {
+                            ...prev,
+                            mode,
+                            ...(mode === "online" && prev.is_anonymous
+                              ? { online_media: "audio" as const }
+                              : {}),
+                          };
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select mode" />
@@ -928,7 +949,7 @@ const StudentAppointments = () => {
             ) : (
             sortedAppointments.map((apt) => {
               const isPhysical = String(apt.notes || "").trim().toLowerCase().startsWith("physical");
-              const isAnonymous = Boolean(apt.is_anonymous);
+              const isAnonymous = isAnonymousSessionFlag(apt.is_anonymous);
               const status = String(apt.status || "").toLowerCase();
               const videoWindow =
                 !isPhysical && isVideoEnabledAppointment(apt.notes)

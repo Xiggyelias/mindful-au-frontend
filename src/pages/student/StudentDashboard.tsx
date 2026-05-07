@@ -31,6 +31,7 @@ import { isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/vid
 import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
 
 const navItems = [
@@ -112,9 +113,8 @@ function isAppointmentUpcoming(a: AppointmentRecord, now: Date): boolean {
 }
 
 function resolveRecentConversationTitle(session: LiteSession): string {
-  if (session.is_anonymous) {
-    const label = typeof session.anonymous_id === "string" ? session.anonymous_id.trim() : "";
-    return label !== "" ? `Anonymous (${label})` : "Anonymous session";
+  if (isAnonymousSessionFlag(session.is_anonymous)) {
+    return formatStudentAnonymousSessionTitle(session.anonymous_id);
   }
   const counselorName = session.counselor?.profile?.full_name?.trim();
   const peerName = session.peer_counselor?.profile?.full_name?.trim();
@@ -420,7 +420,7 @@ const StudentDashboard = () => {
   const handleAnonymousModeToggle = async (checked: boolean) => {
     if (!user?.id) return;
 
-    if (user.profile?.anonymous_mode && !checked) {
+    if (isProfileAnonymousMode(user.profile?.anonymous_mode) && !checked) {
       const ok = window.confirm(
         "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
       );
@@ -670,7 +670,7 @@ const StudentDashboard = () => {
               <div className="flex items-center gap-3">
                 <Switch
                   id="student-anonymous-mode"
-                  checked={user?.profile?.anonymous_mode ?? false}
+                  checked={isProfileAnonymousMode(user?.profile?.anonymous_mode)}
                   onCheckedChange={handleAnonymousModeToggle}
                   disabled={isSavingAnonymousMode}
                 />
@@ -754,7 +754,7 @@ const StudentDashboard = () => {
                                   appearsLive ? "bg-success animate-pulse" : "bg-muted"
                                 }`}
                               />
-                              {session.is_anonymous
+                              {isAnonymousSessionFlag(session.is_anonymous)
                                 ? "Anonymous session"
                                 : isPeer
                                   ? "Peer support"

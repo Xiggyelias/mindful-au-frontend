@@ -44,6 +44,7 @@ import {
   getAppointmentWhereLabel,
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 const navItems = [
@@ -98,7 +99,7 @@ const StudentVideoCall = () => {
   const [isRejoining, setIsRejoining] = useState(false);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
-  const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
+  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
 
   const requestedAppointmentId = useMemo(() => {
     const parsed = Number(searchParams.get("appointment_id"));
@@ -312,7 +313,7 @@ const StudentVideoCall = () => {
   }, [activeAppointment]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeAppointment?.is_anonymous) {
+    if (activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous)) {
       return "Counselor (Private Session)";
     }
     return getParticipantName(activeAppointment?.counselor, "Counselor");
@@ -443,7 +444,7 @@ const StudentVideoCall = () => {
     if (isUpdatingAnonymousMode) {
       return;
     }
-    const nextMode = !isAnonymousMode;
+    const nextMode = !profileAnonymousMode;
     setIsUpdatingAnonymousMode(true);
     try {
       await api.updateProfile({ anonymous_mode: nextMode });
@@ -911,7 +912,7 @@ const StudentVideoCall = () => {
                                 <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
                               </div>
                             )}
-                            {activeAppointment?.is_anonymous && (
+                            {activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && (
                               <div className="flex flex-wrap gap-2 pt-1">
                                 <AnonymousModeIndicator variant="badge" />
                                 <Badge
@@ -940,7 +941,7 @@ const StudentVideoCall = () => {
 
                         <div className="absolute right-4 top-24 z-20 w-32 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-44">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
-                            {isAnonymousMode ? "You (Anonymous)" : "You"}
+                            {profileAnonymousMode ? "You (Anonymous)" : "You"}
                             {localSpeaking ? " • speaking" : ""}
                           </div>
 
@@ -1124,7 +1125,7 @@ const StudentVideoCall = () => {
                     >
                       {isUpdatingAnonymousMode
                         ? "Updating..."
-                        : isAnonymousMode
+                        : profileAnonymousMode
                         ? "Anonymous Mode"
                         : "Identified Mode"}
                     </Button>

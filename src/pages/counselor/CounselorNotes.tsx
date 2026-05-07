@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -106,8 +107,7 @@ function formatRelativeUpdated(value: unknown): string {
 function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const id = String(s.id ?? "");
   const student = s.student;
-  const isAnon =
-    s.is_anonymous === true || s.is_anonymous === 1 || s.is_anonymous === "1";
+  const isAnon = isAnonymousSessionFlag(s.is_anonymous);
 
   let studentLabel = "Student";
   if (isAnon) {

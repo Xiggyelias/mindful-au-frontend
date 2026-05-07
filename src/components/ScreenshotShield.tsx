@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { isProfileAnonymousMode } from "@/lib/anonymousMode";
 
 const SENSITIVE_PATH_PREFIXES = [
   "/student/chat",
@@ -27,7 +28,7 @@ export const ScreenshotShield = () => {
     [location.pathname, user?.id]
   );
   const watermarkIdentity = useMemo(() => {
-    const alias = user?.profile?.anonymous_mode
+    const alias = isProfileAnonymousMode(user?.profile?.anonymous_mode)
       ? `User_${String(Number(user?.id || 0) % 10000).padStart(4, "0")}`
       : `UID-${String(user?.id || "").padStart(4, "0")}`;
     return alias;

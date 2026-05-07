@@ -757,9 +757,49 @@ const createEngineFreshPeerConnection = () => {
   return connection;
 };
 
+/** Offer SDP declares a video section (send or recv). Used when `audioOnly` flag is missing from legacy payloads. */
+const offerSdpDeclaresVideo = (sdp: string | undefined): boolean => {
+  if (!sdp) {
+    return false;
+  }
+  return /\nm=video(\s|$)/m.test(sdp);
+};
+
+/**
+ * Returns true when the existing mic/camera stream cannot be reused for the next negotiation.
+ * (e.g. audio-only offer + cached video stream, or video offer + cached audio-only stream.)
+ */
+const localStreamConflictsWithMediaPreference = (
+  stream: MediaStream,
+  audioOnlyRequested: boolean
+): boolean => {
+  const hasLiveVideo = stream.getVideoTracks().some((t) => t.readyState !== "ended");
+  if (audioOnlyRequested && hasLiveVideo) {
+    return true;
+  }
+  if (!audioOnlyRequested && !hasLiveVideo) {
+    return true;
+  }
+  return false;
+};
+
 const initializeEngineMedia = async (audioOnlyRequested = false) => {
   if (engine.localStream) {
-    return engine.localStream;
+    if (localStreamConflictsWithMediaPreference(engine.localStream, audioOnlyRequested)) {
+      removeEngineLocalSenders();
+      clearEngineMedia();
+      setEngineState((prev) => ({
+        ...prev,
+        localStream: null,
+        isAudioOnly: false,
+        isLocalVideoEnabled: false,
+      }));
+      for (const element of engine.localVideoElements) {
+        element.srcObject = null;
+      }
+    } else {
+      return engine.localStream;
+    }
   }
 
   if (
@@ -828,6 +868,21 @@ const clearEngineMedia = () => {
   if (engine.localStream) {
     engine.localStream.getTracks().forEach((track) => track.stop());
     engine.localStream = null;
+  }
+};
+
+/** Remove local senders so a new getUserMedia + attachEngineLocalTracks can align with a new offer. */
+const removeEngineLocalSenders = () => {
+  const pc = engine.peerConnection;
+  if (!pc) {
+    return;
+  }
+  for (const sender of [...pc.getSenders()]) {
+    try {
+      pc.removeTrack(sender);
+    } catch {
+      /* ignore — sender may already be disposed */
+    }
   }
 };
 
@@ -1029,7 +1084,8 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
         return;
       }
 
-      const audioOnly = pendingRequest?.audioOnly ?? engine.state.isAudioOnly;
+      const audioOnly =
+        pendingRequest != null ? pendingRequest.audioOnly : engine.state.isAudioOnly;
 
       void (async () => {
         try {
@@ -1090,14 +1146,20 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
     .on("broadcast", { event: "offer" }, ({ payload }) => {
       const offer = payload?.offer as RTCSessionDescriptionInit | undefined;
       const senderId = String(payload?.senderId || "");
-      const audioOnly = Boolean(payload?.audioOnly);
       if (!offer || !senderId || senderId === normalizedUserId) {
         return;
       }
 
+      const sdpHasVideo = offerSdpDeclaresVideo(offer.sdp);
+      // Align local getUserMedia with the offer's m-lines so SDP negotiation and senders stay in sync.
+      const audioOnly = !sdpHasVideo;
+      const payloadAudioOnly = Boolean(payload?.audioOnly);
+
       logWebRTC("[WebRTC] Received offer:", {
         senderId,
         audioOnly,
+        payloadAudioOnly,
+        sdpHasVideo,
         sdpLength: offer.sdp?.length,
         hasVideo: offer.sdp?.includes("m=video"),
         hasAudio: offer.sdp?.includes("m=audio"),

@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { playSessionReminderSound } from "@/lib/sounds/notificationSoundManager";
 
 const POLL_MS = 60_000;
@@ -172,6 +173,8 @@ function ReminderRow({
   const ss = secondsLeft % 60;
   const countdownLabel = secondsLeft <= 0 ? "Starting now" : `${mm}:${String(ss).padStart(2, "0")}`;
 
+  const itemAnonymous = isAnonymousSessionFlag(item.is_anonymous);
+
   const timeLabel =
     item.scheduled_at && !Number.isNaN(startMs)
       ? formatInDisplayZone(new Date(item.scheduled_at), "EEE, MMM d · h:mm a")
@@ -181,7 +184,7 @@ function ReminderRow({
     <div
       className={cn(
         "flex flex-col gap-2 rounded-2xl border px-4 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between",
-        item.is_anonymous
+        itemAnonymous
           ? "border-red-600/80 bg-black text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
           : "border-white/20 bg-black/15 text-amber-50"
       )}
@@ -190,7 +193,7 @@ function ReminderRow({
         <div
           className={cn(
             "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-2",
-            item.is_anonymous ? "bg-red-600/25 ring-red-500/40" : "bg-white/20 ring-white/30"
+            itemAnonymous ? "bg-red-600/25 ring-red-500/40" : "bg-white/20 ring-white/30"
           )}
         >
           <CalendarClock className="h-5 w-5" aria-hidden />
@@ -199,7 +202,7 @@ function ReminderRow({
           <p
             className={cn(
               "text-[11px] font-bold uppercase tracking-wider",
-              item.is_anonymous ? "text-red-400" : "text-amber-100/90"
+              itemAnonymous ? "text-red-400" : "text-amber-100/90"
             )}
           >
             Upcoming session
@@ -208,12 +211,12 @@ function ReminderRow({
             <p className="truncate text-base font-semibold leading-snug">
               Upcoming session with {item.student_name}
             </p>
-            {item.is_anonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
+            {itemAnonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
           </div>
           <div
             className={cn(
               "mt-1 flex flex-wrap gap-x-3 text-xs",
-              item.is_anonymous ? "text-white/80" : "text-amber-100/90"
+              itemAnonymous ? "text-white/80" : "text-amber-100/90"
             )}
           >
             {timeLabel && <span className="tabular-nums">{timeLabel}</span>}
@@ -228,7 +231,7 @@ function ReminderRow({
           variant="secondary"
           className={cn(
             "gap-1.5 rounded-full",
-            item.is_anonymous
+            itemAnonymous
               ? "border border-white/20 bg-white text-black hover:bg-white/90"
               : "border-white/30 bg-white/90 text-amber-900 hover:bg-white"
           )}
@@ -243,7 +246,7 @@ function ReminderRow({
           variant="ghost"
           className={cn(
             "rounded-full",
-            item.is_anonymous
+            itemAnonymous
               ? "text-white hover:bg-white/10 hover:text-white"
               : "text-amber-50 hover:bg-white/10 hover:text-white"
           )}

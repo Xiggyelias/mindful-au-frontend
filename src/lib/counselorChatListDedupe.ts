@@ -5,6 +5,8 @@
  * across merged rows — summing inflated badges vs. what you see after opening chat.
  */
 
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+
 export function isValidChatListRow(row: unknown): row is Record<string, unknown> {
   if (row === null || typeof row !== "object" || Array.isArray(row)) {
     return false;
@@ -51,7 +53,7 @@ function normalizedNameKey(row: Record<string, unknown>): string {
  * One row per student on the counselor home strip (ignores peer-vs-pro split so duplicates disappear).
  */
 function counselorChatListDashboardKey(row: Record<string, unknown>): string {
-  const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
+  const isAnon = isAnonymousSessionFlag(row.is_anonymous);
   const rid = realStudentId(row);
   if (isAnon) {
     if (rid > 0) return `dash:anon:u:${rid}`;
@@ -78,7 +80,7 @@ export function counselorChatListDedupeKey(
     return counselorChatListDashboardKey(row);
   }
 
-  const isAnon = row.is_anonymous === true || row.is_anonymous === 1 || row.is_anonymous === "1";
+  const isAnon = isAnonymousSessionFlag(row.is_anonymous);
   const assigned = String(row.assigned_role || "").toLowerCase();
   const targetPeer = Number(row.peer_counselor_id ?? 0);
   const peerSuffix =

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 
 export interface Session {
   id: number;
@@ -90,7 +91,7 @@ const isPeerAssignedSession = (session: Session) =>
 const conversationKey = (session: Session) => {
   const cId = session.counselor_id || 0;
   const pId = session.peer_counselor_id || 0;
-  const isAnon = session.is_anonymous ? 1 : 0;
+  const isAnon = isAnonymousSessionFlag(session.is_anonymous) ? 1 : 0;
   const role = session.assigned_role || "counselor";
   return `c:${cId}:p:${pId}:a:${isAnon}:r:${role}`;
 };
@@ -353,7 +354,7 @@ export const useChatSession = (userId: number | undefined) => {
             s.counselor_id === counselorId &&
             s.session_type === "chat" &&
             !isPeerAssignedSession(s) &&
-            Boolean(s.is_anonymous) === shouldBeAnonymous &&
+            isAnonymousSessionFlag(s.is_anonymous) === shouldBeAnonymous &&
             isOpenChatSession(s)
         );
         if (existing) {

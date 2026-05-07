@@ -6,6 +6,7 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { toast } from "sonner";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
@@ -252,12 +253,13 @@ export function CounselorIncomingCallBanner({
               ? formatInDisplayZone(new Date(call.scheduled_at), "EEE, MMM d · h:mm a")
               : null;
           const isVideo = call.call_type !== "audio";
+          const callAnonymous = isAnonymousSessionFlag(call.is_anonymous);
           return (
             <div
               key={call.id}
               className={cn(
                 "flex flex-col gap-3 rounded-2xl border px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between",
-                call.is_anonymous
+                callAnonymous
                   ? "border-red-600/90 bg-black text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
                   : "border-white/15 bg-black/20 text-primary-foreground"
               )}
@@ -266,7 +268,7 @@ export function CounselorIncomingCallBanner({
                 <div
                   className={cn(
                     "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-2 animate-pulse",
-                    call.is_anonymous ? "bg-red-600/30 ring-red-500/50" : "bg-white/15 ring-white/25"
+                    callAnonymous ? "bg-red-600/30 ring-red-500/50" : "bg-white/15 ring-white/25"
                   )}
                 >
                   {isVideo ? <Video className="h-6 w-6" aria-hidden /> : <Mic className="h-6 w-6" aria-hidden />}
@@ -275,19 +277,19 @@ export function CounselorIncomingCallBanner({
                   <p
                     className={cn(
                       "text-[11px] font-bold uppercase tracking-widest",
-                      call.is_anonymous ? "text-red-400" : "text-primary-foreground/80"
+                      callAnonymous ? "text-red-400" : "text-primary-foreground/80"
                     )}
                   >
                     Incoming session call
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <p className="truncate text-lg font-semibold leading-tight">{call.student_name}</p>
-                    {call.is_anonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
+                    {callAnonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                   </div>
                   <div
                     className={cn(
                       "mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs",
-                      call.is_anonymous ? "text-white/85" : "text-primary-foreground/85"
+                      callAnonymous ? "text-white/85" : "text-primary-foreground/85"
                     )}
                   >
                     <span>{isVideo ? "Video call" : "Audio call"}</span>

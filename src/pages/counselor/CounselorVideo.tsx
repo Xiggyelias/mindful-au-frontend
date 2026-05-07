@@ -33,6 +33,7 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import { api } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -96,7 +97,6 @@ const CounselorVideo = () => {
   const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
-  const isAnonymousMode = Boolean(user?.profile?.anonymous_mode);
   const requestedAppointmentId = useMemo(() => {
     const parsed = Number(searchParams.get("appointment_id"));
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -572,8 +572,8 @@ const CounselorVideo = () => {
   }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeSession?.is_anonymous) {
-      return "Anonymous User";
+    if (activeSession && isAnonymousSessionFlag(activeSession.is_anonymous)) {
+      return anonymousLabelForCounselor();
     }
     return getParticipantName(activeSession?.student, "Student");
   }, [activeSession]);
@@ -908,7 +908,7 @@ const CounselorVideo = () => {
                               variant="secondary"
                               className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
                             >
-                              {isAnonymousMode ? "You (Anonymous)" : "You"}
+                              You
                               {localSpeaking ? " • speaking" : ""}
                             </Badge>
                           </div>
@@ -1096,8 +1096,8 @@ const CounselorVideo = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">
-                                {session.is_anonymous
-                                  ? "Anonymous User"
+                                {isAnonymousSessionFlag(session.is_anonymous)
+                                  ? anonymousLabelForCounselor()
                                   : getParticipantName(
                                       session.student,
                                       `Student #${String(session.id).slice(-4)}`
@@ -1110,7 +1110,7 @@ const CounselorVideo = () => {
                                 <MapPin className="h-3.5 w-3.5 shrink-0" />
                                 <span className="line-clamp-2">{getAppointmentWhereLabel(session.notes)}</span>
                               </p>
-                              {session.is_anonymous && (
+                              {isAnonymousSessionFlag(session.is_anonymous) && (
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <AnonymousModeIndicator variant="badge" audience="counselor" />
                                   <span className="text-[10px] font-medium text-muted-foreground">

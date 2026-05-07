@@ -33,6 +33,7 @@ import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -97,7 +98,7 @@ const StudentChat = () => {
   const hasLoadedCounselorsRef = useRef(false);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
-  const profileAnonymousMode = Boolean(user?.profile?.anonymous_mode);
+  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -171,14 +172,14 @@ const StudentChat = () => {
     async (checked: boolean) => {
       if (!user?.id) return;
 
-      if (user.profile?.anonymous_mode && !checked) {
+      if (isProfileAnonymousMode(user.profile?.anonymous_mode) && !checked) {
         const ok = window.confirm(
           "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
         );
         if (!ok) return;
       }
 
-      const revertTo = Boolean(user?.profile?.anonymous_mode);
+      const revertTo = isProfileAnonymousMode(user?.profile?.anonymous_mode);
       setAnonymousStartMode(checked);
 
       try {
@@ -370,7 +371,7 @@ const StudentChat = () => {
 
   const handleStartVideoCall = async () => {
     if (!activeSession?.counselor_id) return toast.error("No active conversation");
-    const chatAnonymous = Boolean(activeSession.is_anonymous);
+    const chatAnonymous = isAnonymousSessionFlag(activeSession.is_anonymous);
     try {
       setIsPreparingCall(true);
       const scheduledAt = new Date(Date.now() + 60 * 1000).toISOString();
@@ -489,11 +490,12 @@ const StudentChat = () => {
   const handleActiveChatAnonymityToggle = async (checked: boolean) => {
     if (!sessionId || !activeSession) return;
 
+    const sessionIsAnonymous = isAnonymousSessionFlag(activeSession.is_anonymous);
     const hasConversationHistory = messages.length > 0;
 
     if (hasConversationHistory) {
-      const turningOn = checked && !activeSession.is_anonymous;
-      const turningOff = !checked && activeSession.is_anonymous;
+      const turningOn = checked && !sessionIsAnonymous;
+      const turningOff = !checked && sessionIsAnonymous;
       if (turningOn || turningOff) {
         const ok = window.confirm(
           turningOn
@@ -502,7 +504,7 @@ const StudentChat = () => {
         );
         if (!ok) return;
       }
-    } else if (activeSession.is_anonymous && !checked) {
+    } else if (sessionIsAnonymous && !checked) {
       const ok = window.confirm(
         "Turning this off will show your real name to this counselor for active chats. Continue?",
       );
@@ -622,7 +624,7 @@ const StudentChat = () => {
                 </div>
               )}
 
-              {activeSession?.is_anonymous && (
+              {activeSession && isAnonymousSessionFlag(activeSession.is_anonymous) && (
                 <div className="shrink-0 border-b border-red-600/50 bg-black px-4 py-2">
                   <AnonymousModeIndicator variant="banner" audience="student" />
                 </div>
@@ -663,7 +665,7 @@ const StudentChat = () => {
                       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-2 py-1 sm:px-2.5 sm:py-1">
                         <Switch
                           id="active-chat-anonymous"
-                          checked={Boolean(activeSession.is_anonymous)}
+                          checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
                           onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
                           disabled={isSavingChatAnonymity}
                           aria-label="Anonymous mode for this chat"
