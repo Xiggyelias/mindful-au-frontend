@@ -20,8 +20,6 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
 import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
@@ -33,6 +31,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
+import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -667,17 +666,12 @@ const StudentDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="student-anonymous-mode"
-                  checked={isProfileAnonymousMode(user?.profile?.anonymous_mode)}
-                  onCheckedChange={handleAnonymousModeToggle}
-                  disabled={isSavingAnonymousMode}
-                />
-                <Label htmlFor="student-anonymous-mode" className="text-sm font-medium cursor-pointer">
-                  Anonymous mode
-                </Label>
-              </div>
+              <AnonymousModeToggle
+                id="student-anonymous-mode"
+                checked={isProfileAnonymousMode(user?.profile?.anonymous_mode)}
+                onCheckedChange={handleAnonymousModeToggle}
+                disabled={isSavingAnonymousMode}
+              />
               <p className="text-xs text-muted-foreground max-w-md">
                 This applies to active chat sessions. You can also change this from an open chat.
               </p>

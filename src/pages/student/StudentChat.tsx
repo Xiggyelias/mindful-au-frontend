@@ -18,8 +18,6 @@ import {
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
@@ -33,6 +31,7 @@ import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { cn } from "@/lib/utils";
 
@@ -650,21 +649,12 @@ const StudentChat = () => {
                     </div>
                     
                     <div className="flex shrink-0 items-center gap-2">
-                      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-2 py-1 sm:px-2.5 sm:py-1">
-                        <Switch
-                          id="active-chat-anonymous"
-                          checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
-                          onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
-                          disabled={isSavingChatAnonymity}
-                          aria-label="Anonymous mode for this chat"
-                        />
-                        <Label
-                          htmlFor="active-chat-anonymous"
-                          className="hidden cursor-pointer text-[10px] font-bold uppercase tracking-widest text-muted-foreground sm:inline"
-                        >
-                          Anon
-                        </Label>
-                      </div>
+                      <AnonymousModeToggle
+                        id="active-chat-anonymous"
+                        checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
+                        onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
+                        disabled={isSavingChatAnonymity}
+                      />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
                         <span>{isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
