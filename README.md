@@ -18,6 +18,7 @@ If this repository sits next to `mindful-au-backend` under a shared parent, see 
 - Peer counselor assignment with notification flow.
 - Anonymous support mode for protected student identity in chat, appointments, and calls.
 - End-to-end encrypted messaging with delivery/seen receipts.
+- Virtualized student and counselor message threads for smoother long-conversation performance.
 - Real-time chat attachments with image previews, document downloads, and playable voice notes.
 - Server-backed chat message deletion (sender/admin authorized, synced across devices).
 - Secure real-time call flow with stable signaling, call-request/accept/reject, reconnect handling, and quality telemetry.
@@ -227,6 +228,7 @@ If calls work on the same network but fail across different laptops or off-campu
 - **Profile “anonymous mode”** sets the **default for new** conversations only. It does **not** bulk-change existing open chat sessions; each thread keeps its own anonymity until the student changes it **in that chat** (or closes it).
 - **Mid-conversation anonymity toggles** (in chat): when the thread already has messages, the UI asks for **confirmation** before switching modes. Copy explains that **older messages stay in the privacy context they were sent under**.
 - **Per-message snapshot**: the API stores `sent_as_anonymous` on each message so counselor-side masking and digest labels stay consistent with the mode **at send time**, even if the session’s current flag changes later.
+- The student chat header and student dashboard now share one `AnonymousModeToggle` component to keep anonymous switch visuals and behavior uniform.
 - Controlled identity reveal is restricted and audited:
   - `POST /api/sessions/{id}/reveal-identity` (authorized counselor/admin + required reason)
 - Anonymous sessions have TTL-based expiry for misuse prevention (`ANONYMOUS_SESSION_TTL_HOURS` on backend).
@@ -266,6 +268,12 @@ npx tsc --noEmit
 npm run build
 composer --working-dir=../mindful-au-backend test
 ```
+
+## Chat Performance Notes
+
+- `react-virtuoso` is used in both student and counselor thread UIs to keep rendering stable as message history grows.
+- Prepending older history uses a `firstItemIndex` preservation strategy so loading older messages does not jump the viewport.
+- Large encrypted payload decrypt can use `src/workers/chatDecrypt.worker.ts` via `decryptLargePayloadInWorker` with fallback to main-thread decrypt on timeout.
 
 ## Database Schema
 

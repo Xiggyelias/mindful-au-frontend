@@ -39,7 +39,6 @@ export async function idbSessionKeyGet(storageKey: string): Promise<string | nul
     try {
       const tx = db.transaction(STORE, "readonly");
       const req = tx.objectStore(STORE).get(storageKey);
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- IDB result */
       req.onsuccess = () => resolve(typeof (req as any).result === "string" ? (req as any).result : null);
       req.onerror = () => resolve(null);
     } catch {

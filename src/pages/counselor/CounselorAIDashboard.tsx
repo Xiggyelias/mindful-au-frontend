@@ -521,15 +521,17 @@ const CounselorAIDashboard = () => {
                       <h4 className="font-semibold text-foreground">AI Recommendations</h4>
                       <p className="text-foreground text-sm">{selectedDiagnostic.ai_recommendations?.primary || "No recommendation text available."}</p>
                       <div className="space-y-2">
-                        {(Array.isArray(selectedDiagnostic.ai_recommendations?.actions)
-                          ? selectedDiagnostic.ai_recommendations?.actions
-                          : []
-                        ).map((action, index) => (
-                          <div key={index} className="flex items-start gap-2">
-                            <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                            <span className="text-sm text-muted-foreground">{action}</span>
-                          </div>
-                        ))}
+                        {(() => {
+                          const actions = Array.isArray(selectedDiagnostic.ai_recommendations?.actions)
+                            ? selectedDiagnostic.ai_recommendations.actions
+                            : [];
+                          return actions.map((action, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
+                              <span className="text-sm text-muted-foreground">{action}</span>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
 

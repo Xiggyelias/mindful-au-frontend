@@ -50,6 +50,7 @@ const AdminStudents = () => {
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const [students, setStudents] = useState<any[]>([]);
   const [diagnostics, setDiagnostics] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

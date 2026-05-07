@@ -73,7 +73,7 @@ import {
   PopoverContent, 
   PopoverTrigger 
 } from "@/components/ui/popover";
-import { VoiceMemoPlayer, VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
+import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
 import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
@@ -316,7 +316,6 @@ const CounselorMessages = () => {
     loadOlderMessages,
     registerServerMessage,
     retryEncryption,
-    refreshMessages,
     nudgeEncryptionHandshake,
     deleteMessage,
   } = useEncryptedChat({

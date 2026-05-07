@@ -30,6 +30,12 @@ import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import {
+  confirmProfileAnonymousModeTransition,
+  getProfileAnonymousModeSuccessTitle,
+  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
+  PROFILE_ANON_MODE_UPDATE_ERROR,
+} from "@/lib/profileAnonymousMode";
 import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 
@@ -419,11 +425,8 @@ const StudentDashboard = () => {
   const handleAnonymousModeToggle = async (checked: boolean) => {
     if (!user?.id) return;
 
-    if (isProfileAnonymousMode(user.profile?.anonymous_mode) && !checked) {
-      const ok = window.confirm(
-        "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
-      );
-      if (!ok) return;
+    if (!confirmProfileAnonymousModeTransition(user.profile?.anonymous_mode, checked)) {
+      return;
     }
 
     try {
@@ -432,13 +435,12 @@ const StudentDashboard = () => {
       await refreshUser();
       dispatchChatAnonymitySync();
       await loadStats();
-      toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.", {
-        description:
-          "This is your default for new conversations. Open chats stay as they are until you change them in the chat.",
+      toast.success(getProfileAnonymousModeSuccessTitle(checked), {
+        description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
       });
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, "Failed to update anonymous mode");
-      toast.error(message || "Could not update anonymous mode.");
+      toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
     } finally {
       setIsSavingAnonymousMode(false);
     }

@@ -33,6 +33,12 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import {
+  confirmProfileAnonymousModeTransition,
+  getProfileAnonymousModeSuccessTitle,
+  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
+  PROFILE_ANON_MODE_UPDATE_ERROR,
+} from "@/lib/profileAnonymousMode";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -154,7 +160,6 @@ const StudentChat = () => {
     loadOlderMessages,
     registerServerMessage,
     retryEncryption,
-    refreshMessages,
     nudgeEncryptionHandshake,
   } = useEncryptedChat({
     sessionId: sessionId || "",
@@ -179,11 +184,8 @@ const StudentChat = () => {
     async (checked: boolean) => {
       if (!user?.id) return;
 
-      if (isProfileAnonymousMode(user.profile?.anonymous_mode) && !checked) {
-        const ok = window.confirm(
-          "Turning off anonymous mode will show your real name to counselors in chat. Continue?",
-        );
-        if (!ok) return;
+      if (!confirmProfileAnonymousModeTransition(user.profile?.anonymous_mode, checked)) {
+        return;
       }
 
       const revertTo = isProfileAnonymousMode(user?.profile?.anonymous_mode);
@@ -194,14 +196,13 @@ const StudentChat = () => {
         await api.updateProfile({ anonymous_mode: checked });
         await refreshUser();
         dispatchChatAnonymitySync();
-        toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.", {
-          description:
-            "This is your default for new conversations. Open chats stay as they are until you change them in the chat.",
+        toast.success(getProfileAnonymousModeSuccessTitle(checked), {
+          description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
         });
       } catch (error: unknown) {
         setAnonymousStartMode(revertTo);
         const message = getApiErrorMessage(error, "Failed to update anonymous mode");
-        toast.error(message || "Could not update anonymous mode.");
+        toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
       } finally {
         setIsSavingProfileAnonymous(false);
       }
@@ -455,7 +456,7 @@ const StudentChat = () => {
     setShowScrollToBottom(!atBottom && messages.length > 5);
   }, [messages.length]);
 
-  const handleActiveChatAnonymityToggle = async (checked: boolean) => {
+  const handleActiveChatAnonymityToggle = useCallback(async (checked: boolean) => {
     if (!sessionId || !activeSession) return;
 
     const sessionIsAnonymous = isAnonymousSessionFlag(activeSession.is_anonymous);
@@ -495,7 +496,26 @@ const StudentChat = () => {
     } finally {
       setIsSavingChatAnonymity(false);
     }
-  };
+  }, [activeSession, messages.length, refreshUser, sessionId]);
+
+  const sidebarAnonymousChecked = activeSession
+    ? isAnonymousSessionFlag(activeSession.is_anonymous)
+    : anonymousStartMode;
+
+  const handleUnifiedAnonymousToggle = useCallback(
+    async (checked: boolean) => {
+      if (activeSession) {
+        await handleActiveChatAnonymityToggle(checked);
+        return;
+      }
+      await handleSidebarAnonymousToggle(checked);
+    },
+    [activeSession, handleActiveChatAnonymityToggle, handleSidebarAnonymousToggle]
+  );
+
+  const unifiedAnonymousToggleDisabled = activeSession
+    ? isSavingChatAnonymity
+    : isSavingProfileAnonymous;
 
   return (
     <div className="h-screen bg-background overflow-hidden">
@@ -532,9 +552,9 @@ const StudentChat = () => {
                 onSelectSession={handleSelectSessionById}
                 onStartSession={handleStartSessionWrapper}
                 onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
-                anonymousStartMode={anonymousStartMode}
-                onToggleAnonymous={handleSidebarAnonymousToggle}
-                anonymousToggleDisabled={isSavingProfileAnonymous}
+                anonymousStartMode={sidebarAnonymousChecked}
+                onToggleAnonymous={handleUnifiedAnonymousToggle}
+                anonymousToggleDisabled={unifiedAnonymousToggleDisabled}
                 counselorPage={counselorPage}
                 counselorTotalPages={counselorTotalPages}
                 onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
@@ -652,8 +672,8 @@ const StudentChat = () => {
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
                         checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
-                        onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
-                        disabled={isSavingChatAnonymity}
+                        onCheckedChange={(v) => void handleUnifiedAnonymousToggle(v)}
+                        disabled={unifiedAnonymousToggleDisabled}
                       />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
@@ -754,9 +774,9 @@ const StudentChat = () => {
                     onSelectSession={handleSelectSessionById}
                     onStartSession={handleStartSessionWrapper}
                     onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
-                    anonymousStartMode={anonymousStartMode}
-                    onToggleAnonymous={handleSidebarAnonymousToggle}
-                    anonymousToggleDisabled={isSavingProfileAnonymous}
+                    anonymousStartMode={sidebarAnonymousChecked}
+                    onToggleAnonymous={handleUnifiedAnonymousToggle}
+                    anonymousToggleDisabled={unifiedAnonymousToggleDisabled}
                     counselorPage={counselorPage}
                     counselorTotalPages={counselorTotalPages}
                     onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}

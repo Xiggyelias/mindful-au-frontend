@@ -33,6 +33,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import type { Appointment } from "@/hooks/useChatSession";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -45,6 +46,12 @@ import {
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import {
+  confirmProfileAnonymousModeTransition,
+  getProfileAnonymousModeSuccessTitle,
+  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
+  PROFILE_ANON_MODE_UPDATE_ERROR,
+} from "@/lib/profileAnonymousMode";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 const navItems = [
@@ -445,13 +452,19 @@ const StudentVideoCall = () => {
       return;
     }
     const nextMode = !profileAnonymousMode;
+    if (!confirmProfileAnonymousModeTransition(user?.profile?.anonymous_mode, nextMode)) {
+      return;
+    }
     setIsUpdatingAnonymousMode(true);
     try {
       await api.updateProfile({ anonymous_mode: nextMode });
       await refreshUser();
-      toast.success(nextMode ? "Anonymous mode enabled." : "Identified mode enabled.");
+      dispatchChatAnonymitySync();
+      toast.success(getProfileAnonymousModeSuccessTitle(nextMode), {
+        description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
+      });
     } catch {
-      toast.error("Could not update anonymous mode.");
+      toast.error(PROFILE_ANON_MODE_UPDATE_ERROR);
     } finally {
       setIsUpdatingAnonymousMode(false);
     }

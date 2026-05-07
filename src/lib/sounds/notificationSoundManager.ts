@@ -315,7 +315,7 @@ function ensureRingGain(el: HTMLAudioElement): GainNode | null {
   if (!ctx) {
     return null;
   }
-  let gain = ringGainByEl.get(el);
+  const gain = ringGainByEl.get(el);
   if (gain) {
     return gain;
   }
