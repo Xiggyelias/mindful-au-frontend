@@ -1,6 +1,8 @@
 /**
  * Merge duplicate open chat sessions for the same counselor–student conversation
- * (e.g. multiple pending/active rows) into one list entry with combined unread counts.
+ * (e.g. multiple pending/active rows) into one list entry. Unread badges use the
+ * representative row's unread_count only (same session id as the row), not a sum
+ * across merged rows — summing inflated badges vs. what you see after opening chat.
  */
 
 export function isValidChatListRow(row: unknown): row is Record<string, unknown> {
@@ -110,19 +112,17 @@ export function dedupeCounselorChatListRows(
   mode: CounselorChatDedupeMode = "messages",
 ): Record<string, unknown>[] {
   const safe = rows.filter(isValidChatListRow);
-  type Bucket = { row: Record<string, unknown>; timeMs: number; unread: number };
+  type Bucket = { row: Record<string, unknown>; timeMs: number };
   const map = new Map<string, Bucket>();
 
   for (const row of safe) {
     const key = counselorChatListDedupeKey(row, mode);
-    const unread = Math.max(0, Math.floor(Number(row.unread_count ?? 0)));
     const timeMs = chatListRowTimeMs(row);
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, { row: { ...row }, timeMs, unread });
+      map.set(key, { row: { ...row }, timeMs });
       continue;
     }
-    existing.unread += unread;
     if (timeMs >= existing.timeMs) {
       existing.row = { ...row };
       existing.timeMs = timeMs;
@@ -131,10 +131,13 @@ export function dedupeCounselorChatListRows(
 
   return Array.from(map.values())
     .sort((a, b) => b.timeMs - a.timeMs)
-    .map((b) => ({
-      ...b.row,
-      unread_count: b.unread,
-    }));
+    .map((b) => {
+      const unread = Math.max(0, Math.floor(Number(b.row.unread_count ?? 0)));
+      return {
+        ...b.row,
+        unread_count: unread,
+      };
+    });
 }
 
 /** Same key as {@link counselorChatListDedupeKey} for strongly typed session rows. */

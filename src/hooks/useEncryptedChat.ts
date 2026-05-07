@@ -29,6 +29,8 @@ export interface ChatMessage {
   has_file?: boolean;
   attachment?: ChatAttachment | null;
   decryptedContent?: string;
+  /** Server snapshot: anonymous session flag when the message was stored (`null` = legacy). */
+  sent_as_anonymous?: boolean | null;
 }
 
 type RawMessage = ChatMessage & {

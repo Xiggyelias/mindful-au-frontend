@@ -11,6 +11,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
+import { PushNotificationPrompt } from "@/components/pwa/PushNotificationPrompt";
 
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
@@ -95,6 +96,7 @@ const App = () => (
           >
             <AuthProvider>
               <ChatIncomingNotificationHost />
+              <PushNotificationPrompt />
               <PwaInstallBanner />
               <ScreenshotShield />
               <Suspense fallback={<RouteLoader />}>

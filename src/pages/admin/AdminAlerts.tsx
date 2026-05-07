@@ -41,6 +41,14 @@ type PanicAlert = {
   created_at: string;
   resolved_at?: string | null;
   status: "active" | "resolved";
+  /** Full stored location string from API */
+  raw_location?: string;
+  /** First lat,lng pair extracted for map links */
+  map_query?: string | null;
+  /** Roster user id for deep-linking */
+  student_id?: number;
+  /** Extra identifiers (user id, email, institution id) */
+  student_detail_line?: string;
 };
 
 type RiskAlert = {
@@ -54,6 +62,62 @@ type RiskAlert = {
 };
 
 type AlertItem = PanicAlert | RiskAlert;
+
+function extractLatLngFromLocation(raw: string | null | undefined): string | null {
+  if (raw == null || typeof raw !== "string") return null;
+  const m = raw.match(/-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?/);
+  if (!m?.[0]) return null;
+  return m[0].replace(/\s*,\s*/, ", ");
+}
+
+function buildPanicStudentSummary(log: {
+  student_id?: unknown;
+  student?: {
+    email?: string;
+    profile?: { full_name?: string | null; id_number?: string | null };
+  };
+}): {
+  studentId: number;
+  displayName: string;
+  email?: string;
+  idNumber?: string;
+  detailLine: string;
+} {
+  const studentId = Number(log.student_id);
+  const st = log.student;
+  const profile = st?.profile;
+  const fullName = typeof profile?.full_name === "string" ? profile.full_name.trim() : "";
+  const email = typeof st?.email === "string" && st.email.trim() !== "" ? st.email.trim() : undefined;
+  const idNumber =
+    profile?.id_number != null && String(profile.id_number).trim() !== ""
+      ? String(profile.id_number).trim()
+      : undefined;
+
+  const displayName =
+    fullName ||
+    (email ? email.split("@")[0] : "") ||
+    email ||
+    (Number.isFinite(studentId) && studentId > 0 ? `Student #${studentId}` : "Unknown student");
+
+  const parts: string[] = [];
+  if (Number.isFinite(studentId) && studentId > 0) {
+    parts.push(`User ID ${studentId}`);
+  }
+  if (email) {
+    parts.push(email);
+  }
+  if (idNumber) {
+    parts.push(`Institution ID ${idNumber}`);
+  }
+
+  return {
+    studentId: Number.isFinite(studentId) ? studentId : 0,
+    displayName,
+    email,
+    idNumber,
+    detailLine: parts.join(" · "),
+  };
+}
 
 const AdminAlerts = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -86,18 +150,24 @@ const AdminAlerts = () => {
         : [];
 
       const mappedPanic: PanicAlert[] = (panicLogs || []).map((log: any) => {
-        const studentName = log.student?.profile?.full_name || `Student #${log.student_id ?? "N/A"}`;
-        const location = log.location ? ` (at ${log.location})` : "";
+        const summary = buildPanicStudentSummary(log);
+        const mapCoords = extractLatLngFromLocation(log.location);
+        const locationSuffix = log.location
+          ? ` (at ${mapCoords ?? log.location})`
+          : "";
 
         return {
           id: Number(log.id),
           type: "panic",
           title: "Panic Button Triggered",
-          message: `${studentName} triggered panic button${location}`,
+          message: `${summary.displayName} triggered panic button${locationSuffix}`,
           created_at: log.created_at,
           resolved_at: log.resolved_at,
           status: log.resolved ? "resolved" : "active",
           raw_location: log.location,
+          map_query: mapCoords,
+          student_id: summary.studentId > 0 ? summary.studentId : undefined,
+          student_detail_line: summary.detailLine || undefined,
         };
       });
 
@@ -343,6 +413,11 @@ const AdminAlerts = () => {
                           <div>
                             <p className="font-medium text-foreground">{alert.title}</p>
                             <p className="text-sm text-muted-foreground">{alert.message}</p>
+                            {alert.type === "panic" && alert.student_detail_line ? (
+                              <p className="text-xs text-foreground/90 mt-1 font-mono bg-secondary/40 rounded-md px-2 py-1 inline-block max-w-full break-all">
+                                {alert.student_detail_line}
+                              </p>
+                            ) : null}
                             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                               <Clock className="h-3 w-3" />
                               {formatTimeAgo(alert.created_at)}
@@ -363,12 +438,31 @@ const AdminAlerts = () => {
                             {alert.status}
                           </span>
 
-                          {alert.type === "panic" && (alert as any).raw_location && /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test((alert as any).raw_location) && (
+                          {alert.type === "panic" && alert.student_id ? (
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-xs h-7"
-                              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((alert as any).raw_location)}`, '_blank')}
+                              onClick={() =>
+                                navigate(`/admin/students?open=${encodeURIComponent(String(alert.student_id))}`)
+                              }
+                            >
+                              Student profile
+                            </Button>
+                          ) : null}
+
+                          {alert.type === "panic" && (alert.map_query || extractLatLngFromLocation(alert.raw_location)) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7"
+                              onClick={() => {
+                                const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
+                                  "_blank",
+                                );
+                              }}
                             >
                               View on Maps
                             </Button>

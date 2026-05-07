@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- In-app / PWA notification icon: black panel, crimson band, white bell (counseling dashboard palette). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="104" ry="104" fill="#0a0a0a"/>
+  <rect x="0" y="384" width="512" height="128" fill="#dc2626"/>
+  <path
+    fill="none"
+    stroke="#fafafa"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    d="M256 120c-54 0-98 36-98 92v68l-34 34v28h264v-28l-34-34v-68c0-56-44-92-98-92z"
+  />
+  <path fill="#fafafa" d="M216 360h80c0 22-18 40-40 40s-40-18-40-40z"/>
+</svg>

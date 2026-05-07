@@ -476,20 +476,15 @@ const CounselorMessages = () => {
             return bTime - aTime;
           });
 
-        const dedupedByConversation = new Map<
-          string,
-          { session: RawSession; totalUnread: number }
-        >();
+        const dedupedByConversation = new Map<string, { session: RawSession }>();
 
         for (const session of chatSessions) {
           const conversationKey = counselorChatDedupeKeyFromSession(session);
-          const unread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
           const bucket = dedupedByConversation.get(conversationKey);
           if (!bucket) {
-            dedupedByConversation.set(conversationKey, { session, totalUnread: unread });
+            dedupedByConversation.set(conversationKey, { session });
             continue;
           }
-          bucket.totalUnread += unread;
 
           const existing = bucket.session;
           const existingOpen = isOpenSession(existing.status);
@@ -511,7 +506,7 @@ const CounselorMessages = () => {
         }
 
         const nextChats = Array.from(dedupedByConversation.values())
-          .map(({ session, totalUnread }): ChatListItem => {
+          .map(({ session }): ChatListItem => {
             const isAnonymous = isSessionAnonymous(session);
             const anonymousLabel = resolveAnonymousLabel(session);
             const numericStudentId = Number(session.student_id);
@@ -532,6 +527,7 @@ const CounselorMessages = () => {
                   session.student?.email?.split("@")[0] ||
                   `Student #${session.id}`;
             const email = isAnonymous ? "" : session.student?.email || "";
+            const rowUnread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
 
             return {
               id: Number(session.id),
@@ -557,7 +553,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
-              unreadCount: totalUnread,
+              unreadCount: rowUnread,
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));

@@ -28,6 +28,7 @@ If this repository sits next to `mindful-au-backend` under a shared parent, see 
 - Screen-capture deterrence on sensitive routes (watermark, blur-on-inactive, copy/context restrictions, warning overlay).
 - Daily student mood check-in enforcement (once per day).
 - **Student dashboard** (`/student/dashboard`): aggregates open chat sessions, truly upcoming appointments (status + future `scheduled_at`), wellness score, and **AI assistant usage (30 days)** from the wellness summary ML snapshot when available; tolerates partial API failures (`Promise.allSettled`); optional **soft refresh** when returning to the tab (throttled, e.g. 45s); daily mood buttons; panic support strip with **`988`** hotline shortcut and emergency log action (server notifies **professional staff**, not peers).
+- **Notifications & PWA push**: permission prompt, toasts, and default push artwork follow the **black / crimson / white** counseling dashboard theme. Service worker and Web Push payloads use branded icons under `public/assets/icons/` (PNG generated from SVG). After changing SVG sources, run `npm run generate:notify-icons`.
 - API resilience: retry on transient failures, base URL failover, and stale-if-error cache fallback.
 
 ## Tech Stack
@@ -223,6 +224,9 @@ If calls work on the same network but fail across different laptops or off-campu
 
 - Anonymous aliases use the `User_XXXX` format.
 - Student identity is hidden by default in anonymous sessions.
+- **Profile “anonymous mode”** sets the **default for new** conversations only. It does **not** bulk-change existing open chat sessions; each thread keeps its own anonymity until the student changes it **in that chat** (or closes it).
+- **Mid-conversation anonymity toggles** (in chat): when the thread already has messages, the UI asks for **confirmation** before switching modes. Copy explains that **older messages stay in the privacy context they were sent under**.
+- **Per-message snapshot**: the API stores `sent_as_anonymous` on each message so counselor-side masking and digest labels stay consistent with the mode **at send time**, even if the session’s current flag changes later.
 - Controlled identity reveal is restricted and audited:
   - `POST /api/sessions/{id}/reveal-identity` (authorized counselor/admin + required reason)
 - Anonymous sessions have TTL-based expiry for misuse prevention (`ANONYMOUS_SESSION_TTL_HOURS` on backend).
@@ -266,7 +270,7 @@ composer --working-dir=../mindful-au-backend test
 ## Database Schema
 
 - Canonical SQL snapshot: `../mindful-au-backend/database/schema.sql`
-- Schema includes peer assignment, escalations, login logs, student mood logs, message seen receipts, and performance indexes.
+- Schema includes peer assignment, escalations, login logs, student mood logs, message seen receipts, **`messages.sent_as_anonymous`** (anonymity at send time for consistent masking), and performance indexes.
 - Keep schema in sync with migrations when adding/changing tables.
 
 ## Project Structure

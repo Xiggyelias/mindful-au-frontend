@@ -430,7 +430,10 @@ const StudentDashboard = () => {
       await refreshUser();
       dispatchChatAnonymitySync();
       await loadStats();
-      toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.");
+      toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.", {
+        description:
+          "This is your default for new conversations. Open chats stay as they are until you change them in the chat.",
+      });
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, "Failed to update anonymous mode");
       toast.error(message || "Could not update anonymous mode.");

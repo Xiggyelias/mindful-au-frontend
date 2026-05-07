@@ -1,15 +1,16 @@
 /**
- * Registers the app shell service worker (public/service-worker.js).
+ * Registers the app shell + web push service worker (public/service-worker.js).
  * Requires HTTPS or localhost.
  *
- * Production only: this SW cache-firsts same-origin GETs, which breaks Vite dev
- * (HMR, /@fs/, stale modules). Test the PWA with `npm run build && npm run preview`.
+ * Default: production only (SW cache-first breaks Vite HMR). Set
+ * VITE_ENABLE_SERVICE_WORKER=true to register in dev (e.g. push testing).
  */
 export function registerServiceWorker(): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return;
   }
-  if (!import.meta.env.PROD) {
+  const enableInDev = import.meta.env.VITE_ENABLE_SERVICE_WORKER === "true";
+  if (!import.meta.env.PROD && !enableInDev) {
     return;
   }
 

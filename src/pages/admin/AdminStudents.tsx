@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -48,7 +49,7 @@ const AdminStudents = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
 
-  const [students, setStudents] = useState<any[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [diagnostics, setDiagnostics] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,6 +95,46 @@ const AdminStudents = () => {
       void loadStudents();
     }
   }, [user, loadStudents]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const rawOpen = searchParams.get("open");
+    const openId = rawOpen ? Number(rawOpen) : NaN;
+    if (!Number.isFinite(openId) || openId <= 0 || students.length === 0 || isLoading) {
+      return;
+    }
+
+    const match = students.find((s) => Number(s.id) === openId);
+
+    const next = new URLSearchParams(searchParams);
+    if (!match) {
+      next.delete("open");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+
+    setSelectedStudent(match);
+    setStudentSummary(null);
+    setIsDetailsOpen(true);
+
+    void (async () => {
+      try {
+        setIsSummaryLoading(true);
+        const summary = await api.getStudentWellnessSummary(openId);
+        setStudentSummary(summary || null);
+      } catch (error: any) {
+        const message = error?.response?.data?.message || "Failed to load student details";
+        toast.error(message);
+      } finally {
+        setIsSummaryLoading(false);
+      }
+    })();
+  }, [students, isLoading, searchParams, setSearchParams, user]);
 
   const latestDiagnosticByStudent = useMemo(() => {
     const map = new Map<number, any>();

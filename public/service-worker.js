@@ -1,8 +1,19 @@
 /* global self, caches, fetch */
-const CACHE_NAME = "cms-cache-v3";
+const CACHE_NAME = "cms-cache-v5";
+
+/** System notification artwork — black / crimson / white (matches counseling UI). */
+const NOTIFY_ICON = "/assets/icons/notify-192.png";
+const NOTIFY_BADGE = "/assets/icons/notify-badge-96.png";
 
 /** Precache: SPA shell only (hashed JS/CSS is loaded lazily from network). */
-const urlsToCache = ["/", "/manifest.json", "/assets/icons/icon-192.png", "/assets/icons/icon-512.png"];
+const urlsToCache = [
+  "/",
+  "/manifest.json",
+  "/assets/icons/icon-192.png",
+  "/assets/icons/icon-512.png",
+  NOTIFY_ICON,
+  NOTIFY_BADGE,
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -65,5 +76,80 @@ self.addEventListener("fetch", (event) => {
         return res;
       });
     })
+  );
+});
+
+/** Web Push — payload JSON: { title, body, url, path, icon?, badge?, tag, requireInteraction?, silent?, urgency? } */
+self.addEventListener("push", (event) => {
+  let payload = {
+    title: "Africa University Counseling",
+    body: "You have a new notification.",
+    url: "/",
+    path: "/",
+    icon: NOTIFY_ICON,
+    badge: NOTIFY_BADGE,
+    tag: "cms-default",
+    requireInteraction: false,
+    silent: false,
+  };
+
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    }
+  } catch {
+    try {
+      const text = event.data?.text();
+      if (text) payload.body = text;
+    } catch {
+      /* keep defaults */
+    }
+  }
+
+  const resolveUrl = () => {
+    const raw = payload.url || payload.path || "/";
+    if (typeof raw === "string" && raw.startsWith("http")) return raw;
+    try {
+      return new URL(String(raw || "/"), self.location.origin).href;
+    } catch {
+      return "/";
+    }
+  };
+
+  const targetUrl = resolveUrl();
+  const icon = payload.icon || NOTIFY_ICON;
+  const badge = payload.badge || NOTIFY_BADGE;
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Africa University Counseling", {
+      body: payload.body || "",
+      icon,
+      badge,
+      tag: payload.tag || "cms-" + String(Date.now()),
+      vibrate: payload.silent ? undefined : [200, 100, 200],
+      requireInteraction: Boolean(payload.requireInteraction),
+      silent: Boolean(payload.silent),
+      data: { url: targetUrl, path: payload.path || "/", tag: payload.tag, icon, badge },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const raw = data.url || data.path || "/";
+  let targetUrl;
+  try {
+    targetUrl =
+      typeof raw === "string" && raw.startsWith("http")
+        ? raw
+        : new URL(String(raw), self.location.origin).href;
+  } catch {
+    targetUrl = self.location.origin + "/";
+  }
+
+  event.waitUntil(
+    self.clients.openWindow ? self.clients.openWindow(targetUrl) : Promise.resolve()
   );
 });

@@ -185,7 +185,10 @@ const StudentChat = () => {
         await api.updateProfile({ anonymous_mode: checked });
         await refreshUser();
         dispatchChatAnonymitySync();
-        toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.");
+        toast.success(checked ? "Anonymous mode is on." : "Anonymous mode is off.", {
+          description:
+            "This is your default for new conversations. Open chats stay as they are until you change them in the chat.",
+        });
       } catch (error: unknown) {
         setAnonymousStartMode(revertTo);
         const message = getApiErrorMessage(error, "Failed to update anonymous mode");
@@ -485,7 +488,20 @@ const StudentChat = () => {
   const handleActiveChatAnonymityToggle = async (checked: boolean) => {
     if (!sessionId || !activeSession) return;
 
-    if (activeSession.is_anonymous && !checked) {
+    const hasConversationHistory = messages.length > 0;
+
+    if (hasConversationHistory) {
+      const turningOn = checked && !activeSession.is_anonymous;
+      const turningOff = !checked && activeSession.is_anonymous;
+      if (turningOn || turningOff) {
+        const ok = window.confirm(
+          turningOn
+            ? "Turn on anonymous mode for this chat?\n\nOlder messages stay exactly as you sent them. New messages and activity use anonymous identity for your counselor. Continue?"
+            : "Turn off anonymous mode for this chat?\n\nOlder anonymous messages stay in that context on your counselor's screen. Your real name applies to new activity in this thread. Continue?",
+        );
+        if (!ok) return;
+      }
+    } else if (activeSession.is_anonymous && !checked) {
       const ok = window.confirm(
         "Turning this off will show your real name to this counselor for active chats. Continue?",
       );

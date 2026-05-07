@@ -12,6 +12,7 @@
     "verify:ci": "npm run verify && npm run test:e2e",
     "preview": "vite preview",
     "generate:pwa-icons": "node ./scripts/generate-pwa-icons.mjs",
+    "generate:notify-icons": "node ./scripts/generate-notify-icons.mjs",
     "check:prod": "npm audit && npm run lint && npm run build && npx tsc --noEmit && composer --working-dir=../mindful-au-backend audit && composer --working-dir=../mindful-au-backend test",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:ui": "npm run build && playwright test --ui"

@@ -170,7 +170,12 @@ export function ChatIncomingNotificationHost() {
           try {
             const grouped = groupDigestRows(rows);
             for (const g of grouped.slice(0, 2)) {
-              void new Notification("New message", { body: g.previewLine, tag: `chat-${g.sessionId}` });
+              void new Notification("New message", {
+                body: g.previewLine,
+                tag: `chat-${g.sessionId}`,
+                icon: "/assets/icons/notify-192.png",
+                badge: "/assets/icons/notify-badge-96.png",
+              });
             }
           } catch {
             // ignore
@@ -239,8 +244,8 @@ export function ChatIncomingNotificationHost() {
           }}
           className={cn(
             "pointer-events-auto w-full max-w-md animate-in slide-in-from-top-2 fade-in duration-300",
-            "rounded-2xl border border-red-600/55 bg-zinc-950/95 text-left shadow-xl shadow-black/40",
-            "backdrop-blur-md transition hover:bg-zinc-950"
+            "rounded-2xl border border-zinc-800/90 border-l-4 border-l-red-600 bg-zinc-950/98 text-left",
+            "shadow-xl shadow-black/50 backdrop-blur-md transition hover:bg-black"
           )}
         >
           <div className="flex gap-3 p-3.5">

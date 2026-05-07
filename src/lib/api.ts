@@ -779,6 +779,30 @@ class ApiClient {
     return response.data;
   }
 
+  async getPushVapidPublicKey() {
+    const response = await this.client.get('/push/vapid-public-key');
+    return response.data as { enabled: boolean; publicKey: string | null };
+  }
+
+  async subscribeWebPush(subscription: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+    contentEncoding?: string;
+  }) {
+    const response = await this.client.post('/push/subscribe', subscription);
+    return response.data as { ok: boolean; id: number };
+  }
+
+  async unsubscribeWebPush(endpoint: string) {
+    const response = await this.client.post('/push/unsubscribe', { endpoint });
+    return response.data as { ok: boolean; deleted: number };
+  }
+
+  async setWebPushPreference(enabled: boolean) {
+    const response = await this.client.patch('/push/preferences', { enabled });
+    return response.data as { ok: boolean; web_push_enabled: boolean };
+  }
+
   async getAuthSessions() {
     const response = await this.client.get('/auth/sessions');
     return (response.data?.sessions ?? []) as AuthDeviceSession[];
