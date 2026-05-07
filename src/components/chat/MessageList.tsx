@@ -1,14 +1,15 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
+import { Virtuoso } from "react-virtuoso";
 import { Shield, Loader2, Trash2, MessageSquare, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
 import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import { messageIsAttachmentFirst } from "@/lib/chatAttachments";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
+import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
 import type { E2EVisualState } from "@/types/e2eChat";
 import { Session } from "@/hooks/useChatSession";
 
@@ -17,30 +18,189 @@ const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
   return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
 };
 
+const formatTimeLabel = (dateString: string): string => {
+  try {
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return "";
+    return formatInDisplayZone(d, "h:mm a");
+  } catch {
+    return "";
+  }
+};
+
+type BubbleRenderProps = {
+  msg: ChatMessage;
+  isMe: boolean;
+  showTime: boolean;
+  timeLabel: string;
+  isDeleting: boolean;
+  onDeleteMessage: (id: number) => Promise<void>;
+  onRetryDecrypt?: () => void;
+  onResyncDevice?: () => void;
+};
+
+const MessageBubble = React.memo(
+  function MessageBubble({
+    msg,
+    isMe,
+    showTime,
+    timeLabel,
+    isDeleting,
+    onDeleteMessage,
+    onRetryDecrypt,
+    onResyncDevice,
+  }: BubbleRenderProps) {
+    const renderBody = () => {
+      if (messageIsAttachmentFirst(msg)) {
+        return <ChatAttachmentView message={msg} isOutgoing={isMe} />;
+      }
+
+      const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
+      if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
+        return (
+          <EncryptedMessagePlaceholder
+            state={msg.e2eVisual}
+            isOutgoing={isMe}
+            onRetryDecrypt={onRetryDecrypt}
+            onResyncDevice={onResyncDevice}
+          />
+        );
+      }
+
+      const legacyBracket =
+        msg.is_encrypted &&
+        typeof msg.decryptedContent === "string" &&
+        /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
+      if (legacyBracket) {
+        return (
+          <EncryptedMessagePlaceholder
+            state="needs_resync"
+            isOutgoing={isMe}
+            onRetryDecrypt={onRetryDecrypt}
+            onResyncDevice={onResyncDevice}
+          />
+        );
+      }
+
+      if (
+        msg.is_encrypted &&
+        !msg.e2eVisual &&
+        !String(msg.decryptedContent || "").trim() &&
+        typeof msg.content === "string" &&
+        LOOKS_LIKE_E2E_CIPHER(msg.content)
+      ) {
+        return (
+          <EncryptedMessagePlaceholder
+            state="awaiting_key"
+            isOutgoing={isMe}
+            onRetryDecrypt={onRetryDecrypt}
+            onResyncDevice={onResyncDevice}
+          />
+        );
+      }
+
+      const content = msg.decryptedContent ?? msg.content;
+      return <p className="whitespace-pre-wrap break-words">{content}</p>;
+    };
+
+    return (
+      <div
+        className={cn(
+          "flex flex-col group",
+          isMe ? "items-end" : "items-start"
+        )}
+      >
+        {showTime && (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">
+            {timeLabel}
+          </span>
+        )}
+        <div className="flex items-center gap-2 max-w-[85%] lg:max-w-[70%]">
+          {isMe && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+              onClick={() => onDeleteMessage(msg.id)}
+              disabled={isDeleting}
+              aria-label={isDeleting ? "Deleting message" : "Delete message"}
+            >
+              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
+          )}
+          <div
+            className={cn(
+              "relative px-4 py-3 rounded-[2rem] shadow-sm",
+              isMe
+                ? "bg-primary text-primary-foreground rounded-tr-none"
+                : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50"
+            )}
+          >
+            <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
+          </div>
+        </div>
+        {isMe && (
+          <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">
+            <div className="flex items-center gap-1.5 px-0.5">
+              <span
+                className={cn("text-[11px]", msg.seen_at ? "text-emerald-500" : "text-muted-foreground/60")}
+                aria-label={msg.seen_at ? "Seen" : "Sent"}
+                title={msg.seen_at ? "Seen" : "Sent"}
+              >
+                {msg.seen_at ? "✓✓" : "✓"}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  },
+  (prev, next) =>
+    prev.msg.id === next.msg.id &&
+    prev.msg.seen_at === next.msg.seen_at &&
+    prev.msg.decryptedContent === next.msg.decryptedContent &&
+    prev.msg.e2eVisual === next.msg.e2eVisual &&
+    prev.msg.content === next.msg.content &&
+    prev.msg.is_encrypted === next.msg.is_encrypted &&
+    prev.msg.message_type === next.msg.message_type &&
+    prev.msg.file_url === next.msg.file_url &&
+    prev.msg.has_file === next.msg.has_file &&
+    prev.msg.attachment?.id === next.msg.attachment?.id &&
+    prev.msg.attachment?.url === next.msg.attachment?.url &&
+    prev.isMe === next.isMe &&
+    prev.showTime === next.showTime &&
+    prev.timeLabel === next.timeLabel &&
+    prev.isDeleting === next.isDeleting
+);
+
 interface MessageListProps {
+  /** Stabilizes scroll when older messages prepend; use active session id. */
+  conversationKey: string;
   messages: ChatMessage[];
   isLoading: boolean;
   isLoadingOlderMessages: boolean;
   hasOlderMessages: boolean;
   isAtBottom: boolean;
   showScrollToBottom: boolean;
-  user: any;
+  user: { id?: string | number | null } | null;
   activeSession: Session | null;
   isPeerTyping: boolean;
   deletingMessageIds: Set<number>;
-  onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  /** Fired when the virtual list reports bottom state (for scroll-to-bottom FAB). */
+  onAtBottomChange?: (atBottom: boolean) => void;
   onLoadOlder: () => Promise<void>;
   onDeleteMessage: (id: number) => Promise<void>;
   scrollToBottom: () => void;
   /** When set, empty-state starter lines fill the composer instead of being inert. */
   onStarterPrompt?: (draft: string) => void;
-  messageScrollAreaRef: React.RefObject<HTMLDivElement>;
-  scrollRef: React.RefObject<HTMLDivElement>;
+  messageScrollAreaRef: React.RefObject<HTMLDivElement | null>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
   onRetryDecrypt?: () => void;
   onResyncDevice?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
+  conversationKey,
   messages,
   isLoading,
   isLoadingOlderMessages,
@@ -51,7 +211,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   activeSession,
   isPeerTyping,
   deletingMessageIds,
-  onScroll,
+  onAtBottomChange,
   onLoadOlder,
   onDeleteMessage,
   scrollToBottom,
@@ -61,96 +221,23 @@ export const MessageList: React.FC<MessageListProps> = ({
   onRetryDecrypt,
   onResyncDevice,
 }) => {
-  React.useEffect(() => {
-    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
-      "[data-radix-scroll-area-viewport]"
-    );
-    if (!viewport) return;
-
-    const handleViewportScroll = () => {
-      onScroll({ currentTarget: viewport } as React.UIEvent<HTMLDivElement>);
-    };
-
-    viewport.addEventListener("scroll", handleViewportScroll, { passive: true });
-    handleViewportScroll();
-
-    return () => {
-      viewport.removeEventListener("scroll", handleViewportScroll);
-    };
-  }, [messageScrollAreaRef, onScroll]);
+  const firstItemIndex = useVirtuosoFirstItemIndex(messages, conversationKey);
+  const olderInflightRef = useRef(false);
 
   const typingLabel =
     activeSession?.assigned_role === "peer_counselor" && Number(activeSession?.peer_counselor_id) > 0
       ? "Peer supporter is typing…"
       : "Counselor is typing…";
 
-  const formatTime = (dateString: string) => {
-    try {
-      const d = new Date(dateString);
-      if (Number.isNaN(d.getTime())) return "";
-      return formatInDisplayZone(d, "h:mm a");
-    } catch {
-      return "";
+  const handleStartReached = useCallback(() => {
+    if (!hasOlderMessages || isLoadingOlderMessages || olderInflightRef.current) {
+      return;
     }
-  };
-
-  const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
-    if (messageIsAttachmentFirst(msg)) {
-      return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
-    }
-
-    const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
-    if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
-      return (
-        <EncryptedMessagePlaceholder
-          state={msg.e2eVisual}
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={onRetryDecrypt}
-          onResyncDevice={onResyncDevice}
-        />
-      );
-    }
-
-    const legacyBracket =
-      msg.is_encrypted &&
-      typeof msg.decryptedContent === "string" &&
-      /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
-    if (legacyBracket) {
-      return (
-        <EncryptedMessagePlaceholder
-          state="needs_resync"
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={onRetryDecrypt}
-          onResyncDevice={onResyncDevice}
-        />
-      );
-    }
-
-    if (
-      msg.is_encrypted &&
-      !msg.e2eVisual &&
-      !String(msg.decryptedContent || "").trim() &&
-      typeof msg.content === "string" &&
-      LOOKS_LIKE_E2E_CIPHER(msg.content)
-    ) {
-      return (
-        <EncryptedMessagePlaceholder
-          state="awaiting_key"
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={onRetryDecrypt}
-          onResyncDevice={onResyncDevice}
-        />
-      );
-    }
-
-    const content = msg.decryptedContent ?? msg.content;
-    
-    return (
-      <p className="whitespace-pre-wrap break-words">
-        {content}
-      </p>
-    );
-  };
+    olderInflightRef.current = true;
+    void Promise.resolve(onLoadOlder()).finally(() => {
+      olderInflightRef.current = false;
+    });
+  }, [hasOlderMessages, isLoadingOlderMessages, onLoadOlder]);
 
   if (isLoading && messages.length === 0) {
     return (
@@ -173,8 +260,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           <div className="space-y-2">
             <h3 className="text-2xl font-display font-bold tracking-tight">Your Safe Space</h3>
             <p className="text-muted-foreground leading-relaxed">
-              Every word you share here is private and end-to-end encrypted. 
-              What would you like to talk about today?
+              Every word you share here is private and end-to-end encrypted. What would you like to talk about today?
             </p>
           </div>
           <div className="grid gap-3 pt-4">
@@ -182,7 +268,7 @@ export const MessageList: React.FC<MessageListProps> = ({
               [
                 {
                   draft: "I'm feeling a bit overwhelmed lately.",
-                  label: 'Prompt: I\'m feeling a bit overwhelmed lately',
+                  label: "Prompt: I'm feeling a bit overwhelmed lately",
                   display: '"I\'m feeling a bit overwhelmed lately..."',
                 },
                 {
@@ -218,105 +304,83 @@ export const MessageList: React.FC<MessageListProps> = ({
   }
 
   return (
-    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
-      <ScrollArea 
-        ref={messageScrollAreaRef}
-        className="flex-1"
-      >
-        <div className="flex min-h-full flex-col justify-end space-y-6 px-4 py-6 lg:px-6">
-          {hasOlderMessages && (
-            <div className="flex justify-center pb-4">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={onLoadOlder} 
-                disabled={isLoadingOlderMessages}
-                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
-                aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
-              >
-                {isLoadingOlderMessages ? (
-                  <Loader2 className="h-3 w-3 animate-spin mr-2" />
-                ) : (
-                  <MessageSquare className="h-3 w-3 mr-2" />
-                )}
-                {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
-              </Button>
-            </div>
-          )}
-
-          {messages.map((msg, idx) => {
-            const isMe =
-              user?.id != null && String(msg.sender_id) === String(user.id);
-            const showTime = idx === 0 || formatTime(msg.created_at) !== formatTime(messages[idx-1].created_at);
-            const isDeleting = deletingMessageIds.has(msg.id);
-
-            return (
-              <div key={msg.id !== undefined && msg.id !== null ? msg.id : `m-${idx}`} className={`flex flex-col ${isMe ? "items-end" : "items-start"} group animate-in slide-in-from-bottom-2 duration-300`}>
-                {showTime && (
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">
-                    {formatTime(msg.created_at)}
-                  </span>
-                )}
-                <div className="flex items-center gap-2 max-w-[85%] lg:max-w-[70%]">
-                  {isMe && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => onDeleteMessage(msg.id)}
-                      disabled={isDeleting}
-                      aria-label={isDeleting ? "Deleting message" : "Delete message"}
-                    >
-                      {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
+    <div ref={messageScrollAreaRef} className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+      <Virtuoso
+        style={{ height: "100%" }}
+        data={messages}
+        firstItemIndex={firstItemIndex}
+        atBottomStateChange={onAtBottomChange}
+        alignToBottom
+        followOutput="smooth"
+        increaseViewportBy={{ top: 320, bottom: 480 }}
+        defaultItemHeight={88}
+        startReached={handleStartReached}
+        components={{
+          Header: () =>
+            hasOlderMessages ? (
+              <div className="flex justify-center pb-4 pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void onLoadOlder()}
+                  disabled={isLoadingOlderMessages}
+                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
+                  aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
+                >
+                  {isLoadingOlderMessages ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                  ) : (
+                    <MessageSquare className="h-3 w-3 mr-2" />
                   )}
-                  
-                  <div className={`relative px-4 py-3 rounded-[2rem] shadow-sm ${
-                    isMe 
-                      ? "bg-primary text-primary-foreground rounded-tr-none" 
-                      : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50"
-                  }`}>
-                    <ChatMessageErrorBoundary>
-                      {renderMessageContent(msg, isMe)}
-                    </ChatMessageErrorBoundary>
+                  {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
+                </Button>
+              </div>
+            ) : (
+              <div className="h-2 shrink-0" aria-hidden />
+            ),
+          Footer: () => (
+            <div className="space-y-6 pb-6">
+              {isPeerTyping && (
+                <div className="flex items-center gap-3 px-4 lg:px-6 animate-in fade-in slide-in-from-left-2 duration-500">
+                  <div className="flex gap-1 p-3 rounded-full bg-secondary/50 border border-border/50">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
                   </div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                    {typingLabel}
+                  </span>
                 </div>
-                {isMe && (
-                  <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">
-                    <div className="flex items-center gap-1.5 px-0.5">
-                      <span
-                        className={cn(
-                          "text-[11px]",
-                          msg.seen_at ? "text-emerald-500" : "text-muted-foreground/60"
-                        )}
-                        aria-label={msg.seen_at ? "Seen" : "Sent"}
-                        title={msg.seen_at ? "Seen" : "Sent"}
-                      >
-                        {msg.seen_at ? "✓✓" : "✓"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {isPeerTyping && (
-            <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-500">
-              <div className="flex gap-1 p-3 rounded-full bg-secondary/50 border border-border/50">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                {typingLabel}
-              </span>
+              )}
+              <div ref={scrollRef} className="h-px w-full" />
             </div>
-          )}
-          
-          <div ref={scrollRef} className="h-px w-full" />
-        </div>
-      </ScrollArea>
+          ),
+        }}
+        itemContent={(index, msg) => {
+          const dataIndex = index - firstItemIndex;
+          const prev = dataIndex > 0 ? messages[dataIndex - 1] ?? null : null;
+          const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
+          const timeLabel = formatTimeLabel(msg.created_at);
+          const showTime =
+            dataIndex === 0 || !prev || formatTimeLabel(prev.created_at) !== timeLabel;
+          const isDeleting = deletingMessageIds.has(msg.id);
+
+          return (
+            <div className="px-4 lg:px-6 pb-6 animate-in slide-in-from-bottom-2 duration-300">
+              <MessageBubble
+                msg={msg}
+                isMe={isMe}
+                showTime={showTime}
+                timeLabel={timeLabel}
+                isDeleting={isDeleting}
+                onDeleteMessage={onDeleteMessage}
+                onRetryDecrypt={onRetryDecrypt}
+                onResyncDevice={onResyncDevice}
+              />
+            </div>
+          );
+        }}
+      />
 
       {showScrollToBottom && (
         <Button
@@ -329,7 +393,6 @@ export const MessageList: React.FC<MessageListProps> = ({
           <ArrowDown className="h-5 w-5" />
         </Button>
       )}
-
     </div>
   );
 };

@@ -34,6 +34,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -94,7 +95,6 @@ const StudentChat = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
-  const lastRenderedTailMessageIdRef = useRef<number | null>(null);
   const hasLoadedCounselorsRef = useRef(false);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
@@ -156,6 +156,7 @@ const StudentChat = () => {
     registerServerMessage,
     retryEncryption,
     refreshMessages,
+    nudgeEncryptionHandshake,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
@@ -163,6 +164,13 @@ const StudentChat = () => {
 
   const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
   const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
+  const isEncryptionReadyRef = useRef(isEncryptionReady);
+  const chatErrorRef = useRef(chatError);
+
+  useEffect(() => {
+    isEncryptionReadyRef.current = isEncryptionReady;
+    chatErrorRef.current = chatError;
+  }, [isEncryptionReady, chatError]);
 
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
@@ -215,20 +223,20 @@ const StudentChat = () => {
     return cleanup;
   }, [cleanup]);
 
-  // Encryption timeout: if not ready after 15s, show fallback UI
+  // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
   useEffect(() => {
-    if (!activeSession || isEncryptionReady || chatError) {
+    if (!sessionId || isEncryptionReady || chatError) {
       setEncryptionTimedOut(false);
       return;
     }
     setEncryptionTimedOut(false);
     const timer = window.setTimeout(() => {
-      if (!isEncryptionReady && !chatError) {
+      if (!isEncryptionReadyRef.current && !chatErrorRef.current) {
         setEncryptionTimedOut(true);
       }
     }, 15000);
     return () => window.clearTimeout(timer);
-  }, [activeSession, isEncryptionReady, chatError]);
+  }, [sessionId, isEncryptionReady, chatError]);
 
   const handleRetryEncryption = useCallback(async () => {
     setIsRetryingEncryption(true);
@@ -306,28 +314,7 @@ const StudentChat = () => {
     return () => { active = false; window.clearInterval(intervalId); };
   }, [user?.id, counselorPage]);
 
-  // Smart Scroll Management
   useEffect(() => {
-    const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
-    if (!latestMessageId || !Number.isFinite(latestMessageId)) {
-      lastRenderedTailMessageIdRef.current = null;
-      return;
-    }
-
-    const previousTailId = lastRenderedTailMessageIdRef.current;
-    if (previousTailId === null || (latestMessageId !== previousTailId && isAtBottom)) {
-      if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ 
-          behavior: previousTailId === null ? "auto" : "smooth",
-          block: "end"
-        });
-      }
-    }
-    lastRenderedTailMessageIdRef.current = latestMessageId;
-  }, [messages, isAtBottom]);
-
-  useEffect(() => {
-    lastRenderedTailMessageIdRef.current = null;
     setDeletingMessageIds(new Set());
   }, [sessionId]);
 
@@ -464,28 +451,10 @@ const StudentChat = () => {
     await deleteMessage(id);
   }, [deleteMessage]);
 
-  // Refs for scroll handler to avoid re-creating callback on every message change
-  const messagesLengthRef = useRef(messages.length);
-  const hasOlderMessagesRef = useRef(hasOlderMessages);
-  const isLoadingOlderMessagesRef = useRef(isLoadingOlderMessages);
-  const loadOlderMessagesRef = useRef(loadOlderMessages);
-
-  // Keep refs updated without causing re-renders
-  messagesLengthRef.current = messages.length;
-  hasOlderMessagesRef.current = hasOlderMessages;
-  isLoadingOlderMessagesRef.current = isLoadingOlderMessages;
-  loadOlderMessagesRef.current = loadOlderMessages;
-
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const viewport = e.currentTarget;
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const atBottom = scrollHeight - scrollTop - clientHeight < 50;
+  const handleAtBottomChange = useCallback((atBottom: boolean) => {
     setIsAtBottom(atBottom);
-    setShowScrollToBottom(!atBottom && messagesLengthRef.current > 5);
-    if (scrollTop < 80 && hasOlderMessagesRef.current && !isLoadingOlderMessagesRef.current) {
-      loadOlderMessagesRef.current();
-    }
-  }, []); // Empty deps - uses refs for changing values
+    setShowScrollToBottom(!atBottom && messages.length > 5);
+  }, [messages.length]);
 
   const handleActiveChatAnonymityToggle = async (checked: boolean) => {
     if (!sessionId || !activeSession) return;
@@ -655,8 +624,27 @@ const StudentChat = () => {
                           {activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <div className="mt-0.5 flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Session Active</span>
+                          <span
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full",
+                              chatError
+                                ? "bg-destructive"
+                                : isEncryptionReady
+                                  ? "bg-emerald-500"
+                                  : encryptionTimedOut
+                                    ? "bg-amber-500"
+                                    : "animate-pulse bg-amber-400",
+                            )}
+                          />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            {chatError
+                              ? "Secure chat error"
+                              : encryptionTimedOut && !isEncryptionReady
+                                ? "Encryption setup delayed"
+                                : !isEncryptionReady
+                                  ? "Securing encryption…"
+                                  : "Session active"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -692,6 +680,7 @@ const StudentChat = () => {
 
                   {/* Message List */}
                   <MessageList
+                    conversationKey={String(sessionId ?? "")}
                     messages={messages}
                     isLoading={messagesLoading && isEncryptionReady}
                     isLoadingOlderMessages={isLoadingOlderMessages}
@@ -702,7 +691,7 @@ const StudentChat = () => {
                     activeSession={activeSession}
                     isPeerTyping={isPeerTyping}
                     deletingMessageIds={deletingMessageIds}
-                    onScroll={handleScroll}
+                    onAtBottomChange={handleAtBottomChange}
                     onLoadOlder={loadOlderMessages}
                     onDeleteMessage={handleDeleteMessageWrapper}
                     onStarterPrompt={setMessage}
@@ -710,7 +699,7 @@ const StudentChat = () => {
                     messageScrollAreaRef={messageScrollAreaRef as any}
                     scrollRef={scrollRef}
                     onRetryDecrypt={() => {
-                      void refreshMessages();
+                      void nudgeEncryptionHandshake();
                     }}
                     onResyncDevice={handleRetryEncryption}
                   />

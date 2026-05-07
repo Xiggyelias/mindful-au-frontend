@@ -65,6 +65,116 @@ export function logCryptoDebug(message: string, detail?: Record<string, unknown>
   }
 }
 
+/** Bounded cache: same ciphertext + key skips repeat subtle.decrypt (re-renders, list virtualization). */
+const DECRYPT_OK_CACHE_MAX = 250;
+const decryptPlaintextCache = new Map<string, string>();
+const aesKeyFingerprintCache = new WeakMap<CryptoKey, string>();
+
+const makePayloadDigestKey = (trimmedCipher: string): string => {
+  if (trimmedCipher.length <= 120) {
+    return trimmedCipher;
+  }
+  return `${trimmedCipher.length}:${trimmedCipher.slice(0, 48)}:${trimmedCipher.slice(-40)}`;
+};
+
+const getAesKeyFingerprint = async (key: CryptoKey): Promise<string> => {
+  const cached = aesKeyFingerprintCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const raw = await crypto.subtle.exportKey("raw", key);
+  const bytes = new Uint8Array(raw);
+  let h = 2166136261;
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 16777619);
+  }
+  const fp = `${bytes.length}:${(h >>> 0).toString(16)}`;
+  aesKeyFingerprintCache.set(key, fp);
+  return fp;
+};
+
+export function clearDecryptPlaintextCache(): void {
+  decryptPlaintextCache.clear();
+}
+
+/** Offload heavy AES-GCM decrypt so long messages don't block the UI thread (large attachments). */
+const LARGE_CIPHER_WORKER_MIN_CHARS = 3200;
+
+let decryptWorker: Worker | null = null;
+let decryptWorkerNextId = 1;
+const decryptWorkerPending = new Map<number, (result: DecryptChatPayloadResult) => void>();
+
+function getDecryptWorker(): Worker | null {
+  if (typeof Worker === "undefined") {
+    return null;
+  }
+  if (decryptWorker) {
+    return decryptWorker;
+  }
+  try {
+    decryptWorker = new Worker(new URL("../workers/chatDecrypt.worker.ts", import.meta.url), { type: "module" });
+    decryptWorker.onmessage = (ev: MessageEvent<{ id: number; ok: boolean; plaintext?: string }>) => {
+      const d = ev.data;
+      const resolve = decryptWorkerPending.get(d.id);
+      decryptWorkerPending.delete(d.id);
+      if (!resolve) {
+        return;
+      }
+      if (d.ok && typeof d.plaintext === "string") {
+        resolve({ ok: true, plaintext: d.plaintext });
+      } else {
+        resolve({ ok: false, reason: "decrypt_failed" });
+      }
+    };
+    return decryptWorker;
+  } catch {
+    return null;
+  }
+}
+
+async function decryptLargePayloadInWorker(
+  trimmed: string,
+  key: CryptoKey,
+  cacheKey: string
+): Promise<DecryptChatPayloadResult | null> {
+  const w = getDecryptWorker();
+  if (!w) {
+    return null;
+  }
+  const keyRawB64 = await exportKey(key);
+  const id = decryptWorkerNextId++;
+  return new Promise((resolveOuter) => {
+    const timeout = window.setTimeout(() => {
+      decryptWorkerPending.delete(id);
+      resolveOuter(null);
+    }, 15000);
+    decryptWorkerPending.set(id, (r) => {
+      window.clearTimeout(timeout);
+      if (r.ok) {
+        if (decryptPlaintextCache.size >= DECRYPT_OK_CACHE_MAX) {
+          const oldest = decryptPlaintextCache.keys().next().value;
+          if (oldest !== undefined) {
+            decryptPlaintextCache.delete(oldest);
+          }
+        }
+        decryptPlaintextCache.set(cacheKey, r.plaintext);
+        logCryptoDebug("decrypt: worker ok", { len: trimmed.length });
+      } else {
+        logCryptoDebug("decrypt: worker failed");
+      }
+      resolveOuter(r);
+    });
+    try {
+      w.postMessage({ type: "decrypt", id, cipherTrimmed: trimmed, keyRawB64 });
+    } catch {
+      window.clearTimeout(timeout);
+      decryptWorkerPending.delete(id);
+      resolveOuter(null);
+    }
+  });
+}
+
 export const generateEncryptionKey = async (): Promise<CryptoKey> => {
   return await crypto.subtle.generateKey(
     { name: ALGORITHM, length: KEY_LENGTH },
@@ -116,12 +226,35 @@ export const decryptChatPayload = async (
     logCryptoDebug("decrypt: reject payload", { reason: "invalid_or_short", len: combined?.length ?? 0 });
     return { ok: false, reason: combined ? "payload_too_short" : "invalid_base64" };
   }
+
+  const fp = await getAesKeyFingerprint(key);
+  const cacheKey = `${fp}:${makePayloadDigestKey(trimmed)}`;
+  const cachedPlain = decryptPlaintextCache.get(cacheKey);
+  if (cachedPlain !== undefined) {
+    logCryptoDebug("decrypt: cache hit", { len: trimmed.length });
+    return { ok: true, plaintext: cachedPlain };
+  }
+
+  if (trimmed.length >= LARGE_CIPHER_WORKER_MIN_CHARS) {
+    const workerResult = await decryptLargePayloadInWorker(trimmed, key, cacheKey);
+    if (workerResult !== null) {
+      return workerResult;
+    }
+  }
+
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
   try {
     const decrypted = await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext);
     const plaintext = new TextDecoder().decode(decrypted);
     logCryptoDebug("decrypt: ok", { cipherBytes: ciphertext.length });
+    if (decryptPlaintextCache.size >= DECRYPT_OK_CACHE_MAX) {
+      const oldest = decryptPlaintextCache.keys().next().value;
+      if (oldest !== undefined) {
+        decryptPlaintextCache.delete(oldest);
+      }
+    }
+    decryptPlaintextCache.set(cacheKey, plaintext);
     return { ok: true, plaintext };
   } catch {
     logCryptoDebug("decrypt: subtle.decrypt failed");

@@ -13,6 +13,7 @@ import {
   encryptMessage,
   decryptChatPayload,
   logCryptoDebug,
+  clearDecryptPlaintextCache,
 } from '@/lib/encryption';
 import {
   loadPersistedSessionKey,
@@ -95,22 +96,23 @@ interface RealtimeClient {
   removeChannel(channel: RealtimeBroadcastChannel): Promise<unknown> | unknown;
 }
 
-const DEFAULT_POLLING_INTERVAL_MS = 10000;
-const ACTIVE_POLLING_INTERVAL_MS = 4500;
-const POLLING_BOOST_DURATION_MS = 15000;
+const DEFAULT_POLLING_INTERVAL_MS = 6500;
+const ACTIVE_POLLING_INTERVAL_MS = 2800;
+const POLLING_BOOST_DURATION_MS = 12000;
 
-const MESSAGE_BATCH_LIMIT = 30;
-const INITIAL_SYNC_BATCH_LIMIT = 30;
-const MESSAGE_RETRY_BATCH_LIMIT = 15;
-const OLDER_MESSAGE_BATCH_LIMIT = 30;
+/** Aligned with API max; fewer round-trips for history sync. */
+const MESSAGE_BATCH_LIMIT = 40;
+const INITIAL_SYNC_BATCH_LIMIT = 40;
+const MESSAGE_RETRY_BATCH_LIMIT = 20;
+const OLDER_MESSAGE_BATCH_LIMIT = 40;
 const RECEIPT_FULL_SYNC_EVERY_POLLS = 20;
 const MESSAGE_POLL_TIMEOUT_MS = 12000;
 const MESSAGE_POLL_RETRY_TIMEOUT_MS = 20000;
-const REALTIME_SYNC_DEBOUNCE_MS = 120;
-const TYPING_HEARTBEAT_MS = 1600;
-const PEER_TYPING_IDLE_TIMEOUT_MS = 2600;
-const TYPING_STATUS_TIMEOUT_MS = 3500;
-const TYPING_POLL_INTERVAL_MS = 4500;
+const REALTIME_SYNC_DEBOUNCE_MS = 75;
+const TYPING_HEARTBEAT_MS = 1300;
+const PEER_TYPING_IDLE_TIMEOUT_MS = 2400;
+const TYPING_STATUS_TIMEOUT_MS = 3200;
+const TYPING_POLL_INTERVAL_MS = 2800;
 const MAX_CLIENT_MESSAGES = 500;
 const E2E_VERSION = 'v1';
 const SESSION_KEY_PREFIX = 'chat_key_';
@@ -261,7 +263,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const localTypingStateRef = useRef(false);
   const localTypingLastSentAtRef = useRef(0);
   const lastActiveAtRef = useRef(0);
+  /** Keeps pagination gate in sync for handshake catch-up (avoids stale `useCallback` closures). */
+  const hasOlderMessagesRef = useRef(true);
 
+  useEffect(() => {
+    hasOlderMessagesRef.current = hasOlderMessages;
+  }, [hasOlderMessages]);
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isInteger(numericUserId) && numericUserId > 0;
@@ -720,7 +727,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       // Hide all E2E control envelopes from UI, even if malformed/legacy.
       const envelopeSessionId =
         typeof envelope.sessionId === 'string' ? envelope.sessionId : null;
-      if (envelopeSessionId && envelopeSessionId !== sessionId) {
+      if (envelopeSessionId && String(envelopeSessionId) !== String(sessionId)) {
         return true;
       }
 
@@ -1068,69 +1075,107 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     [decryptMessages, sessionId]
   );
 
-  const loadOlderMessages = useCallback(async () => {
-    if (!sessionId) return;
-    if (loadInFlightRef.current || loadOlderInFlightRef.current) return;
-    if (!hasOlderMessages || oldestMessageIdRef.current <= 0) return;
+  const loadOlderMessages = useCallback(
+    async (opts?: { force?: boolean }): Promise<boolean> => {
+      if (!sessionId) return false;
+      if (loadInFlightRef.current || loadOlderInFlightRef.current) return false;
 
-    loadOlderInFlightRef.current = true;
-    setIsLoadingOlderMessages(true);
+      const forced = Boolean(opts?.force);
+      if (!forced && (!hasOlderMessagesRef.current || oldestMessageIdRef.current <= 0)) {
+        return false;
+      }
+      if (forced && oldestMessageIdRef.current <= 0) {
+        return false;
+      }
 
-    try {
-      const beforeId = oldestMessageIdRef.current;
-      const fetchOlder = (timeoutMs: number, limit: number) =>
-        api.getMessages(sessionId, {
-          before_id: beforeId,
-          limit,
-          timeout_ms: timeoutMs,
-        });
+      loadOlderInFlightRef.current = true;
+      setIsLoadingOlderMessages(true);
 
-      let data: RawMessage[];
       try {
-        data = (await fetchOlder(MESSAGE_POLL_TIMEOUT_MS, OLDER_MESSAGE_BATCH_LIMIT)) as RawMessage[];
-      } catch (err) {
-        if (!isTimeoutError(err)) {
-          throw err;
+        const beforeId = oldestMessageIdRef.current;
+        const fetchOlder = (timeoutMs: number, limit: number) =>
+          api.getMessages(sessionId, {
+            before_id: beforeId,
+            limit,
+            timeout_ms: timeoutMs,
+          });
+
+        let data: RawMessage[];
+        try {
+          data = (await fetchOlder(MESSAGE_POLL_TIMEOUT_MS, OLDER_MESSAGE_BATCH_LIMIT)) as RawMessage[];
+        } catch (err) {
+          if (!isTimeoutError(err)) {
+            throw err;
+          }
+
+          data = (await fetchOlder(MESSAGE_POLL_RETRY_TIMEOUT_MS, MESSAGE_RETRY_BATCH_LIMIT)) as RawMessage[];
         }
 
-        data = (await fetchOlder(MESSAGE_POLL_RETRY_TIMEOUT_MS, MESSAGE_RETRY_BATCH_LIMIT)) as RawMessage[];
-      }
+        const rawOlder = normalizeMessagePayload(data);
+        if (rawOlder.length === 0) {
+          setHasOlderMessages(false);
+          hasOlderMessagesRef.current = false;
+          return false;
+        }
 
-      const rawOlder = normalizeMessagePayload(data);
-      if (rawOlder.length === 0) {
-        setHasOlderMessages(false);
-        return;
-      }
+        const nextOldestId = rawOlder.reduce(
+          (min, msg) => Math.min(min, msg.id),
+          Number.MAX_SAFE_INTEGER
+        );
+        oldestMessageIdRef.current = nextOldestId;
+        const nextHasOlder = rawOlder.length >= OLDER_MESSAGE_BATCH_LIMIT && nextOldestId > 0;
+        setHasOlderMessages(nextHasOlder);
+        hasOlderMessagesRef.current = nextHasOlder;
 
-      const nextOldestId = rawOlder.reduce(
-        (min, msg) => Math.min(min, msg.id),
-        Number.MAX_SAFE_INTEGER
-      );
-      oldestMessageIdRef.current = nextOldestId;
-      setHasOlderMessages(rawOlder.length >= OLDER_MESSAGE_BATCH_LIMIT && nextOldestId > 0);
-
-      const decryptedOlder = await decryptMessages(rawOlder);
-      if (decryptedOlder.length > 0) {
-        setMessages((previous) => {
-          const merged = new Map<number, ChatMessage>();
-          for (const msg of previous) merged.set(msg.id, msg);
-          for (const msg of decryptedOlder) {
-            if (!merged.has(msg.id) || !isOptimisticMessageId(msg.id)) {
-              merged.set(msg.id, msg);
+        const decryptedOlder = await decryptMessages(rawOlder);
+        if (decryptedOlder.length > 0) {
+          setMessages((previous) => {
+            const merged = new Map<number, ChatMessage>();
+            for (const msg of previous) merged.set(msg.id, msg);
+            for (const msg of decryptedOlder) {
+              if (!merged.has(msg.id) || !isOptimisticMessageId(msg.id)) {
+                merged.set(msg.id, msg);
+              }
             }
-          }
-          return sortAndTrimMessages(Array.from(merged.values()));
-        });
-      }
+            return sortAndTrimMessages(Array.from(merged.values()));
+          });
+        }
 
-      setError(null);
-    } catch (err) {
-      console.error('Failed to load older messages:', err);
-    } finally {
-      setIsLoadingOlderMessages(false);
-      loadOlderInFlightRef.current = false;
+        setError(null);
+        return true;
+      } catch (err) {
+        console.error('Failed to load older messages:', err);
+        return false;
+      } finally {
+        setIsLoadingOlderMessages(false);
+        loadOlderInFlightRef.current = false;
+      }
+    },
+    [decryptMessages, sessionId]
+  );
+
+  /**
+   * E2E `kind:key` envelopes are often at the start of a long thread, while the initial
+   * poll only returns the latest page. Non-initiators would stay on "Securing…" forever.
+   */
+  const runHandshakeHistoryCatchup = useCallback(async () => {
+    if (!sessionId || !isInitializedRef.current) return;
+    if (encryptionKeyRef.current) return;
+    if (isSessionKeyInitiator()) return;
+
+    const maxPages = 50;
+    for (let i = 0; i < maxPages; i++) {
+      if (encryptionKeyRef.current) break;
+      if (oldestMessageIdRef.current <= 0) break;
+      const gotMore = await loadOlderMessages({ force: true });
+      if (!gotMore) break;
     }
-  }, [decryptMessages, hasOlderMessages, sessionId]);
+
+    if (encryptionKeyRef.current) {
+      setIsEncryptionReady(true);
+      setError(null);
+    }
+  }, [isSessionKeyInitiator, loadOlderMessages, sessionId]);
 
   useEffect(() => {
     messageCountRef.current = messages.length;
@@ -1498,6 +1543,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       localTypingStateRef.current = false;
       localTypingLastSentAtRef.current = 0;
       sessionKeyStorageKeyRef.current = null;
+      clearDecryptPlaintextCache();
       setMessages([]);
       setIsLoading(false);
       setIsLoadingOlderMessages(false);
@@ -1523,6 +1569,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     localTypingStateRef.current = false;
     localTypingLastSentAtRef.current = 0;
     sessionKeyStorageKeyRef.current = null;
+    clearDecryptPlaintextCache();
     setMessages([]);
     setIsLoading(true);
     setIsLoadingOlderMessages(false);
@@ -1580,14 +1627,13 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
 
     const bootstrap = async () => {
-      if (hasValidUserId) {
-        await api.markSessionInboundRead(sessionId).catch(() => {
-          // index() also marks read; this is best-effort for faster badge sync.
-        });
-      }
       await initializeEncryption();
       if (isDisposed) return;
+      // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
+      // POST to shave one round-trip on open (important on high-latency links).
       await loadMessages(true);
+      if (isDisposed) return;
+      await runHandshakeHistoryCatchup();
       await refreshPeerTypingStatus();
       scheduleNextPoll();
       scheduleTypingPoll();
@@ -1619,13 +1665,28 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     initializeEncryption,
     loadMessages,
     refreshPeerTypingStatus,
+    runHandshakeHistoryCatchup,
     sessionId,
   ]);
 
-  const refreshMessages = useCallback(async () => {
-    if (!sessionId) return;
-    await loadMessages(false);
-  }, [loadMessages, sessionId]);
+  const refreshMessages = useCallback(
+    async (opts?: { forceFull?: boolean }) => {
+      if (!sessionId) return;
+      await loadMessages(Boolean(opts?.forceFull));
+      if (opts?.forceFull) {
+        await runHandshakeHistoryCatchup();
+      }
+      if (encryptionKeyRef.current) {
+        setIsEncryptionReady(true);
+        setError(null);
+      }
+    },
+    [loadMessages, runHandshakeHistoryCatchup, sessionId]
+  );
+
+  const nudgeEncryptionHandshake = useCallback(async () => {
+    await refreshMessages({ forceFull: true });
+  }, [refreshMessages]);
 
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getKeyForSharing = useCallback(() => keyStringRef.current, []);
@@ -1644,8 +1705,16 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     await initializeEncryption();
     if (isInitializedRef.current) {
       await loadMessages(true);
+      await runHandshakeHistoryCatchup();
     }
-  }, [hasValidUserId, initializeEncryption, loadMessages, numericUserId, sessionId]);
+  }, [
+    hasValidUserId,
+    initializeEncryption,
+    loadMessages,
+    numericUserId,
+    runHandshakeHistoryCatchup,
+    sessionId,
+  ]);
 
   return {
     messages,
@@ -1662,6 +1731,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     getKeyForSharing,
     getEncryptionKey,
     refreshMessages,
+    nudgeEncryptionHandshake,
     registerServerMessage,
     retryEncryption,
   };

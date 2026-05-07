@@ -28,7 +28,6 @@ import {
   Square,
   Menu,
   MoreHorizontal,
-  Trash2,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -49,7 +48,7 @@ import {
   validateChatAttachment,
 } from "@/lib/chatAttachments";
 import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
-import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
+import { CounselorMessageThread } from "@/components/chat/CounselorMessageThread";
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import type { E2EVisualState } from "@/types/e2eChat";
 import { cn } from "@/lib/utils";
@@ -220,15 +219,6 @@ const formatChatListTime = (dateString?: string) => {
   return formatInDisplayZone(d, "MMM d, yyyy · h:mm a");
 };
 
-/** In-thread message footer: sent time in display zone. */
-const formatMessageTime = (dateString?: string) => {
-  const d = parseBackendDate(dateString);
-  if (!d) return "";
-  if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
-  if (isYesterdayInDisplayZone(d)) return `Yesterday ${formatInDisplayZone(d, "h:mm a")}`;
-  return formatInDisplayZone(d, "MMM d, h:mm a");
-};
-
 const getInitials = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "??";
@@ -270,7 +260,7 @@ const CounselorMessages = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
-  const lastRenderedTailMessageIdRef = useRef<number | null>(null);
+  const [showThreadScrollToBottom, setShowThreadScrollToBottom] = useState(false);
   const hasShownLoadErrorRef = useRef(false);
   const loadSessionsGenerationRef = useRef(0);
   const { user, role } = useAuth();
@@ -327,11 +317,19 @@ const CounselorMessages = () => {
     registerServerMessage,
     retryEncryption,
     refreshMessages,
+    nudgeEncryptionHandshake,
     deleteMessage,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
   });
+
+  const isEncryptionReadyRef = useRef(isEncryptionReady);
+  const chatErrorRef = useRef(chatError);
+  useEffect(() => {
+    isEncryptionReadyRef.current = isEncryptionReady;
+    chatErrorRef.current = chatError;
+  }, [isEncryptionReady, chatError]);
 
   const {
     sendFileMessage,
@@ -692,47 +690,7 @@ const CounselorMessages = () => {
     prevMessagesLoadingRef.current = messagesLoading;
   }, [messagesLoading, selectedSessionId, loadSessions]);
 
-  // Optimized scroll management using refs to avoid re-binding on every message change
-  const messagesLengthRef = useRef(messages.length);
-  const isAtBottomRef = useRef(true);
-
-  // Track if we are at bottom
   useEffect(() => {
-    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
-      "[data-radix-scroll-area-viewport]"
-    );
-    if (!viewport) return;
-
-    const onScrollInternal = () => {
-      const { scrollTop, scrollHeight, clientHeight } = viewport;
-      isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
-    };
-    viewport.addEventListener("scroll", onScrollInternal, { passive: true });
-    return () => viewport.removeEventListener("scroll", onScrollInternal);
-  }, []);
-
-  useEffect(() => {
-    messagesLengthRef.current = messages.length;
-    const latestMessageId = messages.length > 0 ? Number(messages[messages.length - 1]?.id) : null;
-    if (!latestMessageId || !Number.isFinite(latestMessageId)) {
-      lastRenderedTailMessageIdRef.current = null;
-      return;
-    }
-
-    const previousTailId = lastRenderedTailMessageIdRef.current;
-    if (previousTailId === null || (latestMessageId !== previousTailId && isAtBottomRef.current)) {
-      if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ 
-          behavior: previousTailId === null ? "auto" : "smooth",
-          block: "end"
-        });
-      }
-    }
-    lastRenderedTailMessageIdRef.current = latestMessageId;
-  }, [messages]);
-
-  useEffect(() => {
-    lastRenderedTailMessageIdRef.current = null;
     setDeletingMessageIds(new Set());
   }, [selectedSessionId]);
 
@@ -758,7 +716,7 @@ const CounselorMessages = () => {
     [canModerateChat, deleteMessage]
   );
 
-  // Encryption timeout: if not ready after 15s, show fallback UI
+  // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
   useEffect(() => {
     if (!selectedSessionId || isEncryptionReady || chatError) {
       setEncryptionTimedOut(false);
@@ -766,7 +724,7 @@ const CounselorMessages = () => {
     }
     setEncryptionTimedOut(false);
     const timer = window.setTimeout(() => {
-      if (!isEncryptionReady && !chatError) {
+      if (!isEncryptionReadyRef.current && !chatErrorRef.current) {
         setEncryptionTimedOut(true);
       }
     }, 15000);
@@ -1028,47 +986,27 @@ const CounselorMessages = () => {
     setChatPage((current) => Math.min(chatTotalPages, current + 1));
   };
 
+  const handleCounselorThreadAtBottomChange = useCallback((atBottom: boolean) => {
+    setShowThreadScrollToBottom(!atBottom && messages.length > 5);
+  }, [messages.length]);
+
+  useEffect(() => {
+    setShowThreadScrollToBottom(false);
+  }, [selectedSessionId]);
+
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedSessionId) return;
     if (!hasOlderMessages || isLoadingOlderMessages) return;
-
-    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
-      "[data-radix-scroll-area-viewport]"
-    );
-    const previousScrollHeight = viewport?.scrollHeight ?? 0;
-    const previousScrollTop = viewport?.scrollTop ?? 0;
-
     await loadOlderMessages();
-
-    if (!viewport) return;
-    window.requestAnimationFrame(() => {
-      const nextScrollHeight = viewport.scrollHeight;
-      const preservedTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
-      viewport.scrollTop = Math.max(0, preservedTop);
-    });
   }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages, selectedSessionId]);
 
-  useEffect(() => {
-    if (!selectedSessionId) return;
+  const threadStudentLabel = useMemo(
+    () =>
+      selectedChat?.isAnonymous ? anonymousLabelForCounselor() : (selectedChat?.studentName ?? "Student"),
+    [selectedChat]
+  );
 
-    const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
-      "[data-radix-scroll-area-viewport]"
-    );
-    if (!viewport) return;
-
-    const onScroll = () => {
-      if (viewport.scrollTop > 80) return;
-      if (!hasOlderMessages || isLoadingOlderMessages) return;
-      void handleLoadOlderMessages();
-    };
-
-    viewport.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      viewport.removeEventListener("scroll", onScroll);
-    };
-  }, [handleLoadOlderMessages, hasOlderMessages, isLoadingOlderMessages, selectedSessionId]);
-
-  const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
+  const renderMessageContent = useCallback((msg: ChatMessage, isOutgoing: boolean) => {
     if (messageIsAttachmentFirst(msg)) {
       return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
     }
@@ -1080,7 +1018,7 @@ const CounselorMessages = () => {
           state={msg.e2eVisual}
           isOutgoing={isOutgoing}
           onRetryDecrypt={() => {
-            void refreshMessages();
+            void nudgeEncryptionHandshake();
           }}
           onResyncDevice={() => {
             void handleRetryEncryption();
@@ -1099,7 +1037,7 @@ const CounselorMessages = () => {
           state="needs_resync"
           isOutgoing={isOutgoing}
           onRetryDecrypt={() => {
-            void refreshMessages();
+            void nudgeEncryptionHandshake();
           }}
           onResyncDevice={() => {
             void handleRetryEncryption();
@@ -1120,7 +1058,7 @@ const CounselorMessages = () => {
           state="awaiting_key"
           isOutgoing={isOutgoing}
           onRetryDecrypt={() => {
-            void refreshMessages();
+            void nudgeEncryptionHandshake();
           }}
           onResyncDevice={() => {
             void handleRetryEncryption();
@@ -1132,7 +1070,7 @@ const CounselorMessages = () => {
     const content = msg.decryptedContent || msg.content || "";
 
     return <p>{content}</p>;
-  };
+  }, [handleRetryEncryption, nudgeEncryptionHandshake]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -1446,7 +1384,7 @@ const CounselorMessages = () => {
                     </Button>
                   </div>
                 )}
-                <ScrollArea ref={messageScrollAreaRef} className="min-h-0 flex-1">
+                <div className="min-h-0 flex-1 flex flex-col">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
                       <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
@@ -1464,7 +1402,7 @@ const CounselorMessages = () => {
                       </div>
                     </div>
                   ) : messagesLoading ? (
-                    <div className="flex items-center justify-center h-full">
+                    <div className="flex min-h-[240px] flex-1 items-center justify-center">
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : messages.length === 0 && !isPeerTyping ? (
@@ -1474,153 +1412,28 @@ const CounselorMessages = () => {
                       <p className="text-xs">Start the conversation by sending a message</p>
                     </div>
                   ) : (
-                    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end space-y-3 px-3 py-4 sm:space-y-3.5 md:max-w-none md:px-6 lg:py-6">
-                      {selectedSessionId && hasOlderMessages && (
-                        <div className="flex justify-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              void handleLoadOlderMessages();
-                            }}
-                            disabled={isLoadingOlderMessages}
-                          >
-                            {isLoadingOlderMessages ? (
-                              <span className="inline-flex items-center gap-2">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Loading older...
-                              </span>
-                            ) : (
-                              "Load older messages"
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                      {messages.map((msg, idx) => {
-                        const isMine =
-                          currentUserId > 0 &&
-                          String(msg.sender_id) === String(currentUserId);
-                        const prevMsg = messages[idx - 1];
-                        const sameSenderAsPrev =
-                          !!prevMsg && String(prevMsg.sender_id) === String(msg.sender_id);
-                        const showAvatar = !sameSenderAsPrev;
-                        const studentLabel =
-                          selectedChat?.isAnonymous ? anonymousLabelForCounselor() : (selectedChat?.studentName ?? "Student");
-                        const incomingInitials =
-                          selectedChat?.isAnonymous ? "AU" : getInitials(studentLabel);
-
-                        return (
-                          <div
-                            key={msg.id}
-                            className={cn(
-                              "flex w-full min-w-0 items-end gap-2.5",
-                              isMine ? "justify-end" : "justify-start"
-                            )}
-                          >
-                            {!isMine && (
-                              <div className="flex w-9 shrink-0 justify-center">
-                                {showAvatar ? (
-                                  <div
-                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(
-                                      studentLabel
-                                    )}`}
-                                    title={studentLabel}
-                                  >
-                                    {incomingInitials}
-                                  </div>
-                                ) : (
-                                  <div className="h-9 w-9" aria-hidden />
-                                )}
-                              </div>
-                            )}
-
-                            <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
-                              <div
-                                className={cn(
-                                  "flex items-end gap-1",
-                                  isMine ? "flex-row-reverse" : "flex-row"
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "rounded-2xl border px-4 py-3 shadow-sm transition-colors duration-200",
-                                    isMine
-                                      ? "rounded-br-md border-primary/30 bg-primary text-primary-foreground"
-                                      : "rounded-bl-md border-border/60 bg-muted/80 text-foreground dark:bg-muted/40"
-                                  )}
-                                >
-                                  <div className="text-[15px] leading-relaxed">
-                                    <ChatMessageErrorBoundary>{renderMessageContent(msg, isMine)}</ChatMessageErrorBoundary>
-                                  </div>
-                                </div>
-                                {canModerateChat ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
-                                      isMine
-                                        ? "text-primary-foreground/90 hover:bg-primary-foreground/15 hover:text-primary-foreground"
-                                        : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                    )}
-                                    disabled={deletingMessageIds.has(msg.id)}
-                                    onClick={() => void handleDeleteMessage(msg.id)}
-                                    aria-label="Delete message"
-                                  >
-                                    {deletingMessageIds.has(msg.id) ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                ) : null}
-                              </div>
-                              <div className="flex items-center gap-1.5 px-0.5">
-                                <span className="text-[10px] font-medium text-muted-foreground">
-                                  {formatMessageTime(msg.created_at)}
-                                </span>
-                                {isMine && (
-                                  <span
-                                    className={cn(
-                                      "text-[11px]",
-                                      msg.seen_at ? "text-emerald-500" : "text-muted-foreground/50"
-                                    )}
-                                    aria-label={msg.seen_at ? "Seen" : "Sent"}
-                                    title={msg.seen_at ? "Seen" : "Sent"}
-                                  >
-                                    {msg.seen_at ? "✓✓" : "✓"}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {isPeerTyping && (
-                        <div className="flex items-end gap-2.5">
-                          <div
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(
-                              selectedChat?.isAnonymous ? anonymousLabelForCounselor() : (selectedChat?.studentName ?? "Student")
-                            )}`}
-                          >
-                            {selectedChat?.isAnonymous ? "AU" : getInitials(selectedChat?.studentName ?? "Student")}
-                          </div>
-                          <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-muted/40 px-4 py-2.5 dark:bg-muted/25">
-                            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Student is typing…</p>
-                            <div className="flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0ms" }} />
-                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "120ms" }} />
-                              <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "240ms" }} />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <div ref={scrollRef} />
-                    </div>
+                    <CounselorMessageThread
+                      conversationKey={selectedSessionId}
+                      messages={messages}
+                      currentUserId={currentUserId}
+                      studentLabel={threadStudentLabel}
+                      studentIsAnonymous={Boolean(selectedChat?.isAnonymous)}
+                      isPeerTyping={isPeerTyping}
+                      hasOlderMessages={hasOlderMessages}
+                      isLoadingOlderMessages={isLoadingOlderMessages}
+                      onLoadOlder={handleLoadOlderMessages}
+                      deletingMessageIds={deletingMessageIds}
+                      onDeleteMessage={handleDeleteMessage}
+                      canModerateChat={canModerateChat}
+                      renderMessageContent={renderMessageContent}
+                      scrollRef={scrollRef}
+                      containerRef={messageScrollAreaRef}
+                      onAtBottomChange={handleCounselorThreadAtBottomChange}
+                      showScrollToBottom={showThreadScrollToBottom}
+                      scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                    />
                   )}
-                </ScrollArea>
+                </div>
 
                 {selectedFile && (
                   <div className="px-4 py-2 border-t border-border/50">
