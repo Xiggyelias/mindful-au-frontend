@@ -154,6 +154,7 @@ const StudentChat = () => {
     loadOlderMessages,
     registerServerMessage,
     retryEncryption,
+    refreshMessages,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
@@ -706,6 +707,10 @@ const StudentChat = () => {
                     scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                     messageScrollAreaRef={messageScrollAreaRef as any}
                     scrollRef={scrollRef}
+                    onRetryDecrypt={() => {
+                      void refreshMessages();
+                    }}
+                    onResyncDevice={handleRetryEncryption}
                   />
 
                   {/* Chat Input */}

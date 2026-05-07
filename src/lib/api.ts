@@ -1058,17 +1058,27 @@ class ApiClient {
   // Messages
   async getMessages(
     sessionId: string,
-    params?: { after_id?: number; before_id?: number; limit?: number; timeout_ms?: number }
+    params?: {
+      after_id?: number;
+      before_id?: number;
+      limit?: number;
+      timeout_ms?: number;
+      /** When false, do not mark inbound messages read (e.g. notification preview decrypt). Default true. */
+      mark_read?: boolean;
+    }
   ) {
     const timeoutMs =
       typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
         ? Math.floor(params.timeout_ms)
         : DEFAULT_READ_TIMEOUT_MS;
-    const queryParams = {
+    const queryParams: Record<string, unknown> = {
       after_id: params?.after_id,
       before_id: params?.before_id,
       limit: params?.limit,
     };
+    if (params?.mark_read === false) {
+      queryParams.mark_read = 0;
+    }
 
     const response = await this.client.get(`/sessions/${sessionId}/messages`, {
       params: queryParams,
@@ -1144,6 +1154,36 @@ class ApiClient {
   async deleteMessage(sessionId: string, messageId: number | string) {
     const response = await this.client.delete(`/sessions/${sessionId}/messages/${messageId}`);
     return response.data as { ok?: boolean; id?: number };
+  }
+
+  /** Returns a fresh signed URL for the message attachment (authorized participants only). */
+  async getMessageAttachmentDownloadUrl(messageId: number | string) {
+    const response = await this.client.get(`/messages/${messageId}/attachment`);
+    return response.data as { download_url?: string; message?: unknown };
+  }
+
+  /**
+   * Fetches attachment bytes using a fresh signed URL so downloads work after URL expiry
+   * and Content-Disposition: attachment is honored as a file save.
+   */
+  async downloadChatMessageAttachment(messageId: number | string, fileName: string): Promise<boolean> {
+    try {
+      const data = await this.getMessageAttachmentDownloadUrl(messageId);
+      const downloadUrl = typeof data.download_url === 'string' ? data.download_url : '';
+      if (!downloadUrl) {
+        return false;
+      }
+      const res = await fetch(downloadUrl);
+      if (!res.ok) {
+        return false;
+      }
+      const blob = await res.blob();
+      const safeName = String(fileName || '').trim() || 'attachment';
+      triggerBlobDownload(blob, safeName);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async setTypingState(
@@ -1398,6 +1438,21 @@ class ApiClient {
     status: "accepted" | "declined"
   ) {
     const response = await this.client.patch(`/counselor/incoming-calls/${callId}`, { status });
+    return response.data;
+  }
+
+  async getStudentIncomingCalls() {
+    const response = await this.client.get("/student/incoming-calls", {
+      timeout: 12_000,
+    });
+    return response.data;
+  }
+
+  async updateStudentIncomingCall(
+    callId: number | string,
+    status: "accepted" | "declined"
+  ) {
+    const response = await this.client.patch(`/student/incoming-calls/${callId}`, { status });
     return response.data;
   }
 

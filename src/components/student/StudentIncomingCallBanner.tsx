@@ -13,11 +13,11 @@ const POLL_MS = 4000;
 const AUTO_DISMISS_MS = 30_000;
 const TAB_FLASH_MS = 1000;
 
-export type IncomingCallItem = {
+export type StudentIncomingCallItem = {
   id: number;
   appointment_id: number;
-  student_id: number;
-  student_name: string;
+  counselor_id: number;
+  counselor_name: string;
   is_anonymous: boolean;
   call_type: string;
   status: string;
@@ -27,7 +27,7 @@ export type IncomingCallItem = {
 
 type DismissReason = "declined" | "timeout";
 
-export function CounselorIncomingCallBanner({
+export function StudentIncomingCallBanner({
   enabled,
   onActiveChange,
 }: {
@@ -35,7 +35,7 @@ export function CounselorIncomingCallBanner({
   onActiveChange?: (active: boolean) => void;
 }) {
   const navigate = useNavigate();
-  const [calls, setCalls] = useState<IncomingCallItem[]>([]);
+  const [calls, setCalls] = useState<StudentIncomingCallItem[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const seenIdsRef = useRef<Set<number>>(new Set());
   const baseTitleRef = useRef<string | null>(null);
@@ -84,8 +84,8 @@ export function CounselorIncomingCallBanner({
   const fetchIncoming = useCallback(async () => {
     if (!enabled) return;
     try {
-      const res = await api.getCounselorIncomingCalls();
-      const rows = Array.isArray(res?.data) ? (res.data as IncomingCallItem[]) : [];
+      const res = await api.getStudentIncomingCalls();
+      const rows = Array.isArray(res?.data) ? (res.data as StudentIncomingCallItem[]) : [];
       const normalized = rows.filter((r) => r && typeof r.id === "number");
       setCalls(normalized);
 
@@ -144,7 +144,7 @@ export function CounselorIncomingCallBanner({
           autoDismissTimersRef.current.delete(c.id);
           void (async () => {
             try {
-              await api.updateCounselorIncomingCall(c.id, "declined");
+              await api.updateStudentIncomingCall(c.id, "declined");
             } catch {
               /* ignore */
             }
@@ -198,17 +198,20 @@ export function CounselorIncomingCallBanner({
     };
   }, [calls]);
 
-  const handleAccept = async (call: IncomingCallItem) => {
+  const handleAccept = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
     try {
-      await api.updateCounselorIncomingCall(call.id, "accepted");
+      await api.updateStudentIncomingCall(call.id, "accepted");
       removeCallLocal(call.id);
       const params = new URLSearchParams({
         appointment_id: String(call.appointment_id),
         autostart: "1",
         mode: call.call_type === "audio" ? "audio" : "video",
       });
-      navigate(`/counselor/video?${params.toString()}`);
+      if (call.counselor_id) {
+        params.set("counselor_id", String(call.counselor_id));
+      }
+      navigate(`/student/video-call?${params.toString()}`);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "Could not accept call"));
     } finally {
@@ -216,10 +219,10 @@ export function CounselorIncomingCallBanner({
     }
   };
 
-  const handleDecline = async (call: IncomingCallItem, _reason: DismissReason) => {
+  const handleDecline = async (call: StudentIncomingCallItem, _reason: DismissReason) => {
     setBusyId(call.id);
     try {
-      await api.updateCounselorIncomingCall(call.id, "declined");
+      await api.updateStudentIncomingCall(call.id, "declined");
       removeCallLocal(call.id);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "Could not decline call"));
@@ -281,8 +284,8 @@ export function CounselorIncomingCallBanner({
                     Incoming session call
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="truncate text-lg font-semibold leading-tight">{call.student_name}</p>
-                    {call.is_anonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
+                    <p className="truncate text-lg font-semibold leading-tight">{call.counselor_name}</p>
+                    {call.is_anonymous && <AnonymousModeIndicator variant="badge" audience="student" />}
                   </div>
                   <div
                     className={cn(
@@ -323,7 +326,7 @@ export function CounselorIncomingCallBanner({
         })}
         {overflow > 0 && (
           <p className="text-center text-xs font-medium text-primary-foreground/90">
-            +{overflow} more incoming — open Video Sessions to manage
+            +{overflow} more incoming — open Video Call to manage
           </p>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -14,6 +14,7 @@ import {
   CheckCircle,
   Activity,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -38,7 +39,7 @@ const navItems = [
 
 interface DiagnosticData {
   id: number;
-  student: { profile?: { full_name?: string }; email?: string };
+  student?: { profile?: { full_name?: string }; email?: string };
   total_score: number;
   risk_level: string;
   category_scores: Record<string, number>;
@@ -68,6 +69,18 @@ interface StudentObservation {
   recommended_action: string;
 }
 
+function clampPercent(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function normalizeRiskLevel(level: unknown): "low" | "medium" | "high" | "critical" {
+  const s = String(level ?? "").toLowerCase();
+  if (s === "medium" || s === "high" || s === "critical" || s === "low") return s;
+  return "low";
+}
+
 const CounselorAIDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
@@ -79,22 +92,89 @@ const CounselorAIDashboard = () => {
   const [riskDistribution, setRiskDistribution] = useState<Record<string, number>>({});
   const [summary, setSummary] = useState<{ students_observed: number; high_or_critical: number; worsening_trend: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDiagnostic, setSelectedDiagnostic] = useState<DiagnosticData | null>(null);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    loadDashboardData();
-  }, [user?.id]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
+      setLoadError(null);
       setIsLoading(true);
       const data = await api.getCounselorDiagnosticDashboard();
 
-      setRecentDiagnostics(data.recent || []);
-      setStudentObservations(data.student_observations || []);
-      setHighRiskStudents(data.high_risk_students || []);
-      setSummary(data.summary || null);
+      const recent = Array.isArray(data?.recent) ? data.recent : [];
+      setRecentDiagnostics(
+        recent.map((row: DiagnosticData) => ({
+          ...row,
+          total_score: clampPercent(row.total_score),
+          category_scores: row.category_scores && typeof row.category_scores === "object" ? row.category_scores : {},
+          student: row.student ?? { profile: undefined, email: undefined },
+        }))
+      );
+      const observationsRaw = Array.isArray(data?.student_observations) ? data.student_observations : [];
+      const observations: StudentObservation[] = observationsRaw.map((raw: Record<string, unknown>) => {
+        const studentRaw = (raw.student as StudentObservation["student"]) || { id: 0, name: "Student", email: "" };
+        const reasons = Array.isArray(raw.reasons) ? raw.reasons : [];
+        const trendRaw = raw.trend as StudentObservation["trend"] | undefined;
+        return {
+          student_id: Number(raw.student_id) || 0,
+          student: {
+            id: Number(studentRaw.id) || 0,
+            name: String(studentRaw.name || "Student"),
+            email: String(studentRaw.email || ""),
+          },
+          risk_level: normalizeRiskLevel(raw.risk_level),
+          risk_score: clampPercent(raw.risk_score),
+          confidence: clampPercent(raw.confidence),
+          trend: {
+            label:
+              trendRaw?.label === "improving" ||
+              trendRaw?.label === "stable" ||
+              trendRaw?.label === "worsening" ||
+              trendRaw?.label === "insufficient_data"
+                ? trendRaw.label
+                : "insufficient_data",
+            delta: Number.isFinite(Number(trendRaw?.delta)) ? Number(trendRaw?.delta) : 0,
+          },
+          reasons: reasons.filter((r): r is string => typeof r === "string"),
+          recommended_action: String(raw.recommended_action || "Continue routine monitoring."),
+        };
+      });
+      setStudentObservations(observations);
+
+      const highRiskRaw = Array.isArray(data?.high_risk_students) ? data.high_risk_students : [];
+      setHighRiskStudents(
+        highRiskRaw.map((raw: Record<string, unknown>) => {
+          const found = observations.find((o) => o.student_id === Number(raw.student_id));
+          if (found) return found;
+          const studentRaw = (raw.student as StudentObservation["student"]) || { id: 0, name: "Student", email: "" };
+          return {
+            student_id: Number(raw.student_id) || 0,
+            student: {
+              id: Number(studentRaw.id) || 0,
+              name: String(studentRaw.name || "Student"),
+              email: String(studentRaw.email || ""),
+            },
+            risk_level: normalizeRiskLevel(raw.risk_level),
+            risk_score: clampPercent(raw.risk_score),
+            confidence: clampPercent(raw.confidence),
+            trend: {
+              label: "insufficient_data",
+              delta: 0,
+            },
+            reasons: [],
+            recommended_action: String(raw.recommended_action || ""),
+          };
+        })
+      );
+      setSummary(
+        data.summary && typeof data.summary === "object"
+          ? {
+              students_observed: Number(data.summary.students_observed) || 0,
+              high_or_critical: Number(data.summary.high_or_critical) || 0,
+              worsening_trend: Number(data.summary.worsening_trend) || 0,
+            }
+          : null
+      );
 
       const distribution: Record<string, number> = {
         low: 0,
@@ -102,17 +182,24 @@ const CounselorAIDashboard = () => {
         high: 0,
         critical: 0,
       };
-      (data.risk_distribution || []).forEach((item: any) => {
-        distribution[item.risk_level] = item.count;
+      (Array.isArray(data?.risk_distribution) ? data.risk_distribution : []).forEach((item: { risk_level?: string; count?: number }) => {
+        const key = normalizeRiskLevel(item?.risk_level);
+        distribution[key] = Number(item?.count) || 0;
       });
       setRiskDistribution(distribution);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
+      setLoadError("Could not load AI diagnostics. Check your connection and try again.");
       toast.error("Failed to load AI diagnostics dashboard");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void loadDashboardData();
+  }, [user?.id, loadDashboardData]);
 
   const getRiskColor = (riskLevel: string) => {
     return {
@@ -153,11 +240,36 @@ const CounselorAIDashboard = () => {
         <DashboardHeader title="AI Diagnostics Dashboard" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
-          {isLoading ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={isLoading}
+              onClick={() => void loadDashboardData()}
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {loadError && !isLoading ? (
+            <Card variant="glass" className="border-destructive/40">
+              <CardContent className="pt-6">
+                <p className="text-sm text-destructive">{loadError}</p>
+                <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => void loadDashboardData()}>
+                  Try again
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {isLoading && recentDiagnostics.length === 0 && studentObservations.length === 0 ? (
             <div className="flex items-center justify-center h-96">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : (
+          ) : !loadError || recentDiagnostics.length > 0 || studentObservations.length > 0 ? (
             <>
               <div className="grid gap-4 md:grid-cols-4">
                 <Card variant="glass">
@@ -327,16 +439,18 @@ const CounselorAIDashboard = () => {
                       >
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
-                            {diagnostic.student.profile?.full_name || diagnostic.student.email || "Student"}
+                            {diagnostic.student?.profile?.full_name || diagnostic.student?.email || "Student"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {format(new Date(diagnostic.created_at), "MMM d, yyyy h:mm a")}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Progress value={diagnostic.total_score} className="w-24 h-2" />
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${getRiskColor(diagnostic.risk_level)}`}>
-                            {diagnostic.risk_level}
+                          <Progress value={clampPercent(diagnostic.total_score)} className="w-24 h-2" />
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${getRiskColor(normalizeRiskLevel(diagnostic.risk_level))}`}
+                          >
+                            {normalizeRiskLevel(diagnostic.risk_level)}
                           </span>
                         </div>
                       </div>
@@ -360,42 +474,57 @@ const CounselorAIDashboard = () => {
                     <div>
                       <h4 className="font-semibold text-foreground mb-2">Student Information</h4>
                       <p className="text-foreground">
-                        {selectedDiagnostic.student.profile?.full_name || selectedDiagnostic.student.email || "Student"}
+                        {selectedDiagnostic.student?.profile?.full_name || selectedDiagnostic.student?.email || "Student"}
                       </p>
-                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student.email}</p>
+                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "—"}</p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Assessment Date: {format(new Date(selectedDiagnostic.created_at), "MMM d, yyyy h:mm a")}
                       </p>
                     </div>
 
-                    <div className={`p-4 rounded-lg ${getRiskBgColor(selectedDiagnostic.risk_level)}`}>
+                    <div className={`p-4 rounded-lg ${getRiskBgColor(normalizeRiskLevel(selectedDiagnostic.risk_level))}`}>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-semibold text-foreground">Overall Risk Level</h4>
-                        <span className={`text-2xl font-bold ${getRiskColor(selectedDiagnostic.risk_level)}`}>
-                          {selectedDiagnostic.total_score}%
+                        <span className={`text-2xl font-bold ${getRiskColor(normalizeRiskLevel(selectedDiagnostic.risk_level))}`}>
+                          {clampPercent(selectedDiagnostic.total_score)}%
                         </span>
                       </div>
-                      <p className="text-sm font-medium capitalize">{selectedDiagnostic.risk_level}</p>
+                      <p className="text-sm font-medium capitalize">{normalizeRiskLevel(selectedDiagnostic.risk_level)}</p>
                     </div>
 
                     <div className="space-y-4">
                       <h4 className="font-semibold text-foreground">Category Scores</h4>
-                      {Object.entries(selectedDiagnostic.category_scores || {}).map(([category, score]) => (
-                        <div key={category} className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground capitalize">{category}</span>
-                            <span className="font-medium">{score}%</span>
+                      {(() => {
+                        const entries = Object.entries(
+                          selectedDiagnostic.category_scores && typeof selectedDiagnostic.category_scores === "object"
+                            ? selectedDiagnostic.category_scores
+                            : {}
+                        );
+                        if (entries.length === 0) {
+                          return (
+                            <p className="text-sm text-muted-foreground">No category scores stored for this assessment.</p>
+                          );
+                        }
+                        return entries.map(([category, score]) => (
+                          <div key={category} className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground capitalize">{category}</span>
+                              <span className="font-medium">{clampPercent(score)}%</span>
+                            </div>
+                            <Progress value={clampPercent(score)} className="h-2" />
                           </div>
-                          <Progress value={score as number} className="h-2" />
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
 
                     <div className="space-y-3 p-4 rounded-lg bg-secondary/30">
                       <h4 className="font-semibold text-foreground">AI Recommendations</h4>
                       <p className="text-foreground text-sm">{selectedDiagnostic.ai_recommendations?.primary || "No recommendation text available."}</p>
                       <div className="space-y-2">
-                        {(selectedDiagnostic.ai_recommendations?.actions || []).map((action, index) => (
+                        {(Array.isArray(selectedDiagnostic.ai_recommendations?.actions)
+                          ? selectedDiagnostic.ai_recommendations?.actions
+                          : []
+                        ).map((action, index) => (
                           <div key={index} className="flex items-start gap-2">
                             <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
                             <span className="text-sm text-muted-foreground">{action}</span>
@@ -421,7 +550,7 @@ const CounselorAIDashboard = () => {
                 </Card>
               )}
             </>
-          )}
+          ) : null}
         </main>
       </div>
     </div>

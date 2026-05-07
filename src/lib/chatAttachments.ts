@@ -125,12 +125,41 @@ export const getAttachmentKind = (attachment?: ChatAttachment | null): 'image' |
   return 'file';
 };
 
+/**
+ * File/voice rows carry bytes on the server independent of E2EE text; show or download
+ * attachments even when the message body is still awaiting a session key.
+ */
+export const messageIsAttachmentFirst = (message: {
+  id: number;
+  message_type?: string;
+  has_file?: boolean;
+  file_url?: string | null;
+  attachment?: ChatAttachment | null;
+  is_encrypted?: boolean;
+  decryptedContent?: string;
+  content?: string;
+  e2eVisual?: string;
+}): boolean => {
+  const isFileMessage =
+    message.message_type === 'file' || message.message_type === 'voice' || message.has_file;
+  if (!isFileMessage) {
+    return false;
+  }
+  const attachment = resolveMessageAttachment(message);
+  if (attachment && (attachment.url || attachment.download_url || message.file_url)) {
+    return true;
+  }
+  return Number.isInteger(message.id) && message.id > 0;
+};
+
 export const resolveMessageAttachment = (message: {
   attachment?: ChatAttachment | null;
   file_url?: string | null;
   message_type?: string;
   content?: string;
   decryptedContent?: string;
+  is_encrypted?: boolean;
+  e2eVisual?: string;
 }): ChatAttachment | null => {
   if (message.attachment && typeof message.attachment === 'object') {
     return {
@@ -138,6 +167,26 @@ export const resolveMessageAttachment = (message: {
       url: message.attachment.url || message.file_url || null,
       download_url: message.attachment.download_url || message.attachment.url || message.file_url || null,
     };
+  }
+
+  if (
+    message.is_encrypted &&
+    !String(message.decryptedContent || '').trim()
+  ) {
+    if (message.message_type === 'file' || message.message_type === 'voice') {
+      const url = message.file_url || null;
+      if (!url) {
+        return null;
+      }
+      return {
+        file_name: message.message_type === 'voice' ? 'Voice note' : 'Attachment',
+        file_type: message.message_type === 'voice' ? 'audio/webm' : 'application/octet-stream',
+        file_size: 0,
+        url,
+        download_url: url,
+      };
+    }
+    return null;
   }
 
   const rawContent = String(message.decryptedContent || message.content || '').trim();

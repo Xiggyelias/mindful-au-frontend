@@ -14,9 +14,16 @@ export function registerServiceWorker(): void {
     return;
   }
 
-  window.addEventListener("load", () => {
+  const register = () => {
     void navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {
       // Avoid noise in production; Lighthouse / DevTools still show registration status.
     });
-  });
+  };
+
+  // Register as soon as the document is parsed so push subscribe() is less likely to race a late "load" event.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", register, { once: true });
+  } else {
+    register();
+  }
 }

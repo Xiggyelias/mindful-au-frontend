@@ -45,6 +45,7 @@ import {
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -131,6 +132,30 @@ const CounselorVideo = () => {
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
+
+  const incomingRingVibratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isIncomingCall) {
+      incomingRingVibratedRef.current = false;
+      stopCallRingtone();
+      return;
+    }
+    startCallRingtone(incomingAudioOnly ? "audio" : "video");
+    if (!incomingRingVibratedRef.current) {
+      incomingRingVibratedRef.current = true;
+      try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([300, 100, 300]);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return () => {
+      stopCallRingtone();
+    };
+  }, [isIncomingCall, incomingAudioOnly]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -418,7 +443,9 @@ const CounselorVideo = () => {
 
     const beginSession = async () => {
       try {
-        const authorization = await api.authorizeVideoCall(activeSessionId);
+        const authorization = await api.authorizeVideoCall(activeSessionId, {
+          call_type: pendingCallMode === "audio" ? "audio" : "video",
+        });
         const serverDuration = Number(authorization?.max_duration_minutes);
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null

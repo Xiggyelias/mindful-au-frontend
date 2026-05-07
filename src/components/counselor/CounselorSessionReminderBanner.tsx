@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { playSessionReminderSound } from "@/lib/sounds/notificationSoundManager";
 
 const POLL_MS = 60_000;
 const AUTO_HIDE_MS = 25_000;
@@ -18,29 +19,6 @@ export type SessionReminderItem = {
   duration_minutes: number;
   status: string;
 };
-
-function playSoftReminderChime() {
-  try {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 523.25;
-    osc.connect(g);
-    g.connect(ctx.destination);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.4);
-  } catch {
-    /* ignore */
-  }
-}
 
 export function CounselorSessionReminderBanner({
   enabled,
@@ -95,7 +73,7 @@ export function CounselorSessionReminderBanner({
       for (const row of normalized) {
         if (!soundPlayedRef.current.has(row.appointment_id)) {
           soundPlayedRef.current.add(row.appointment_id);
-          playSoftReminderChime();
+          playSessionReminderSound();
           try {
             if (typeof navigator !== "undefined" && navigator.vibrate) {
               navigator.vibrate(120);

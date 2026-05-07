@@ -73,7 +73,6 @@ const CounselorAppointments = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | number | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
-  const [bulkCancelScope, setBulkCancelScope] = useState<"all" | "remaining">("all");
   const [bulkCancelReason, setBulkCancelReason] = useState("");
   const [bulkCancelSubmitting, setBulkCancelSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -283,8 +282,7 @@ const CounselorAppointments = () => {
       });
   }, [appointments, searchQuery, statusFilter]);
 
-  const openBulkCancelModal = (scope: "all" | "remaining") => {
-    setBulkCancelScope(scope);
+  const openBulkCancelModal = () => {
     setBulkCancelReason("");
     setBulkCancelOpen(true);
   };
@@ -293,7 +291,7 @@ const CounselorAppointments = () => {
     try {
       setBulkCancelSubmitting(true);
       const data = await api.bulkCancelCounselorAppointments({
-        scope: bulkCancelScope,
+        scope: "all",
         reason: bulkCancelReason,
       });
       const count = Number(data?.cancelled_count ?? 0);
@@ -425,18 +423,9 @@ const CounselorAppointments = () => {
               variant="outline"
               size="sm"
               className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
-              onClick={() => openBulkCancelModal("all")}
+              onClick={openBulkCancelModal}
             >
               Cancel All Sessions
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
-              onClick={() => openBulkCancelModal("remaining")}
-            >
-              Cancel Remaining Sessions
             </Button>
           </div>
 
@@ -453,11 +442,7 @@ const CounselorAppointments = () => {
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Bulk cancel sessions</DialogTitle>
-                <DialogDescription>
-                  {bulkCancelScope === "all"
-                    ? "Are you sure you want to cancel all sessions?"
-                    : "Are you sure you want to cancel all remaining upcoming sessions?"}
-                </DialogDescription>
+                <DialogDescription>Are you sure you want to cancel all sessions?</DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
                 <Label htmlFor="bulk-cancel-reason">Reason (optional)</Label>

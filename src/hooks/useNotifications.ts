@@ -1,9 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { tryDecryptChatNotificationPreview } from "@/lib/notificationChatDecrypt";
+import { playEmergencyAlertSound, playMessageNotificationSound } from "@/lib/sounds/notificationSoundManager";
 
 export type AppNotificationType = "info" | "warning" | "success" | "error" | "panic";
+
+/** Optional structured data for chat message rows (server never stores plaintext for E2E). */
+export type ChatNotificationMeta = {
+  chat_session_id?: number;
+  chat_message_id?: number;
+  is_encrypted?: boolean;
+  message_type?: string;
+  appointment_id?: number;
+};
 
 export interface AppNotification {
   id: number;
@@ -13,6 +24,7 @@ export interface AppNotification {
   read: boolean;
   created_at: string;
   updated_at?: string;
+  meta?: ChatNotificationMeta | null;
 }
 
 interface NotificationsState {
@@ -27,6 +39,23 @@ const POLL_MIN_GAP_MS = 5000;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const normalizeMeta = (value: unknown): ChatNotificationMeta | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const r = value as Record<string, unknown>;
+  const chatSessionId = Number(r.chat_session_id);
+  const chatMessageId = Number(r.chat_message_id);
+  const appointmentId = Number(r.appointment_id);
+  return {
+    chat_session_id: Number.isFinite(chatSessionId) ? chatSessionId : undefined,
+    chat_message_id: Number.isFinite(chatMessageId) ? chatMessageId : undefined,
+    is_encrypted: r.is_encrypted === true,
+    message_type: typeof r.message_type === "string" ? r.message_type : undefined,
+    appointment_id: Number.isFinite(appointmentId) ? appointmentId : undefined,
+  };
+};
+
 const normalizeNotification = (value: unknown): AppNotification | null => {
   if (!isRecord(value)) return null;
 
@@ -37,6 +66,7 @@ const normalizeNotification = (value: unknown): AppNotification | null => {
   const read = Boolean(value.read);
   const createdAt = typeof value.created_at === "string" ? value.created_at : "";
   const updatedAt = typeof value.updated_at === "string" ? value.updated_at : undefined;
+  const meta = normalizeMeta(value.meta);
 
   if (!Number.isFinite(id) || !title || !message) return null;
 
@@ -48,6 +78,7 @@ const normalizeNotification = (value: unknown): AppNotification | null => {
     read,
     created_at: createdAt,
     updated_at: updatedAt,
+    meta,
   };
 };
 
@@ -104,6 +135,7 @@ const normalizeNotificationPayload = (value: unknown): NotificationsState => {
 export const useNotifications = () => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [decryptedLines, setDecryptedLines] = useState<Record<number, string>>({});
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +148,7 @@ export const useNotifications = () => {
     async (options?: { silent?: boolean; force?: boolean }) => {
       if (!user?.id) {
         setNotifications([]);
+        setDecryptedLines({});
         setUnreadCount(0);
         setError(null);
         announcedNotificationIdsRef.current.clear();
@@ -159,10 +192,19 @@ export const useNotifications = () => {
           );
           if (hasPrimedNotificationCacheRef.current && newUnreadNotifications.length > 0) {
             newUnreadNotifications.slice(0, 3).forEach((notification) => {
+              if (notification.title === "New appointment request") {
+                playMessageNotificationSound();
+                toast.success(notification.title, {
+                  description: notification.message,
+                  duration: 10_000,
+                });
+                return;
+              }
               if (notification.type === "panic") {
                 // Panic notifications are surfaced with an error-style toast,
                 // a long duration, and optional vibration so responders cannot
                 // miss them.
+                playEmergencyAlertSound();
                 toast.error(notification.title, {
                   description: notification.message,
                   duration: 30000,
@@ -200,6 +242,7 @@ export const useNotifications = () => {
           hasPrimedNotificationCacheRef.current = true;
 
           setNotifications(normalized.notifications);
+          setDecryptedLines({});
           setUnreadCount(normalized.unreadCount);
           setError(null);
         } catch (err: unknown) {
@@ -276,6 +319,81 @@ export const useNotifications = () => {
   }, [loadNotifications, unreadCount]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setDecryptedLines({});
+      return;
+    }
+    const uid = Number(user.id);
+    if (!Number.isFinite(uid) || uid <= 0) {
+      setDecryptedLines({});
+      return;
+    }
+
+    const targets = notifications.filter(
+      (n) =>
+        n.meta?.is_encrypted &&
+        Number.isFinite(Number(n.meta?.chat_session_id)) &&
+        Number(n.meta!.chat_session_id) > 0 &&
+        Number.isFinite(Number(n.meta?.chat_message_id)) &&
+        Number(n.meta!.chat_message_id) > 0 &&
+        /secure message/i.test(n.message)
+    );
+
+    if (targets.length === 0) {
+      setDecryptedLines({});
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const next: Record<number, string> = {};
+      for (const n of targets) {
+        if (cancelled) return;
+        const sid = String(n.meta!.chat_session_id!);
+        const mid = Number(n.meta!.chat_message_id!);
+        const mt = String(n.meta!.message_type || "text");
+        const plain = await tryDecryptChatNotificationPreview(uid, sid, mid, mt);
+        if (cancelled) return;
+        if (plain) {
+          const idx = n.message.indexOf(": ");
+          const prefix = idx >= 0 ? n.message.slice(0, idx) : n.message;
+          next[n.id] = `${prefix}: ${plain}`;
+        }
+      }
+      if (!cancelled) {
+        setDecryptedLines((prev) => {
+          const ids = new Set(notifications.map((x) => x.id));
+          const merged: Record<number, string> = {};
+          for (const key of Object.keys(prev)) {
+            const num = Number(key);
+            if (ids.has(num)) {
+              merged[num] = prev[num];
+            }
+          }
+          for (const [idStr, line] of Object.entries(next)) {
+            merged[Number(idStr)] = line;
+          }
+          return merged;
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notifications, user?.id]);
+
+  const notificationsForDisplay = useMemo(
+    () =>
+      notifications.map((n) => ({
+        ...n,
+        message: decryptedLines[n.id] ?? n.message,
+      })),
+    [notifications, decryptedLines]
+  );
+
+  useEffect(() => {
     if (!user?.id) return;
 
     void loadNotifications();
@@ -308,7 +426,7 @@ export const useNotifications = () => {
   }, [loadNotifications, user?.id]);
 
   return {
-    notifications,
+    notifications: notificationsForDisplay,
     unreadCount,
     isLoading,
     error,

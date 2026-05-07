@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { dispatchChatIncomingDigest } from "@/lib/chatRealtimeEvents";
 import { playChatNotificationSound } from "@/lib/chatNotificationSound";
 
+import { tryDecryptChatNotificationPreview } from "@/lib/notificationChatDecrypt";
+
 const POLL_MS = 5_000;
 const AUTO_DISMISS_MS = 6_500;
 const PREVIEW_MAX = 52;
@@ -18,6 +20,9 @@ type DigestRow = {
   sender_label: string;
   preview: string;
   created_at: string;
+  message_id?: number;
+  is_encrypted?: boolean;
+  message_type?: string;
 };
 
 type ToastItem = {
@@ -26,6 +31,7 @@ type ToastItem = {
   headline: string;
   previewLine: string;
   timeLabel: string;
+  decryptHint?: { messageId: number; messageType: string };
 };
 
 function truncatePreview(text: string, max = PREVIEW_MAX): string {
@@ -73,15 +79,53 @@ function groupDigestRows(rows: DigestRow[]): ToastItem[] {
       count > 1
         ? `${sender}: ${preview} · ${count} new messages`
         : `${sender}: ${preview}`;
+    const decryptHint =
+      last.is_encrypted === true &&
+      Number.isFinite(Number(last.message_id)) &&
+      Number(last.message_id) > 0 &&
+      /secure message/i.test(String(last.preview || ""))
+        ? { messageId: Number(last.message_id), messageType: String(last.message_type || "text") }
+        : undefined;
     out.push({
       key: `${sessionId}-${last.id}-${last.created_at}`,
       sessionId,
       headline: count > 1 ? `${sender} · ${count} new` : sender,
       previewLine,
       timeLabel: formatToastTime(last.created_at),
+      decryptHint,
     });
   }
   return out;
+}
+
+async function enhanceToastItemsWithDecrypt(uid: number, items: ToastItem[]): Promise<ToastItem[]> {
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return items;
+  }
+  return Promise.all(
+    items.map(async (item) => {
+      if (!item.decryptHint) {
+        return item;
+      }
+      const plain = await tryDecryptChatNotificationPreview(
+        uid,
+        String(item.sessionId),
+        item.decryptHint.messageId,
+        item.decryptHint.messageType
+      );
+      if (!plain) {
+        return item;
+      }
+      const firstSep = item.previewLine.indexOf(" · ");
+      const colon = item.previewLine.indexOf(": ");
+      const name = colon >= 0 ? item.previewLine.slice(0, colon) : item.headline;
+      if (firstSep === -1) {
+        return { ...item, previewLine: `${name}: ${plain}` };
+      }
+      const tail = item.previewLine.slice(firstSep);
+      return { ...item, previewLine: `${name}: ${plain}${tail}` };
+    })
+  );
 }
 
 /**
@@ -164,11 +208,21 @@ export function ChatIncomingNotificationHost() {
         const sessionIds = rows.map((r) => Number(r.session_id)).filter((id) => Number.isFinite(id) && id > 0);
         dispatchChatIncomingDigest(sessionIds);
 
-        playChatNotificationSound();
+        const batchKey = [...rows]
+          .map((r) => Number(r.id))
+          .filter((id) => Number.isFinite(id))
+          .sort((a, b) => a - b)
+          .join(",");
+        playChatNotificationSound({ batchKey });
+
+        let grouped = groupDigestRows(rows);
+        const uid = Number(user?.id);
+        if (Number.isFinite(uid) && uid > 0) {
+          grouped = await enhanceToastItemsWithDecrypt(uid, grouped);
+        }
 
         if (typeof Notification !== "undefined" && document.hidden && Notification.permission === "granted") {
           try {
-            const grouped = groupDigestRows(rows);
             for (const g of grouped.slice(0, 2)) {
               void new Notification("New message", {
                 body: g.previewLine,
@@ -182,7 +236,6 @@ export function ChatIncomingNotificationHost() {
           }
         }
 
-        const grouped = groupDigestRows(rows);
         setToasts((prev) => {
           const next = [...grouped, ...prev].slice(0, 6);
           return next;

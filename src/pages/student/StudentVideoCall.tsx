@@ -44,6 +44,7 @@ import {
   getAppointmentWhereLabel,
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -141,6 +142,30 @@ const StudentVideoCall = () => {
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
+
+  const incomingRingVibratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isIncomingCall) {
+      incomingRingVibratedRef.current = false;
+      stopCallRingtone();
+      return;
+    }
+    startCallRingtone(incomingAudioOnly ? "audio" : "video");
+    if (!incomingRingVibratedRef.current) {
+      incomingRingVibratedRef.current = true;
+      try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([300, 100, 300]);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return () => {
+      stopCallRingtone();
+    };
+  }, [isIncomingCall, incomingAudioOnly]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {

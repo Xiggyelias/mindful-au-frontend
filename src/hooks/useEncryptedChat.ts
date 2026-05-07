@@ -11,10 +11,19 @@ import {
   exportKey,
   importKey,
   encryptMessage,
-  decryptMessage,
+  decryptChatPayload,
+  logCryptoDebug,
 } from '@/lib/encryption';
+import {
+  loadPersistedSessionKey,
+  persistSessionKey,
+  deletePersistedSessionKey,
+} from '@/lib/chatSessionKeys';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 import type { Session } from '@/hooks/useChatSession';
+import type { E2EVisualState } from '@/types/e2eChat';
+
+export type { E2EVisualState };
 
 export interface ChatMessage {
   id: number;
@@ -31,6 +40,8 @@ export interface ChatMessage {
   decryptedContent?: string;
   /** Server snapshot: anonymous session flag when the message was stored (`null` = legacy). */
   sent_as_anonymous?: boolean | null;
+  /** Set client-side after decrypt (or placeholder state). */
+  e2eVisual?: E2EVisualState;
 }
 
 type RawMessage = ChatMessage & {
@@ -107,9 +118,6 @@ const SESSION_KEY_V2_PREFIX = 'chat_key_v2_';
 const SESSION_PEER_MARKER_PREFIX = 'chat_key_peer_';
 const PEER_KEY_PREFIX = 'chat_peer_pub_';
 const OPTIMISTIC_MESSAGE_ID_THRESHOLD = 1_000_000_000_000_000;
-const DECRYPT_FAILED_CONTENT = '[Unable to decrypt message]';
-const PENDING_KEY_CONTENT = '[Encrypted message - key exchange pending]';
-const UNAVAILABLE_CONTENT = '[Encrypted message unavailable on this device]';
 const MIN_ENCRYPTED_PAYLOAD_LENGTH = 40;
 const ENCRYPTED_PAYLOAD_REGEX = /^[A-Za-z0-9+/=]+$/;
 
@@ -168,13 +176,9 @@ const isLikelyEncryptedPayload = (content: string): boolean => {
   );
 };
 
-const hasUndecryptedPlaceholder = (content?: string): boolean => {
-  return (
-    content === DECRYPT_FAILED_CONTENT ||
-    content === PENDING_KEY_CONTENT ||
-    content === UNAVAILABLE_CONTENT
-  );
-};
+const messageNeedsKeyOrDecryptRetry = (message: ChatMessage): boolean =>
+  message.is_encrypted &&
+  (message.e2eVisual === 'awaiting_key' || message.e2eVisual === 'needs_resync');
 
 const parseEnvelope = (rawContent: string): E2EEnvelope | null => {
   if (!rawContent || rawContent[0] !== '{') return null;
@@ -204,6 +208,7 @@ const normalizeExternalMessage = (message: ChatMessage): ChatMessage => {
   return {
     ...message,
     decryptedContent: message.decryptedContent ?? message.content,
+    e2eVisual: 'plain',
   };
 };
 
@@ -516,7 +521,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
     encryptionKeyRef.current = generatedKey;
     keyStringRef.current = generatedKeyString;
-    localStorage.setItem(sessionKeyStorageKeyRef.current, generatedKeyString);
+    await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
     setIsEncryptionReady(true);
   }, [isSessionKeyInitiator]);
 
@@ -625,11 +630,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             numericUserId,
             previousPeerId
           );
-          localStorage.removeItem(previousPairStorageKey);
+          await deletePersistedSessionKey(previousPairStorageKey);
           localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId));
         }
 
-        storedKey = localStorage.getItem(activeSessionStorageKey);
+        storedKey = await loadPersistedSessionKey(activeSessionStorageKey);
         const isPeerParticipant =
           (peerCounselorId === numericUserId && assignedRole === 'peer_counselor') ||
           (
@@ -647,13 +652,14 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           const legacyKey = localStorage.getItem(getLegacySessionKeyStorageKey(sessionId));
           if (legacyKey) {
             storedKey = legacyKey;
-            localStorage.setItem(activeSessionStorageKey, legacyKey);
+            await persistSessionKey(activeSessionStorageKey, legacyKey);
           }
         }
 
         if (storedKey) {
           encryptionKeyRef.current = await importKey(storedKey);
           keyStringRef.current = storedKey;
+          await persistSessionKey(activeSessionStorageKey, storedKey);
           setIsEncryptionReady(true);
         }
 
@@ -817,8 +823,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           );
           encryptionKeyRef.current = await importKey(decryptedKey);
           keyStringRef.current = decryptedKey;
-          localStorage.setItem(sessionKeyStorageKeyRef.current, decryptedKey);
+          await persistSessionKey(sessionKeyStorageKeyRef.current, decryptedKey);
           localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(trustedSenderId));
+          logCryptoDebug('session key unwrapped from peer envelope', {
+            sessionId,
+            storageKeySuffix: trustedSenderId,
+          });
           setIsEncryptionReady(true);
           setError(null);
           hasUndecryptedMessagesRef.current = true;
@@ -837,19 +847,22 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const decryptMessages = useCallback(
     async (msgs: RawMessage[]): Promise<ChatMessage[]> => {
       const ordered = [...msgs].sort((a, b) => a.id - b.id);
-      const visibleMessages: ChatMessage[] = [];
 
+      // Pass 1: apply every handshake envelope so session + peer keys exist before any decrypt.
       for (const message of ordered) {
-        let isHandshakeMessage = false;
         try {
-          isHandshakeMessage = await handleEnvelope(message);
+          await handleEnvelope(message);
         } catch (err) {
           if (import.meta.env.DEV) {
             console.warn('[chat] Skipped message during envelope processing', message.id, err);
           }
-          isHandshakeMessage = parseEnvelope(message.content) !== null;
         }
-        if (isHandshakeMessage) {
+      }
+
+      const visibleMessages: ChatMessage[] = [];
+
+      for (const message of ordered) {
+        if (parseEnvelope(message.content)) {
           continue;
         }
 
@@ -861,50 +874,52 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
               ...message,
               is_encrypted: false,
               decryptedContent: message.content,
+              e2eVisual: 'plain',
             });
             continue;
           }
 
           if (!encryptionKeyRef.current) {
+            logCryptoDebug('decrypt deferred: no AES key yet', { messageId: message.id });
             visibleMessages.push({
               ...message,
-              decryptedContent: PENDING_KEY_CONTENT,
+              e2eVisual: 'awaiting_key',
+              decryptedContent: undefined,
             });
             continue;
           }
 
-          const decrypted = await decryptMessage(message.content, encryptionKeyRef.current);
-          visibleMessages.push({
-            ...message,
-            decryptedContent:
-              decrypted === DECRYPT_FAILED_CONTENT ? UNAVAILABLE_CONTENT : decrypted,
-          });
+          const result = await decryptChatPayload(message.content, encryptionKeyRef.current);
+          if (result.ok) {
+            logCryptoDebug('decrypt ok', { messageId: message.id });
+            visibleMessages.push({
+              ...message,
+              decryptedContent: result.plaintext,
+              e2eVisual: 'decrypted',
+            });
+          } else {
+            logCryptoDebug('decrypt failed', { messageId: message.id, reason: result.reason });
+            const e2eVisual: E2EVisualState =
+              result.reason === 'invalid_base64' || result.reason === 'payload_too_short'
+                ? 'payload_invalid'
+                : 'needs_resync';
+            visibleMessages.push({
+              ...message,
+              e2eVisual,
+              decryptedContent: undefined,
+            });
+          }
           continue;
         }
 
-        visibleMessages.push({ ...message, decryptedContent: message.content });
+        visibleMessages.push({
+          ...message,
+          decryptedContent: message.content,
+          e2eVisual: 'plain',
+        });
       }
 
-      // Retry unresolved encrypted messages after handshake processing in the same batch.
-      // This handles cases where the key envelope arrives after an encrypted payload.
-      if (encryptionKeyRef.current) {
-        await Promise.all(
-          visibleMessages.map(async (message, index) => {
-            if (!message.is_encrypted) return;
-            if (!hasUndecryptedPlaceholder(message.decryptedContent)) return;
-            if (!isLikelyEncryptedPayload(message.content)) return;
-
-            const retried = await decryptMessage(message.content, encryptionKeyRef.current as CryptoKey);
-            if (retried !== DECRYPT_FAILED_CONTENT) {
-              visibleMessages[index] = { ...message, decryptedContent: retried };
-            }
-          })
-        );
-      }
-
-      hasUndecryptedMessagesRef.current = visibleMessages.some(
-        (message) => message.is_encrypted && hasUndecryptedPlaceholder(message.decryptedContent)
-      );
+      hasUndecryptedMessagesRef.current = visibleMessages.some(messageNeedsKeyOrDecryptRetry);
 
       return visibleMessages;
     },
@@ -1149,6 +1164,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         message_type: messageType,
         file_url: fileUrl,
         decryptedContent: content,
+        e2eVisual: 'decrypted',
       };
 
       setMessages((prev) => {
@@ -1205,7 +1221,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         file_url: fileUrl,
       });
 
-      const decrypted = { ...newMessage, decryptedContent: content };
+      const decrypted = { ...newMessage, decryptedContent: content, e2eVisual: 'decrypted' as const };
       lastMessageIdRef.current = Math.max(lastMessageIdRef.current, newMessage.id || 0);
       setMessages((prev) => {
         const merged = new Map<number, ChatMessage>();
@@ -1620,9 +1636,9 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
     const peer = peerIdRef.current;
     if (peer !== null && Number.isFinite(peer) && peer > 0) {
-      localStorage.removeItem(getSessionKeyStorageKey(sessionId, numericUserId, peer));
+      await deletePersistedSessionKey(getSessionKeyStorageKey(sessionId, numericUserId, peer));
     }
-    localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId));
+    await deletePersistedSessionKey(getLegacySessionKeyStorageKey(sessionId));
 
     isInitializedRef.current = false;
     await initializeEncryption();

@@ -30,6 +30,8 @@ import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
+import { cn } from "@/lib/utils";
+import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -151,6 +153,7 @@ const StudentDashboard = () => {
   const hasInitiallyLoadedRef = useRef(false);
   const lastDashboardStatsRefreshAtMs = useRef(0);
 
+  const [incomingCallBannerActive, setIncomingCallBannerActive] = useState(false);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
   const openVideoCallRoom = (appointment: AppointmentRecord) => {
@@ -453,12 +456,21 @@ const StudentDashboard = () => {
       />
 
       <div className="lg:pl-72">
+        <StudentIncomingCallBanner
+          enabled={Boolean(user?.id)}
+          onActiveChange={setIncomingCallBannerActive}
+        />
         <DashboardHeader
           title="Dashboard"
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6 space-y-6">
+        <main
+          className={cn(
+            "p-4 lg:p-6 space-y-6 transition-[padding-top] duration-300",
+            incomingCallBannerActive && "pt-28 lg:pt-32"
+          )}
+        >
           {/* Welcome Section */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-background p-8 border border-primary/10">
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">

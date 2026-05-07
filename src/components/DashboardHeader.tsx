@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, Loader2, Menu, ShieldX } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Menu, ShieldX, Volume2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -8,10 +8,13 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { ScrollArea } from "./ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { SessionManagerDialog } from "./SessionManagerDialog";
+import { NotificationSoundSettingsPanel } from "./settings/NotificationSoundSettingsPanel";
+import { primeNotificationAudioFromUserGesture } from "@/lib/sounds/notificationSoundManager";
 
 interface DashboardHeaderProps {
   title: string;
@@ -104,6 +107,23 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
         </Button>
         <SessionManagerDialog />
         <ThemeToggle />
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Sound settings"
+              onClick={() => primeNotificationAudioFromUserGesture()}
+            >
+              <Volume2 className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto max-w-[min(100vw-2rem,20rem)]">
+            <p className="text-sm font-semibold mb-1">Sound & alerts</p>
+            <NotificationSoundSettingsPanel />
+          </PopoverContent>
+        </Popover>
         <DropdownMenu onOpenChange={(open) => {
           if (open) {
             void refreshNotifications();

@@ -1,13 +1,21 @@
 import React from "react";
-import { Shield, Loader2, Trash2, FileText, MessageSquare, ArrowDown } from "lucide-react";
+import { Shield, Loader2, Trash2, MessageSquare, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
-import { resolveMessageAttachment, getAttachmentKind, formatChatFileSize } from "@/lib/chatAttachments";
-import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
+import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
+import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
+import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
+import { messageIsAttachmentFirst } from "@/lib/chatAttachments";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
+import type { E2EVisualState } from "@/types/e2eChat";
 import { Session } from "@/hooks/useChatSession";
+
+const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
+  const t = s.trim();
+  return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
+};
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -28,6 +36,8 @@ interface MessageListProps {
   onStarterPrompt?: (draft: string) => void;
   messageScrollAreaRef: React.RefObject<HTMLDivElement>;
   scrollRef: React.RefObject<HTMLDivElement>;
+  onRetryDecrypt?: () => void;
+  onResyncDevice?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -48,6 +58,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   onStarterPrompt,
   messageScrollAreaRef,
   scrollRef,
+  onRetryDecrypt,
+  onResyncDevice,
 }) => {
   React.useEffect(() => {
     const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
@@ -83,59 +95,61 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
-    const content = msg.decryptedContent || msg.content;
-    const attachment = resolveMessageAttachment(msg);
+    if (messageIsAttachmentFirst(msg)) {
+      return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
+    }
 
-    if (attachment && (msg.message_type === "file" || msg.message_type === "voice" || msg.has_file)) {
-      const kind = getAttachmentKind(attachment);
-      const resolvedUrl = attachment.url || msg.file_url;
-      const downloadUrl = attachment.download_url || attachment.url || msg.file_url;
-      const hasSize = Number(attachment.file_size) > 0;
-
-      if (!resolvedUrl) return <p className="italic opacity-70 text-sm">Attachment unavailable</p>;
-
-      if (kind === "image") {
-        return (
-          <div className="space-y-2 max-w-sm">
-            <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-2xl border border-border/50 hover:ring-2 hover:ring-primary/20 transition-all">
-              <img src={resolvedUrl} alt={attachment.file_name} className="max-h-80 w-full object-cover" loading="lazy" />
-            </a>
-            <div className="flex items-center justify-between gap-3 px-1 text-[10px] font-medium opacity-70 uppercase tracking-tight">
-              <span className="truncate">{attachment.file_name}</span>
-              {hasSize && <span>{formatChatFileSize(attachment.file_size)}</span>}
-            </div>
-          </div>
-        );
-      }
-
-      if (kind === "audio") {
-        const isVoiceMemo = msg.message_type === "voice";
-        return (
-          <VoiceMemoPlayer
-            src={resolvedUrl}
-            mimeType={attachment.file_type}
-            headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
-            fileSizeBytes={hasSize ? Number(attachment.file_size) : undefined}
-            bubbleRole={isOutgoing ? "outgoing" : "incoming"}
-          />
-        );
-      }
-
+    const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
+    if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
       return (
-        <div className="flex items-center gap-3 rounded-2xl bg-background/50 p-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{attachment.file_name}</p>
-            {hasSize && <p className="text-xs opacity-70">{formatChatFileSize(attachment.file_size)}</p>}
-          </div>
-          <a href={downloadUrl || resolvedUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold underline">Download</a>
-        </div>
+        <EncryptedMessagePlaceholder
+          state={msg.e2eVisual}
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={onRetryDecrypt}
+          onResyncDevice={onResyncDevice}
+        />
       );
     }
+
+    const legacyBracket =
+      msg.is_encrypted &&
+      typeof msg.decryptedContent === "string" &&
+      /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
+    if (legacyBracket) {
+      return (
+        <EncryptedMessagePlaceholder
+          state="needs_resync"
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={onRetryDecrypt}
+          onResyncDevice={onResyncDevice}
+        />
+      );
+    }
+
+    if (
+      msg.is_encrypted &&
+      !msg.e2eVisual &&
+      !String(msg.decryptedContent || "").trim() &&
+      typeof msg.content === "string" &&
+      LOOKS_LIKE_E2E_CIPHER(msg.content)
+    ) {
+      return (
+        <EncryptedMessagePlaceholder
+          state="awaiting_key"
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={onRetryDecrypt}
+          onResyncDevice={onResyncDevice}
+        />
+      );
+    }
+
+    const content = msg.decryptedContent ?? msg.content;
     
-    return <p className="whitespace-pre-wrap break-words">{content}</p>;
+    return (
+      <p className="whitespace-pre-wrap break-words">
+        {content}
+      </p>
+    );
   };
 
   if (isLoading && messages.length === 0) {
@@ -262,7 +276,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                       ? "bg-primary text-primary-foreground rounded-tr-none" 
                       : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50"
                   }`}>
-                    {renderMessageContent(msg, isMe)}
+                    <ChatMessageErrorBoundary>
+                      {renderMessageContent(msg, isMe)}
+                    </ChatMessageErrorBoundary>
                   </div>
                 </div>
                 {isMe && (

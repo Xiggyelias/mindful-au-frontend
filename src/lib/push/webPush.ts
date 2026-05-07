@@ -119,7 +119,11 @@ export async function registerPushSubscriptionWithServer(): Promise<{ ok: boolea
       contentEncoding: "aesgcm",
     });
   } catch (err) {
-    logWebPushDebug("POST /push/subscribe failed", err);
+    logWebPushDebug("POST /push/subscribe failed", {
+      message: err instanceof Error ? err.message : String(err),
+      status: (err as { response?: { status?: number } })?.response?.status,
+      data: (err as { response?: { data?: unknown } })?.response?.data,
+    });
     return { ok: false, reason: "server_save_failed" };
   }
 

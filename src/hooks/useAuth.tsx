@@ -498,6 +498,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     api.clearToken();
 
     void logoutRequest;
+
+    try {
+      const { clearAllChatSessionSecrets } = await import("@/lib/chatSessionKeys");
+      await clearAllChatSessionSecrets();
+    } catch {
+      /* ignore */
+    }
   };
 
   return (

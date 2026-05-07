@@ -28,6 +28,7 @@ import {
   Square,
   Menu,
   MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -44,10 +45,13 @@ import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/cha
 import {
   CHAT_ATTACHMENT_ACCEPT,
   formatChatFileSize,
-  getAttachmentKind,
-  resolveMessageAttachment,
+  messageIsAttachmentFirst,
   validateChatAttachment,
 } from "@/lib/chatAttachments";
+import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
+import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
+import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
+import type { E2EVisualState } from "@/types/e2eChat";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -73,6 +77,11 @@ import {
 import { VoiceMemoPlayer, VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
+
+const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
+  const t = s.trim();
+  return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
+};
 
 const counselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -275,6 +284,7 @@ const CounselorMessages = () => {
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
 
   // Voice recording functionality
   const {
@@ -322,6 +332,8 @@ const CounselorMessages = () => {
     loadOlderMessages,
     registerServerMessage,
     retryEncryption,
+    refreshMessages,
+    deleteMessage,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
@@ -727,7 +739,30 @@ const CounselorMessages = () => {
 
   useEffect(() => {
     lastRenderedTailMessageIdRef.current = null;
+    setDeletingMessageIds(new Set());
   }, [selectedSessionId]);
+
+  const canModerateChat = role === "counselor" || role === "peer_counselor";
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: number) => {
+      if (!canModerateChat) return;
+      setDeletingMessageIds((prev) => new Set(prev).add(messageId));
+      try {
+        const ok = await deleteMessage(messageId);
+        if (!ok) {
+          toast.error("Could not delete message");
+        }
+      } finally {
+        setDeletingMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+      }
+    },
+    [canModerateChat, deleteMessage]
+  );
 
   // Encryption timeout: if not ready after 15s, show fallback UI
   useEffect(() => {
@@ -1040,78 +1075,67 @@ const CounselorMessages = () => {
   }, [handleLoadOlderMessages, hasOlderMessages, isLoadingOlderMessages, selectedSessionId]);
 
   const renderMessageContent = (msg: ChatMessage, isOutgoing: boolean) => {
-    const content = msg.decryptedContent || msg.content || "";
+    if (messageIsAttachmentFirst(msg)) {
+      return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
+    }
 
-    const attachment = resolveMessageAttachment(msg);
-    if (attachment && (msg.message_type === "file" || msg.message_type === "voice" || msg.has_file)) {
-      const kind = getAttachmentKind(attachment);
-      const resolvedUrl = attachment.url || msg.file_url;
-      const downloadUrl = attachment.download_url || attachment.url || msg.file_url;
-      const hasSize = Number(attachment.file_size) > 0;
-
-      if (!resolvedUrl) {
-        return <p>Attachment unavailable</p>;
-      }
-
-      if (kind === "image") {
-        return (
-          <div className="space-y-2 max-w-sm">
-            <a 
-              href={downloadUrl || resolvedUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block overflow-hidden rounded-2xl border border-border/50 hover:ring-2 hover:ring-primary/20 transition-all"
-            >
-              <img
-                src={resolvedUrl}
-                alt={attachment.file_name}
-                className="max-h-80 w-full object-cover"
-                loading="lazy"
-              />
-            </a>
-            <div className="flex items-center justify-between gap-3 px-1 text-[10px] font-medium opacity-70 uppercase tracking-tight">
-              <span className="truncate">{attachment.file_name}</span>
-              {hasSize ? <span>{formatFileSize(attachment.file_size)}</span> : null}
-            </div>
-          </div>
-        );
-      }
-
-      if (kind === "audio") {
-        const isVoiceMemo = msg.message_type === "voice";
-        return (
-          <VoiceMemoPlayer
-            src={resolvedUrl}
-            mimeType={attachment.file_type}
-            headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
-            fileSizeBytes={hasSize ? Number(attachment.file_size) : undefined}
-            bubbleRole={isOutgoing ? "outgoing" : "incoming"}
-          />
-        );
-      }
-
+    const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
+    if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
       return (
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 rounded-2xl bg-background/50 p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{attachment.file_name}</p>
-              {hasSize ? <p className="text-xs opacity-70">{formatFileSize(attachment.file_size)}</p> : null}
-            </div>
-            <a
-              href={downloadUrl || resolvedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold underline underline-offset-2"
-            >
-              Download
-            </a>
-          </div>
-        </div>
+        <EncryptedMessagePlaceholder
+          state={msg.e2eVisual}
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={() => {
+            void refreshMessages();
+          }}
+          onResyncDevice={() => {
+            void handleRetryEncryption();
+          }}
+        />
       );
     }
+
+    const legacyBracket =
+      msg.is_encrypted &&
+      typeof msg.decryptedContent === "string" &&
+      /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
+    if (legacyBracket) {
+      return (
+        <EncryptedMessagePlaceholder
+          state="needs_resync"
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={() => {
+            void refreshMessages();
+          }}
+          onResyncDevice={() => {
+            void handleRetryEncryption();
+          }}
+        />
+      );
+    }
+
+    if (
+      msg.is_encrypted &&
+      !msg.e2eVisual &&
+      !String(msg.decryptedContent || "").trim() &&
+      typeof msg.content === "string" &&
+      LOOKS_LIKE_E2E_CIPHER(msg.content)
+    ) {
+      return (
+        <EncryptedMessagePlaceholder
+          state="awaiting_key"
+          isOutgoing={isOutgoing}
+          onRetryDecrypt={() => {
+            void refreshMessages();
+          }}
+          onResyncDevice={() => {
+            void handleRetryEncryption();
+          }}
+        />
+      );
+    }
+
+    const content = msg.decryptedContent || msg.content || "";
 
     return <p>{content}</p>;
   };
@@ -1520,13 +1544,44 @@ const CounselorMessages = () => {
                             <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
                               <div
                                 className={cn(
-                                  "rounded-2xl border px-4 py-3 shadow-sm transition-colors duration-200",
-                                  isMine
-                                    ? "rounded-br-md border-primary/30 bg-primary text-primary-foreground"
-                                    : "rounded-bl-md border-border/60 bg-muted/80 text-foreground dark:bg-muted/40"
+                                  "flex items-end gap-1",
+                                  isMine ? "flex-row-reverse" : "flex-row"
                                 )}
                               >
-                                <div className="text-[15px] leading-relaxed">{renderMessageContent(msg, isMine)}</div>
+                                <div
+                                  className={cn(
+                                    "rounded-2xl border px-4 py-3 shadow-sm transition-colors duration-200",
+                                    isMine
+                                      ? "rounded-br-md border-primary/30 bg-primary text-primary-foreground"
+                                      : "rounded-bl-md border-border/60 bg-muted/80 text-foreground dark:bg-muted/40"
+                                  )}
+                                >
+                                  <div className="text-[15px] leading-relaxed">
+                                    <ChatMessageErrorBoundary>{renderMessageContent(msg, isMine)}</ChatMessageErrorBoundary>
+                                  </div>
+                                </div>
+                                {canModerateChat ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn(
+                                      "h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
+                                      isMine
+                                        ? "text-primary-foreground/90 hover:bg-primary-foreground/15 hover:text-primary-foreground"
+                                        : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    )}
+                                    disabled={deletingMessageIds.has(msg.id)}
+                                    onClick={() => void handleDeleteMessage(msg.id)}
+                                    aria-label="Delete message"
+                                  >
+                                    {deletingMessageIds.has(msg.id) ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-1.5 px-0.5">
                                 <span className="text-[10px] font-medium text-muted-foreground">
