@@ -63,6 +63,7 @@ const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
 const MIN_APPOINTMENT_DURATION_MINUTES = 15;
 const MAX_APPOINTMENT_DURATION_MINUTES = 120;
+const MIN_BOOKING_LEAD_MINUTES = 5;
 
 function normalizeDurationMinutes(value: number): number {
   if (!Number.isFinite(value)) return 60;
@@ -70,6 +71,15 @@ function normalizeDurationMinutes(value: number): number {
     MAX_APPOINTMENT_DURATION_MINUTES,
     Math.max(MIN_APPOINTMENT_DURATION_MINUTES, Math.floor(value))
   );
+}
+
+function toDateTimeLocalValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 const StudentAppointments = () => {
@@ -429,6 +439,15 @@ const StudentAppointments = () => {
         });
         return;
       }
+      const minAllowedDate = new Date(Date.now() + MIN_BOOKING_LEAD_MINUTES * 60_000);
+      if (parsedScheduledAt.getTime() < minAllowedDate.getTime()) {
+        toast({
+          title: "Choose a later time",
+          description: `Please book at least ${MIN_BOOKING_LEAD_MINUTES} minutes ahead.`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       const scheduledAt = parsedScheduledAt.toISOString();
       const sessionNotes =
@@ -465,9 +484,14 @@ const StudentAppointments = () => {
       if (import.meta.env.DEV) {
         console.error("Create appointment error", err);
       }
+      const validationErrors = (err as { response?: { data?: { errors?: Record<string, string[] | string> } } })
+        ?.response?.data?.errors;
+      const firstValidationMessage = validationErrors
+        ? Object.values(validationErrors).flat().map((v) => String(v)).find((v) => v.trim().length > 0)
+        : null;
       toast({
         title: "Booking failed",
-        description: getApiErrorMessage(err, "Please try again."),
+        description: firstValidationMessage || getApiErrorMessage(err, "Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -834,6 +858,7 @@ const StudentAppointments = () => {
                     <Label>Date & Time</Label>
                     <Input
                       type="datetime-local"
+                      min={toDateTimeLocalValue(new Date(Date.now() + MIN_BOOKING_LEAD_MINUTES * 60_000))}
                       value={form.scheduled_at}
                       onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
                     />
