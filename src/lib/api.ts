@@ -1175,7 +1175,8 @@ class ApiClient {
       }
       const res = await fetch(downloadUrl);
       if (!res.ok) {
-        return false;
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+        return true;
       }
       const blob = await res.blob();
       const safeName = String(fileName || '').trim() || 'attachment';

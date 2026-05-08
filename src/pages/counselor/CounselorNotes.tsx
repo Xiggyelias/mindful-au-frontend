@@ -13,6 +13,7 @@ import {
   Trash2,
   Search,
   Mic,
+  SlidersHorizontal,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -74,6 +75,8 @@ type CounselorSessionNoteRow = {
   sessionTimingLabel: string;
   hasClinicalNote: boolean;
 };
+
+type NotesFilter = "all" | "with_notes" | "without_notes" | "high_risk";
 
 function extractSessionsPayload(data: unknown): ApiSessionBlob[] {
   if (Array.isArray(data)) return data as ApiSessionBlob[];
@@ -157,6 +160,7 @@ const CounselorNotes = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
 
   const { user, role } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
@@ -197,13 +201,37 @@ const CounselorNotes = () => {
 
   const filteredSessions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return sessions;
-
     return sessions.filter((row) => {
       const haystack = `${row.studentLabel} ${row.notes} ${row.id} ${row.status} ${row.sessionType}`.toLowerCase();
-      return haystack.includes(q);
+      const matchesSearch = !q || haystack.includes(q);
+      const isHighRisk = row.riskLevel === "high" || row.riskLevel === "critical";
+      const matchesFilter =
+        notesFilter === "all" ||
+        (notesFilter === "with_notes" && row.hasClinicalNote) ||
+        (notesFilter === "without_notes" && !row.hasClinicalNote) ||
+        (notesFilter === "high_risk" && isHighRisk);
+
+      return matchesSearch && matchesFilter;
     });
-  }, [sessions, searchQuery]);
+  }, [sessions, searchQuery, notesFilter]);
+
+  const noteStats = useMemo(() => {
+    const withNotes = sessions.filter((s) => s.hasClinicalNote).length;
+    const highRisk = sessions.filter(
+      (s) => s.riskLevel === "high" || s.riskLevel === "critical"
+    ).length;
+    return {
+      total: sessions.length,
+      withNotes,
+      withoutNotes: Math.max(0, sessions.length - withNotes),
+      highRisk,
+    };
+  }, [sessions]);
+
+  const noteDraftDirty = useMemo(() => {
+    if (!selectedSession) return false;
+    return noteText.trim() !== selectedSession.notes.trim();
+  }, [noteText, selectedSession]);
 
   const saveNote = async () => {
     if (!selectedSessionId || !canEditNotes) return;
@@ -267,6 +295,33 @@ const CounselorNotes = () => {
         <DashboardHeader title="Session Notes" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Card variant="glass" className="border-border/40">
+              <CardContent className="pt-5">
+                <p className="text-2xl font-bold text-foreground">{noteStats.total}</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Total sessions</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass" className="border-border/40">
+              <CardContent className="pt-5">
+                <p className="text-2xl font-bold text-emerald-600">{noteStats.withNotes}</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">With note</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass" className="border-border/40">
+              <CardContent className="pt-5">
+                <p className="text-2xl font-bold text-amber-600">{noteStats.withoutNotes}</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Needs note</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass" className="border-border/40">
+              <CardContent className="pt-5">
+                <p className="text-2xl font-bold text-destructive">{noteStats.highRisk}</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">High/Critical risk</p>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold tracking-tight">Session notes</h2>
@@ -285,6 +340,52 @@ const CounselorNotes = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <Button
+                type="button"
+                variant={notesFilter === "all" ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => setNotesFilter("all")}
+              >
+                <SlidersHorizontal className="h-4 w-4 mr-2" />
+                All
+              </Button>
+              <Button
+                type="button"
+                variant={notesFilter === "with_notes" ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => setNotesFilter("with_notes")}
+              >
+                With notes
+              </Button>
+              <Button
+                type="button"
+                variant={notesFilter === "without_notes" ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => setNotesFilter("without_notes")}
+              >
+                Needs notes
+              </Button>
+              <Button
+                type="button"
+                variant={notesFilter === "high_risk" ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => setNotesFilter("high_risk")}
+              >
+                High risk
+              </Button>
+              {(searchQuery || notesFilter !== "all") && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="shrink-0"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setNotesFilter("all");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -445,6 +546,25 @@ const CounselorNotes = () => {
                       </div>
 
                       <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="uppercase text-[10px]">{selectedSession.status}</Badge>
+                        <Badge variant="outline" className="uppercase text-[10px]">{selectedSession.sessionType}</Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "uppercase text-[10px]",
+                            selectedSession.riskLevel === "critical"
+                              ? "border-destructive/40 text-destructive"
+                              : selectedSession.riskLevel === "high"
+                                ? "border-orange-500/40 text-orange-500"
+                                : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                          )}
+                        >
+                          {selectedSession.riskLevel} risk
+                        </Badge>
+                        {noteDraftDirty && <Badge className="uppercase text-[10px]">Unsaved changes</Badge>}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -505,7 +625,11 @@ const CounselorNotes = () => {
                           className="flex-1 sm:flex-none shadow-lg shadow-primary/20 h-12 sm:min-w-[200px]"
                           onClick={() => void saveNote()}
                           disabled={
-                            !canEditNotes || isSaving || isDeleting || selectedSession.status === "cancelled"
+                            !canEditNotes ||
+                            isSaving ||
+                            isDeleting ||
+                            selectedSession.status === "cancelled" ||
+                            !noteDraftDirty
                           }
                         >
                           {isSaving ? (

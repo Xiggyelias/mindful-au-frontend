@@ -12,6 +12,7 @@ import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { PushNotificationPrompt } from "@/components/pwa/PushNotificationPrompt";
+import { ChatPerfDevBadge } from "@/components/dev/ChatPerfDevBadge";
 
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
@@ -98,6 +99,7 @@ const App = () => (
               <ChatIncomingNotificationHost />
               <PushNotificationPrompt />
               <PwaInstallBanner />
+              {import.meta.env.DEV && <ChatPerfDevBadge />}
               <ScreenshotShield />
               <Suspense fallback={<RouteLoader />}>
                 <Routes>

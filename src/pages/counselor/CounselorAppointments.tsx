@@ -76,6 +76,7 @@ const CounselorAppointments = () => {
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [bulkCancelReason, setBulkCancelReason] = useState("");
   const [bulkCancelSubmitting, setBulkCancelSubmitting] = useState(false);
+  const bulkCancelInFlightRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<AppointmentFilter>("all");
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
@@ -284,11 +285,16 @@ const CounselorAppointments = () => {
   }, [appointments, searchQuery, statusFilter]);
 
   const openBulkCancelModal = () => {
+    bulkCancelInFlightRef.current = false;
     setBulkCancelReason("");
     setBulkCancelOpen(true);
   };
 
   const handleBulkCancelConfirm = async () => {
+    if (bulkCancelInFlightRef.current || bulkCancelSubmitting) {
+      return;
+    }
+    bulkCancelInFlightRef.current = true;
     try {
       setBulkCancelSubmitting(true);
       const data = await api.bulkCancelCounselorAppointments({
@@ -310,6 +316,7 @@ const CounselorAppointments = () => {
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, "Failed to cancel sessions"));
     } finally {
+      bulkCancelInFlightRef.current = false;
       setBulkCancelSubmitting(false);
     }
   };
@@ -435,6 +442,7 @@ const CounselorAppointments = () => {
             onOpenChange={(open) => {
               setBulkCancelOpen(open);
               if (!open) {
+                bulkCancelInFlightRef.current = false;
                 setBulkCancelReason("");
                 setBulkCancelSubmitting(false);
               }
@@ -456,10 +464,11 @@ const CounselorAppointments = () => {
                   disabled={bulkCancelSubmitting}
                 />
               </div>
-              <DialogFooter className="gap-2 sm:gap-0">
+              <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => setBulkCancelOpen(false)}
                   disabled={bulkCancelSubmitting}
                 >
@@ -468,6 +477,7 @@ const CounselorAppointments = () => {
                 <Button
                   type="button"
                   variant="destructive"
+                  className="w-full sm:w-auto"
                   onClick={() => void handleBulkCancelConfirm()}
                   disabled={bulkCancelSubmitting}
                 >

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
@@ -21,6 +21,9 @@ type ChatAttachmentViewProps = {
 export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentViewProps) {
   const [downloading, setDownloading] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const refreshingPreviewRef = useRef(false);
+  const attemptedPreviewRefreshRef = useRef(false);
   const resolved = resolveMessageAttachment(msg);
   const att =
     resolved ??
@@ -33,10 +36,14 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
     } satisfies ChatAttachment);
 
   const resolvedUrl = (att.url || msg.file_url || "").trim();
+  const activePreviewUrl = (previewUrl || resolvedUrl).trim();
   const hasPreviewUrl = resolvedUrl.length > 0;
 
   useEffect(() => {
     setImageLoadFailed(false);
+    setPreviewUrl("");
+    refreshingPreviewRef.current = false;
+    attemptedPreviewRefreshRef.current = false;
   }, [resolvedUrl]);
   const kind = getAttachmentKind(att);
   const hasSize = Number(att.file_size) > 0;
@@ -48,7 +55,14 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
       try {
         const ok = await api.downloadChatMessageAttachment(messageId, att.file_name);
         if (!ok) {
-          toast.error("Could not download file");
+          const fallbackData = await api.getMessageAttachmentDownloadUrl(messageId);
+          const fallbackUrl =
+            typeof fallbackData.download_url === "string" ? fallbackData.download_url.trim() : "";
+          if (fallbackUrl) {
+            window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+          } else {
+            toast.error("Could not download file");
+          }
         }
       } finally {
         setDownloading(false);
@@ -63,6 +77,36 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
     }
 
     toast.error("Attachment is not available to download yet");
+  };
+
+  const handleImageError = async () => {
+    if (!Number.isInteger(messageId) || messageId <= 0) {
+      setImageLoadFailed(true);
+      return;
+    }
+    if (attemptedPreviewRefreshRef.current || refreshingPreviewRef.current) {
+      setImageLoadFailed(true);
+      return;
+    }
+    attemptedPreviewRefreshRef.current = true;
+    refreshingPreviewRef.current = true;
+    try {
+      const fresh = await api.getMessageAttachmentDownloadUrl(messageId);
+      const freshUrl =
+        typeof fresh.download_url === "string" && fresh.download_url.trim().length > 0
+          ? fresh.download_url.trim()
+          : "";
+      if (freshUrl) {
+        setPreviewUrl(freshUrl);
+        setImageLoadFailed(false);
+      } else {
+        setImageLoadFailed(true);
+      }
+    } catch {
+      setImageLoadFailed(true);
+    } finally {
+      refreshingPreviewRef.current = false;
+    }
   };
 
   const downloadControl = (
@@ -129,11 +173,11 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
             )}
           >
             <img
-              src={resolvedUrl}
+              src={activePreviewUrl}
               alt={att.file_name}
               className="max-h-80 w-full object-cover"
               loading="lazy"
-              onError={() => setImageLoadFailed(true)}
+              onError={() => void handleImageError()}
             />
           </a>
         )}

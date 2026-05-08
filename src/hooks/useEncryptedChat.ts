@@ -20,6 +20,9 @@ import {
   persistSessionKey,
   deletePersistedSessionKey,
 } from '@/lib/chatSessionKeys';
+import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
+import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
+import { recordChatOpenLatency, recordWarmHydrateResult } from '@/lib/chatPerfMetrics';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 import type { Session } from '@/hooks/useChatSession';
 import type { E2EVisualState } from '@/types/e2eChat';
@@ -377,18 +380,27 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         peerTypingTimeoutRef.current = null;
       }
       setIsPeerTyping(false);
+      if (sessionId) {
+        saveTypingSnapshot(sessionId, false, { ownerUserId: userId });
+      }
       return;
     }
 
     setIsPeerTyping(true);
+    if (sessionId) {
+      saveTypingSnapshot(sessionId, true, { ownerUserId: userId });
+    }
     if (peerTypingTimeoutRef.current !== null) {
       window.clearTimeout(peerTypingTimeoutRef.current);
     }
     peerTypingTimeoutRef.current = window.setTimeout(() => {
       peerTypingTimeoutRef.current = null;
       setIsPeerTyping(false);
+      if (sessionId) {
+        saveTypingSnapshot(sessionId, false, { ownerUserId: userId });
+      }
     }, PEER_TYPING_IDLE_TIMEOUT_MS);
-  }, []);
+  }, [sessionId, userId]);
 
   const syncTypingStateToServer = useCallback(
     async (isTyping: boolean) => {
@@ -984,6 +996,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
         const rawMessages = normalizeMessagePayload(data);
         if (rawMessages.length > 0) {
+          void savePreloadedSessionMessages(sessionId, rawMessages, {
+            ownerUserId: userId,
+            keyScope: sessionKeyStorageKeyRef.current,
+          });
+        }
+        if (rawMessages.length > 0) {
           const maxId = rawMessages.reduce((max, msg) => Math.max(max, msg.id), lastMessageIdRef.current);
           lastMessageIdRef.current = maxId;
         }
@@ -1072,7 +1090,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         loadInFlightRef.current = false;
       }
     },
-    [decryptMessages, sessionId]
+    [decryptMessages, sessionId, userId]
   );
 
   const loadOlderMessages = useCallback(
@@ -1627,6 +1645,39 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
 
     const bootstrap = async () => {
+      const bootstrapStartedAt = Date.now();
+      let warmHydrateHit = false;
+      const cachedMessages = normalizeMessagePayload(
+        await loadPreloadedSessionMessages(sessionId, {
+          expectedOwnerUserId: userId,
+          expectedKeyScope: sessionKeyStorageKeyRef.current,
+        })
+      );
+      const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
+      if (!isDisposed && cachedTyping) {
+        applyPeerTypingState(cachedTyping.isPeerTyping === true);
+      }
+      if (!isDisposed && cachedMessages.length > 0) {
+        const decryptedCached = await decryptMessages(cachedMessages);
+        if (!isDisposed && decryptedCached.length > 0) {
+          warmHydrateHit = true;
+          setMessages((previous) => {
+            const merged = new Map<number, ChatMessage>();
+            for (const msg of previous) merged.set(msg.id, msg);
+            for (const msg of decryptedCached) merged.set(msg.id, msg);
+            return sortAndTrimMessages(Array.from(merged.values()));
+          });
+          const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
+          const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
+          if (maxId > 0) lastMessageIdRef.current = maxId;
+          if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
+            oldestMessageIdRef.current = minId;
+          }
+          setIsLoading(false);
+        }
+      }
+      recordWarmHydrateResult(warmHydrateHit);
+
       await initializeEncryption();
       if (isDisposed) return;
       // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
@@ -1637,6 +1688,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       await refreshPeerTypingStatus();
       scheduleNextPoll();
       scheduleTypingPoll();
+      recordChatOpenLatency(Date.now() - bootstrapStartedAt, sessionId);
     };
 
     void bootstrap();
@@ -1660,6 +1712,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       loadOlderInFlightRef.current = false;
     };
   }, [
+    applyPeerTypingState,
+    decryptMessages,
     detachRealtimeChannel,
     hasValidUserId,
     initializeEncryption,
@@ -1667,6 +1721,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     refreshPeerTypingStatus,
     runHandshakeHistoryCatchup,
     sessionId,
+    userId,
   ]);
 
   const refreshMessages = useCallback(

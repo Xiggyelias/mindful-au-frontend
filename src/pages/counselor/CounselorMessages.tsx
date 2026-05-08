@@ -39,6 +39,8 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
+import { useChatPreloader } from "@/hooks/useChatPreloader";
+import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import {
@@ -302,6 +304,18 @@ const CounselorMessages = () => {
 
   const selectedSessionId = selectedChat ? String(selectedChat.id) : "";
   const currentUserId = Number(user?.id || 0);
+
+  useChatPreloader({
+    sessions: chats,
+    activeSessionId: selectedSessionId,
+    enabled: Boolean(user?.id),
+    ownerUserId: user?.id?.toString() || null,
+  });
+  useChatRoomPrejoin({
+    sessions: chats,
+    activeSessionId: selectedSessionId,
+    enabled: Boolean(user?.id),
+  });
 
   const {
     messages,

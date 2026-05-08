@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
+import { useChatPreloader } from "@/hooks/useChatPreloader";
+import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -135,6 +137,18 @@ const StudentChat = () => {
     goToNextPage: goToNextSessionPage,
     startSessionWithCounselor
   } = useChatSession(user?.id);
+
+  useChatPreloader({
+    sessions,
+    activeSessionId: sessionId,
+    enabled: Boolean(user?.id),
+    ownerUserId: user?.id?.toString() || null,
+  });
+  useChatRoomPrejoin({
+    sessions,
+    activeSessionId: sessionId,
+    enabled: Boolean(user?.id),
+  });
 
   useEffect(() => {
     if (!sessionFromUrl || !sessions?.length) {
