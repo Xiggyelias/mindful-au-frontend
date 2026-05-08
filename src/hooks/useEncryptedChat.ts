@@ -1671,6 +1671,9 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     const bootstrap = async () => {
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
+      await initializeEncryption();
+      if (isDisposed) return;
+
       const cachedMessages = normalizeMessagePayload(
         await loadPreloadedSessionMessages(sessionId, {
           expectedOwnerUserId: userId,
@@ -1702,8 +1705,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       }
       recordWarmHydrateResult(warmHydrateHit);
 
-      await initializeEncryption();
-      if (isDisposed) return;
       // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
       // POST to shave one round-trip on open (important on high-latency links).
       await loadMessages(true);

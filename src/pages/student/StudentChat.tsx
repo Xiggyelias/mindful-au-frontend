@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Shield,
   Loader2,
@@ -80,6 +80,7 @@ const COUNSELOR_PAGE_SIZE = 24;
 
 const StudentChat = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const sessionFromUrl = searchParams.get("session");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -99,6 +100,9 @@ const StudentChat = () => {
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
   const [isSavingProfileAnonymous, setIsSavingProfileAnonymous] = useState(false);
+  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(
+    () => Boolean((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight)
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -132,6 +136,7 @@ const StudentChat = () => {
     sessions, 
     sessionPage,
     sessionTotalPages,
+    isLoading: isSessionsLoading,
     selectSession,
     goToPrevPage: goToPrevSessionPage,
     goToNextPage: goToNextSessionPage,
@@ -189,6 +194,12 @@ const StudentChat = () => {
     isEncryptionReadyRef.current = isEncryptionReady;
     chatErrorRef.current = chatError;
   }, [isEncryptionReady, chatError]);
+
+  useEffect(() => {
+    if ((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight) {
+      setIsEntryPreflightActive(true);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
@@ -251,6 +262,24 @@ const StudentChat = () => {
     }, 15000);
     return () => window.clearTimeout(timer);
   }, [sessionId, isEncryptionReady, chatError]);
+
+  useEffect(() => {
+    if (!isEntryPreflightActive) return;
+    if ((!activeSession && !isSessionsLoading) || isEncryptionReady || chatError || encryptionTimedOut) {
+      setIsEntryPreflightActive(false);
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }
+  }, [
+    activeSession,
+    chatError,
+    encryptionTimedOut,
+    isEncryptionReady,
+    isEntryPreflightActive,
+    isSessionsLoading,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const handleRetryEncryption = useCallback(async () => {
     setIsRetryingEncryption(true);
@@ -534,6 +563,11 @@ const StudentChat = () => {
   const unifiedAnonymousToggleDisabled = activeSession
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
+  const showEntryPreflight =
+    isEntryPreflightActive &&
+    !chatError &&
+    !encryptionTimedOut &&
+    (isSessionsLoading || (Boolean(activeSession) && !isEncryptionReady));
 
   return (
     <div className="h-screen bg-background overflow-hidden">
@@ -586,6 +620,18 @@ const StudentChat = () => {
 
             {/* Main Chat Area */}
             <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-secondary/5">
+              {showEntryPreflight ? (
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+                  <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                  </div>
+                  <h2 className="text-xl font-display font-bold tracking-tight">Securing Your Chat</h2>
+                  <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                    Verifying the private session key before opening this conversation.
+                  </p>
+                </div>
+              ) : (
+              <>
               {/* Handshake Indicator - non-blocking inline banner */}
               {activeSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                 <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
@@ -818,6 +864,8 @@ const StudentChat = () => {
                       Select a conversation or start a new one to begin your secure, encrypted session with a qualified counselor.
                     </p>
                  </div>
+              )}
+              </>
               )}
             </div>
           </div>
