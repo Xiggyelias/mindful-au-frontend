@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -242,6 +242,8 @@ const getUserColor = (name: string) => {
 };
 
 const CounselorMessages = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
@@ -260,6 +262,9 @@ const CounselorMessages = () => {
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
   const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
   const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
+  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(
+    () => Boolean((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight)
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -344,6 +349,12 @@ const CounselorMessages = () => {
     isEncryptionReadyRef.current = isEncryptionReady;
     chatErrorRef.current = chatError;
   }, [isEncryptionReady, chatError]);
+
+  useEffect(() => {
+    if ((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight) {
+      setIsEntryPreflightActive(true);
+    }
+  }, [location.state]);
 
   const {
     sendFileMessage,
@@ -745,6 +756,24 @@ const CounselorMessages = () => {
     return () => window.clearTimeout(timer);
   }, [selectedSessionId, isEncryptionReady, chatError]);
 
+  useEffect(() => {
+    if (!isEntryPreflightActive) return;
+    if ((!selectedSessionId && !isLoadingChats) || isEncryptionReady || chatError || encryptionTimedOut) {
+      setIsEntryPreflightActive(false);
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }
+  }, [
+    chatError,
+    encryptionTimedOut,
+    isEncryptionReady,
+    isEntryPreflightActive,
+    isLoadingChats,
+    location.pathname,
+    location.search,
+    navigate,
+    selectedSessionId,
+  ]);
+
   const handleRetryEncryption = useCallback(async () => {
     setIsRetryingEncryption(true);
     setEncryptionTimedOut(false);
@@ -989,6 +1018,11 @@ const CounselorMessages = () => {
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
+  const showEntryPreflight =
+    isEntryPreflightActive &&
+    !chatError &&
+    !encryptionTimedOut &&
+    (isLoadingChats || (Boolean(selectedSessionId) && !isEncryptionReady));
 
   const handlePrevPage = () => {
     if (!canGoToPrevPage || isLoadingChats) return;
@@ -1361,6 +1395,18 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col p-0 bg-gradient-to-b from-background to-secondary/5 pt-0">
+                {showEntryPreflight ? (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+                    <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
+                      <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                    </div>
+                    <h2 className="text-xl font-display font-bold tracking-tight">Securing Your Chat</h2>
+                    <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                      Verifying the private session key before opening this conversation.
+                    </p>
+                  </div>
+                ) : (
+                <>
                 {/* Mobile encryption status banner */}
                 {selectedSessionId && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
@@ -1644,6 +1690,8 @@ const CounselorMessages = () => {
                     </Button>
                   </div>
                 </form>
+                </>
+                )}
               </CardContent>
             </Card>
           </div>

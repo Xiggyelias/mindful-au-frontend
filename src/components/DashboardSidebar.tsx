@@ -54,12 +54,15 @@ export const DashboardSidebar = ({
     admin: "bg-warning/20 text-warning",
   };
 
-  const roleLabels: Record<DashboardSidebarProps["userType"], string> = {
-    student: "Student",
-    counselor: "Counselor",
-    peer: "Peer Counselor",
-    admin: "Admin",
-  };
+const roleLabels: Record<DashboardSidebarProps["userType"], string> = {
+  student: "Student",
+  counselor: "Counselor",
+  peer: "Peer Counselor",
+  admin: "Admin",
+};
+
+const isSecureChatPath = (path: string) =>
+  path === "/student/chat" || path === "/counselor/messages" || path === "/peer/chats";
 
   return (
     <>
@@ -123,7 +126,11 @@ export const DashboardSidebar = ({
                 <button
                   key={item.path}
                   onClick={() => {
-                    navigate(item.path);
+                    navigate(item.path, {
+                      state: isSecureChatPath(item.path)
+                        ? { secureChatPreflight: true, startedAt: Date.now() }
+                        : undefined,
+                    });
                     onClose?.();
                   }}
                   className={cn(
