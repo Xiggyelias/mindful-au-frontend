@@ -61,6 +61,16 @@ type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: Pa
 const APPOINTMENTS_PAGE_SIZE = 12;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
+const MIN_APPOINTMENT_DURATION_MINUTES = 15;
+const MAX_APPOINTMENT_DURATION_MINUTES = 120;
+
+function normalizeDurationMinutes(value: number): number {
+  if (!Number.isFinite(value)) return 60;
+  return Math.min(
+    MAX_APPOINTMENT_DURATION_MINUTES,
+    Math.max(MIN_APPOINTMENT_DURATION_MINUTES, Math.floor(value))
+  );
+}
 
 const StudentAppointments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -430,11 +440,12 @@ const StudentAppointments = () => {
 
       const callTypeForApi =
         form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
+      const durationMinutes = normalizeDurationMinutes(form.duration_minutes);
 
       await api.createAppointment({
         counselor_id: Number(form.counselor_id),
         scheduled_at: scheduledAt,
-        duration_minutes: form.duration_minutes || 60,
+        duration_minutes: durationMinutes,
         notes: sessionNotes,
         is_anonymous: form.is_anonymous,
         ...(callTypeForApi ? { call_type: callTypeForApi } : {}),
@@ -831,10 +842,15 @@ const StudentAppointments = () => {
                     <Label>Duration (minutes)</Label>
                     <Input
                       type="number"
-                      min={15}
-                      max={120}
+                      min={MIN_APPOINTMENT_DURATION_MINUTES}
+                      max={MAX_APPOINTMENT_DURATION_MINUTES}
                       value={form.duration_minutes}
-                      onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          duration_minutes: normalizeDurationMinutes(Number(e.target.value)),
+                        })
+                      }
                     />
                   </div>
                 </div>

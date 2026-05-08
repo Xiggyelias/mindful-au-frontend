@@ -215,9 +215,8 @@ const CounselorAppointments = () => {
     };
   }, [loadAppointments, user?.id]);
 
-  const today = useMemo(() => new Date(), []);
-
   const stats = useMemo(() => {
+    const today = new Date();
     const isSameDay = (dateStr?: string) => {
       if (!dateStr) return false;
       const d = new Date(dateStr);
@@ -242,7 +241,7 @@ const CounselorAppointments = () => {
     }).length;
 
     return { today: todayCount, pending: pendingCount, thisWeek: weekCount };
-  }, [appointments, today]);
+  }, [appointments]);
 
   const filteredAppointments = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
@@ -408,19 +407,19 @@ const CounselorAppointments = () => {
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-primary">{stats.today}</p>
-                <p className="text-muted-foreground">Today</p>
+                <p className="text-muted-foreground">Today (this page)</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-warning">{stats.pending}</p>
-                <p className="text-muted-foreground">Pending Approval</p>
+                <p className="text-muted-foreground">Pending (this page)</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-success">{stats.thisWeek}</p>
-                <p className="text-muted-foreground">Next 7 Days</p>
+                <p className="text-muted-foreground">Next 7 Days (this page)</p>
               </CardContent>
             </Card>
           </div>
