@@ -636,7 +636,7 @@ const StudentChat = () => {
               {activeSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                 <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your connection…</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your chat…</span>
                 </div>
               )}
 

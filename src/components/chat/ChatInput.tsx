@@ -183,7 +183,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     onTypingChange?.(nextMessage.trim().length > 0);
                   }}
                   onBlur={() => onTypingChange?.(false)}
-                  placeholder={isEncryptionReady ? "Type your message..." : "Securing connection..."}
+                  placeholder={isEncryptionReady ? "Type your message..." : "Securing your chat..."}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 h-12 text-base px-2"
                   disabled={isSending || !isEncryptionReady}
                 />
