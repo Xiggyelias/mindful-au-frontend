@@ -63,7 +63,6 @@ const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
 const MIN_APPOINTMENT_DURATION_MINUTES = 15;
 const MAX_APPOINTMENT_DURATION_MINUTES = 120;
-const MIN_BOOKING_LEAD_MINUTES = 5;
 
 function normalizeDurationMinutes(value: number): number {
   if (!Number.isFinite(value)) return 60;
@@ -73,13 +72,9 @@ function normalizeDurationMinutes(value: number): number {
   );
 }
 
-function toDateTimeLocalValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+function isHttpServerError(error: unknown): boolean {
+  const status = Number((error as { response?: { status?: unknown } })?.response?.status ?? 0);
+  return Number.isFinite(status) && status >= 500;
 }
 
 const StudentAppointments = () => {
@@ -439,15 +434,6 @@ const StudentAppointments = () => {
         });
         return;
       }
-      const minAllowedDate = new Date(Date.now() + MIN_BOOKING_LEAD_MINUTES * 60_000);
-      if (parsedScheduledAt.getTime() < minAllowedDate.getTime()) {
-        toast({
-          title: "Choose a later time",
-          description: `Please book at least ${MIN_BOOKING_LEAD_MINUTES} minutes ahead.`,
-          variant: "destructive",
-        });
-        return;
-      }
 
       const scheduledAt = parsedScheduledAt.toISOString();
       const sessionNotes =
@@ -460,15 +446,28 @@ const StudentAppointments = () => {
       const callTypeForApi =
         form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
       const durationMinutes = normalizeDurationMinutes(form.duration_minutes);
-
-      await api.createAppointment({
+      const basePayload = {
         counselor_id: Number(form.counselor_id),
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         notes: sessionNotes,
         is_anonymous: form.is_anonymous,
-        ...(callTypeForApi ? { call_type: callTypeForApi } : {}),
-      });
+      };
+      try {
+        await api.createAppointment({
+          ...basePayload,
+          ...(callTypeForApi ? { call_type: callTypeForApi } : {}),
+        });
+      } catch (firstError: unknown) {
+        // Backward-compatibility path: some deployments still reject newer optional booking fields.
+        if (!isHttpServerError(firstError) || !callTypeForApi) {
+          throw firstError;
+        }
+        await api.createAppointment({
+          ...basePayload,
+          notes: form.mode === "physical" ? "Physical" : "Online",
+        });
+      }
       toast({ title: "Appointment booked!" });
       setOpenDialog(false);
       setForm({
@@ -484,14 +483,9 @@ const StudentAppointments = () => {
       if (import.meta.env.DEV) {
         console.error("Create appointment error", err);
       }
-      const validationErrors = (err as { response?: { data?: { errors?: Record<string, string[] | string> } } })
-        ?.response?.data?.errors;
-      const firstValidationMessage = validationErrors
-        ? Object.values(validationErrors).flat().map((v) => String(v)).find((v) => v.trim().length > 0)
-        : null;
       toast({
         title: "Booking failed",
-        description: firstValidationMessage || getApiErrorMessage(err, "Please try again."),
+        description: getApiErrorMessage(err, "Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -858,7 +852,6 @@ const StudentAppointments = () => {
                     <Label>Date & Time</Label>
                     <Input
                       type="datetime-local"
-                      min={toDateTimeLocalValue(new Date(Date.now() + MIN_BOOKING_LEAD_MINUTES * 60_000))}
                       value={form.scheduled_at}
                       onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
                     />

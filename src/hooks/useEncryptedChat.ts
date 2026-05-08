@@ -117,6 +117,7 @@ const PEER_TYPING_IDLE_TIMEOUT_MS = 2400;
 const TYPING_STATUS_TIMEOUT_MS = 3200;
 const TYPING_POLL_INTERVAL_MS = 2800;
 const MAX_CLIENT_MESSAGES = 500;
+const DECRYPT_BATCH_SIZE = 8;
 const E2E_VERSION = 'v1';
 const SESSION_KEY_PREFIX = 'chat_key_';
 const SESSION_KEY_V2_PREFIX = 'chat_key_v2_';
@@ -878,64 +879,72 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
       }
 
-      const visibleMessages: ChatMessage[] = [];
-
-      for (const message of ordered) {
+      const decryptOneMessage = async (message: RawMessage): Promise<ChatMessage | null> => {
         if (parseEnvelope(message.content)) {
-          continue;
+          return null;
         }
 
         if (message.is_encrypted) {
           // Some legacy rows were saved as plaintext with is_encrypted=1.
           // If payload is not valid ciphertext, treat it as unencrypted content.
           if (!isLikelyEncryptedPayload(message.content)) {
-            visibleMessages.push({
+            return {
               ...message,
               is_encrypted: false,
               decryptedContent: message.content,
               e2eVisual: 'plain',
-            });
-            continue;
+            };
           }
 
           if (!encryptionKeyRef.current) {
             logCryptoDebug('decrypt deferred: no AES key yet', { messageId: message.id });
-            visibleMessages.push({
+            return {
               ...message,
               e2eVisual: 'awaiting_key',
               decryptedContent: undefined,
-            });
-            continue;
+            };
           }
 
           const result = await decryptChatPayload(message.content, encryptionKeyRef.current);
           if (result.ok) {
             logCryptoDebug('decrypt ok', { messageId: message.id });
-            visibleMessages.push({
+            return {
               ...message,
               decryptedContent: result.plaintext,
               e2eVisual: 'decrypted',
-            });
-          } else {
-            logCryptoDebug('decrypt failed', { messageId: message.id, reason: result.reason });
-            const e2eVisual: E2EVisualState =
-              result.reason === 'invalid_base64' || result.reason === 'payload_too_short'
-                ? 'payload_invalid'
-                : 'needs_resync';
-            visibleMessages.push({
-              ...message,
-              e2eVisual,
-              decryptedContent: undefined,
-            });
+            };
           }
-          continue;
+
+          logCryptoDebug('decrypt failed', { messageId: message.id, reason: result.reason });
+          const e2eVisual: E2EVisualState =
+            result.reason === 'invalid_base64' || result.reason === 'payload_too_short'
+              ? 'payload_invalid'
+              : 'needs_resync';
+          return {
+            ...message,
+            e2eVisual,
+            decryptedContent: undefined,
+          };
         }
 
-        visibleMessages.push({
+        return {
           ...message,
           decryptedContent: message.content,
           e2eVisual: 'plain',
-        });
+        };
+      };
+
+      const visibleMessages: ChatMessage[] = [];
+      const visibleRawMessages = ordered.filter((message) => !parseEnvelope(message.content));
+
+      for (let i = 0; i < visibleRawMessages.length; i += DECRYPT_BATCH_SIZE) {
+        const chunk = visibleRawMessages.slice(i, i + DECRYPT_BATCH_SIZE);
+        const decryptedChunk = await Promise.all(chunk.map(decryptOneMessage));
+        for (const message of decryptedChunk) {
+          if (message) {
+            visibleMessages.push(message);
+          }
+        }
       }
 
       hasUndecryptedMessagesRef.current = visibleMessages.some(messageNeedsKeyOrDecryptRetry);
@@ -969,6 +978,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             after_id: afterId > 0 ? afterId : undefined,
             limit: requestLimit,
             timeout_ms: timeoutMs,
+            mark_read: shouldReloadAll,
           });
 
         const maxFetchAttempts = pollCountRef.current === 0 && shouldReloadAll ? 3 : 1;
@@ -1004,6 +1014,20 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         if (rawMessages.length > 0) {
           const maxId = rawMessages.reduce((max, msg) => Math.max(max, msg.id), lastMessageIdRef.current);
           lastMessageIdRef.current = maxId;
+        }
+
+        if (
+          !shouldReloadAll &&
+          rawMessages.some(
+            (msg) =>
+              Number(msg.recipient_id) === numericUserId &&
+              msg.seen_at == null &&
+              !parseEnvelope(String(msg.content || ''))
+          )
+        ) {
+          void api.markSessionInboundRead(sessionId, { timeout_ms: 5000 }).catch(() => {
+            // Read receipts are eventually corrected by the next full sync.
+          });
         }
 
         if (shouldReloadAll) {
@@ -1090,7 +1114,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         loadInFlightRef.current = false;
       }
     },
-    [decryptMessages, sessionId, userId]
+    [decryptMessages, numericUserId, sessionId, userId]
   );
 
   const loadOlderMessages = useCallback(

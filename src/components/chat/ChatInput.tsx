@@ -16,10 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CHAT_ATTACHMENT_ACCEPT } from "@/lib/chatAttachments";
 import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
+import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
 
 interface ChatInputProps {
   message: string;
@@ -33,6 +33,7 @@ interface ChatInputProps {
   isPaused: boolean;
   selectedFile: File | null;
   onMessageChange: (val: string) => void;
+  onTypingChange?: (isTyping: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachClick: () => void;
@@ -45,7 +46,7 @@ interface ChatInputProps {
   fileInputRef: React.RefObject<HTMLInputElement>;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({
+export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   message,
   isSending,
   isUploading,
@@ -57,6 +58,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isPaused,
   selectedFile,
   onMessageChange,
+  onTypingChange,
   onSubmit,
   onFileSelect,
   onAttachClick,
@@ -163,7 +165,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none">
-                      <EmojiPicker onEmojiClick={onEmojiClick} theme={EmojiTheme.AUTO} />
+                      <LazyEmojiPicker onEmojiClick={onEmojiClick} />
                     </PopoverContent>
                   </Popover>
                   
@@ -175,7 +177,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                 <Input
                   value={message}
-                  onChange={(e) => onMessageChange(e.target.value)}
+                  onChange={(e) => {
+                    const nextMessage = e.target.value;
+                    onMessageChange(nextMessage);
+                    onTypingChange?.(nextMessage.trim().length > 0);
+                  }}
+                  onBlur={() => onTypingChange?.(false)}
                   placeholder={isEncryptionReady ? "Type your message..." : "Securing connection..."}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 h-12 text-base px-2"
                   disabled={isSending || !isEncryptionReady}
@@ -215,4 +222,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </form>
     </div>
   );
-};
+});
+
+ChatInput.displayName = "ChatInput";

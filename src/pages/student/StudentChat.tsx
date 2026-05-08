@@ -465,6 +465,10 @@ const StudentChat = () => {
     await deleteMessage(id);
   }, [deleteMessage]);
 
+  const handleMessageInputChange = useCallback((nextMessage: string) => {
+    setMessage(nextMessage);
+  }, []);
+
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
     setIsAtBottom(atBottom);
     setShowScrollToBottom(!atBottom && messages.length > 5);
@@ -740,7 +744,8 @@ const StudentChat = () => {
                     recordingTime={recordingTime}
                     isPaused={isPaused}
                     selectedFile={selectedFile}
-                    onMessageChange={setMessage}
+                    onMessageChange={handleMessageInputChange}
+                    onTypingChange={notifyTyping}
                     onSubmit={handleSendMessage}
                     onFileSelect={(e) => {
                       const file = e.target.files?.[0];

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -62,7 +62,6 @@ import {
   isYesterdayInDisplayZone,
 } from "@/lib/displayTimezone";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
-import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +75,7 @@ import {
   PopoverTrigger 
 } from "@/components/ui/popover";
 import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
+import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
 import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
@@ -248,6 +248,7 @@ const CounselorMessages = () => {
   const [isSending, setIsSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [chatPage, setChatPage] = useState(1);
@@ -356,7 +357,7 @@ const CounselorMessages = () => {
 
   const filteredChats = useMemo(() => {
     // `chats` is de-duplicated in loadSessions (same student + anonymity + role lane).
-    const needle = searchQuery.trim().toLowerCase();
+    const needle = deferredSearchQuery.trim().toLowerCase();
     if (!needle) {
       return chats;
     }
@@ -367,7 +368,7 @@ const CounselorMessages = () => {
         String(chat.id).includes(needle)
       );
     });
-  }, [chats, searchQuery]);
+  }, [chats, deferredSearchQuery]);
 
   const selectConversationById = useCallback((id: number) => {
     if (!Number.isFinite(id) || id <= 0) return;
@@ -1543,10 +1544,8 @@ const CounselorMessages = () => {
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-full p-0 border-none shadow-2xl bg-transparent mb-4" align="end" side="top">
-                                <EmojiPicker
+                                <LazyEmojiPicker
                                   onEmojiClick={(emojiData) => setMessage(prev => prev + emojiData.emoji)}
-                                  theme={EmojiTheme.AUTO}
-                                  lazyLoadEmojis={true}
                                 />
                               </PopoverContent>
                             </Popover>
