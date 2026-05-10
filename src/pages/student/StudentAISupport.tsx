@@ -272,7 +272,20 @@ const StudentAISupport = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, supportSignal, sendMessage } = useAIChat();
+  const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat();
+
+  const handleResetChat = () => {
+    if (messages.length === 0) return;
+    if (window.confirm("Are you sure you want to clear your conversation history?")) {
+      clearMessages();
+      setShowMoodCheck(true);
+      toast.success("Conversation cleared");
+    }
+  };
+
+  const handleBack = () => {
+    navigate("/student/dashboard");
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -387,12 +400,20 @@ const StudentAISupport = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="flex flex-col h-[calc(100vh-64px)] p-3 sm:p-5 lg:p-6">
-          <div className="flex flex-1 min-h-0 rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
+        <main className="flex flex-col h-[calc(100vh-64px)] p-2 sm:p-4 lg:p-6">
+          <div className="flex flex-col flex-1 min-h-0 rounded-2xl sm:rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
             <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full hover:bg-white/10"
+                    onClick={handleBack}
+                  >
+                    <History className="h-5 w-5 text-zinc-400 rotate-180" />
+                  </Button>
                   <AICompanion isThinking={isLoading} />
                   <div>
                     <h1 className="text-base font-semibold text-zinc-100 tracking-tight">AI Wellness Assistant</h1>
@@ -413,10 +434,19 @@ const StudentAISupport = () => {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="rounded-full h-8 w-8 hover:bg-rose-500/10 text-rose-400"
+                    onClick={handleResetChat}
+                    title="Reset Conversation"
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="rounded-full h-8 w-8 hover:bg-white/10"
                     onClick={() => toast.info("Your conversation is private and handled securely.")}
                   >
-                    <Heart className="h-4 w-4 text-rose-400" />
+                    <Heart className="h-4 w-4 text-zinc-500" />
                   </Button>
                 </div>
               </div>

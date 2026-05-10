@@ -245,6 +245,14 @@ export const useAIChat = () => {
     [conversationId]
   );
 
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setConversationId(null);
+    setSupportSignal(null);
+    setMlSignals(null);
+    localStorage.removeItem(AI_HISTORY_CACHE_KEY);
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -252,6 +260,7 @@ export const useAIChat = () => {
     supportSignal,
     mlSignals,
     sendMessage,
+    clearMessages,
     reloadHistory: loadHistory,
   };
 };
