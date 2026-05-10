@@ -483,7 +483,7 @@ const StudentAISupport = () => {
             <div 
               ref={scrollContainerRef}
               onScroll={handleScroll}
-              className="flex-1 min-h-0 overflow-y-auto scroll-smooth custom-scrollbar relative"
+              className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative"
             >
               {/* Scroll to bottom indicator */}
               <AnimatePresence>
@@ -501,7 +501,7 @@ const StudentAISupport = () => {
                 )}
               </AnimatePresence>
               <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   {messages.length === 0 && !isLoading && (
                     <motion.div
                       key="welcome-screen"
