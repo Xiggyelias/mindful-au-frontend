@@ -394,13 +394,13 @@ const StudentAISupport = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 relative z-10">
+      <div className="lg:pl-72 relative z-10 flex flex-col h-screen overflow-hidden">
         <DashboardHeader
           title="AI Support"
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="flex flex-col h-[calc(100vh-64px)] p-2 sm:p-4 lg:p-6">
+        <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-4 lg:p-6">
           <div className="flex flex-col flex-1 min-h-0 rounded-2xl sm:rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
             <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
