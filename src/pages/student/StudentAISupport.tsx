@@ -171,10 +171,10 @@ const WellnessCapsule = ({ capsule, onClick, disabled }: {
     <motion.button
       onClick={onClick}
       disabled={disabled}
-      whileHover={{ scale: 1.05, y: -3 }}
+      whileHover={{ scale: 1.05, y: -2 }}
       whileTap={{ scale: 0.97 }}
       className={cn(
-        "relative group flex items-center gap-3 px-5 py-3 rounded-2xl",
+        "relative group flex items-center gap-2 px-3.5 py-2 rounded-xl",
         "border border-white/[0.08] bg-gradient-to-br backdrop-blur-md",
         "hover:border-white/[0.15] transition-all duration-500",
         "disabled:opacity-40 disabled:cursor-not-allowed",
@@ -182,8 +182,8 @@ const WellnessCapsule = ({ capsule, onClick, disabled }: {
         "shadow-lg", capsule.glow
       )}
     >
-      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/[0.06] group-hover:bg-white/[0.1] transition-colors">
-        <Icon className="h-4 w-4 text-zinc-200" />
+      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.06] group-hover:bg-white/[0.1] transition-colors">
+        <Icon className="h-3.5 w-3.5 text-zinc-200" />
       </div>
       <span className="text-sm font-medium text-zinc-200">{capsule.label}</span>
     </motion.button>
@@ -245,13 +245,13 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
             whileTap={{ scale: 0.95 }}
             onClick={() => onSelect(`I'm feeling ${mood.label.toLowerCase()}`)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.06]",
+              "flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.06]",
               "bg-gradient-to-br hover:border-white/[0.12] transition-all",
               mood.color
             )}
           >
-            <span className="text-lg">{mood.emoji}</span>
-            <span className="text-sm font-medium text-zinc-200">{mood.label}</span>
+            <span className="text-base">{mood.emoji}</span>
+            <span className="text-xs font-medium text-zinc-200">{mood.label}</span>
           </motion.button>
         ))}
       </div>
