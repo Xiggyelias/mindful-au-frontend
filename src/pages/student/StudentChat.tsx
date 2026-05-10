@@ -787,6 +787,7 @@ const StudentChat = () => {
                     activeSession={activeSession}
                     isPeerTyping={isPeerTyping}
                     deletingMessageIds={deletingMessageIds}
+                    error={chatError}
                     onAtBottomChange={handleAtBottomChange}
                     onLoadOlder={async () => { await loadOlderMessages(); }}
                     onDeleteMessage={handleDeleteMessageWrapper}
@@ -798,6 +799,9 @@ const StudentChat = () => {
                       void nudgeEncryptionHandshake();
                     }}
                     onResyncDevice={handleRetryEncryption}
+                    onRetryLoad={() => {
+                      void retryEncryption();
+                    }}
                   />
 
                   {/* Chat Input */}

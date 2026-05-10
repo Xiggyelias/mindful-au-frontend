@@ -1821,58 +1821,79 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     const bootstrap = async () => {
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
-      await initializeEncryption();
-      if (isDisposed) return;
+      
+      try {
+        await initializeEncryption();
+        if (isDisposed) return;
 
-      const cachedMessages = normalizeMessagePayload(
-        await loadPreloadedSessionMessages(sessionId, {
-          expectedOwnerUserId: userId,
-          expectedKeyScope: sessionKeyStorageKeyRef.current,
-        })
-      );
-      const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
-      if (!isDisposed && cachedTyping) {
-        applyPeerTypingState(cachedTyping.isPeerTyping === true);
-      }
-      if (!isDisposed && cachedMessages.length > 0) {
-        const decryptedCached = await decryptMessages(cachedMessages);
-        if (!isDisposed && decryptedCached.length > 0) {
-          warmHydrateHit = true;
-          setMessages((previous) => {
-            const merged = new Map<number, ChatMessage>();
-            for (const msg of previous) merged.set(msg.id, msg);
-            for (const msg of decryptedCached) merged.set(msg.id, msg);
-            return sortAndTrimMessages(Array.from(merged.values()));
-          });
-          const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
-          const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
-          if (maxId > 0) lastMessageIdRef.current = maxId;
-          if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
-            oldestMessageIdRef.current = minId;
+        const cachedMessages = normalizeMessagePayload(
+          await loadPreloadedSessionMessages(sessionId, {
+            expectedOwnerUserId: userId,
+            expectedKeyScope: sessionKeyStorageKeyRef.current,
+          })
+        );
+        const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
+        if (!isDisposed && cachedTyping) {
+          applyPeerTypingState(cachedTyping.isPeerTyping === true);
+        }
+        if (!isDisposed && cachedMessages.length > 0) {
+          const decryptedCached = await decryptMessages(cachedMessages);
+          if (!isDisposed && decryptedCached.length > 0) {
+            warmHydrateHit = true;
+            setMessages((previous) => {
+              const merged = new Map<number, ChatMessage>();
+              for (const msg of previous) merged.set(msg.id, msg);
+              for (const msg of decryptedCached) merged.set(msg.id, msg);
+              return sortAndTrimMessages(Array.from(merged.values()));
+            });
+            const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
+            const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
+            if (maxId > 0) lastMessageIdRef.current = maxId;
+            if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
+              oldestMessageIdRef.current = minId;
+            }
+            setIsLoading(false);
           }
+        }
+        recordWarmHydrateResult(warmHydrateHit);
+
+        // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
+        // POST to shave one round-trip on open (important on high-latency links).
+        await loadMessages(true);
+        if (isDisposed) return;
+        await runHandshakeHistoryCatchup();
+
+        // If non-initiator still doesn't have encryption key, request it from initiator via realtime
+        if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
+          void requestSessionKey();
+        }
+
+        await refreshPeerTypingStatus();
+        scheduleNextPoll();
+        scheduleTypingPoll();
+        recordChatOpenLatency(Date.now() - bootstrapStartedAt, sessionId);
+      } catch (err) {
+        if (!isDisposed) {
+          console.error('[useEncryptedChat] Bootstrap failed:', err);
+          const errorMessage = extractApiErrorMessage(err, 'Failed to load conversation');
+          setError(errorMessage);
           setIsLoading(false);
         }
       }
-      recordWarmHydrateResult(warmHydrateHit);
-
-      // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
-      // POST to shave one round-trip on open (important on high-latency links).
-      await loadMessages(true);
-      if (isDisposed) return;
-      await runHandshakeHistoryCatchup();
-
-      // If non-initiator still doesn't have encryption key, request it from initiator via realtime
-      if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
-        void requestSessionKey();
-      }
-
-      await refreshPeerTypingStatus();
-      scheduleNextPoll();
-      scheduleTypingPoll();
-      recordChatOpenLatency(Date.now() - bootstrapStartedAt, sessionId);
     };
 
-    void bootstrap();
+    // Loading timeout recovery - if loading takes more than 15 seconds, show error
+    const loadingTimeoutId = window.setTimeout(() => {
+      if (!isDisposed && isInitializedRef.current === false) {
+        console.warn('[useEncryptedChat] Loading timeout - showing retry option');
+        setError('Conversation is taking too long to load. Please try again.');
+        setIsLoading(false);
+      }
+    }, 15000);
+
+    void bootstrap().finally(() => {
+      window.clearTimeout(loadingTimeoutId);
+    });
     window.addEventListener('focus', onVisibilityOrFocus);
     document.addEventListener('visibilitychange', onVisibilityOrFocus);
 

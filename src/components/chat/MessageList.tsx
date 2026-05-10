@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Shield, Loader2, Trash2, MessageSquare, ArrowDown } from "lucide-react";
+import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
@@ -59,7 +59,7 @@ const MessageBubble = React.memo(
       if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
         return (
           <EncryptedMessagePlaceholder
-            state={msg.e2eVisual}
+            state={msg.e2eVisual as "awaiting_key" | "needs_resync" | "payload_invalid"}
             isOutgoing={isMe}
             onRetryDecrypt={onRetryDecrypt}
             onResyncDevice={onResyncDevice}
@@ -186,6 +186,8 @@ interface MessageListProps {
   activeSession: Session | null;
   isPeerTyping: boolean;
   deletingMessageIds: Set<number>;
+  /** Error message if conversation failed to load */
+  error?: string | null;
   /** Fired when the virtual list reports bottom state (for scroll-to-bottom FAB). */
   onAtBottomChange?: (atBottom: boolean) => void;
   onLoadOlder: () => Promise<void>;
@@ -197,6 +199,8 @@ interface MessageListProps {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onRetryDecrypt?: () => void;
   onResyncDevice?: () => void;
+  /** Retry loading the conversation */
+  onRetryLoad?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -211,6 +215,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   activeSession,
   isPeerTyping,
   deletingMessageIds,
+  error,
   onAtBottomChange,
   onLoadOlder,
   onDeleteMessage,
@@ -220,6 +225,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   scrollRef,
   onRetryDecrypt,
   onResyncDevice,
+  onRetryLoad,
 }) => {
   const firstItemIndex = useVirtuosoFirstItemIndex(messages, conversationKey);
   const olderInflightRef = useRef(false);
@@ -245,6 +251,29 @@ export const MessageList: React.FC<MessageListProps> = ({
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm font-medium text-muted-foreground">Loading conversation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state with retry button if conversation failed to load
+  if (error && messages.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="inline-flex rounded-[2rem] border border-destructive/20 bg-destructive/10 p-5">
+            <AlertTriangle className="h-12 w-12 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-display font-bold tracking-tight">Could not load conversation</h3>
+            <p className="text-muted-foreground leading-rel">{error}</p>
+          </div>
+          {onRetryLoad && (
+            <Button onClick={onRetryLoad} variant="default" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Retry loading conversation
+            </Button>
+          )}
         </div>
       </div>
     );

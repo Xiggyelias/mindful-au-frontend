@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Loader2, Trash2, ArrowDown } from "lucide-react";
+import { Loader2, Trash2, ArrowDown, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,6 +186,8 @@ export type CounselorMessageThreadProps = {
   isPeerTyping: boolean;
   hasOlderMessages: boolean;
   isLoadingOlderMessages: boolean;
+  /** Error message if conversation failed to load */
+  error?: string | null;
   onLoadOlder: () => void | Promise<void>;
   deletingMessageIds: Set<number>;
   onDeleteMessage: (id: number) => void | Promise<void>;
@@ -196,6 +198,8 @@ export type CounselorMessageThreadProps = {
   onAtBottomChange?: (atBottom: boolean) => void;
   showScrollToBottom?: boolean;
   scrollToBottom?: () => void;
+  /** Retry loading the conversation */
+  onRetryLoad?: () => void;
 };
 
 export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
@@ -207,6 +211,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
   isPeerTyping,
   hasOlderMessages,
   isLoadingOlderMessages,
+  error,
   onLoadOlder,
   deletingMessageIds,
   onDeleteMessage,
@@ -217,6 +222,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
   onAtBottomChange,
   showScrollToBottom = false,
   scrollToBottom,
+  onRetryLoad,
 }) => {
   const firstItemIndex = useVirtuosoFirstItemIndex(messages, conversationKey);
   const olderInflightRef = useRef(false);
@@ -230,6 +236,29 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
       olderInflightRef.current = false;
     });
   }, [hasOlderMessages, isLoadingOlderMessages, onLoadOlder]);
+
+  // Show error state with retry button if conversation failed to load
+  if (error && messages.length === 0) {
+    return (
+      <div ref={containerRef} className="relative min-h-0 flex-1 flex items-center justify-center p-8">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="inline-flex rounded-[2rem] border border-destructive/20 bg-destructive/10 p-5">
+            <AlertTriangle className="h-12 w-12 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-display font-bold tracking-tight">Could not load conversation</h3>
+            <p className="text-muted-foreground leading-rel">{error}</p>
+          </div>
+          {onRetryLoad && (
+            <Button onClick={onRetryLoad} variant="default" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Retry loading conversation
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 flex flex-col">

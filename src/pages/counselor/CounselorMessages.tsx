@@ -1085,7 +1085,7 @@ const CounselorMessages = () => {
     if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
       return (
         <EncryptedMessagePlaceholder
-          state={msg.e2eVisual}
+          state={msg.e2eVisual as "awaiting_key" | "needs_resync" | "payload_invalid"}
           isOutgoing={isOutgoing}
           onRetryDecrypt={() => {
             void nudgeEncryptionHandshake();
@@ -1503,6 +1503,7 @@ const CounselorMessages = () => {
                       isPeerTyping={isPeerTyping}
                       hasOlderMessages={hasOlderMessages}
                       isLoadingOlderMessages={isLoadingOlderMessages}
+                      error={chatError}
                       onLoadOlder={handleLoadOlderMessages}
                       deletingMessageIds={deletingMessageIds}
                       onDeleteMessage={handleDeleteMessage}
@@ -1513,6 +1514,9 @@ const CounselorMessages = () => {
                       onAtBottomChange={handleCounselorThreadAtBottomChange}
                       showScrollToBottom={showThreadScrollToBottom}
                       scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                      onRetryLoad={() => {
+                        void retryEncryption();
+                      }}
                     />
                   )}
                 </div>
