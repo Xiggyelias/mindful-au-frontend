@@ -52,6 +52,7 @@ const DASHBOARD_APPOINTMENT_PAGE_SIZE = 120;
 const DASHBOARD_SESSION_PAGE_SIZE = 200;
 const DASHBOARD_SESSION_RETRY_PAGE_SIZE = 100;
 const DASHBOARD_SESSION_TIMEOUT_MS = 20000;
+const DASHBOARD_SESSION_RETRY_TIMEOUT_MS = 15000;
 const DASHBOARD_CONVERSATIONS_PAGE_SIZE = 8;
 /** Fetch more raw sessions before dedupe so the strip still fills after merging duplicates. */
 const DASHBOARD_CONVERSATIONS_FETCH_SIZE = 48;
@@ -256,7 +257,7 @@ const CounselorDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [isApprovedCounselor, toast]);
+  }, [isApprovedCounselor, toast, getApiErrorMessage]);
 
   useEffect(() => {
     if (!user?.id) {

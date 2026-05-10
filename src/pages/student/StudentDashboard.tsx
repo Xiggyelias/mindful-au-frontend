@@ -279,7 +279,7 @@ const StudentDashboard = () => {
     } finally {
       setStatsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, getApiErrorMessage]);
 
   // Reset state when user changes
   useEffect(() => {
