@@ -1,28 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  History,
-  Heart,
-  Send,
-  Sparkles,
-  Loader2,
-  AlertTriangle,
-  Phone,
-  ClipboardCheck,
-  Wind,
-  Moon,
-  Brain,
-  Coffee,
-  Shield,
-  Lock,
-  Zap,
-  MessageCircle,
-  Mic,
-  Smile,
+  LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
+  Send, Sparkles, Loader2, AlertTriangle, Phone, ClipboardCheck,
+  Wind, Moon, Brain, Zap, MessageCircle, Mic,
+  Activity, Waves, Flame, Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -45,121 +26,249 @@ const navItems = [
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
-// Premium quick action chips with icons
-const quickActions = [
-  { icon: Brain, label: "Anxiety Support", prompt: "I'm feeling anxious", gradient: "from-violet-500/20 to-purple-500/20" },
-  { icon: Wind, label: "Breathing", prompt: "Guide me through a breathing exercise", gradient: "from-cyan-500/20 to-blue-500/20" },
-  { icon: Moon, label: "Sleep Help", prompt: "Help me relax before sleep", gradient: "from-indigo-500/20 to-violet-500/20" },
-  { icon: Coffee, label: "Study Stress", prompt: "I'm stressed about studying", gradient: "from-amber-500/20 to-orange-500/20" },
-  { icon: Heart, label: "Self-Care", prompt: "I need some self-care tips", gradient: "from-rose-500/20 to-pink-500/20" },
-  { icon: MessageCircle, label: "Talk Freely", prompt: "I just want to talk", gradient: "from-emerald-500/20 to-teal-500/20" },
+// ═══════════════════════════════════════════════════════════
+// WELLNESS CAPSULES — Interactive wellness action triggers
+// ═══════════════════════════════════════════════════════════
+const wellnessCapsules = [
+  { icon: Wind, label: "Breathe", prompt: "Guide me through a breathing exercise", color: "from-cyan-500/30 to-blue-600/30", glow: "shadow-cyan-500/20" },
+  { icon: Moon, label: "Sleep", prompt: "Help me relax before sleep", color: "from-violet-500/30 to-indigo-600/30", glow: "shadow-violet-500/20" },
+  { icon: Brain, label: "Focus", prompt: "I'm stressed about studying", color: "from-amber-500/30 to-orange-600/30", glow: "shadow-amber-500/20" },
+  { icon: Flame, label: "Calm", prompt: "I'm feeling anxious", color: "from-rose-500/30 to-red-600/30", glow: "shadow-rose-500/20" },
+  { icon: Waves, label: "Ground", prompt: "I need some self-care tips", color: "from-emerald-500/30 to-teal-600/30", glow: "shadow-emerald-500/20" },
+  { icon: MessageCircle, label: "Talk", prompt: "I just want to talk", color: "from-sky-500/30 to-cyan-600/30", glow: "shadow-sky-500/20" },
 ];
 
-// Animated background gradient component
-const AnimatedBackground = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-primary/5 via-transparent to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-    <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-rose-500/5 via-transparent to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-  </div>
-);
-
-// AI Avatar with animated glow
-const AIAvatar = ({ isThinking }: { isThinking?: boolean }) => (
-  <div className="relative">
-    <div className={cn(
-      "absolute inset-0 rounded-2xl bg-gradient-to-br from-primary to-rose-500 blur-xl transition-opacity duration-500",
-      isThinking ? "opacity-40 animate-pulse" : "opacity-20"
-    )} />
+// ═══════════════════════════════════════════════════════════
+// AMBIENT CANVAS — Deep wellness atmosphere
+// ═══════════════════════════════════════════════════════════
+const AmbientCanvas = () => (
+  <div className="fixed inset-0 pointer-events-none overflow-hidden">
+    {/* Deep base layer */}
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-950/40 via-black to-black" />
+    {/* Floating orbs */}
     <motion.div
-      className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-rose-500 shadow-lg"
-      animate={isThinking ? { scale: [1, 1.05, 1] } : {}}
-      transition={{ duration: 1.5, repeat: isThinking ? Infinity : 0 }}
+      className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full"
+      style={{ background: "radial-gradient(circle, rgba(225,29,72,0.08) 0%, transparent 70%)" }}
+      animate={{ x: [0, 30, 0], y: [0, -20, 0], scale: [1, 1.1, 1] }}
+      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+    />
+    <motion.div
+      className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full"
+      style={{ background: "radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)" }}
+      animate={{ x: [0, -20, 0], y: [0, 30, 0], scale: [1, 1.15, 1] }}
+      transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 3 }}
+    />
+    <motion.div
+      className="absolute top-1/2 left-1/2 w-[400px] h-[400px] rounded-full"
+      style={{ background: "radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 70%)" }}
+      animate={{ x: [0, 15, 0], y: [0, -15, 0], scale: [1, 1.05, 1] }}
+      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 6 }}
+    />
+    {/* Subtle grid texture */}
+    <div className="absolute inset-0 opacity-[0.015]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════
+// FLOATING AI COMPANION — Emotional wellness presence
+// ═══════════════════════════════════════════════════════════
+const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
+  <div className="relative flex flex-col items-center">
+    {/* Outer aura rings */}
+    <motion.div
+      className="absolute w-32 h-32 rounded-full border border-rose-500/10"
+      animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.1, 0.3] }}
+      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+    />
+    <motion.div
+      className="absolute w-24 h-24 rounded-full border border-rose-500/20"
+      animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.2, 0.5] }}
+      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+    />
+    {/* Core orb */}
+    <motion.div
+      className="relative w-16 h-16 rounded-full bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 shadow-2xl flex items-center justify-center"
+      animate={isThinking ? {
+        boxShadow: ["0 0 30px rgba(225,29,72,0.3)", "0 0 60px rgba(225,29,72,0.5)", "0 0 30px rgba(225,29,72,0.3)"],
+        scale: [1, 1.05, 1]
+      } : {
+        boxShadow: ["0 0 20px rgba(225,29,72,0.2)", "0 0 40px rgba(225,29,72,0.3)", "0 0 20px rgba(225,29,72,0.2)"]
+      }}
+      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
     >
-      <Sparkles className="h-6 w-6 text-white" />
+      <Sparkles className="h-7 w-7 text-white" />
     </motion.div>
+    {/* Status dot */}
+    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 border border-white/10 backdrop-blur-md">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+      </span>
+      <span className="text-[10px] text-muted-foreground font-medium">Here</span>
+    </div>
   </div>
 );
 
-// Typing indicator with smooth animation
-const TypingIndicator = () => (
-  <div className="flex items-center gap-1.5 px-2 py-3">
-    {[0, 1, 2].map((i) => (
-      <motion.div
-        key={i}
-        className="h-2 w-2 rounded-full bg-primary/60"
-        animate={{ y: [-2, 2, -2], opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
-      />
-    ))}
-  </div>
-);
-
-// Message bubble components
-const UserMessage = ({ content, time }: { content: string; time: string }) => (
+// ═══════════════════════════════════════════════════════════
+// WELLNESS CARD — User emotional expression card
+// ═══════════════════════════════════════════════════════════
+const UserCard = ({ content, time }: { content: string; time: string }) => (
   <motion.div
-    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+    initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.3, ease: "easeOut" }}
+    transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
     className="flex justify-end"
   >
-    <div className="max-w-[85%] sm:max-w-[75%]">
-      <div className="relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-primary to-primary/90 px-5 py-3.5 shadow-lg shadow-primary/20">
-        <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
-        <p className="relative text-[15px] leading-relaxed text-white whitespace-pre-wrap">{content}</p>
+    <div className="max-w-[90%] sm:max-w-[80%] lg:max-w-[70%]">
+      <div className="relative group">
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500/20 to-red-600/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
+        <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-white/[0.06] px-6 py-4 shadow-xl">
+          <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-rose-500/30 to-transparent" />
+          <p className="text-[15px] leading-relaxed text-zinc-100 whitespace-pre-wrap">{content}</p>
+        </div>
       </div>
-      <p className="mt-1.5 text-[10px] text-muted-foreground/70 text-right pr-1">{time}</p>
+      <p className="mt-2 text-[10px] text-zinc-500 text-right pr-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
 );
 
-const AIMessage = ({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
+// ═══════════════════════════════════════════════════════════
+// AI RESPONSE CARD — Elegant floating wellness response
+// ═══════════════════════════════════════════════════════════
+const AICard = ({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
   <motion.div
-    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+    initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.3, ease: "easeOut" }}
-    className="flex gap-3"
+    transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+    className="flex gap-4"
   >
-    <AIAvatar isThinking={isThinking} />
-    <div className="max-w-[85%] sm:max-w-[75%] min-w-0">
-      <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.03] backdrop-blur-sm px-5 py-3.5 shadow-lg shadow-black/10">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-rose-500/5 pointer-events-none" />
-        <p className="relative text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">{content}</p>
+    <div className="flex-shrink-0 pt-1">
+      <AICompanion isThinking={isThinking} />
+    </div>
+    <div className="min-w-0 flex-1 max-w-[88%] sm:max-w-[82%] lg:max-w-[75%]">
+      <div className="relative group">
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-red-900/20 via-rose-800/10 to-transparent rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
+        <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/40 to-zinc-900/60 border border-white/[0.06] backdrop-blur-sm px-6 py-5 shadow-xl">
+          <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-rose-500/20 via-red-400/10 to-transparent" />
+          <p className="text-[15px] leading-[1.7] text-zinc-200 whitespace-pre-wrap">{content}</p>
+        </div>
       </div>
-      <p className="mt-1.5 text-[10px] text-muted-foreground/70 pl-1">{time}</p>
+      <p className="mt-2 text-[10px] text-zinc-500 pl-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
 );
 
-// Quick action chip component
-const QuickActionChip = ({ action, onClick, disabled }: { action: typeof quickActions[0]; onClick: () => void; disabled: boolean }) => {
-  const Icon = action.icon;
+// ═══════════════════════════════════════════════════════════
+// WELLNESS CAPSULE — Interactive emotional trigger
+// ═══════════════════════════════════════════════════════════
+const WellnessCapsule = ({ capsule, onClick, disabled }: {
+  capsule: typeof wellnessCapsules[0];
+  onClick: () => void;
+  disabled: boolean;
+}) => {
+  const Icon = capsule.icon;
   return (
     <motion.button
       onClick={onClick}
       disabled={disabled}
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.05, y: -3 }}
+      whileTap={{ scale: 0.97 }}
       className={cn(
-        "group relative flex items-center gap-2.5 px-4 py-2.5 rounded-full",
-        "border border-white/10 bg-gradient-to-br backdrop-blur-sm",
-        "hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10",
-        "transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed",
-        action.gradient
+        "relative group flex items-center gap-3 px-5 py-3 rounded-2xl",
+        "border border-white/[0.08] bg-gradient-to-br backdrop-blur-md",
+        "hover:border-white/[0.15] transition-all duration-500",
+        "disabled:opacity-40 disabled:cursor-not-allowed",
+        capsule.color,
+        "shadow-lg", capsule.glow
       )}
     >
-      <Icon className="h-4 w-4 text-foreground/80 group-hover:text-primary transition-colors" />
-      <span className="text-sm font-medium text-foreground/90 group-hover:text-foreground transition-colors">{action.label}</span>
+      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/[0.06] group-hover:bg-white/[0.1] transition-colors">
+        <Icon className="h-4 w-4 text-zinc-200" />
+      </div>
+      <span className="text-sm font-medium text-zinc-200">{capsule.label}</span>
     </motion.button>
   );
 };
 
+// ═══════════════════════════════════════════════════════════
+// WELLNESS TYPING — Breathing AI presence
+// ═══════════════════════════════════════════════════════════
+const WellnessTyping = () => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="flex gap-4"
+  >
+    <AICompanion isThinking />
+    <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-zinc-800/40 to-zinc-900/60 backdrop-blur-sm px-6 py-4 shadow-xl">
+      <div className="flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-rose-400/60"
+            animate={{ y: [-3, 3, -3], opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+          />
+        ))}
+        <span className="ml-3 text-xs text-zinc-500">Thinking...</span>
+      </div>
+    </div>
+  </motion.div>
+);
+
+// ═══════════════════════════════════════════════════════════
+// MOOD CHECK — Quick emotional state selector
+// ═══════════════════════════════════════════════════════════
+const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
+  const moods = [
+    { emoji: "😊", label: "Good", color: "from-emerald-500/20 to-green-600/20" },
+    { emoji: "😐", label: "Okay", color: "from-amber-500/20 to-yellow-600/20" },
+    { emoji: "😔", label: "Low", color: "from-orange-500/20 to-red-600/20" },
+    { emoji: "😰", label: "Anxious", color: "from-rose-500/20 to-red-700/20" },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-zinc-800/30 to-zinc-900/50 backdrop-blur-md p-5"
+    >
+      <p className="text-sm text-zinc-400 mb-3 flex items-center gap-2">
+        <Activity className="h-4 w-4 text-rose-400" />
+        How are you feeling right now?
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {moods.map((mood) => (
+          <motion.button
+            key={mood.label}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onSelect(`I'm feeling ${mood.label.toLowerCase()}`)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.06]",
+              "bg-gradient-to-br hover:border-white/[0.12] transition-all",
+              mood.color
+            )}
+          >
+            <span className="text-lg">{mood.emoji}</span>
+            <span className="text-sm font-medium text-zinc-200">{mood.label}</span>
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════
 const StudentAISupport = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [showMoodCheck, setShowMoodCheck] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
@@ -172,15 +281,13 @@ const StudentAISupport = () => {
   }, [messages]);
 
   useEffect(() => {
-    if (error) {
-      toast.error(error);
-    }
+    if (error) toast.error(error);
   }, [error]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading) return;
-    
+    setShowMoodCheck(false);
     const currentMessage = message;
     setMessage("");
     await sendMessage(currentMessage);
@@ -188,6 +295,7 @@ const StudentAISupport = () => {
 
   const handleQuickPrompt = async (prompt: string) => {
     if (isLoading) return;
+    setShowMoodCheck(false);
     await sendMessage(prompt);
   };
 
@@ -263,8 +371,8 @@ const StudentAISupport = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <AnimatedBackground />
+    <div className="min-h-screen bg-black relative overflow-hidden">
+      <AmbientCanvas />
       <DashboardSidebar
         items={navItems}
         userType="student"
@@ -279,89 +387,82 @@ const StudentAISupport = () => {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="flex flex-col h-[calc(100vh-64px)] p-4 sm:p-6 lg:p-8">
-          <div className="flex flex-1 min-h-0 rounded-[2rem] border border-white/10 bg-gradient-to-br from-black/40 to-black/20 backdrop-blur-xl shadow-2xl overflow-hidden">
+        <main className="flex flex-col h-[calc(100vh-64px)] p-3 sm:p-5 lg:p-6">
+          <div className="flex flex-1 min-h-0 rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
-            <div className="flex-shrink-0 border-b border-white/5 bg-gradient-to-r from-primary/5 via-transparent to-rose-500/5 px-6 py-4">
+            <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <AIAvatar isThinking={isLoading} />
+                <div className="flex items-center gap-3">
+                  <AICompanion isThinking={isLoading} />
                   <div>
-                    <h1 className="text-lg font-semibold text-foreground tracking-tight">AI Wellness Assistant</h1>
+                    <h1 className="text-base font-semibold text-zinc-100 tracking-tight">AI Wellness Assistant</h1>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      <span className="text-xs text-muted-foreground">Always here for you</span>
+                      <span className="text-[11px] text-zinc-500">Always here for you</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                    <Lock className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Private</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
+                    <Lock className="h-3 w-3 text-zinc-500" />
+                    <span className="text-[10px] text-zinc-500">Private</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full h-9 w-9 hover:bg-white/10"
+                    className="rounded-full h-8 w-8 hover:bg-white/10"
                     onClick={() => toast.info("Your conversation is private and handled securely.")}
                   >
-                    <Heart className="h-4 w-4 text-primary" />
+                    <Heart className="h-4 w-4 text-rose-400" />
                   </Button>
                 </div>
               </div>
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto" ref={messagesContainerRef}>
-              <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
                 <AnimatePresence mode="popLayout">
                   {messages.length === 0 && !isLoading && (
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="text-center py-12"
+                      className="text-center py-10"
                     >
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-rose-500/20 mb-6">
-                        <Sparkles className="h-8 w-8 text-primary" />
+                      <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500/20 to-violet-500/20 mb-5">
+                        <Sparkles className="h-7 w-7 text-rose-400" />
                       </div>
-                      <h2 className="text-xl font-semibold text-foreground mb-2">Welcome to your safe space</h2>
-                      <p className="text-muted-foreground max-w-md mx-auto">
+                      <h2 className="text-lg font-semibold text-zinc-100 mb-2">Welcome to your safe space</h2>
+                      <p className="text-zinc-500 text-sm max-w-md mx-auto">
                         I'm here to listen and support you. Share what's on your mind, or choose a topic below to get started.
                       </p>
                     </motion.div>
                   )}
-                  
+
+                  {showMoodCheck && messages.length === 0 && !isLoading && (
+                    <MoodCheck onSelect={(mood) => void handleQuickPrompt(mood)} />
+                  )}
+
                   {messages.map((msg) =>
                     msg.sender === "user" ? (
-                      <UserMessage key={msg.id} content={msg.content} time={msg.time} />
+                      <UserCard key={msg.id} content={msg.content} time={msg.time} />
                     ) : (
-                      <AIMessage key={msg.id} content={msg.content} time={msg.time} />
+                      <AICard key={msg.id} content={msg.content} time={msg.time} />
                     )
                   )}
-                  
-                  {isLoading && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex gap-3"
-                    >
-                      <AIAvatar isThinking />
-                      <div className="rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.03] backdrop-blur-sm px-5 py-4">
-                        <TypingIndicator />
-                      </div>
-                    </motion.div>
-                  )}
+
+                  {isLoading && <WellnessTyping />}
                 </AnimatePresence>
                 <div ref={scrollRef} />
               </div>
             </div>
 
             {/* Input Area - Floating Premium Design */}
-            <div className="flex-shrink-0 border-t border-white/5 bg-gradient-to-t from-black/60 to-transparent p-4 sm:p-6">
-              <div className="max-w-4xl mx-auto space-y-4">
+            <div className="flex-shrink-0 border-t border-white/[0.04] bg-gradient-to-t from-black/60 to-transparent p-3 sm:p-5">
+              <div className="max-w-3xl mx-auto space-y-3">
                 {/* Crisis Alert */}
                 <AnimatePresence>
                   {supportSignal?.requiresImmediateHelp && (
@@ -369,20 +470,20 @@ const StudentAISupport = () => {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      className="rounded-2xl border border-destructive/30 bg-gradient-to-br from-destructive/10 to-destructive/5 p-4"
+                      className="rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-red-600/5 p-4"
                     >
                       <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-destructive/20 flex items-center justify-center">
-                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                          <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                            <AlertTriangle className="h-4 w-4 text-rose-400" />
                           </div>
                           <div>
-                            <p className="font-semibold text-destructive text-sm">Immediate help recommended</p>
-                            <p className="text-sm text-foreground/80 mt-1">
+                            <p className="font-semibold text-rose-400 text-sm">Immediate help recommended</p>
+                            <p className="text-sm text-zinc-300 mt-1">
                               Move toward another person or a safer place now. Use the emergency alert if you need a counselor response quickly.
                             </p>
                             {supportSignal.crisisHotline && (
-                              <p className="text-xs text-muted-foreground mt-2">Crisis contact: {supportSignal.crisisHotline}</p>
+                              <p className="text-xs text-zinc-500 mt-2">Crisis contact: {supportSignal.crisisHotline}</p>
                             )}
                           </div>
                         </div>
@@ -394,7 +495,7 @@ const StudentAISupport = () => {
                               size="sm"
                               onClick={() => void handleTriggerEmergency()}
                               disabled={isTriggeringEmergency}
-                              className="gap-2"
+                              className="gap-2 bg-gradient-to-br from-rose-600 to-red-700 border-none"
                             >
                               {isTriggeringEmergency ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                               {isTriggeringEmergency ? "Alerting..." : "Emergency Alert"}
@@ -405,7 +506,7 @@ const StudentAISupport = () => {
                             variant="outline"
                             size="sm"
                             onClick={handleCallHotline}
-                            className="gap-2"
+                            className="gap-2 border-white/10 hover:bg-white/5"
                           >
                             <Phone className="h-4 w-4" />
                             Call Now
@@ -416,13 +517,13 @@ const StudentAISupport = () => {
                   )}
                 </AnimatePresence>
 
-                {/* Quick Action Chips */}
+                {/* Wellness Capsules */}
                 <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                  {quickActions.map((action) => (
-                    <QuickActionChip
-                      key={action.label}
-                      action={action}
-                      onClick={() => void handleQuickPrompt(action.prompt)}
+                  {wellnessCapsules.map((capsule) => (
+                    <WellnessCapsule
+                      key={capsule.label}
+                      capsule={capsule}
+                      onClick={() => void handleQuickPrompt(capsule.prompt)}
                       disabled={isLoading}
                     />
                   ))}
@@ -432,10 +533,10 @@ const StudentAISupport = () => {
                 <form onSubmit={handleSendMessage}>
                   <div className={cn(
                     "relative flex items-center rounded-2xl border transition-all duration-300",
-                    "bg-gradient-to-br from-white/[0.08] to-white/[0.03] backdrop-blur-sm",
-                    isFocused 
-                      ? "border-primary/40 shadow-lg shadow-primary/10" 
-                      : "border-white/10 hover:border-white/20"
+                    "bg-gradient-to-br from-zinc-800/60 to-zinc-900/40 backdrop-blur-md",
+                    isFocused
+                      ? "border-rose-500/30 shadow-lg shadow-rose-500/10"
+                      : "border-white/[0.06] hover:border-white/10"
                   )}>
                     <input
                       type="text"
@@ -445,14 +546,14 @@ const StudentAISupport = () => {
                       onBlur={() => setIsFocused(false)}
                       placeholder="Share what's on your mind..."
                       disabled={isLoading}
-                      className="flex-1 bg-transparent px-5 py-4 text-[15px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
+                      className="flex-1 bg-transparent px-5 py-3.5 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
                     />
                     <div className="flex items-center gap-2 pr-2">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-10 w-10 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-foreground"
+                        className="h-9 w-9 rounded-xl hover:bg-white/10 text-zinc-500 hover:text-zinc-300"
                         onClick={() => toast.info("Voice input coming soon!")}
                       >
                         <Mic className="h-5 w-5" />
@@ -462,9 +563,9 @@ const StudentAISupport = () => {
                         size="icon"
                         disabled={!message.trim() || isLoading}
                         className={cn(
-                          "h-10 w-10 rounded-xl transition-all duration-300",
-                          "bg-gradient-to-br from-primary to-primary/90",
-                          "hover:shadow-lg hover:shadow-primary/30",
+                          "h-9 w-9 rounded-xl transition-all duration-300",
+                          "bg-gradient-to-br from-rose-500 to-red-600",
+                          "hover:shadow-lg hover:shadow-rose-500/30",
                           "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
                       >
@@ -479,7 +580,7 @@ const StudentAISupport = () => {
                 </form>
 
                 {/* Footer */}
-                <p className="text-center text-[11px] text-muted-foreground/60 leading-relaxed">
+                <p className="text-center text-[10px] text-zinc-600 leading-relaxed">
                   I'm here to listen and support you. Remember, I'm an AI assistant and not a replacement for professional clinical help.
                 </p>
               </div>
