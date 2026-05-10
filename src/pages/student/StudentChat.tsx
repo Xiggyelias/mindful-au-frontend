@@ -252,7 +252,7 @@ const StudentChat = () => {
         setIsSavingProfileAnonymous(false);
       }
     },
-    [user?.id, user?.profile?.anonymous_mode, refreshUser],
+    [user?.id, user?.profile?.anonymous_mode, refreshUser, getApiErrorMessage, toast],
   );
 
   const {
@@ -788,7 +788,7 @@ const StudentChat = () => {
                     isPeerTyping={isPeerTyping}
                     deletingMessageIds={deletingMessageIds}
                     onAtBottomChange={handleAtBottomChange}
-                    onLoadOlder={loadOlderMessages}
+                    onLoadOlder={async () => { await loadOlderMessages(); }}
                     onDeleteMessage={handleDeleteMessageWrapper}
                     onStarterPrompt={setMessage}
                     scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
