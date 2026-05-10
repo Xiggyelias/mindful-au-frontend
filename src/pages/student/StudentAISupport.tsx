@@ -288,10 +288,13 @@ const StudentAISupport = () => {
   };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0 || isLoading) {
+      const timer = setTimeout(() => {
+        scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   useEffect(() => {
     if (error) toast.error(error);
