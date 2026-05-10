@@ -301,7 +301,7 @@ const StudentAISupport = () => {
   }, [isNearBottom, hasNewMessages, messages.length]);
 
   const handleScrollToBottom = () => {
-    scrollToBottom(true);
+    scrollToBottom();
     setHasNewMessages(false);
   };
 
