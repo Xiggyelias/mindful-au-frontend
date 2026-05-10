@@ -84,8 +84,13 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
       setImageLoadFailed(true);
       return;
     }
-    if (attemptedPreviewRefreshRef.current || refreshingPreviewRef.current) {
+    // If we already have a preview URL and it failed, don't retry
+    if (previewUrl && attemptedPreviewRefreshRef.current) {
       setImageLoadFailed(true);
+      return;
+    }
+    // If we're already refreshing, wait
+    if (refreshingPreviewRef.current) {
       return;
     }
     attemptedPreviewRefreshRef.current = true;
@@ -96,10 +101,15 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
         typeof fresh.download_url === "string" && fresh.download_url.trim().length > 0
           ? fresh.download_url.trim()
           : "";
-      if (freshUrl) {
+      if (freshUrl && freshUrl !== activePreviewUrl) {
+        // Got a new URL, reset the failed state and let the image try again
         setPreviewUrl(freshUrl);
         setImageLoadFailed(false);
+      } else if (freshUrl) {
+        // Same URL returned, it's expired
+        setImageLoadFailed(true);
       } else {
+        // No URL returned
         setImageLoadFailed(true);
       }
     } catch {
@@ -173,6 +183,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
             )}
           >
             <img
+              key={activePreviewUrl}
               src={activePreviewUrl}
               alt={att.file_name}
               className="max-h-80 w-full object-cover"
