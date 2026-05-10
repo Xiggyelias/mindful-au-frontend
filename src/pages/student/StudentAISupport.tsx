@@ -287,14 +287,14 @@ const StudentAISupport = () => {
     navigate("/student/dashboard");
   };
 
+  // Auto-scroll removed as per user request
+  /*
   useEffect(() => {
-    if (messages.length > 0 || isLoading) {
-      const timer = setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      }, 100);
-      return () => clearTimeout(timer);
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isLoading]);
+  }, [messages]);
+  */
 
   useEffect(() => {
     if (error) toast.error(error);
