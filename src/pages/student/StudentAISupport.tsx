@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo, type FormEvent } from "react";
+import { useState, useEffect, useRef, memo, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
@@ -329,8 +329,6 @@ const StudentAISupport = () => {
     const content = message.trim();
     setShowMoodCheck(false);
     setMessage("");
-    
-    setTimeout(() => scrollToBottom(true), 100);
     
     await sendMessage(content);
   };
