@@ -3,7 +3,7 @@ import {
   LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
   Send, Sparkles, Loader2, AlertTriangle, Phone, ClipboardCheck,
   Wind, Moon, Brain, Zap, MessageCircle, Mic,
-  Activity, Waves, Flame, Lock,
+  Activity, Waves, Flame, Lock, ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useAIChat } from "@/hooks/useAIChat";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { useChatScroll } from "@/hooks/useChatScroll";
 import { toast } from "sonner";
 
 const navItems = [
@@ -112,35 +113,36 @@ const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
 // ═══════════════════════════════════════════════════════════
 // WELLNESS CARD — User emotional expression card
 // ═══════════════════════════════════════════════════════════
-const UserCard = ({ content, time }: { content: string; time: string }) => (
+const UserCard = React.memo(({ content, time }: { content: string; time: string }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
     transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-    className="flex justify-end"
+    className="flex justify-end w-full"
   >
     <div className="max-w-[90%] sm:max-w-[80%] lg:max-w-[70%]">
       <div className="relative group">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500/20 to-red-600/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
         <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-white/[0.06] px-6 py-4 shadow-xl">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-rose-500/30 to-transparent" />
-          <p className="text-[15px] leading-relaxed text-zinc-100 whitespace-pre-wrap">{content}</p>
+          <p className="text-[15px] leading-relaxed text-zinc-100 whitespace-pre-wrap break-words">{content}</p>
         </div>
       </div>
       <p className="mt-2 text-[10px] text-zinc-500 text-right pr-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
-);
+));
+UserCard.displayName = "UserCard";
 
 // ═══════════════════════════════════════════════════════════
 // AI RESPONSE CARD — Elegant floating wellness response
 // ═══════════════════════════════════════════════════════════
-const AICard = ({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
+const AICard = React.memo(({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
     transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-    className="flex gap-4"
+    className="flex gap-4 w-full"
   >
     <div className="flex-shrink-0 pt-1">
       <AICompanion isThinking={isThinking} />
@@ -150,13 +152,14 @@ const AICard = ({ content, time, isThinking }: { content: string; time: string; 
         <div className="absolute -inset-0.5 bg-gradient-to-r from-red-900/20 via-rose-800/10 to-transparent rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
         <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/40 to-zinc-900/60 border border-white/[0.06] backdrop-blur-sm px-6 py-5 shadow-xl">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-rose-500/20 via-red-400/10 to-transparent" />
-          <p className="text-[15px] leading-[1.7] text-zinc-200 whitespace-pre-wrap">{content}</p>
+          <p className="text-[15px] leading-[1.7] text-zinc-200 whitespace-pre-wrap break-words">{content}</p>
         </div>
       </div>
       <p className="mt-2 text-[10px] text-zinc-500 pl-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
-);
+));
+AICard.displayName = "AICard";
 
 // ═══════════════════════════════════════════════════════════
 // WELLNESS CAPSULE — Interactive emotional trigger
@@ -273,6 +276,10 @@ const StudentAISupport = () => {
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
   const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat();
+  const { scrollRef: scrollContainerRef, handleScroll, scrollToBottom } = useChatScroll(messages, {
+    threshold: 150,
+    smooth: true
+  });
 
   const handleResetChat = () => {
     if (messages.length === 0) return;
@@ -287,26 +294,21 @@ const StudentAISupport = () => {
     navigate("/student/dashboard");
   };
 
-  // Auto-scroll removed as per user request
-  /*
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
-  */
-
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!message.trim() || isLoading) return;
+    
+    const content = message.trim();
     setShowMoodCheck(false);
-    const currentMessage = message;
     setMessage("");
-    await sendMessage(currentMessage);
+    
+    setTimeout(() => scrollToBottom(true), 100);
+    
+    await sendMessage(content);
   };
 
   const handleQuickPrompt = async (prompt: string) => {
@@ -404,7 +406,7 @@ const StudentAISupport = () => {
         />
 
         <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-4 lg:p-6">
-          <div className="flex flex-col flex-1 min-h-0 rounded-2xl sm:rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col rounded-2xl sm:rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
             <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
@@ -456,11 +458,16 @@ const StudentAISupport = () => {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div 
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 min-h-0 overflow-y-auto scroll-smooth custom-scrollbar relative"
+            >
               <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
                 <AnimatePresence mode="wait">
                   {messages.length === 0 && !isLoading && (
                     <motion.div
+                      key="welcome-screen"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
@@ -478,6 +485,7 @@ const StudentAISupport = () => {
 
                   {showMoodCheck && messages.length === 0 && !isLoading && (
                     <motion.div
+                      key="mood-check"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
@@ -486,15 +494,20 @@ const StudentAISupport = () => {
                     </motion.div>
                   )}
 
-                  {messages.map((msg) =>
-                    msg.sender === "user" ? (
-                      <UserCard key={msg.id} content={msg.content} time={msg.time} />
-                    ) : (
-                      <AICard key={msg.id} content={msg.content} time={msg.time} />
-                    )
-                  )}
+                  {messages.map((msg, index) => (
+                    <div
+                      key={msg.id || `msg-${index}-${msg.time}`}
+                      className="w-full"
+                    >
+                      {msg.sender === "user" ? (
+                        <UserCard content={msg.content} time={msg.time} />
+                      ) : (
+                        <AICard content={msg.content} time={msg.time} />
+                      )}
+                    </div>
+                  ))}
 
-                  {isLoading && <WellnessTyping />}
+                  {isLoading && <WellnessTyping key="typing" />}
                 </AnimatePresence>
                 <div ref={scrollRef} />
               </div>

@@ -165,7 +165,7 @@ export const useAIChat = () => {
       const trimmed = content.trim();
       if (!trimmed) return;
 
-      const optimisticId = `user-${Date.now()}`;
+      const optimisticId = `local-${Date.now()}-user`;
       const optimisticMessage: Message = {
         id: optimisticId,
         sender: "user",
