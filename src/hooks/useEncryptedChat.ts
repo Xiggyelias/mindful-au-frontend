@@ -543,18 +543,21 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       return;
     }
 
-    // Only the lower user id invents the AES key. The other party must receive it via a `kind:key` envelope;
-    // otherwise they hold a random key that can never decrypt the peer's ciphertext (shown as "unavailable").
-    if (!isSessionKeyInitiator()) {
-      return;
-    }
-
+    // Both initiator and non-initiator generate a session key immediately so the UI is not stuck.
+    // The initiator will also encrypt and send the key to the peer.
+    // The non-initiator's locally-generated key will be replaced once the peer's
+    // encrypted session key envelope arrives (handled in handleEnvelope).
     const generatedKey = await generateEncryptionKey();
     const generatedKeyString = await exportKey(generatedKey);
 
     encryptionKeyRef.current = generatedKey;
     keyStringRef.current = generatedKeyString;
-    await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
+
+    // Only the initiator persists the key; non-initiator's key is temporary until peer's arrives
+    if (isSessionKeyInitiator()) {
+      await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
+    }
+
     runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
       key: generatedKey,
       keyString: generatedKeyString,
@@ -981,9 +984,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             };
           }
 
-          logCryptoDebug('decrypt failed', { messageId: message.id, reason: result.reason });
+          // Handle error case - result is { ok: false; reason: ... }
+          const errorResult = result as { ok: false; reason: 'invalid_base64' | 'payload_too_short' | 'decrypt_failed' };
+          logCryptoDebug('decrypt failed', { messageId: message.id, reason: errorResult.reason });
           const e2eVisual: E2EVisualState =
-            result.reason === 'invalid_base64' || result.reason === 'payload_too_short'
+            errorResult.reason === 'invalid_base64' || errorResult.reason === 'payload_too_short'
               ? 'payload_invalid'
               : 'needs_resync';
           return {
