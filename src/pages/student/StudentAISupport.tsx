@@ -330,12 +330,16 @@ const StudentAISupport = () => {
     setShowMoodCheck(false);
     setMessage("");
     
+    // Scroll to show user's new message
+    scrollToBottom();
+    
     await sendMessage(content);
   };
 
   const handleQuickPrompt = async (prompt: string) => {
     if (isLoading) return;
     setShowMoodCheck(false);
+    scrollToBottom();
     await sendMessage(prompt);
   };
 

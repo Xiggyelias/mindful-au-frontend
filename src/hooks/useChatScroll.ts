@@ -1,7 +1,7 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 
 export function useChatScroll(
-  _messageCount: number,
+  messageCount: number,
   options: {
     threshold?: number;
     smooth?: boolean;
@@ -10,10 +10,15 @@ export function useChatScroll(
   const { threshold = 150, smooth = true } = options;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const prevCountRef = useRef(0);
+  const userHasScrolledUpRef = useRef(false);
 
-  const scrollToBottom = useCallback((force = true) => {
+  const scrollToBottom = useCallback(() => {
     const container = scrollRef.current;
     if (!container) return;
+    
+    // Reset scrolled-up state so future messages auto-scroll
+    userHasScrolledUpRef.current = false;
     
     const { scrollHeight, clientHeight } = container;
     container.scrollTo({
@@ -28,8 +33,39 @@ export function useChatScroll(
     
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceToBottom = scrollHeight - clientHeight - scrollTop;
-    setIsNearBottom(distanceToBottom <= threshold);
+    const nearBottom = distanceToBottom <= threshold;
+    
+    setIsNearBottom(nearBottom);
+    
+    // Track if user manually scrolled up
+    if (!nearBottom) {
+      userHasScrolledUpRef.current = true;
+    } else {
+      userHasScrolledUpRef.current = false;
+    }
   }, [threshold]);
+
+  // Auto-scroll when new messages arrive and user is near bottom
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const hasNewMessages = messageCount > prevCountRef.current;
+    const isInitialLoad = prevCountRef.current === 0;
+
+    // Scroll if: initial load OR (new messages AND user hasn't scrolled up)
+    if (isInitialLoad || (hasNewMessages && !userHasScrolledUpRef.current)) {
+      // Use RAF to ensure DOM has updated
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          const { scrollHeight, clientHeight } = scrollRef.current;
+          scrollRef.current.scrollTop = scrollHeight - clientHeight;
+        }
+      });
+    }
+
+    prevCountRef.current = messageCount;
+  }, [messageCount]);
 
   return { scrollRef, handleScroll, scrollToBottom, isNearBottom };
 }
