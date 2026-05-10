@@ -23,6 +23,8 @@ import {
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
 import { recordChatOpenLatency, recordWarmHydrateResult } from '@/lib/chatPerfMetrics';
+import { playMessageNotificationSound } from '@/lib/sounds/notificationSoundManager';
+import { toast } from 'sonner';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 import type { Session } from '@/hooks/useChatSession';
 import type { E2EVisualState } from '@/types/e2eChat';
@@ -1573,6 +1575,18 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             const senderId = Number((payload as { senderId?: unknown })?.senderId ?? 0);
             if (Number.isFinite(senderId) && senderId === numericUserId) {
               return;
+            }
+
+            // Play notification sound for new message
+            playMessageNotificationSound();
+
+            // Show toast notification if document is hidden (user on another tab/dashboard)
+            if (document.visibilityState === 'hidden') {
+              const preview = String((payload as { preview?: unknown })?.preview ?? 'New message');
+              toast.info('New Message', {
+                description: preview.length > 80 ? preview.slice(0, 80) + '…' : preview,
+                duration: 5000,
+              });
             }
 
             if (realtimeSyncTimeoutRef.current !== null) {
