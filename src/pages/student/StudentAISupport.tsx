@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, memo, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
   Send, Sparkles, Loader2, AlertTriangle, Phone, ClipboardCheck,
@@ -113,7 +114,7 @@ const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
 // ═══════════════════════════════════════════════════════════
 // WELLNESS CARD — User emotional expression card
 // ═══════════════════════════════════════════════════════════
-const UserCard = React.memo(({ content, time }: { content: string; time: string }) => (
+const UserCard = memo(({ content, time }: { content: string; time: string }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -137,7 +138,7 @@ UserCard.displayName = "UserCard";
 // ═══════════════════════════════════════════════════════════
 // AI RESPONSE CARD — Elegant floating wellness response
 // ═══════════════════════════════════════════════════════════
-const AICard = React.memo(({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
+const AICard = memo(({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -271,15 +272,38 @@ const StudentAISupport = () => {
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showMoodCheck, setShowMoodCheck] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
   const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat();
-  const { scrollRef: scrollContainerRef, handleScroll, scrollToBottom } = useChatScroll(messages, {
+  const { scrollRef: scrollContainerRef, handleScroll, scrollToBottom, isNearBottom } = useChatScroll(messages.length, {
     threshold: 150,
     smooth: true
   });
+
+  // Track if user has scrolled up (not near bottom) and there are messages
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const prevMessagesLengthRef = useRef(messages.length);
+
+  // Detect new messages arriving
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      setHasNewMessages(true);
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length]);
+
+  // Show scroll button when not near bottom and has new messages
+  useEffect(() => {
+    setShowScrollToBottom(!isNearBottom && hasNewMessages && messages.length > 0);
+  }, [isNearBottom, hasNewMessages, messages.length]);
+
+  const handleScrollToBottom = () => {
+    scrollToBottom(true);
+    setHasNewMessages(false);
+  };
 
   const handleResetChat = () => {
     if (messages.length === 0) return;
@@ -298,7 +322,7 @@ const StudentAISupport = () => {
     if (error) toast.error(error);
   }, [error]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!message.trim() || isLoading) return;
     
@@ -463,6 +487,21 @@ const StudentAISupport = () => {
               onScroll={handleScroll}
               className="flex-1 min-h-0 overflow-y-auto scroll-smooth custom-scrollbar relative"
             >
+              {/* Scroll to bottom indicator */}
+              <AnimatePresence>
+                {showScrollToBottom && (
+                  <motion.button
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                    onClick={handleScrollToBottom}
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-rose-500 to-red-600 text-white text-sm font-medium shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40 transition-all"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    <span>New messages</span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
               <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
                 <AnimatePresence mode="wait">
                   {messages.length === 0 && !isLoading && (
@@ -509,7 +548,6 @@ const StudentAISupport = () => {
 
                   {isLoading && <WellnessTyping key="typing" />}
                 </AnimatePresence>
-                <div ref={scrollRef} />
               </div>
             </div>
 
