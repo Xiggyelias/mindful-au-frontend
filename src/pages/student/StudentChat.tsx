@@ -41,6 +41,10 @@ import {
   PROFILE_ANON_MODE_TOAST_DESCRIPTION,
   PROFILE_ANON_MODE_UPDATE_ERROR,
 } from "@/lib/profileAnonymousMode";
+import {
+  hasCompletedLoginChatSecurity,
+  markLoginChatSecurityComplete,
+} from "@/lib/chatLoginSecurity";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -110,6 +114,9 @@ const StudentChat = () => {
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
+  const [hasLoginSecureSession, setHasLoginSecureSession] = useState(() =>
+    hasCompletedLoginChatSecurity(user?.id)
+  );
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -196,10 +203,23 @@ const StudentChat = () => {
   }, [isEncryptionReady, chatError]);
 
   useEffect(() => {
-    if ((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight) {
+    setHasLoginSecureSession(hasCompletedLoginChatSecurity(user?.id));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !isEncryptionReady) return;
+    markLoginChatSecurityComplete(user.id);
+    setHasLoginSecureSession(true);
+  }, [isEncryptionReady, user?.id]);
+
+  useEffect(() => {
+    if (
+      (location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight &&
+      !hasLoginSecureSession
+    ) {
       setIsEntryPreflightActive(true);
     }
-  }, [location.state]);
+  }, [hasLoginSecureSession, location.state]);
 
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
@@ -250,7 +270,7 @@ const StudentChat = () => {
 
   // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
   useEffect(() => {
-    if (!sessionId || isEncryptionReady || chatError) {
+    if (!sessionId || hasLoginSecureSession || isEncryptionReady || chatError) {
       setEncryptionTimedOut(false);
       return;
     }
@@ -261,11 +281,11 @@ const StudentChat = () => {
       }
     }, 15000);
     return () => window.clearTimeout(timer);
-  }, [sessionId, isEncryptionReady, chatError]);
+  }, [sessionId, hasLoginSecureSession, isEncryptionReady, chatError]);
 
   useEffect(() => {
     if (!isEntryPreflightActive) return;
-    if ((!activeSession && !isSessionsLoading) || isEncryptionReady || chatError || encryptionTimedOut) {
+    if ((!activeSession && !isSessionsLoading) || hasLoginSecureSession || isEncryptionReady || chatError || encryptionTimedOut) {
       setIsEntryPreflightActive(false);
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     }
@@ -273,6 +293,7 @@ const StudentChat = () => {
     activeSession,
     chatError,
     encryptionTimedOut,
+    hasLoginSecureSession,
     isEncryptionReady,
     isEntryPreflightActive,
     isSessionsLoading,
@@ -565,6 +586,7 @@ const StudentChat = () => {
     : isSavingProfileAnonymous;
   const showEntryPreflight =
     isEntryPreflightActive &&
+    !hasLoginSecureSession &&
     !chatError &&
     !encryptionTimedOut &&
     (isSessionsLoading || (Boolean(activeSession) && !isEncryptionReady));
@@ -633,7 +655,7 @@ const StudentChat = () => {
               ) : (
               <>
               {/* Handshake Indicator - non-blocking inline banner */}
-              {activeSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
+              {activeSession && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                 <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your chat…</span>
@@ -641,7 +663,7 @@ const StudentChat = () => {
               )}
 
               {/* Encryption Timeout Fallback */}
-              {activeSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
+              {activeSession && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
                 <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                   <span className="text-xs font-bold uppercase tracking-widest text-amber-700">Connection is taking longer than expected</span>
@@ -712,7 +734,7 @@ const StudentChat = () => {
                               "h-2 w-2 shrink-0 rounded-full",
                               chatError
                                 ? "bg-destructive"
-                                : isEncryptionReady
+                                : isEncryptionReady || hasLoginSecureSession
                                   ? "bg-emerald-500"
                                   : encryptionTimedOut
                                     ? "bg-amber-500"
@@ -722,9 +744,9 @@ const StudentChat = () => {
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                             {chatError
                               ? "Secure chat error"
-                              : encryptionTimedOut && !isEncryptionReady
+                              : encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession
                                 ? "Encryption setup delayed"
-                                : !isEncryptionReady
+                                : !isEncryptionReady && !hasLoginSecureSession
                                   ? "Securing encryption…"
                                   : "Session active"}
                           </span>
@@ -741,7 +763,7 @@ const StudentChat = () => {
                       />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
-                        <span>{isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
+                        <span>{isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
                       </div>
                       <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}

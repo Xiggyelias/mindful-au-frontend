@@ -79,6 +79,10 @@ import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
 import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  hasCompletedLoginChatSecurity,
+  markLoginChatSecurityComplete,
+} from "@/lib/chatLoginSecurity";
 
 const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
   const t = s.trim();
@@ -275,6 +279,9 @@ const CounselorMessages = () => {
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
+  const [hasLoginSecureSession, setHasLoginSecureSession] = useState(() =>
+    hasCompletedLoginChatSecurity(user?.id)
+  );
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
 
@@ -351,10 +358,23 @@ const CounselorMessages = () => {
   }, [isEncryptionReady, chatError]);
 
   useEffect(() => {
-    if ((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight) {
+    setHasLoginSecureSession(hasCompletedLoginChatSecurity(user?.id));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !isEncryptionReady) return;
+    markLoginChatSecurityComplete(user.id);
+    setHasLoginSecureSession(true);
+  }, [isEncryptionReady, user?.id]);
+
+  useEffect(() => {
+    if (
+      (location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight &&
+      !hasLoginSecureSession
+    ) {
       setIsEntryPreflightActive(true);
     }
-  }, [location.state]);
+  }, [hasLoginSecureSession, location.state]);
 
   const {
     sendFileMessage,
@@ -743,7 +763,7 @@ const CounselorMessages = () => {
 
   // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
   useEffect(() => {
-    if (!selectedSessionId || isEncryptionReady || chatError) {
+    if (!selectedSessionId || hasLoginSecureSession || isEncryptionReady || chatError) {
       setEncryptionTimedOut(false);
       return;
     }
@@ -754,17 +774,18 @@ const CounselorMessages = () => {
       }
     }, 15000);
     return () => window.clearTimeout(timer);
-  }, [selectedSessionId, isEncryptionReady, chatError]);
+  }, [selectedSessionId, hasLoginSecureSession, isEncryptionReady, chatError]);
 
   useEffect(() => {
     if (!isEntryPreflightActive) return;
-    if ((!selectedSessionId && !isLoadingChats) || isEncryptionReady || chatError || encryptionTimedOut) {
+    if ((!selectedSessionId && !isLoadingChats) || hasLoginSecureSession || isEncryptionReady || chatError || encryptionTimedOut) {
       setIsEntryPreflightActive(false);
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     }
   }, [
     chatError,
     encryptionTimedOut,
+    hasLoginSecureSession,
     isEncryptionReady,
     isEntryPreflightActive,
     isLoadingChats,
@@ -1020,6 +1041,7 @@ const CounselorMessages = () => {
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
   const showEntryPreflight =
     isEntryPreflightActive &&
+    !hasLoginSecureSession &&
     !chatError &&
     !encryptionTimedOut &&
     (isLoadingChats || (Boolean(selectedSessionId) && !isEncryptionReady));
@@ -1309,10 +1331,10 @@ const CounselorMessages = () => {
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                           <Shield className="h-3 w-3 shrink-0" />
                           <span className="whitespace-nowrap">
-                            {isEncryptionReady ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing…"}
+                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing…"}
                           </span>
                         </div>
-                        {encryptionTimedOut && !isEncryptionReady && (
+                        {encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1408,13 +1430,13 @@ const CounselorMessages = () => {
                 ) : (
                 <>
                 {/* Mobile encryption status banner */}
-                {selectedSessionId && !isEncryptionReady && !chatError && !encryptionTimedOut && (
+                {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin text-primary" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securing…</span>
                   </div>
                 )}
-                {selectedSessionId && !isEncryptionReady && !chatError && encryptionTimedOut && (
+                {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-2">
                     <AlertTriangle className="h-3 w-3 text-amber-600" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Connection timeout</span>

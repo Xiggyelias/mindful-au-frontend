@@ -137,6 +137,19 @@ const getSessionKeyStorageKey = (sessionId: string, userA: number, userB: number
 const getPeerKeyStorageKey = (sessionId: string, peerId: number) =>
   `${PEER_KEY_PREFIX}${sessionId}_${peerId}`;
 
+type RuntimeEncryptionContext = {
+  key: CryptoKey;
+  keyString: string;
+  peerId: number;
+  storageKey: string;
+  peerPublicKey: CryptoKey | null;
+};
+
+const runtimeEncryptionContexts = new Map<string, RuntimeEncryptionContext>();
+
+const getRuntimeEncryptionContextKey = (sessionId: string, userId: string | number) =>
+  `${sessionId}:${userId}`;
+
 const isTimeoutError = (error: unknown): boolean => {
   const code = (error as { code?: unknown })?.code;
   if (code === 'ECONNABORTED') {
@@ -542,8 +555,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     encryptionKeyRef.current = generatedKey;
     keyStringRef.current = generatedKeyString;
     await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
+    runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
+      key: generatedKey,
+      keyString: generatedKeyString,
+      peerId: peerIdRef.current,
+      storageKey: sessionKeyStorageKeyRef.current,
+      peerPublicKey: peerPublicKeyRef.current,
+    });
     setIsEncryptionReady(true);
-  }, [isSessionKeyInitiator]);
+  }, [isSessionKeyInitiator, sessionId, userId]);
 
   const sendSessionKeyEnvelope = useCallback(
     async (targetUserId: number) => {
@@ -589,10 +609,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
       hasSentPublicKeyRef.current = false;
       hasSentSessionKeyRef.current = false;
-      encryptionKeyRef.current = null;
-      keyStringRef.current = null;
-      sessionKeyStorageKeyRef.current = null;
-      setIsEncryptionReady(false);
 
       const session = (await api.getSession(sessionId)) as Session | null | undefined;
       // Anonymous sessions mask student_id in JSON for counselors; backend sends chat_peer_student_id for E2E.
@@ -654,7 +670,27 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId));
         }
 
-        storedKey = await loadPersistedSessionKey(activeSessionStorageKey);
+        const runtimeContext = runtimeEncryptionContexts.get(
+          getRuntimeEncryptionContextKey(sessionId, userId)
+        );
+        if (
+          runtimeContext &&
+          runtimeContext.peerId === peerIdRef.current &&
+          runtimeContext.storageKey === activeSessionStorageKey
+        ) {
+          encryptionKeyRef.current = runtimeContext.key;
+          keyStringRef.current = runtimeContext.keyString;
+          peerPublicKeyRef.current = runtimeContext.peerPublicKey;
+          storedKey = runtimeContext.keyString;
+          setIsEncryptionReady(true);
+        } else {
+          encryptionKeyRef.current = null;
+          keyStringRef.current = null;
+          peerPublicKeyRef.current = null;
+          setIsEncryptionReady(false);
+          storedKey = await loadPersistedSessionKey(activeSessionStorageKey);
+        }
+
         const isPeerParticipant =
           (peerCounselorId === numericUserId && assignedRole === 'peer_counselor') ||
           (
@@ -677,9 +713,18 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
 
         if (storedKey) {
-          encryptionKeyRef.current = await importKey(storedKey);
+          if (!encryptionKeyRef.current || keyStringRef.current !== storedKey) {
+            encryptionKeyRef.current = await importKey(storedKey);
+          }
           keyStringRef.current = storedKey;
           await persistSessionKey(activeSessionStorageKey, storedKey);
+          runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
+            key: encryptionKeyRef.current,
+            keyString: storedKey,
+            peerId: peerIdRef.current,
+            storageKey: activeSessionStorageKey,
+            peerPublicKey: peerPublicKeyRef.current,
+          });
           setIsEncryptionReady(true);
         }
 
@@ -696,6 +741,16 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         } else {
           peerPublicKeyRef.current = null;
         }
+
+        if (encryptionKeyRef.current && keyStringRef.current && sessionKeyStorageKeyRef.current) {
+          runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
+            key: encryptionKeyRef.current,
+            keyString: keyStringRef.current,
+            peerId: peerIdRef.current,
+            storageKey: sessionKeyStorageKeyRef.current,
+            peerPublicKey: peerPublicKeyRef.current,
+          });
+        }
       }
 
       // Both initiator and non-initiator need a session key so the UI is not stuck
@@ -708,7 +763,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       }
 
       const targetPeerId = peerIdRef.current;
-      await sendPublicKeyEnvelope(targetPeerId ?? undefined);
+      const shouldRefreshHandshake = !storedKey || !peerPublicKeyRef.current;
+      if (shouldRefreshHandshake) {
+        await sendPublicKeyEnvelope(targetPeerId ?? undefined);
+      }
 
       // If we already know the peer key from cache, complete handshake immediately
       // so first outbound text is not delayed waiting for another poll cycle.
@@ -729,6 +787,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     sendPublicKeyEnvelope,
     sendSessionKeyEnvelope,
     sessionId,
+    userId,
   ]);
 
   const handleEnvelope = useCallback(
@@ -844,6 +903,13 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           encryptionKeyRef.current = await importKey(decryptedKey);
           keyStringRef.current = decryptedKey;
           await persistSessionKey(sessionKeyStorageKeyRef.current, decryptedKey);
+          runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
+            key: encryptionKeyRef.current,
+            keyString: decryptedKey,
+            peerId: trustedSenderId,
+            storageKey: sessionKeyStorageKeyRef.current,
+            peerPublicKey: peerPublicKeyRef.current,
+          });
           localStorage.setItem(getSessionPeerMarkerStorageKey(sessionId), String(trustedSenderId));
           logCryptoDebug('session key unwrapped from peer envelope', {
             sessionId,
@@ -861,7 +927,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
       return false;
     },
-    [hasValidUserId, numericUserId, sendPublicKeyEnvelope, sendSessionKeyEnvelope, sessionId]
+    [hasValidUserId, numericUserId, sendPublicKeyEnvelope, sendSessionKeyEnvelope, sessionId, userId]
   );
 
   const decryptMessages = useCallback(
@@ -1596,10 +1662,22 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       return;
     }
 
-    encryptionKeyRef.current = null;
-    keyStringRef.current = null;
-    peerPublicKeyRef.current = null;
-    peerIdRef.current = null;
+    const runtimeContext = runtimeEncryptionContexts.get(
+      getRuntimeEncryptionContextKey(sessionId, userId)
+    );
+    if (runtimeContext) {
+      encryptionKeyRef.current = runtimeContext.key;
+      keyStringRef.current = runtimeContext.keyString;
+      peerPublicKeyRef.current = runtimeContext.peerPublicKey;
+      peerIdRef.current = runtimeContext.peerId;
+      sessionKeyStorageKeyRef.current = runtimeContext.storageKey;
+    } else {
+      encryptionKeyRef.current = null;
+      keyStringRef.current = null;
+      peerPublicKeyRef.current = null;
+      peerIdRef.current = null;
+      sessionKeyStorageKeyRef.current = null;
+    }
     lastMessageIdRef.current = 0;
     oldestMessageIdRef.current = 0;
     pollCountRef.current = 0;
@@ -1610,13 +1688,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     loadOlderInFlightRef.current = false;
     localTypingStateRef.current = false;
     localTypingLastSentAtRef.current = 0;
-    sessionKeyStorageKeyRef.current = null;
     clearDecryptPlaintextCache();
     setMessages([]);
     setIsLoading(true);
     setIsLoadingOlderMessages(false);
     setHasOlderMessages(true);
-    setIsEncryptionReady(false);
+    setIsEncryptionReady(Boolean(runtimeContext));
     setIsPeerTyping(false);
     let isDisposed = false;
 
@@ -1780,6 +1857,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       await deletePersistedSessionKey(getSessionKeyStorageKey(sessionId, numericUserId, peer));
     }
     await deletePersistedSessionKey(getLegacySessionKeyStorageKey(sessionId));
+    runtimeEncryptionContexts.delete(getRuntimeEncryptionContextKey(sessionId, userId));
+    encryptionKeyRef.current = null;
+    keyStringRef.current = null;
+    peerPublicKeyRef.current = null;
+    sessionKeyStorageKeyRef.current = null;
+    setIsEncryptionReady(false);
 
     isInitializedRef.current = false;
     await initializeEncryption();
@@ -1794,6 +1877,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     numericUserId,
     runHandshakeHistoryCatchup,
     sessionId,
+    userId,
   ]);
 
   return {
