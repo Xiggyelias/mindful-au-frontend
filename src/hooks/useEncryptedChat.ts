@@ -472,6 +472,30 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     [hasValidUserId, numericUserId, sessionId]
   );
 
+  const requestSessionKey = useCallback(async () => {
+    if (!sessionId || !hasValidUserId || !realtimeChannelRef.current) {
+      return;
+    }
+
+    // Only non-initiators should request session key
+    if (isSessionKeyInitiator()) {
+      return;
+    }
+
+    try {
+      await realtimeChannelRef.current.send({
+        type: 'broadcast',
+        event: 'request-session-key',
+        payload: {
+          sessionId,
+          senderId: numericUserId,
+        },
+      });
+    } catch {
+      // Best-effort session key request only.
+    }
+  }, [hasValidUserId, isSessionKeyInitiator, numericUserId, sessionId]);
+
   const notifyTyping = useCallback(
     (isTyping: boolean) => {
       if (!sessionId || !hasValidUserId) {
@@ -543,21 +567,18 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       return;
     }
 
-    // Both initiator and non-initiator generate a session key immediately so the UI is not stuck.
-    // The initiator will also encrypt and send the key to the peer.
-    // The non-initiator's locally-generated key will be replaced once the peer's
-    // encrypted session key envelope arrives (handled in handleEnvelope).
+    // Only the lower user id invents the AES key. The other party must receive it via a `kind:key` envelope;
+    // otherwise they hold a random key that can never decrypt the peer's ciphertext (shown as "unavailable").
+    if (!isSessionKeyInitiator()) {
+      return;
+    }
+
     const generatedKey = await generateEncryptionKey();
     const generatedKeyString = await exportKey(generatedKey);
 
     encryptionKeyRef.current = generatedKey;
     keyStringRef.current = generatedKeyString;
-
-    // Only the initiator persists the key; non-initiator's key is temporary until peer's arrives
-    if (isSessionKeyInitiator()) {
-      await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
-    }
-
+    await persistSessionKey(sessionKeyStorageKeyRef.current, generatedKeyString);
     runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
       key: generatedKey,
       keyString: generatedKeyString,
@@ -1604,6 +1625,24 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             const peerIsTyping = (payload as { isTyping?: unknown })?.isTyping === true;
             applyPeerTypingState(peerIsTyping);
           })
+          .on('broadcast', { event: 'request-session-key' }, ({ payload }) => {
+            const payloadSessionId = String(
+              (payload as { sessionId?: unknown })?.sessionId ?? ''
+            );
+            if (payloadSessionId !== sessionId) {
+              return;
+            }
+
+            const senderId = Number((payload as { senderId?: unknown })?.senderId ?? 0);
+            if (!Number.isFinite(senderId) || senderId === numericUserId) {
+              return;
+            }
+
+            // If we're the initiator and have a session key, send it to the requester
+            if (isSessionKeyInitiator() && encryptionKeyRef.current && keyStringRef.current && peerPublicKeyRef.current) {
+              void sendSessionKeyEnvelope(senderId);
+            }
+          })
           .subscribe();
       } catch {
         // Realtime is optional for chat sync; polling remains the fallback.
@@ -1792,6 +1831,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       await loadMessages(true);
       if (isDisposed) return;
       await runHandshakeHistoryCatchup();
+
+      // If non-initiator still doesn't have encryption key, request it from initiator via realtime
+      if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
+        void requestSessionKey();
+      }
+
       await refreshPeerTypingStatus();
       scheduleNextPoll();
       scheduleTypingPoll();
@@ -1824,8 +1869,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     detachRealtimeChannel,
     hasValidUserId,
     initializeEncryption,
+    isSessionKeyInitiator,
     loadMessages,
     refreshPeerTypingStatus,
+    requestSessionKey,
     runHandshakeHistoryCatchup,
     sessionId,
     userId,
@@ -1874,12 +1921,19 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     if (isInitializedRef.current) {
       await loadMessages(true);
       await runHandshakeHistoryCatchup();
+
+      // If non-initiator still doesn't have encryption key, request it from initiator
+      if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
+        void requestSessionKey();
+      }
     }
   }, [
     hasValidUserId,
     initializeEncryption,
+    isSessionKeyInitiator,
     loadMessages,
     numericUserId,
+    requestSessionKey,
     runHandshakeHistoryCatchup,
     sessionId,
     userId,
