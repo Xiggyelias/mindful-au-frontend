@@ -455,11 +455,12 @@ const StudentAISupport = () => {
             {/* Messages Area */}
             <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence mode="wait">
                   {messages.length === 0 && !isLoading && (
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
                       className="text-center py-10"
                     >
                       <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500/20 to-violet-500/20 mb-5">
@@ -473,7 +474,13 @@ const StudentAISupport = () => {
                   )}
 
                   {showMoodCheck && messages.length === 0 && !isLoading && (
-                    <MoodCheck onSelect={(mood) => void handleQuickPrompt(mood)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
+                    >
+                      <MoodCheck onSelect={(mood) => void handleQuickPrompt(mood)} />
+                    </motion.div>
                   )}
 
                   {messages.map((msg) =>
