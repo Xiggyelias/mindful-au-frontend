@@ -885,6 +885,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         const shouldInitiate = numericUserId < trustedSenderId;
         if (shouldInitiate) {
           await runHandshakeOutbound(() => sendSessionKeyEnvelope(trustedSenderId));
+        } else {
+          // Non-initiator: request session key via realtime if we don't have it
+          if (!encryptionKeyRef.current && realtimeChannelRef.current) {
+            void requestSessionKey();
+          }
         }
 
         return true;
@@ -951,7 +956,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
       return false;
     },
-    [hasValidUserId, numericUserId, sendPublicKeyEnvelope, sendSessionKeyEnvelope, sessionId, userId]
+    [hasValidUserId, numericUserId, requestSessionKey, sendPublicKeyEnvelope, sendSessionKeyEnvelope, sessionId, userId]
   );
 
   const decryptMessages = useCallback(
@@ -1643,7 +1648,14 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
               void sendSessionKeyEnvelope(senderId);
             }
           })
-          .subscribe();
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              // Channel is ready - request session key if non-initiator and still needs it
+              if (!isSessionKeyInitiator() && !encryptionKeyRef.current && peerIdRef.current) {
+                void requestSessionKey();
+              }
+            }
+          });
       } catch {
         // Realtime is optional for chat sync; polling remains the fallback.
       }
@@ -1659,9 +1671,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     applyPeerTypingState,
     detachRealtimeChannel,
     hasValidUserId,
+    isSessionKeyInitiator,
     loadMessages,
     numericUserId,
     removeMessageFromState,
+    requestSessionKey,
+    sendSessionKeyEnvelope,
     sessionId,
   ]);
 
@@ -1847,8 +1862,21 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     window.addEventListener('focus', onVisibilityOrFocus);
     document.addEventListener('visibilitychange', onVisibilityOrFocus);
 
+    // Periodic session key request for non-initiators (every 5 seconds, max 12 attempts = 1 minute)
+    let sessionKeyRequestAttempts = 0;
+    const maxSessionKeyRequestAttempts = 12;
+    const sessionKeyRequestInterval = window.setInterval(() => {
+      if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts) {
+        window.clearInterval(sessionKeyRequestInterval);
+        return;
+      }
+      sessionKeyRequestAttempts++;
+      void requestSessionKey();
+    }, 5000);
+
     return () => {
       isDisposed = true;
+      window.clearInterval(sessionKeyRequestInterval);
       if (pollingTimeoutRef.current !== null) {
         window.clearTimeout(pollingTimeoutRef.current);
         pollingTimeoutRef.current = null;
