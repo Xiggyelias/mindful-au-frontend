@@ -627,7 +627,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     [emitRealtimeSyncHint, ensureSessionKey, hasValidUserId, numericUserId, sessionId]
   );
 
-  const initializeEncryption = useCallback(async () => {
+  const initializeEncryption = useCallback(async (signal?: AbortSignal) => {
     if (!sessionId || !hasValidUserId) return;
 
     try {
@@ -636,7 +636,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       hasSentPublicKeyRef.current = false;
       hasSentSessionKeyRef.current = false;
 
-      const session = (await api.getSession(sessionId)) as Session | null | undefined;
+      const session = (await api.getSession(sessionId, { signal })) as Session | null | undefined;
       // Anonymous sessions mask student_id in JSON for counselors; backend sends chat_peer_student_id for E2E.
       const studentId = Number(session?.chat_peer_student_id ?? session?.student_id);
       const counselorId = Number(session?.counselor_id);
@@ -1054,16 +1054,21 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   );
 
   const loadMessages = useCallback(
-    async (forceInitial = false) => {
+    async (forceInitial = false, signal?: AbortSignal) => {
       if (!sessionId) {
         setIsLoading(false);
         setIsLoadingOlderMessages(false);
         setHasOlderMessages(false);
         return;
       }
-      if (loadInFlightRef.current) return;
+      if (loadInFlightRef.current) {
+        // If we're already loading but this was a forceInitial call, 
+        // we might need to ensure the loading state is eventually cleared.
+        if (!forceInitial) return;
+      }
 
       loadInFlightRef.current = true;
+      if (forceInitial) setIsLoading(true);
 
       try {
         const shouldReloadAll =
@@ -1078,6 +1083,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             limit: requestLimit,
             timeout_ms: timeoutMs,
             mark_read: shouldReloadAll,
+            signal,
           });
 
         const maxFetchAttempts = pollCountRef.current === 0 && shouldReloadAll ? 3 : 1;
@@ -1818,13 +1824,14 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       }, TYPING_POLL_INTERVAL_MS);
     };
 
-    const bootstrap = async () => {
+    const bootstrap = async (signal: AbortSignal) => {
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
       
       try {
-        await initializeEncryption();
-        if (isDisposed) return;
+        console.log(`[chat:${sessionId}] Starting bootstrap...`);
+        await initializeEncryption(signal);
+        if (isDisposed || signal.aborted) return;
 
         const cachedMessages = normalizeMessagePayload(
           await loadPreloadedSessionMessages(sessionId, {
@@ -1859,7 +1866,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
         // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
         // POST to shave one round-trip on open (important on high-latency links).
-        await loadMessages(true);
+        await loadMessages(true, signal);
         if (isDisposed) return;
         await runHandshakeHistoryCatchup();
 
@@ -1882,16 +1889,17 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       }
     };
 
-    // Loading timeout recovery - if loading takes more than 15 seconds, show error
+    const controller = new AbortController();
     const loadingTimeoutId = window.setTimeout(() => {
-      if (!isDisposed && isInitializedRef.current === false) {
-        console.warn('[useEncryptedChat] Loading timeout - showing retry option');
-        setError('Conversation is taking too long to load. Please try again.');
+      if (!isDisposed && (isInitializedRef.current === false || isLoading)) {
+        console.warn('[useEncryptedChat] Loading timeout - recovering state');
+        setError('Conversation is taking a bit longer to load...');
         setIsLoading(false);
+        loadInFlightRef.current = false;
       }
-    }, 15000);
+    }, 12000);
 
-    void bootstrap().finally(() => {
+    void bootstrap(controller.signal).finally(() => {
       window.clearTimeout(loadingTimeoutId);
     });
     window.addEventListener('focus', onVisibilityOrFocus);

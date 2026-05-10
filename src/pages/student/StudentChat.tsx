@@ -778,7 +778,7 @@ const StudentChat = () => {
                   <MessageList
                     conversationKey={String(sessionId ?? "")}
                     messages={messages}
-                    isLoading={messagesLoading && isEncryptionReady}
+                    isLoading={messagesLoading || (!isEncryptionReady && !chatError)}
                     isLoadingOlderMessages={isLoadingOlderMessages}
                     hasOlderMessages={hasOlderMessages}
                     isAtBottom={isAtBottom}

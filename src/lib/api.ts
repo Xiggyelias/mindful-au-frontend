@@ -888,6 +888,7 @@ class ApiClient {
     page?: number;
     per_page?: number;
     timeout_ms?: number;
+    signal?: AbortSignal;
   }) {
     const queryParams: Record<string, unknown> = {};
 
@@ -923,6 +924,7 @@ class ApiClient {
     const response = await this.client.get('/sessions', {
       params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
       timeout: timeoutMs,
+      signal: params?.signal,
     });
     return response.data;
   }
@@ -987,8 +989,15 @@ class ApiClient {
     };
   }
 
-  async getSession(id: string) {
-    const response = await this.client.get(`/sessions/${id}`);
+  async getSession(id: string, params?: { timeout_ms?: number; signal?: AbortSignal }) {
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+    const response = await this.client.get(`/sessions/${id}`, {
+      timeout: timeoutMs,
+      signal: params?.signal,
+    });
     return response.data;
   }
 
@@ -1065,6 +1074,7 @@ class ApiClient {
       timeout_ms?: number;
       /** When false, do not mark inbound messages read (e.g. notification preview decrypt). Default true. */
       mark_read?: boolean;
+      signal?: AbortSignal;
     }
   ) {
     const timeoutMs =
@@ -1083,6 +1093,7 @@ class ApiClient {
     const response = await this.client.get(`/sessions/${sessionId}/messages`, {
       params: queryParams,
       timeout: timeoutMs,
+      signal: params?.signal,
     });
     return response.data;
   }
