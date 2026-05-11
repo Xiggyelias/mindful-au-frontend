@@ -504,7 +504,7 @@ const CounselorMessages = () => {
         ) as RawSession[];
 
         console.log('[sessions] unread counts:', 
-          normalized.map(s => ({ id: s.id, unread: s.unread_count }))
+          (normalized || []).map(s => ({ id: s.id, unread: s.unread_count }))
         );
 
         const receivedPage = Number(pagedPayload?.meta?.page);
@@ -608,7 +608,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
-              unreadCount: session.id === activeSessionIdRef.current ? 0 : rowUnread,
+              unreadCount: (session.id && activeSessionIdRef.current && Number(session.id) === activeSessionIdRef.current) ? 0 : rowUnread,
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));
