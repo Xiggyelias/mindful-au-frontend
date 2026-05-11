@@ -1176,8 +1176,16 @@ class ApiClient {
 
   /** Returns a fresh signed URL for the message attachment (authorized participants only). */
   async getMessageAttachmentDownloadUrl(messageId: number | string) {
-    const response = await this.client.get(`/messages/${messageId}/attachment`);
-    return response.data as { download_url?: string; message?: unknown };
+    try {
+      const response = await this.client.get(`/messages/${messageId}/attachment`);
+      return response.data as { download_url?: string; message?: unknown };
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 404 || status === 410) {
+        return { download_url: undefined };  // graceful empty — don't crash
+      }
+      throw err;
+    }
   }
 
   /**

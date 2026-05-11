@@ -50,6 +50,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
   const messageId = Number(msg.id);
 
   const handleDownload = async () => {
+    console.log('handleDownload - messageId:', messageId, 'type:', typeof messageId, 'isValidInteger:', Number.isInteger(messageId) && messageId > 0);
     if (Number.isInteger(messageId) && messageId > 0) {
       setDownloading(true);
       try {
@@ -61,7 +62,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
           if (fallbackUrl) {
             window.open(fallbackUrl, "_blank", "noopener,noreferrer");
           } else {
-            toast.error("Could not download file");
+            toast.error("This file is no longer available on the server.");
           }
         }
       } finally {
@@ -80,6 +81,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
   };
 
   const handleImageError = async () => {
+    console.log('handleImageError - messageId:', messageId, 'type:', typeof messageId, 'isValidInteger:', Number.isInteger(messageId) && messageId > 0);
     if (!Number.isInteger(messageId) || messageId <= 0) {
       setImageLoadFailed(true);
       return;
