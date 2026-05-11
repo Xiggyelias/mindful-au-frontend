@@ -59,7 +59,7 @@ type PagedMeta = {
   total_pages?: number;
 };
 type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
-const APPOINTMENTS_PAGE_SIZE = 16;
+const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 
 const CounselorAppointments = () => {

@@ -58,7 +58,7 @@ type PagedMeta = {
 };
 
 type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
-const APPOINTMENTS_PAGE_SIZE = 12;
+const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
 const MIN_APPOINTMENT_DURATION_MINUTES = 15;
