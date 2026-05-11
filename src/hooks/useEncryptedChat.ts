@@ -746,6 +746,36 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           peerPublicKeyRef.current = null;
           setIsEncryptionReady(false);
           storedKey = await loadPersistedSessionKey(activeSessionStorageKey);
+          
+          // If we found a stored key, set it immediately so messages can start decrypting
+          // while the handshake runs in the background
+          if (storedKey) {
+            try {
+              const importedKey = await importKey(storedKey);
+              encryptionKeyRef.current = importedKey;
+              keyStringRef.current = storedKey;
+              sessionKeyStorageKeyRef.current = activeSessionStorageKey;
+              setIsEncryptionReady(true);
+              setError(null);
+              
+              // Store in runtime cache for immediate access
+              runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
+                key: importedKey,
+                keyString: storedKey,
+                peerId: peerIdRef.current,
+                storageKey: activeSessionStorageKey,
+                peerPublicKey: peerPublicKeyRef.current,
+              });
+              
+              logCryptoDebug('session key loaded from storage before handshake', {
+                sessionId,
+                storageKeySuffix: peerIdRef.current || 'legacy',
+              });
+            } catch (err) {
+              console.warn('Failed to import stored session key:', err);
+              // Continue with handshake if stored key is corrupted
+            }
+          }
         }
 
         const isPeerParticipant =
@@ -997,6 +1027,32 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           });
           setIsEncryptionReady(true);
           setError(null);
+          
+          // Immediately decrypt all messages that were waiting for the key
+          setMessages(prev => prev.map(m => 
+            m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
+          ));
+          
+          // Trigger immediate re-decryption of all pending messages
+          setTimeout(async () => {
+            const pendingMessages = messages.filter(m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting');
+            if (pendingMessages.length > 0) {
+              const rawMessages: RawMessage[] = pendingMessages.map(m => ({
+                id: m.id,
+                content: m.content,
+                sender_id: m.sender_id,
+                recipient_id: m.recipient_id,
+                created_at: m.created_at,
+                updated_at: m.updated_at,
+                message_type: m.message_type,
+                file_url: m.file_url,
+                is_encrypted: m.is_encrypted,
+                seen_at: m.seen_at,
+                delivered_at: m.delivered_at,
+              }));
+              await decryptMessages(rawMessages);
+            }
+          }, 0);
           hasUndecryptedMessagesRef.current = true;
         } catch {
           return true;
@@ -1368,23 +1424,107 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     if (encryptionKeyRef.current) return;
     if (isSessionKeyInitiator()) return;
 
-    const maxPages = 50;
-    for (let i = 0; i < maxPages; i++) {
+    const MAX_PAGES = 50;
+    const BATCH = 5;
+    
+    // Helper function to fetch a specific page and check for key envelope
+    const fetchHistoryPage = async (pageNum: number): Promise<{ found: boolean; messages: RawMessage[] }> => {
+      try {
+        const beforeId = pageNum === 1 ? undefined : oldestMessageIdRef.current;
+        const data = (await api.getMessages(sessionId, {
+          before_id: beforeId,
+          limit: MESSAGE_POLL_TIMEOUT_MS === 5000 ? 50 : 25, // Use appropriate limit
+          timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
+        })) as RawMessage[];
+        
+        // Check if this page contains a kind:key envelope
+        for (const message of data) {
+          const envelope = parseEnvelope(message.content);
+          if (envelope && envelope.kind === 'key') {
+            await handleEnvelope(message);
+            return { found: true, messages: data };
+          }
+        }
+        
+        return { found: false, messages: data };
+      } catch (err) {
+        console.warn(`[runHandshakeHistoryCatchup] Failed to fetch page ${pageNum}:`, err);
+        return { found: false, messages: [] };
+      }
+    };
+
+    // Fetch pages in parallel batches
+    for (let start = 0; start < MAX_PAGES; start += BATCH) {
       if (encryptionKeyRef.current) break;
       if (oldestMessageIdRef.current <= 0) break;
-      const gotMore = await loadOlderMessages({ force: true });
-      if (!gotMore) break;
+      
+      const pageNums = Array.from({ length: BATCH }, (_, i) => start + i + 1);
+      const results = await Promise.all(pageNums.map(page => fetchHistoryPage(page)));
+      
+      const found = results.find(r => r.found);
+      if (found) {
+        // Add the messages from the found page to the state
+        if (found.messages.length > 0) {
+          await decryptMessages(found.messages);
+        }
+        break;
+      }
+      
+      // If no pages in this batch had messages, stop
+      if (results.every(r => r.messages.length === 0)) {
+        break;
+      }
     }
 
     if (encryptionKeyRef.current) {
       setIsEncryptionReady(true);
       setError(null);
     }
-  }, [isSessionKeyInitiator, loadOlderMessages, sessionId]);
+  }, [isSessionKeyInitiator, sessionId, decryptMessages, handleEnvelope]);
 
   useEffect(() => {
     messageCountRef.current = messages.length;
   }, [messages.length]);
+
+  // Key transition watcher: re-decrypt awaiting_key messages when key becomes available
+  const prevKeyRef = useRef<CryptoKey | null>(null);
+  useEffect(() => {
+    const currentKey = encryptionKeyRef.current;
+    const prevKey = prevKeyRef.current;
+    
+    // When key transitions from null -> valid CryptoKey, re-decrypt all awaiting_key messages
+    if (!prevKey && currentKey) {
+      prevKeyRef.current = currentKey;
+      
+      // Update all awaiting_key messages to decrypting state
+      setMessages(prev => prev.map(m => 
+        m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
+      ));
+      
+      // Trigger immediate re-decryption
+      setTimeout(async () => {
+        const awaitingKeyMessages = messages.filter(m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting');
+        if (awaitingKeyMessages.length > 0) {
+          const rawMessages: RawMessage[] = awaitingKeyMessages.map(m => ({
+            id: m.id,
+            content: m.content,
+            sender_id: m.sender_id,
+            recipient_id: m.recipient_id,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+            message_type: m.message_type,
+            file_url: m.file_url,
+            is_encrypted: m.is_encrypted,
+            seen_at: m.seen_at,
+            delivered_at: m.delivered_at,
+          }));
+          await decryptMessages(rawMessages);
+        }
+      }, 0);
+    } else if (currentKey) {
+      prevKeyRef.current = currentKey;
+    }
+  }, [messages, decryptMessages]);
 
   const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
     lastActiveAtRef.current = Date.now();
