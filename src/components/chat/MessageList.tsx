@@ -55,6 +55,11 @@ const MessageBubble = React.memo(
         return <ChatAttachmentView message={msg} isOutgoing={isMe} />;
       }
 
+      // Add shimmer for decrypting messages
+      if (msg.is_encrypted === true && !msg.decryptedContent && msg.e2eVisual === "decrypting") {
+        return <div className="h-4 w-48 rounded bg-white/10 animate-pulse" />;
+      }
+
       const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
       if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
         return (

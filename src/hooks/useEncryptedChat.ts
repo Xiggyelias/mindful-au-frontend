@@ -1850,42 +1850,42 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       
       try {
         console.log(`[chat:${sessionId}] Starting bootstrap...`);
-        await initializeEncryption(signal);
-        if (isDisposed || signal.aborted) return;
-
-        const cachedMessages = normalizeMessagePayload(
-          await loadPreloadedSessionMessages(sessionId, {
+        
+        // Run initializeEncryption and loadPreloadedSessionMessages in parallel
+        const [_, cachedMessages] = await Promise.all([
+          initializeEncryption(signal),
+          loadPreloadedSessionMessages(sessionId, {
             expectedOwnerUserId: userId,
             expectedKeyScope: sessionKeyStorageKeyRef.current,
           })
-        );
+        ]);
+        
+        if (isDisposed || signal.aborted) return;
+
+        const normalizedCachedMessages = normalizeMessagePayload(cachedMessages);
         const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
         if (!isDisposed && cachedTyping) {
           applyPeerTypingState(cachedTyping.isPeerTyping === true);
         }
-        if (!isDisposed && cachedMessages.length > 0) {
-          const decryptedCached = await decryptMessages(cachedMessages);
+        
+        // Show UI immediately when cached messages are available
+        if (!isDisposed && normalizedCachedMessages.length > 0) {
+          const decryptedCached = await decryptMessages(normalizedCachedMessages);
           if (!isDisposed && decryptedCached.length > 0) {
             warmHydrateHit = true;
-            setMessages((previous) => {
-              const merged = new Map<number, ChatMessage>();
-              for (const msg of previous) merged.set(msg.id, msg);
-              for (const msg of decryptedCached) merged.set(msg.id, msg);
-              return sortAndTrimMessages(Array.from(merged.values()));
-            });
+            setMessages(decryptedCached);
+            setIsLoading(false);
             const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
             const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
             if (maxId > 0) lastMessageIdRef.current = maxId;
             if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
               oldestMessageIdRef.current = minId;
             }
-            setIsLoading(false);
           }
         }
         recordWarmHydrateResult(warmHydrateHit);
 
-        // First `loadMessages(true)` already marks inbound read (`mark_read` default). Skip extra
-        // POST to shave one round-trip on open (important on high-latency links).
+        // Load fresh messages after both init and cached messages are done
         await loadMessages(true, signal);
         if (isDisposed) return;
         await runHandshakeHistoryCatchup();
