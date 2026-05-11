@@ -13,6 +13,7 @@ const TRANSIENT_STATUS_CODES = new Set([429, 502, 503, 504]);
 const NETWORK_ERROR_CODES = new Set([
   'ERR_NETWORK',
   'ERR_NETWORK_CHANGED',
+  'ERR_FAILED',
   'ENOTFOUND',
   'ECONNREFUSED',
   'ECONNRESET',
@@ -173,6 +174,14 @@ const extractResponseMessage = (error: unknown): string | null => {
   }
 
   const payload = data as { message?: unknown; errors?: unknown };
+
+  // Laravel 422: field messages are authoritative; top-level message is often only
+  // "The given data was invalid." which hides the real reason (e.g. scheduled_at).
+  const fromErrors = flattenLaravelValidationErrors(payload.errors);
+  if (fromErrors) {
+    return fromErrors;
+  }
+
   const responseMessage = payload.message;
 
   if (typeof responseMessage === 'string' && responseMessage.trim() !== '') {
@@ -189,7 +198,7 @@ const extractResponseMessage = (error: unknown): string | null => {
     }
   }
 
-  return flattenLaravelValidationErrors(payload.errors);
+  return null;
 };
 
 export const isApiNetworkError = (error: unknown): boolean => {

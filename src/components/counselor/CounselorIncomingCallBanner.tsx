@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { effectiveWebRtcCallMode } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
@@ -72,7 +73,7 @@ export function CounselorIncomingCallBanner({
       stopCallRingtone();
       return;
     }
-    const wantsVideo = calls.some((c) => c.call_type !== "audio");
+    const wantsVideo = calls.some((c) => effectiveWebRtcCallMode(c) === "video");
     startCallRingtone(wantsVideo ? "video" : "audio");
   }, [enabled, calls]);
 
@@ -207,7 +208,7 @@ export function CounselorIncomingCallBanner({
       const params = new URLSearchParams({
         appointment_id: String(call.appointment_id),
         autostart: "1",
-        mode: call.call_type === "audio" ? "audio" : "video",
+        mode: effectiveWebRtcCallMode(call),
       });
       navigate(`/counselor/video?${params.toString()}`);
     } catch (e) {
@@ -252,7 +253,7 @@ export function CounselorIncomingCallBanner({
             call.scheduled_at && !Number.isNaN(new Date(call.scheduled_at).getTime())
               ? formatInDisplayZone(new Date(call.scheduled_at), "EEE, MMM d · h:mm a")
               : null;
-          const isVideo = call.call_type !== "audio";
+          const isVideo = effectiveWebRtcCallMode(call) === "video";
           const callAnonymous = isAnonymousSessionFlag(call.is_anonymous);
           return (
             <div

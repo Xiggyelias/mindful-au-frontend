@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage, isApiNetworkError } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { tryDecryptChatNotificationPreview } from "@/lib/notificationChatDecrypt";
@@ -246,14 +246,10 @@ export const useNotifications = () => {
           setUnreadCount(normalized.unreadCount);
           setError(null);
         } catch (err: unknown) {
-          const message =
-            isRecord(err) &&
-            isRecord(err.response) &&
-            isRecord(err.response.data) &&
-            typeof err.response.data.message === "string"
-              ? err.response.data.message
-              : "Failed to load notifications";
-          setError(message);
+          const fallback = isApiNetworkError(err)
+            ? "Could not reach the server (network or TLS). Check your connection, VPN, or try again shortly."
+            : "Failed to load notifications";
+          setError(getApiErrorMessage(err, fallback));
         } finally {
           lastLoadAtRef.current = Date.now();
           if (!silent) {

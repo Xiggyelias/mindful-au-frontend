@@ -33,15 +33,18 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
-import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousIdentityMaskedFromViewer,
+} from "@/lib/anonymousMode";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
   getVideoCallWindowStatus,
   isAppointmentAudioOnly,
   isVideoEnabledAppointment,
+  effectiveWebRtcCallMode,
   normalizeVideoCallDuration,
-  prefersAudioOnlyOnlineCall,
   getAppointmentWhereLabel,
 } from "@/lib/videoCall";
 import { toast } from "sonner";
@@ -291,24 +294,16 @@ const CounselorVideo = () => {
   };
 
   const requestedMode = useMemo((): "video" | "audio" => {
-    if (activeSession && isAppointmentAudioOnly(activeSession)) {
-      return "audio";
-    }
     const rawMode = searchParams.get("mode");
     if (rawMode === "audio") {
       return "audio";
     }
     if (rawMode === "video") {
-      return "video";
+      return activeSession && effectiveWebRtcCallMode(activeSession) === "audio"
+        ? "audio"
+        : "video";
     }
-    if (
-      activeSession?.notes &&
-      isVideoEnabledAppointment(activeSession.notes) &&
-      prefersAudioOnlyOnlineCall(activeSession.notes)
-    ) {
-      return "audio";
-    }
-    return "video";
+    return activeSession ? effectiveWebRtcCallMode(activeSession) : "video";
   }, [searchParams, activeSession]);
 
   useEffect(() => {
@@ -591,7 +586,7 @@ const CounselorVideo = () => {
   }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeSession && isAnonymousSessionFlag(activeSession.is_anonymous) && !activeSession.identity_visible_to_viewer) {
+    if (activeSession && isAnonymousIdentityMaskedFromViewer(activeSession)) {
       return anonymousLabelForCounselor();
     }
     return getParticipantName(activeSession?.student, "Student");
@@ -1115,7 +1110,7 @@ const CounselorVideo = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">
-                                {isAnonymousSessionFlag(session.is_anonymous) && !session.identity_visible_to_viewer
+                                {isAnonymousIdentityMaskedFromViewer(session)
                                   ? anonymousLabelForCounselor()
                                   : getParticipantName(
                                       session.student,
@@ -1129,7 +1124,7 @@ const CounselorVideo = () => {
                                 <MapPin className="h-3.5 w-3.5 shrink-0" />
                                 <span className="line-clamp-2">{getAppointmentWhereLabel(session.notes)}</span>
                               </p>
-                              {isAnonymousSessionFlag(session.is_anonymous) && !session.identity_visible_to_viewer && (
+                              {isAnonymousIdentityMaskedFromViewer(session) && (
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <AnonymousModeIndicator variant="badge" audience="counselor" />
                                   <span className="text-[10px] font-medium text-muted-foreground">

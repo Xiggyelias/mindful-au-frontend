@@ -72,6 +72,12 @@ function normalizeDurationMinutes(value: number): number {
   );
 }
 
+/** Value for `<input type="datetime-local" min=…>` in the user's local timezone (no `Z`). */
+function toDatetimeLocalInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function isHttpServerError(error: unknown): boolean {
   const status = Number((error as { response?: { status?: unknown } })?.response?.status ?? 0);
   return Number.isFinite(status) && status >= 500;
@@ -89,6 +95,7 @@ const StudentAppointments = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
+  const [bookDialogMinLocal, setBookDialogMinLocal] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
@@ -409,6 +416,13 @@ const StudentAppointments = () => {
       return { ...prev, counselor_id: String(availableCounselors[0].id) };
     });
   }, [availableCounselors, openDialog]);
+
+  useEffect(() => {
+    if (!openDialog) {
+      return;
+    }
+    setBookDialogMinLocal(toDatetimeLocalInputValue(new Date()));
+  }, [openDialog]);
 
   useEffect(() => {
     if (!user || !openDialog) {
@@ -852,6 +866,7 @@ const StudentAppointments = () => {
                     <Label>Date & Time</Label>
                     <Input
                       type="datetime-local"
+                      min={bookDialogMinLocal || undefined}
                       value={form.scheduled_at}
                       onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
                     />

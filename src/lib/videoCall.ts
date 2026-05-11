@@ -146,14 +146,18 @@ export const prefersAudioOnlyOnlineCall = (notes?: string | null): boolean => {
   return (notes || "").trim().toLowerCase().startsWith("online audio");
 };
 
-/** Audio-only WebRTC for this appointment (anonymous bookings, explicit call_type, or legacy notes). */
+/**
+ * Audio-only WebRTC for this appointment: explicit `call_type` audio, legacy "Online audio" notes,
+ * or **anonymous online** bookings (matches Laravel: anonymous + non-physical ⇒ audio-only).
+ * Anonymous **in-person** rows are not forced to audio here.
+ */
 export const isAppointmentAudioOnly = (
   apt?: { is_anonymous?: boolean; call_type?: string | null; notes?: string | null } | null
 ): boolean => {
   if (!apt) {
     return false;
   }
-  if (isAnonymousSessionFlag(apt.is_anonymous)) {
+  if (isAnonymousSessionFlag(apt.is_anonymous) && isVideoEnabledAppointment(apt.notes)) {
     return true;
   }
   if (String(apt.call_type || "").toLowerCase() === "audio") {
@@ -161,6 +165,24 @@ export const isAppointmentAudioOnly = (
   }
   return prefersAudioOnlyOnlineCall(apt.notes);
 };
+
+export type AppointmentCallMediaInput = {
+  is_anonymous?: unknown;
+  call_type?: string | null;
+  notes?: string | null;
+};
+
+/**
+ * Single entry for navigation / ringtone / icons: never treat anonymous online (or other audio-only rows) as video.
+ */
+export function effectiveWebRtcCallMode(
+  row: AppointmentCallMediaInput | null | undefined
+): "audio" | "video" {
+  if (!row || isAppointmentAudioOnly(row)) {
+    return "audio";
+  }
+  return String(row.call_type || "").toLowerCase() === "audio" ? "audio" : "video";
+}
 
 export function describeOnlineAppointmentFormat(
   notes?: string | null

@@ -41,12 +41,16 @@ import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
   isAppointmentAudioOnly,
+  effectiveWebRtcCallMode,
   normalizeVideoCallDuration,
-  prefersAudioOnlyOnlineCall,
   getAppointmentWhereLabel,
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
-import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import {
+  isAnonymousIdentityMaskedFromViewer,
+  isAnonymousSessionFlag,
+  isProfileAnonymousMode,
+} from "@/lib/anonymousMode";
 import {
   confirmProfileAnonymousModeTransition,
   getProfileAnonymousModeSuccessTitle,
@@ -272,25 +276,23 @@ const StudentVideoCall = () => {
     [activeAppointment]
   );
 
+  /** PIP / session chrome: only the *appointment* is authoritative, not profile default (fixes stale "Anonymous" after turning profile off). */
+  const activeAppointmentAnonymousBooking = useMemo(
+    () => isAnonymousSessionFlag(activeAppointment?.is_anonymous),
+    [activeAppointment]
+  );
+
   const requestedMode: CallMode = useMemo(() => {
-    if (activeAppointment && isAppointmentAudioOnly(activeAppointment)) {
-      return "audio";
-    }
     const rawMode = searchParams.get("mode");
     if (rawMode === "audio") {
       return "audio";
     }
     if (rawMode === "video") {
-      return "video";
+      return activeAppointment && effectiveWebRtcCallMode(activeAppointment) === "audio"
+        ? "audio"
+        : "video";
     }
-    if (
-      activeAppointment?.notes &&
-      isVideoEnabledAppointment(activeAppointment.notes) &&
-      prefersAudioOnlyOnlineCall(activeAppointment.notes)
-    ) {
-      return "audio";
-    }
-    return "video";
+    return activeAppointment ? effectiveWebRtcCallMode(activeAppointment) : "video";
   }, [searchParams, activeAppointment]);
 
   useEffect(() => {
@@ -321,7 +323,7 @@ const StudentVideoCall = () => {
   }, [activeAppointment]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && !activeAppointment.identity_visible_to_viewer) {
+    if (activeAppointment && isAnonymousIdentityMaskedFromViewer(activeAppointment)) {
       return "Counselor (Private Session)";
     }
     return getParticipantName(activeAppointment?.counselor, "Counselor");
@@ -596,8 +598,12 @@ const StudentVideoCall = () => {
   );
 
   const handleStartCall = useCallback(async () => {
+    if (activeAppointment && isAppointmentAudioOnly(activeAppointment)) {
+      toast.message("This session is audio-only (anonymous or audio booking). Use Start audio call.");
+      return;
+    }
     await beginCall("video");
-  }, [beginCall]);
+  }, [activeAppointment, beginCall]);
 
   const handleStartAudioCall = useCallback(async () => {
     await beginCall("audio");
@@ -932,7 +938,7 @@ const StudentVideoCall = () => {
                                 <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
                               </div>
                             )}
-                            {activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && !activeAppointment.identity_visible_to_viewer && (
+                            {activeAppointment && isAnonymousIdentityMaskedFromViewer(activeAppointment) && (
                               <div className="flex flex-wrap gap-2 pt-1">
                                 <AnonymousModeIndicator variant="badge" />
                                 <Badge
@@ -961,7 +967,7 @@ const StudentVideoCall = () => {
 
                         <div className="absolute right-4 top-24 z-20 w-32 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-44">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
-                            {profileAnonymousMode ? "You (Anonymous)" : "You"}
+                            {activeAppointmentAnonymousBooking ? "You (Anonymous)" : "You"}
                             {localSpeaking ? " • speaking" : ""}
                           </div>
 
@@ -1153,6 +1159,11 @@ const StudentVideoCall = () => {
                   <p className="text-sm text-muted-foreground line-clamp-2">
                     Pick the session you want to open. The main panel updates like a live call room.
                   </p>
+                  {activeAppointment && activeAppointmentAnonymousBooking && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400/90">
+                      Anonymous online bookings are audio-only (no video). Your profile default does not change this session.
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3 p-4 pt-0">
                   {isLoading ? (

@@ -79,7 +79,11 @@ import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
 import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
-import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousSessionFlag,
+  isCounselorChatListableStudentSession,
+} from "@/lib/anonymousMode";
 import {
   hasCompletedLoginChatSecurity,
   markLoginChatSecurityComplete,
@@ -567,8 +571,7 @@ const CounselorMessages = () => {
         const chatSessions = normalized
           .filter(
             (session) =>
-              session.session_type === "chat" &&
-              (isAnonymousSessionFlag(session.is_anonymous) || Number(session.student_id) > 0)
+              session.session_type === "chat" && isCounselorChatListableStudentSession(session)
           )
           .sort((a, b) => {
             const aTime = toTimestamp(a.updated_at || a.created_at);
