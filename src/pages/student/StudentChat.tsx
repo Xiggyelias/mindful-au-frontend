@@ -192,6 +192,7 @@ const StudentChat = () => {
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
+    sessions: sessions,
   });
 
   const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);

@@ -42,6 +42,7 @@ import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -276,6 +277,7 @@ const CounselorMessages = () => {
   const hasShownLoadErrorRef = useRef(false);
   const loadSessionsGenerationRef = useRef(0);
   const activeSessionIdRef = useRef<number | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
@@ -300,7 +302,7 @@ const CounselorMessages = () => {
     clearRecording,
     cleanup
   } = useVoiceRecorder();
-
+  
   // Cleanup voice recorder on unmount
   useEffect(() => {
     return cleanup;
@@ -349,6 +351,7 @@ const CounselorMessages = () => {
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
+    sessions: filteredChats,
   });
 
   const isEncryptionReadyRef = useRef(isEncryptionReady);
@@ -410,6 +413,7 @@ const CounselorMessages = () => {
     void api.markSessionInboundRead(String(id)).catch(() => {});
   }, []);
 
+  
   const loadSessions = useCallback(
     async (silent = false) => {
       if (!user?.id) return;
@@ -1044,6 +1048,35 @@ const CounselorMessages = () => {
     return formatChatFileSize(bytes);
   };
 
+  const handleRowMouseEnter = (sessionId: string | number) => {
+    if (!user?.id) return;
+    const userIdStr = user.id.toString();
+    const sidStr = String(sessionId);
+    
+    hoverTimerRef.current = setTimeout(async () => {
+      // Only preload if not already cached
+      const existing = await loadPreloadedSessionMessages(sidStr, {
+        expectedOwnerUserId: userIdStr,
+      });
+      if (!existing || existing.length === 0) {
+        const rawMessages = await api.getMessages(sidStr, {
+          limit: 40,
+          mark_read: false,
+          timeout_ms: 5000,
+        }).catch(() => null);
+        if (rawMessages?.length) {
+          await savePreloadedSessionMessages(sidStr, rawMessages, {
+            ownerUserId: userIdStr,
+          });
+        }
+      }
+    }, 200);
+  };
+
+  const handleRowMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+  };
+
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
@@ -1226,25 +1259,27 @@ const CounselorMessages = () => {
                     filteredChats.map((chat) => {
                       const isActive = selectedChat?.id === chat.id;
                       return (
-                      <div
-                        key={chat.id}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            selectConversationById(chat.id);
-                          }
-                        }}
-                        className={cn(
-                          "mx-2 my-1 cursor-pointer rounded-2xl border border-transparent px-3 py-2.5 transition-colors outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary/35",
-                          isActive
-                            ? "border-primary/20 bg-primary/[0.08] shadow-sm dark:bg-primary/10"
-                            : "hover:bg-muted/60 dark:hover:bg-muted/25"
-                        )}
-                        onClick={() => selectConversationById(chat.id)}
-                      >
-                        <div className="flex items-center gap-3">
+                        <div
+                          key={chat.id}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              selectConversationById(chat.id);
+                            }
+                          }}
+                          className={cn(
+                            "mx-2 my-1 cursor-pointer rounded-2xl border border-transparent px-3 py-2.5 transition-colors outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary/35",
+                            isActive
+                              ? "border-primary/20 bg-primary/[0.08] shadow-sm dark:bg-primary/10"
+                              : "hover:bg-muted/60 dark:hover:bg-muted/25"
+                          )}
+                          onClick={() => selectConversationById(chat.id)}
+                          onMouseEnter={() => handleRowMouseEnter(chat.id)}
+                          onMouseLeave={handleRowMouseLeave}
+                        >
+                          <div className="flex items-center gap-3">
                           <div
                             className={cn(
                               "h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background",

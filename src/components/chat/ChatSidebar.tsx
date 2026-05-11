@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { Session } from "@/hooks/useChatSession";
 import { 
   Search, 
@@ -11,6 +11,8 @@ import {
   MoreVertical,
   Plus
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -70,6 +72,35 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onNextSessionPage,
   onPrevSessionPage,
 }) => {
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRowMouseEnter = (sessionId: string) => {
+    const userId = activeSession?.student_id?.toString() || activeSession?.counselor_id?.toString();
+    if (!userId) return;
+
+    hoverTimerRef.current = setTimeout(async () => {
+      const existing = await loadPreloadedSessionMessages(sessionId, {
+        expectedOwnerUserId: userId,
+      });
+      if (!existing || existing.length === 0) {
+        const rawMessages = await api.getMessages(sessionId, {
+          limit: 40,
+          mark_read: false,
+          timeout_ms: 5000,
+        }).catch(() => null);
+        if (rawMessages?.length) {
+          await savePreloadedSessionMessages(sessionId, rawMessages, {
+            ownerUserId: userId,
+          });
+        }
+      }
+    }, 200);
+  };
+
+  const handleRowMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+  };
+
   const getInitials = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 0) return "??";
@@ -240,6 +271,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <button
                     key={`recent-${counselorId || session.id}`}
                     onClick={handleRowClick}
+                    onMouseEnter={() => handleRowMouseEnter(String(session.id))}
+                    onMouseLeave={handleRowMouseLeave}
                     className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-colors group ${
                       isActive
                         ? "bg-primary text-primary-foreground shadow-sm"

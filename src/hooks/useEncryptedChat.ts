@@ -83,6 +83,7 @@ type E2EEnvelope = E2EPublicEnvelope | E2ESessionKeyEnvelope;
 interface UseEncryptedChatProps {
   sessionId: string;
   userId: string;
+  sessions?: any[];
 }
 
 interface RealtimeBroadcastChannel {
@@ -252,7 +253,7 @@ const normalizeMessagePayload = (payload: unknown): RawMessage[] => {
   return [];
 };
 
-export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {
+export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
@@ -298,6 +299,13 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const loadInFlightRef = useRef(false);
   const loadOlderInFlightRef = useRef(false);
   const hasUndecryptedMessagesRef = useRef(false);
+
+  const getNextSessionId = useCallback((currentId: string): string | null => {
+    if (!sessions || !Array.isArray(sessions) || sessions.length < 2) return null;
+    const currentIndex = sessions.findIndex(s => String(s.id) === currentId);
+    if (currentIndex === -1 || currentIndex === sessions.length - 1) return null;
+    return String(sessions[currentIndex + 1].id);
+  }, [sessions]);
   const pollCountRef = useRef(0);
   const sessionKeyStorageKeyRef = useRef<string | null>(null);
   const realtimeClientRef = useRef<RealtimeClient | null>(null);
@@ -2089,6 +2097,23 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         // Load fresh messages after both init and cached messages are done
         await loadMessages(true, signal);
         if (isDisposed) return;
+        
+        // Optimistic preload: fetch adjacent conversation history in the background
+        const nextSessionId = getNextSessionId(sessionId);
+        if (nextSessionId) {
+          void api.getMessages(nextSessionId, {
+            limit: 40,
+            mark_read: false,
+            timeout_ms: 5000,
+          }).then(rawMessages => {
+            if (rawMessages?.length) {
+              void savePreloadedSessionMessages(nextSessionId, rawMessages, {
+                ownerUserId: userId,
+              });
+            }
+          }).catch(() => null); // Silent fallback
+        }
+
         void runHandshakeHistoryCatchup();
 
         // If non-initiator still doesn't have encryption key, request it from initiator via realtime
