@@ -1448,8 +1448,13 @@ class ApiClient {
     appointmentId: number | string,
     options?: { call_type?: "video" | "audio" }
   ) {
+    const appointmentIdNum = Number(appointmentId);
+    if (!Number.isFinite(appointmentIdNum) || appointmentIdNum <= 0) {
+      throw new Error("Invalid appointment ID");
+    }
+    
     const response = await this.client.post("/video-calls/authorize", {
-      appointment_id: Number(appointmentId),
+      appointment_id: appointmentIdNum,
       ...(options?.call_type ? { call_type: options.call_type } : {}),
     });
     return response.data;

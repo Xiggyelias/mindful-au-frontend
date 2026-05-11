@@ -55,7 +55,15 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   if (url.origin !== self.location.origin) {
-    event.respondWith(fetch(request));
+    event.respondWith(
+      fetch(request).catch(() => {
+        // Return a basic error response for cross-origin failures
+        return new Response('Service worker fetch failed', { 
+          status: 500, 
+          statusText: 'Service Worker Error' 
+        });
+      })
+    );
     return;
   }
 
@@ -84,6 +92,12 @@ self.addEventListener("fetch", (event) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return res;
+      }).catch(() => {
+        // Return a basic error response for fetch failures
+        return new Response('Service worker fetch failed', { 
+          status: 500, 
+          statusText: 'Service Worker Error' 
+        });
       });
     })
   );
