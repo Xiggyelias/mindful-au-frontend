@@ -1095,6 +1095,13 @@ class ApiClient {
       timeout: timeoutMs,
       signal: params?.signal,
     });
+    
+    if (response.status === 410) {
+      const err = new Error("Session has ended") as any;
+      err.status = 410;
+      throw err;
+    }
+    
     return response.data;
   }
 

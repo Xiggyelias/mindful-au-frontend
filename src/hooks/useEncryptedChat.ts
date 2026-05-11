@@ -260,6 +260,27 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const [isEncryptionReady, setIsEncryptionReady] = useState(false);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  
+  // Stop all retry timers when session expires
+  const stopAllRetries = useCallback(() => {
+    if (pollingTimeoutRef.current !== null) {
+      window.clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+    if (typingPollTimeoutRef.current !== null) {
+      window.clearTimeout(typingPollTimeoutRef.current);
+      typingPollTimeoutRef.current = null;
+    }
+    if (realtimeSyncTimeoutRef.current !== null) {
+      window.clearTimeout(realtimeSyncTimeoutRef.current);
+      realtimeSyncTimeoutRef.current = null;
+    }
+    if (peerTypingTimeoutRef.current !== null) {
+      window.clearTimeout(peerTypingTimeoutRef.current);
+      peerTypingTimeoutRef.current = null;
+    }
+  }, []);
   const encryptionKeyRef = useRef<CryptoKey | null>(null);
   const keyStringRef = useRef<string | null>(null);
   const deviceKeyPairRef = useRef<DeviceKeyPair | null>(null);
@@ -1239,6 +1260,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         pollCountRef.current += 1;
       } catch (err) {
         console.error('Failed to load messages:', err);
+        const status = err?.response?.status ?? err?.status;
+        
+        if (status === 410) {
+          setIsLoading(false);
+          setSessionExpired(true);
+          stopAllRetries();
+          return;
+        }
+        
         if (messageCountRef.current === 0) {
           setError(extractApiErrorMessage(err, 'Failed to load messages'));
         }
@@ -1810,14 +1840,14 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     }
 
     const onVisibilityOrFocus = () => {
-      if (!isInitializedRef.current) return;
+      if (!isInitializedRef.current || sessionExpired) return;
       if (document.visibilityState !== 'visible') return;
       void loadMessages(false);
       void refreshPeerTypingStatus();
     };
 
     const scheduleNextPoll = () => {
-      if (isDisposed || !isInitializedRef.current) return;
+      if (isDisposed || !isInitializedRef.current || sessionExpired) return;
       const now = Date.now();
       const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTypingRef.current;
       const nextInterval = shouldBoost ? ACTIVE_POLLING_INTERVAL_MS : DEFAULT_POLLING_INTERVAL_MS;
@@ -1835,7 +1865,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
 
     const scheduleTypingPoll = () => {
-      if (isDisposed || !isInitializedRef.current) return;
+      if (isDisposed || !isInitializedRef.current || sessionExpired) return;
 
       typingPollTimeoutRef.current = window.setTimeout(async () => {
         if (isDisposed || !isInitializedRef.current) return;
@@ -1906,6 +1936,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       } catch (err) {
         if (!isDisposed) {
           console.error('[useEncryptedChat] Bootstrap failed:', err);
+          const status = err?.response?.status ?? err?.status;
+          
+          if (status === 410) {
+            setIsLoading(false);
+            setSessionExpired(true);
+            stopAllRetries();
+            return;
+          }
+          
           const errorMessage = extractApiErrorMessage(err, 'Failed to load conversation');
           setError(errorMessage);
           setIsLoading(false);
@@ -1933,7 +1972,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     let sessionKeyRequestAttempts = 0;
     const maxSessionKeyRequestAttempts = 12;
     const sessionKeyRequestInterval = window.setInterval(() => {
-      if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts) {
+      if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts || sessionExpired) {
         window.clearInterval(sessionKeyRequestInterval);
         return;
       }
@@ -2042,6 +2081,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     isEncryptionReady,
     isPeerTyping,
     error,
+    sessionExpired,
     sendMessage,
     deleteMessage,
     notifyTyping,

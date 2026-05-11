@@ -14,6 +14,7 @@ import {
   Heart,
   Menu,
   ClipboardCheck,
+  Lock,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -180,6 +181,7 @@ const StudentChat = () => {
     isEncryptionReady,
     isPeerTyping,
     error: chatError,
+    sessionExpired,
     sendMessage: sendEncryptedMessage,
     deleteMessage,
     notifyTyping,
@@ -642,6 +644,14 @@ const StudentChat = () => {
 
             {/* Main Chat Area */}
             <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-secondary/5">
+              {/* Session Expired - Check FIRST before any other UI */}
+              {sessionExpired && (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground text-sm">
+                  <Lock className="w-5 h-5 opacity-50" />
+                  <p>This session has ended and is no longer available.</p>
+                </div>
+              )}
+
               {showEntryPreflight ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
