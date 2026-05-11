@@ -115,15 +115,15 @@ const INITIAL_SYNC_BATCH_LIMIT = 40;
 const MESSAGE_RETRY_BATCH_LIMIT = 20;
 const OLDER_MESSAGE_BATCH_LIMIT = 40;
 const RECEIPT_FULL_SYNC_EVERY_POLLS = 20;
-const MESSAGE_POLL_TIMEOUT_MS = 12000;
-const MESSAGE_POLL_RETRY_TIMEOUT_MS = 20000;
+const MESSAGE_POLL_TIMEOUT_MS = 5000;
+const MESSAGE_POLL_RETRY_TIMEOUT_MS = 8000;
 const REALTIME_SYNC_DEBOUNCE_MS = 75;
 const TYPING_HEARTBEAT_MS = 1300;
 const PEER_TYPING_IDLE_TIMEOUT_MS = 2400;
 const TYPING_STATUS_TIMEOUT_MS = 3200;
 const TYPING_POLL_INTERVAL_MS = 2800;
 const MAX_CLIENT_MESSAGES = 500;
-const DECRYPT_BATCH_SIZE = 8;
+const DECRYPT_BATCH_SIZE = 16;
 const E2E_VERSION = 'v1';
 const SESSION_KEY_PREFIX = 'chat_key_';
 const SESSION_KEY_V2_PREFIX = 'chat_key_v2_';
@@ -1189,7 +1189,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             signal,
           });
 
-        const maxFetchAttempts = pollCountRef.current === 0 && shouldReloadAll ? 3 : 1;
+        const maxFetchAttempts = pollCountRef.current === 0 && shouldReloadAll ? 2 : 1;
         let data: RawMessage[] = [];
 
         for (let attempt = 0; attempt < maxFetchAttempts; attempt++) {
@@ -2056,6 +2056,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         ]);
         
         if (isDisposed || signal.aborted) return;
+        
+        setIsLoading(false); // ADD THIS — unblock UI immediately
 
         const normalizedCachedMessages = normalizeMessagePayload(cachedMessages);
         const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
@@ -2064,26 +2066,26 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
         
         // Show UI immediately when cached messages are available
-        if (!isDisposed && normalizedCachedMessages.length > 0) {
-          const decryptedCached = await decryptMessages(normalizedCachedMessages);
-          if (!isDisposed && decryptedCached.length > 0) {
-            warmHydrateHit = true;
-            setMessages(decryptedCached);
-            setIsLoading(false);
-            const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
-            const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
-            if (maxId > 0) lastMessageIdRef.current = maxId;
-            if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
-              oldestMessageIdRef.current = minId;
+        if (normalizedCachedMessages.length > 0) {
+          decryptMessages(normalizedCachedMessages).then((decryptedCached) => {
+            if (!isDisposed && decryptedCached.length > 0) {
+              warmHydrateHit = true;
+              setMessages(decryptedCached);
+              const maxId = decryptedCached.reduce((max, msg) => Math.max(max, msg.id), 0);
+              const minId = decryptedCached.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
+              if (maxId > 0) lastMessageIdRef.current = maxId;
+              if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
+                oldestMessageIdRef.current = minId;
+              }
             }
-          }
+          });
         }
         recordWarmHydrateResult(warmHydrateHit);
 
         // Load fresh messages after both init and cached messages are done
         await loadMessages(true, signal);
         if (isDisposed) return;
-        await runHandshakeHistoryCatchup();
+        void runHandshakeHistoryCatchup();
 
         // If non-initiator still doesn't have encryption key, request it from initiator via realtime
         if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
@@ -2094,18 +2096,16 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         scheduleNextPoll();
         scheduleTypingPoll();
         recordChatOpenLatency(Date.now() - bootstrapStartedAt, sessionId);
-      } catch (err) {
+      } catch (err: any) {
+        const status = err?.response?.status ?? err?.status;
+        if (status === 410) {
+          setIsLoading(false);
+          setSessionExpired(true);
+          return;
+        }
+        
         if (!isDisposed) {
           console.error('[useEncryptedChat] Bootstrap failed:', err);
-          const status = err?.response?.status ?? err?.status;
-          
-          if (status === 410) {
-            setIsLoading(false);
-            setSessionExpired(true);
-            stopAllRetries();
-            return;
-          }
-          
           const errorMessage = extractApiErrorMessage(err, 'Failed to load conversation');
           setError(errorMessage);
           setIsLoading(false);
