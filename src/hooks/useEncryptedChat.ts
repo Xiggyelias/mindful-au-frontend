@@ -631,12 +631,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     if (!sessionId || !hasValidUserId) return;
 
     try {
-      deviceKeyPairRef.current = await getOrCreateDeviceKeyPair();
-
+      // Parallelize device key generation and session fetch for faster startup
+      const [deviceKeyPair, session] = await Promise.all([
+        getOrCreateDeviceKeyPair(),
+        api.getSession(sessionId, { signal }) as Promise<Session | null | undefined>
+      ]);
+      
+      deviceKeyPairRef.current = deviceKeyPair;
       hasSentPublicKeyRef.current = false;
       hasSentSessionKeyRef.current = false;
-
-      const session = (await api.getSession(sessionId, { signal })) as Session | null | undefined;
       // Anonymous sessions mask student_id in JSON for counselors; backend sends chat_peer_student_id for E2E.
       const studentId = Number(session?.chat_peer_student_id ?? session?.student_id);
       const counselorId = Number(session?.counselor_id);
@@ -692,8 +695,11 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             numericUserId,
             previousPeerId
           );
-          await deletePersistedSessionKey(previousPairStorageKey);
-          localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId));
+          // Parallel cleanup operations
+          await Promise.all([
+            deletePersistedSessionKey(previousPairStorageKey),
+            Promise.resolve(localStorage.removeItem(getLegacySessionKeyStorageKey(sessionId)))
+          ]);
         }
 
         const runtimeContext = runtimeEncryptionContexts.get(
@@ -738,12 +744,21 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           }
         }
 
+        // Check for preloaded key first (fastest path)
+        if (!storedKey && peerIdRef.current) {
+          storedKey = getPreloadedSessionKey(sessionId, numericUserId, peerIdRef.current);
+        }
+        
         if (storedKey) {
-          if (!encryptionKeyRef.current || keyStringRef.current !== storedKey) {
-            encryptionKeyRef.current = await importKey(storedKey);
-          }
+          // Parallel key import and persistence for faster startup
+          const [importedKey] = await Promise.all([
+            encryptionKeyRef.current && keyStringRef.current === storedKey 
+              ? Promise.resolve(encryptionKeyRef.current)
+              : importKey(storedKey),
+            persistSessionKey(activeSessionStorageKey, storedKey)
+          ]);
+          encryptionKeyRef.current = importedKey;
           keyStringRef.current = storedKey;
-          await persistSessionKey(activeSessionStorageKey, storedKey);
           runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
             key: encryptionKeyRef.current,
             keyString: storedKey,
@@ -758,15 +773,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       }
 
       if (peerIdRef.current) {
+        // Load peer key from localStorage (still using LS for peer keys)
         const storedPeerKey = localStorage.getItem(
           getPeerKeyStorageKey(sessionId, peerIdRef.current)
         );
 
-        if (storedPeerKey) {
-          peerPublicKeyRef.current = await importPeerPublicKey(storedPeerKey);
-        } else {
-          peerPublicKeyRef.current = null;
-        }
+        // Pre-import peer key while other operations run
+        peerPublicKeyRef.current = storedPeerKey 
+          ? await importPeerPublicKey(storedPeerKey)
+          : null;
 
         if (encryptionKeyRef.current && keyStringRef.current && sessionKeyStorageKeyRef.current) {
           runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
@@ -790,14 +805,23 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
       const targetPeerId = peerIdRef.current;
       const shouldRefreshHandshake = !storedKey || !peerPublicKeyRef.current;
+      
+      // Parallel handshake operations when possible
+      const handshakePromises: Promise<void>[] = [];
+      
       if (shouldRefreshHandshake) {
-        await sendPublicKeyEnvelope(targetPeerId ?? undefined);
+        handshakePromises.push(sendPublicKeyEnvelope(targetPeerId ?? undefined));
       }
-
+      
       // If we already know the peer key from cache, complete handshake immediately
       // so first outbound text is not delayed waiting for another poll cycle.
       if (!storedKey && targetPeerId !== null && peerPublicKeyRef.current && isSessionKeyInitiator()) {
-        await sendSessionKeyEnvelope(targetPeerId);
+        handshakePromises.push(sendSessionKeyEnvelope(targetPeerId));
+      }
+      
+      // Execute handshake operations in parallel
+      if (handshakePromises.length > 0) {
+        await Promise.all(handshakePromises);
       }
 
       isInitializedRef.current = true;
@@ -1330,10 +1354,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
   const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
     lastActiveAtRef.current = Date.now();
-
-
-
-
 
     if (!sessionId || !userId) {
       setError('Cannot send message: session is not initialized');
