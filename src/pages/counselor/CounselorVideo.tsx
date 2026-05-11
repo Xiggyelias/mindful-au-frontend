@@ -47,6 +47,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { CHAT_INCOMING_DIGEST_EVENT, CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -227,6 +228,18 @@ const CounselorVideo = () => {
       void loadSessions();
     }
   }, [loadSessions, user]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      void loadSessions();
+    };
+    window.addEventListener(CHAT_INCOMING_DIGEST_EVENT as any, handleRefresh);
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT as any, handleRefresh);
+    return () => {
+      window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT as any, handleRefresh);
+      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT as any, handleRefresh);
+    };
+  }, [loadSessions]);
 
   const handleToggleMute = () => {
     toggleMute();
@@ -454,6 +467,12 @@ const CounselorVideo = () => {
         if (!cancelled) {
           const errMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to start session";
           toast.error(errMsg);
+          
+          // If it's a server error, provide a helpful fallback
+          if (errMsg.includes("temporarily unavailable") || errMsg.includes("500")) {
+            toast.info("You can try refreshing the page or contact support if the issue persists.");
+          }
+          
           setPendingSessionStartId(null);
         }
         return;
@@ -572,7 +591,7 @@ const CounselorVideo = () => {
   }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeSession && isAnonymousSessionFlag(activeSession.is_anonymous)) {
+    if (activeSession && isAnonymousSessionFlag(activeSession.is_anonymous) && !activeSession.identity_visible_to_viewer) {
       return anonymousLabelForCounselor();
     }
     return getParticipantName(activeSession?.student, "Student");
@@ -1110,7 +1129,7 @@ const CounselorVideo = () => {
                                 <MapPin className="h-3.5 w-3.5 shrink-0" />
                                 <span className="line-clamp-2">{getAppointmentWhereLabel(session.notes)}</span>
                               </p>
-                              {isAnonymousSessionFlag(session.is_anonymous) && (
+                              {isAnonymousSessionFlag(session.is_anonymous) && !session.identity_visible_to_viewer && (
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <AnonymousModeIndicator variant="badge" audience="counselor" />
                                   <span className="text-[10px] font-medium text-muted-foreground">

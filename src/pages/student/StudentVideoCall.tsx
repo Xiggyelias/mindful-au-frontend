@@ -321,7 +321,7 @@ const StudentVideoCall = () => {
   }, [activeAppointment]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous)) {
+    if (activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && !activeAppointment.identity_visible_to_viewer) {
       return "Counselor (Private Session)";
     }
     return getParticipantName(activeAppointment?.counselor, "Counselor");
@@ -574,7 +574,13 @@ const StudentVideoCall = () => {
           );
         }
       } catch (startError: unknown) {
-        toast.error(getApiErrorMessage(startError, "Failed to start the call"));
+        const errorMessage = getApiErrorMessage(startError, "Failed to start the call");
+        toast.error(errorMessage);
+        
+        // If it's a server error, provide a helpful fallback
+        if (errorMessage.includes("temporarily unavailable") || errorMessage.includes("500")) {
+          toast.info("You can try refreshing the page or contact support if the issue persists.");
+        }
       } finally {
         setIsStartingMode(null);
       }
@@ -926,7 +932,7 @@ const StudentVideoCall = () => {
                                 <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
                               </div>
                             )}
-                            {activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && (
+                            {activeAppointment && isAnonymousSessionFlag(activeAppointment.is_anonymous) && !activeAppointment.identity_visible_to_viewer && (
                               <div className="flex flex-wrap gap-2 pt-1">
                                 <AnonymousModeIndicator variant="badge" />
                                 <Badge

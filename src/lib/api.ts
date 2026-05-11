@@ -1453,11 +1453,62 @@ class ApiClient {
       throw new Error("Invalid appointment ID");
     }
     
-    const response = await this.client.post("/video-calls/authorize", {
-      appointment_id: appointmentIdNum,
-      ...(options?.call_type ? { call_type: options.call_type } : {}),
-    });
-    return response.data;
+    try {
+      console.log('[VideoCall] Authorizing call for appointment:', appointmentIdNum, 'type:', options?.call_type);
+      
+      // Add retry logic for temporary server issues
+      let lastError: any;
+      const maxRetries = 2;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.client.post("/video-calls/authorize", {
+            appointment_id: appointmentIdNum,
+            ...(options?.call_type ? { call_type: options.call_type } : {}),
+          });
+          console.log('[VideoCall] Authorization successful:', response.data);
+          return response.data;
+        } catch (error: any) {
+          lastError = error;
+          console.warn(`[VideoCall] Authorization attempt ${attempt} failed:`, error);
+          
+          // Don't retry on client errors (4xx) except for 429 (rate limit)
+          if (error.response?.status >= 400 && error.response?.status < 500 && error.response?.status !== 429) {
+            break;
+          }
+          
+          // If this is the last attempt, don't wait
+          if (attempt === maxRetries) {
+            break;
+          }
+          
+          // Wait before retrying with exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+      
+      // If we get here, all retries failed
+      throw lastError;
+    } catch (error: any) {
+      console.error('[VideoCall] Authorization failed after retries:', error);
+      
+      // Provide more specific error messages
+      if (error.response?.status === 500) {
+        throw new Error("Video call service is temporarily unavailable. Please try again in a few moments.");
+      } else if (error.response?.status === 404) {
+        throw new Error("Appointment not found or has expired.");
+      } else if (error.response?.status === 403) {
+        throw new Error("You don't have permission to start this video call.");
+      } else if (error.response?.status === 422) {
+        throw new Error("Invalid call parameters. Please refresh and try again.");
+      } else if (error.response?.status === 429) {
+        throw new Error("Too many requests. Please wait a moment and try again.");
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error("Request timed out. Please check your connection and try again.");
+      } else {
+        throw new Error(error.response?.data?.message || error.message || "Failed to authorize video call");
+      }
+    }
   }
 
   async getCounselorIncomingCalls() {
