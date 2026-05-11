@@ -1048,35 +1048,7 @@ const CounselorMessages = () => {
     return formatChatFileSize(bytes);
   };
 
-  const handleRowMouseEnter = (sessionId: string | number) => {
-    if (!user?.id) return;
-    const userIdStr = user.id.toString();
-    const sidStr = String(sessionId);
-    
-    hoverTimerRef.current = setTimeout(async () => {
-      // Only preload if not already cached
-      const existing = await loadPreloadedSessionMessages(sidStr, {
-        expectedOwnerUserId: userIdStr,
-      });
-      if (!existing || existing.length === 0) {
-        const rawMessages = await api.getMessages(sidStr, {
-          limit: 40,
-          mark_read: false,
-          timeout_ms: 5000,
-        }).catch(() => null);
-        if (rawMessages?.length) {
-          await savePreloadedSessionMessages(sidStr, rawMessages, {
-            ownerUserId: userIdStr,
-          });
-        }
-      }
-    }, 200);
-  };
-
-  const handleRowMouseLeave = () => {
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-  };
-
+  
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
