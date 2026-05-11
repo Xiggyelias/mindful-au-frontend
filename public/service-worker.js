@@ -40,10 +40,20 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  // ✅ Never intercept signed file URLs — let them go straight to network
+  if (
+    url.pathname.includes('/chat/files/') ||
+    url.searchParams.has('signature') ||
+    url.searchParams.has('expires')
+  ) {
+    return; // bypass service worker entirely
+  }
+
   const { request } = event;
   if (request.method !== "GET") return;
 
-  const url = new URL(request.url);
   if (url.origin !== self.location.origin) {
     event.respondWith(fetch(request));
     return;
