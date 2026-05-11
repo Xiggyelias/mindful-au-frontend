@@ -671,7 +671,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         getOrCreateDeviceKeyPair(),
         preloadedSession !== undefined
           ? Promise.resolve(preloadedSession)
-          : (api.getSession(sessionId, { signal }) as Promise<Session | null | undefined>),
+          : (api.getSession(sessionId, { signal, minimal: true }) as Promise<Session | null | undefined>),
       ]);
       
       deviceKeyPairRef.current = deviceKeyPair;
@@ -2058,7 +2058,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       // Fetch session once and reuse it for initializeEncryption — avoids a double round-trip.
       let sessionDetails: Session | null | undefined;
       try {
-        sessionDetails = await api.getSession(sessionId);
+        sessionDetails = await api.getSession(sessionId, { minimal: true });
       } catch (e: any) {
         if ((e?.response?.status ?? e?.status) === 410) {
           setIsLoading(false);

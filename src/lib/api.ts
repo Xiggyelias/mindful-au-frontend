@@ -1041,12 +1041,17 @@ class ApiClient {
     };
   }
 
-  async getSession(id: string, params?: { timeout_ms?: number; signal?: AbortSignal }) {
+  async getSession(id: string, params?: { timeout_ms?: number; signal?: AbortSignal; minimal?: boolean }) {
     const timeoutMs =
       typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
         ? Math.floor(params.timeout_ms)
         : DEFAULT_READ_TIMEOUT_MS;
+    const queryParams: Record<string, unknown> = {};
+    if (params?.minimal) {
+      queryParams.minimal = 1;
+    }
     const response = await this.client.get(`/sessions/${id}`, {
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
       timeout: timeoutMs,
       signal: params?.signal,
     });
