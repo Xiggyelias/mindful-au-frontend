@@ -3,7 +3,28 @@
  * Generates session keys in background to reduce "Securing this message" delay.
  */
 
-import { generateEncryptionKey, exportKey } from "./encryption";
+// Inline key generation to avoid circular import with encryption.ts
+const ALGORITHM = "AES-GCM";
+const KEY_LENGTH = 256;
+
+const generateEncryptionKey = async (): Promise<CryptoKey> => {
+  return await crypto.subtle.generateKey(
+    { name: ALGORITHM, length: KEY_LENGTH },
+    true,
+    ["encrypt", "decrypt"]
+  );
+};
+
+const exportKey = async (key: CryptoKey): Promise<string> => {
+  const exported = await crypto.subtle.exportKey("raw", key);
+  const bytes = new Uint8Array(exported);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    const chunk = bytes.subarray(i, i + 0x8000);
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+};
 
 interface PreloadedKey {
   keyString: string;
