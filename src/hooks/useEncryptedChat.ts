@@ -1258,17 +1258,17 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
 
         setError(null);
         pollCountRef.current += 1;
-      } catch (err) {
-        console.error('Failed to load messages:', err);
+      } catch (err: any) {
+        // 410 = session permanently closed — stop all retries immediately
         const status = err?.response?.status ?? err?.status;
-        
         if (status === 410) {
           setIsLoading(false);
           setSessionExpired(true);
           stopAllRetries();
           return;
         }
-        
+
+        console.error('Failed to load messages:', err);
         if (messageCountRef.current === 0) {
           setError(extractApiErrorMessage(err, 'Failed to load messages'));
         }
