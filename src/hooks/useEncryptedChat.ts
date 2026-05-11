@@ -661,14 +661,17 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     [emitRealtimeSyncHint, ensureSessionKey, hasValidUserId, numericUserId, sessionId]
   );
 
-  const initializeEncryption = useCallback(async (signal?: AbortSignal) => {
+  const initializeEncryption = useCallback(async (signal?: AbortSignal, preloadedSession?: Session | null) => {
     if (!sessionId || !hasValidUserId) return;
 
     try {
-      // Parallelize device key generation and session fetch for faster startup
+      // Parallelize device key generation and session fetch for faster startup.
+      // Accept a pre-fetched session to avoid a double round-trip during bootstrap.
       const [deviceKeyPair, session] = await Promise.all([
         getOrCreateDeviceKeyPair(),
-        api.getSession(sessionId, { signal }) as Promise<Session | null | undefined>
+        preloadedSession !== undefined
+          ? Promise.resolve(preloadedSession)
+          : (api.getSession(sessionId, { signal }) as Promise<Session | null | undefined>),
       ]);
       
       deviceKeyPairRef.current = deviceKeyPair;
@@ -1174,9 +1177,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         return;
       }
       if (loadInFlightRef.current) {
-        // If we're already loading but this was a forceInitial call, 
-        // we might need to ensure the loading state is eventually cleared.
         if (!forceInitial) return;
+        // forceInitial overrides the guard — wait briefly for any concurrent fetch to release.
+        await sleep(100);
+        // If still in-flight after the brief yield, bail to avoid double work.
+        if (loadInFlightRef.current) return;
       }
 
       loadInFlightRef.current = true;
@@ -1447,53 +1452,40 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     if (isSessionKeyInitiator()) return;
 
     const MAX_PAGES = 50;
-    const BATCH = 5;
-    
-    // Helper function to fetch a specific page and check for key envelope
-    const fetchHistoryPage = async (pageNum: number): Promise<{ found: boolean; messages: RawMessage[] }> => {
+
+    let localOldestId = oldestMessageIdRef.current;
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      if (encryptionKeyRef.current) break;
+      if (localOldestId <= 0) break;
+
       try {
-        const beforeId = pageNum === 1 ? undefined : oldestMessageIdRef.current;
         const data = (await api.getMessages(sessionId, {
-          before_id: beforeId,
-          limit: MESSAGE_POLL_TIMEOUT_MS <= 5000 ? 50 : 25, // Use appropriate limit
+          before_id: localOldestId,
+          limit: 50,
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
         })) as RawMessage[];
-        
-        // Check if this page contains a kind:key envelope
+
+        if (!data || data.length === 0) break;
+
+        // Track the oldest id in this page for the next iteration.
+        const pageMin = data.reduce((min, msg) => Math.min(min, msg.id), localOldestId);
+        localOldestId = pageMin;
+
+        let foundKey = false;
         for (const message of data) {
           const envelope = parseEnvelope(message.content);
           if (envelope && envelope.kind === 'key') {
             await handleEnvelope(message);
-            return { found: true, messages: data };
+            foundKey = true;
+            break;
           }
         }
-        
-        return { found: false, messages: data };
-      } catch (err) {
-        console.warn(`[runHandshakeHistoryCatchup] Failed to fetch page ${pageNum}:`, err);
-        return { found: false, messages: [] };
-      }
-    };
 
-    // Fetch pages in parallel batches
-    for (let start = 0; start < MAX_PAGES; start += BATCH) {
-      if (encryptionKeyRef.current) break;
-      if (oldestMessageIdRef.current <= 0) break;
-      
-      const pageNums = Array.from({ length: BATCH }, (_, i) => start + i + 1);
-      const results = await Promise.all(pageNums.map(page => fetchHistoryPage(page)));
-      
-      const found = results.find(r => r.found);
-      if (found) {
-        // Add the messages from the found page to the state
-        if (found.messages.length > 0) {
-          await decryptMessages(found.messages);
-        }
-        break;
-      }
-      
-      // If no pages in this batch had messages, stop
-      if (results.every(r => r.messages.length === 0)) {
+        if (foundKey) break;
+        if (data.length < 50) break; // Reached the start of history.
+      } catch (err) {
+        console.warn(`[runHandshakeHistoryCatchup] page ${page} failed:`, err);
         break;
       }
     }
@@ -1502,49 +1494,68 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       setIsEncryptionReady(true);
       setError(null);
     }
-  }, [isSessionKeyInitiator, sessionId, decryptMessages, handleEnvelope]);
+  }, [isSessionKeyInitiator, sessionId, handleEnvelope]);
 
   useEffect(() => {
     messageCountRef.current = messages.length;
   }, [messages.length]);
 
-  // Key transition watcher: re-decrypt awaiting_key messages when key becomes available
+  // Key transition watcher: re-decrypt awaiting_key messages when key becomes available.
+  // Uses a ref snapshot to avoid running on every message-array change.
   const prevKeyRef = useRef<CryptoKey | null>(null);
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   useEffect(() => {
     const currentKey = encryptionKeyRef.current;
     const prevKey = prevKeyRef.current;
-    
-    // When key transitions from null -> valid CryptoKey, re-decrypt all awaiting_key messages
+
     if (!prevKey && currentKey) {
       prevKeyRef.current = currentKey;
-      
-      // Update all awaiting_key messages to decrypting state
-      setMessages(prev => prev.map(m => 
-        m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
-      ));
-      
-      // Trigger immediate re-decryption
-      setTimeout(async () => {
-        const awaitingKeyMessages = messages.filter(m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting');
-        if (awaitingKeyMessages.length > 0) {
-          const rawMessages: RawMessage[] = awaitingKeyMessages.map(m => ({
-            id: m.id,
-            content: m.content,
-            sender_id: m.sender_id,
-            recipient_id: m.recipient_id,
-            created_at: m.created_at,
-            message_type: m.message_type,
-            file_url: m.file_url,
-            is_encrypted: m.is_encrypted,
-            seen_at: m.seen_at,
-          }));
-          await decryptMessages(rawMessages);
-        }
-      }, 0);
+
+      // Mark as decrypting via the ref snapshot — avoids stale-closure issue.
+      setMessages(prev => {
+        const updated = prev.map(m =>
+          m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
+        );
+        return updated.some((m, i) => m !== prev[i]) ? updated : prev;
+      });
+
+      const snapshot = messagesRef.current.filter(
+        m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting'
+      );
+      if (snapshot.length > 0) {
+        const rawMessages: RawMessage[] = snapshot.map(m => ({
+          id: m.id,
+          content: m.content,
+          sender_id: m.sender_id,
+          recipient_id: m.recipient_id,
+          created_at: m.created_at,
+          message_type: m.message_type,
+          file_url: m.file_url,
+          is_encrypted: m.is_encrypted,
+          seen_at: m.seen_at,
+        }));
+        void decryptMessages(rawMessages).then(decrypted => {
+          if (decrypted.length > 0) {
+            setMessages(prev => {
+              const merged = new Map<number, ChatMessage>();
+              for (const msg of prev) merged.set(msg.id, msg);
+              for (const msg of decrypted) merged.set(msg.id, msg);
+              return sortAndTrimMessages(Array.from(merged.values()));
+            });
+          }
+        });
+      }
     } else if (currentKey) {
       prevKeyRef.current = currentKey;
     }
-  }, [messages, decryptMessages]);
+  // Intentionally NOT watching `messages` here — we use messagesRef to avoid
+  // re-running on every message change. The effect only needs to react to isEncryptionReady.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEncryptionReady, decryptMessages]);
 
   const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
     lastActiveAtRef.current = Date.now();
@@ -2043,12 +2054,20 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       console.log('[bootstrap] start - sessionId:', sessionId, 'time:', Date.now());
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
-      
-      // Check if session is already gone before any other work
-      const sessionDetails = await api.getSession(sessionId).catch((e: any) => {
-        if ((e?.response?.status ?? e?.status) === 410) return null;
+
+      // Fetch session once and reuse it for initializeEncryption — avoids a double round-trip.
+      let sessionDetails: Session | null | undefined;
+      try {
+        sessionDetails = await api.getSession(sessionId);
+      } catch (e: any) {
+        if ((e?.response?.status ?? e?.status) === 410) {
+          setIsLoading(false);
+          setSessionExpired(true);
+          sessionExpiredRef.current = true;
+          return;
+        }
         throw e;
-      });
+      }
       if (!sessionDetails || signal.aborted) {
         setIsLoading(false);
         setSessionExpired(true);
@@ -2059,9 +2078,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       try {
         console.log(`[chat:${sessionId}] Starting bootstrap...`);
         
-        // Run initializeEncryption and loadPreloadedSessionMessages in parallel
+        // Pass the already-fetched session to avoid a second getSession call.
         const [_, cachedMessages] = await Promise.all([
-          initializeEncryption(signal),
+          initializeEncryption(signal, sessionDetails),
           loadPreloadedSessionMessages(sessionId, {
             expectedOwnerUserId: userId,
             expectedKeyScope: sessionKeyStorageKeyRef.current,
