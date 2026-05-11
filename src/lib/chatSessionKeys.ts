@@ -1,6 +1,6 @@
 /**
- * Session AES key persistence: localStorage (fast) + IndexedDB (durable across storage eviction, PWA).
- * Device RSA keys stay in localStorage (separate); this module only mirrors AES session secrets.
+ * Session AES key persistence: IndexedDB only (durable across storage eviction, PWA).
+ * Legacy localStorage support removed - now uses IDB exclusively for consistency.
  */
 
 const DB_NAME = "cms_e2e_session_keys_v1";
@@ -82,35 +82,19 @@ export async function idbSessionKeyDelete(storageKey: string): Promise<void> {
 }
 
 /**
- * Restore AES session key: memory-style first step is caller's job; this is storage only.
+ * Restore AES session key from IndexedDB.
+ * Changed from localStorage+IDB to IDB-only to avoid stale key issues.
  */
 export async function loadPersistedSessionKey(storageKey: string): Promise<string | null> {
-  try {
-    const fromLs = localStorage.getItem(storageKey);
-    if (fromLs && fromLs.length > 10) {
-      return fromLs;
-    }
-  } catch {
-    /* ignore */
-  }
   const fromIdb = await idbSessionKeyGet(storageKey);
   if (fromIdb && fromIdb.length > 10) {
-    try {
-      localStorage.setItem(storageKey, fromIdb);
-    } catch {
-      /* quota */
-    }
     return fromIdb;
   }
   return null;
 }
 
 export async function persistSessionKey(storageKey: string, rawKeyBase64: string): Promise<void> {
-  try {
-    localStorage.setItem(storageKey, rawKeyBase64);
-  } catch {
-    /* quota — IDB may still work */
-  }
+  // Changed from dual-write (ls + IDB) to IDB-only for consistency
   await idbSessionKeySet(storageKey, rawKeyBase64);
 }
 
