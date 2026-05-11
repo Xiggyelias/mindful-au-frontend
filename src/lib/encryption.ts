@@ -1,12 +1,12 @@
 // E2E Encryption utilities using Web Crypto API (AES-GCM-256 + RSA-OAEP session wrap)
 
+import { loadDeviceKeys, saveDeviceKeys, clearDeviceKeys as clearIdbDeviceKeys } from "./keyStore";
+
 const ALGORITHM = "AES-GCM";
 const KEY_LENGTH = 256;
 const DEVICE_KEY_ALGORITHM = "RSA-OAEP";
 const DEVICE_KEY_MODULUS_LENGTH = 2048;
 const DEVICE_KEY_HASH = "SHA-256";
-const DEVICE_PUBLIC_KEY_STORAGE = "e2e_device_public_key_v1";
-const DEVICE_PRIVATE_KEY_STORAGE = "e2e_device_private_key_v1";
 
 /** Chunk size for binary → base64 without call stack / arg limits (WhatsApp-scale messages). */
 const B64_CHUNK = 0x8000;
@@ -351,23 +351,23 @@ const importDevicePrivateKey = async (privateKeyBase64: string): Promise<CryptoK
 };
 
 export const getOrCreateDeviceKeyPair = async (): Promise<DeviceKeyPair> => {
-  const storedPublicKey = localStorage.getItem(DEVICE_PUBLIC_KEY_STORAGE);
-  const storedPrivateKey = localStorage.getItem(DEVICE_PRIVATE_KEY_STORAGE);
-
-  if (storedPublicKey && storedPrivateKey) {
+  // Try to load existing keys from IndexedDB
+  const stored = await loadDeviceKeys();
+  if (stored) {
+    const publicKeyBase64 = await exportDevicePublicKey(stored.publicKey);
     return {
-      publicKey: await importDevicePublicKey(storedPublicKey),
-      privateKey: await importDevicePrivateKey(storedPrivateKey),
-      publicKeyBase64: storedPublicKey,
+      publicKey: stored.publicKey,
+      privateKey: stored.privateKey,
+      publicKeyBase64,
     };
   }
 
+  // Generate new key pair
   const keyPair = await generateDeviceKeyPair();
   const publicKeyBase64 = await exportDevicePublicKey(keyPair.publicKey);
-  const privateKeyBase64 = await exportDevicePrivateKey(keyPair.privateKey);
 
-  localStorage.setItem(DEVICE_PUBLIC_KEY_STORAGE, publicKeyBase64);
-  localStorage.setItem(DEVICE_PRIVATE_KEY_STORAGE, privateKeyBase64);
+  // Save to IndexedDB (JWK format)
+  await saveDeviceKeys(keyPair.publicKey, keyPair.privateKey);
 
   return {
     publicKey: keyPair.publicKey,
@@ -403,4 +403,12 @@ export const decryptSessionKeyFromPeer = async (
     base64ToArrayBuffer(encryptedKeyBase64)
   );
   return new TextDecoder().decode(decrypted);
+};
+
+/**
+ * Clears device RSA keys from IndexedDB.
+ * Call on logout or when user wants to reset E2EE.
+ */
+export const clearDeviceKeyPair = async (): Promise<boolean> => {
+  return await clearIdbDeviceKeys();
 };

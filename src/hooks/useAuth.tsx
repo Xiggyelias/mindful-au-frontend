@@ -505,6 +505,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       /* ignore */
     }
+
+    // Clear RSA device keys from IndexedDB
+    try {
+      const { clearDeviceKeyPair } = await import("@/lib/encryption");
+      await clearDeviceKeyPair();
+    } catch {
+      /* ignore */
+    }
   };
 
   return (
