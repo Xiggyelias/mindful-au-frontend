@@ -327,6 +327,21 @@ const CounselorMessages = () => {
     enabled: Boolean(user?.id),
     ownerUserId: user?.id?.toString() || null,
   });
+
+  const filteredChats = useMemo(() => {
+    // `chats` is de-duplicated in loadSessions (same student + anonymity + role lane).
+    const needle = deferredSearchQuery.trim().toLowerCase();
+    if (!needle) {
+      return chats;
+    }
+    return chats.filter((chat) => {
+      return (
+        chat.studentName.toLowerCase().includes(needle) ||
+        (chat.studentEmail || "").toLowerCase().includes(needle) ||
+        String(chat.id).includes(needle)
+      );
+    });
+  }, [chats, deferredSearchQuery]);
   useChatRoomPrejoin({
     sessions: chats,
     activeSessionId: selectedSessionId,
@@ -390,27 +405,15 @@ const CounselorMessages = () => {
     sessionId: selectedSessionId,
   });
 
-  const filteredChats = useMemo(() => {
-    // `chats` is de-duplicated in loadSessions (same student + anonymity + role lane).
-    const needle = deferredSearchQuery.trim().toLowerCase();
-    if (!needle) {
-      return chats;
-    }
-    return chats.filter((chat) => {
-      return (
-        chat.studentName.toLowerCase().includes(needle) ||
-        (chat.studentEmail || "").toLowerCase().includes(needle) ||
-        String(chat.id).includes(needle)
-      );
-    });
-  }, [chats, deferredSearchQuery]);
 
   const handleRowMouseEnter = useCallback((sessionId: number) => {
     if (!user?.id) return;
+    console.log('[preload] hover start - sessionId:', sessionId);
     const userIdStr = user.id.toString();
     const sidStr = String(sessionId);
     
     hoverTimerRef.current = setTimeout(async () => {
+      console.log('[preload] timer fired - checking cache for:', sidStr);
       // Only preload if not already cached
       const existing = await loadPreloadedSessionMessages(sidStr, {
         expectedOwnerUserId: userIdStr,
@@ -420,12 +423,18 @@ const CounselorMessages = () => {
           limit: 40,
           mark_read: false,
           timeout_ms: 5000,
-        }).catch(() => null);
+        }).catch((err) => {
+          console.log('[preload] fetch failed for:', sidStr, err);
+          return null;
+        });
         if (rawMessages?.length) {
+          console.log('[preload] saved to cache:', sidStr, 'messages:', rawMessages.length);
           await savePreloadedSessionMessages(sidStr, rawMessages, {
             ownerUserId: userIdStr,
           });
         }
+      } else {
+        console.log('[preload] cache hit - skipping fetch for:', sidStr, 'messages:', existing.length);
       }
     }, 200);
   }, [user?.id]);

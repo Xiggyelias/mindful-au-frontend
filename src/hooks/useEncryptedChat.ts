@@ -2040,6 +2040,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     };
 
     const bootstrap = async (signal: AbortSignal) => {
+      console.log('[bootstrap] start - sessionId:', sessionId, 'time:', Date.now());
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
       
@@ -2066,10 +2067,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
             expectedKeyScope: sessionKeyStorageKeyRef.current,
           })
         ]);
+        console.log('[bootstrap] init+cache done in:', Date.now() - bootstrapStartedAt, 'ms', 'cachedMessages:', cachedMessages?.length ?? 0);
         
         if (isDisposed || signal.aborted) return;
         
         setIsLoading(false); // ADD THIS — unblock UI immediately
+        console.log('[bootstrap] UI unblocked at:', Date.now() - bootstrapStartedAt, 'ms');
 
         const normalizedCachedMessages = normalizeMessagePayload(cachedMessages);
         const cachedTyping = loadTypingSnapshot(sessionId, { expectedOwnerUserId: userId });
@@ -2089,6 +2092,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               if (Number.isFinite(minId) && minId !== Number.MAX_SAFE_INTEGER) {
                 oldestMessageIdRef.current = minId;
               }
+              console.log('[bootstrap] warm hydration rendered:', decryptedCached.length, 'messages');
             }
           });
         }
@@ -2096,6 +2100,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
         // Load fresh messages after both init and cached messages are done
         await loadMessages(true, signal);
+        console.log('[bootstrap] loadMessages done at:', Date.now() - bootstrapStartedAt, 'ms');
         if (isDisposed) return;
         
         // Optimistic preload: fetch adjacent conversation history in the background

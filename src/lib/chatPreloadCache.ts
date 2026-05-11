@@ -67,6 +67,7 @@ export async function loadPreloadedSessionMessages(
   sessionId: string,
   opts?: { expectedOwnerUserId?: string | null; expectedKeyScope?: string | null }
 ): Promise<unknown[]> {
+  console.log('[preload:read] checking cache for sessionId:', sessionId);
   const id = String(sessionId || "").trim();
   if (!id) return [];
   const db = await openDb();
@@ -94,12 +95,17 @@ export async function loadPreloadedSessionMessages(
           return;
         }
         if (Date.now() - Number(row.savedAt || 0) > SNAPSHOT_TTL_MS) {
+          console.log('[preload:read] CACHE MISS (expired):', sessionId);
           resolve([]);
           return;
         }
+        console.log('[preload:read] CACHE HIT:', sessionId, 'messages:', row.messages.length);
         resolve(row.messages);
       };
-      req.onerror = () => resolve([]);
+      req.onerror = () => {
+        console.log('[preload:read] CACHE MISS (error):', sessionId);
+        resolve([]);
+      };
     } catch {
       resolve([]);
     }

@@ -75,10 +75,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRowMouseEnter = (sessionId: string) => {
+    console.log('[preload] hover start - sessionId:', sessionId);
     const userId = activeSession?.student_id?.toString() || activeSession?.counselor_id?.toString();
     if (!userId) return;
 
     hoverTimerRef.current = setTimeout(async () => {
+      console.log('[preload] timer fired - checking cache for:', sessionId);
       const existing = await loadPreloadedSessionMessages(sessionId, {
         expectedOwnerUserId: userId,
       });
@@ -87,12 +89,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           limit: 40,
           mark_read: false,
           timeout_ms: 5000,
-        }).catch(() => null);
+        }).catch((err) => {
+          console.log('[preload] fetch failed for:', sessionId, err);
+          return null;
+        });
         if (rawMessages?.length) {
+          console.log('[preload] saved to cache:', sessionId, 'messages:', rawMessages.length);
           await savePreloadedSessionMessages(sessionId, rawMessages, {
             ownerUserId: userId,
           });
         }
+      } else {
+        console.log('[preload] cache hit - skipping fetch for:', sessionId, 'messages:', existing.length);
       }
     }, 200);
   };
