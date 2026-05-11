@@ -5,7 +5,7 @@ export const VIDEO_CALL_LIMITS = {
   maxDurationMinutes: 120,
   defaultDurationMinutes: 60,
   joinEarlyMinutes: 15,
-  joinLateGraceMinutes: 0,
+  joinLateGraceMinutes: 15,
   connectionTimeoutMs: 45_000,
 } as const;
 

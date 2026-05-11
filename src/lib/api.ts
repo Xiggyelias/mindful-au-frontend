@@ -144,13 +144,52 @@ const stableSerialize = (value: unknown): string => {
   return `{${entries.map(([key, entryValue]) => `${key}:${stableSerialize(entryValue)}`).join(',')}}`;
 };
 
+const flattenLaravelValidationErrors = (errors: unknown): string | null => {
+  if (!errors || typeof errors !== 'object') {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const value of Object.values(errors as Record<string, unknown>)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'string' && item.trim() !== '') {
+          parts.push(item.trim());
+        }
+      }
+    } else if (typeof value === 'string' && value.trim() !== '') {
+      parts.push(value.trim());
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return parts.join(' ');
+};
+
 const extractResponseMessage = (error: unknown): string | null => {
-  const responseMessage = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
-  if (typeof responseMessage === 'string' && responseMessage.trim() !== '') {
-    return responseMessage;
+  const data = (error as { response?: { data?: unknown } })?.response?.data;
+  if (!data || typeof data !== 'object') {
+    return null;
   }
 
-  return null;
+  const payload = data as { message?: unknown; errors?: unknown };
+  const responseMessage = payload.message;
+
+  if (typeof responseMessage === 'string' && responseMessage.trim() !== '') {
+    return responseMessage.trim();
+  }
+
+  if (Array.isArray(responseMessage)) {
+    const joined = responseMessage
+      .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      .map((item) => item.trim())
+      .join(' ');
+    if (joined !== '') {
+      return joined;
+    }
+  }
+
+  return flattenLaravelValidationErrors(payload.errors);
 };
 
 export const isApiNetworkError = (error: unknown): boolean => {
@@ -201,6 +240,10 @@ export const getApiErrorMessage = (
   const status = Number((error as { response?: { status?: unknown } })?.response?.status);
   if (status === 401) {
     return 'Your session expired. Please sign in again.';
+  }
+
+  if (status === 502 || status === 503 || status === 504) {
+    return 'The server is temporarily unavailable. Please try again in a moment.';
   }
 
   if (isTimeoutError(error)) {
@@ -1491,23 +1534,52 @@ class ApiClient {
       throw lastError;
     } catch (error: any) {
       console.error('[VideoCall] Authorization failed after retries:', error);
-      
-      // Provide more specific error messages
-      if (error.response?.status === 500) {
-        throw new Error("Video call service is temporarily unavailable. Please try again in a few moments.");
-      } else if (error.response?.status === 404) {
-        throw new Error("Appointment not found or has expired.");
-      } else if (error.response?.status === 403) {
-        throw new Error("You don't have permission to start this video call.");
-      } else if (error.response?.status === 422) {
-        throw new Error("Invalid call parameters. Please refresh and try again.");
-      } else if (error.response?.status === 429) {
-        throw new Error("Too many requests. Please wait a moment and try again.");
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error("Request timed out. Please check your connection and try again.");
-      } else {
-        throw new Error(error.response?.data?.message || error.message || "Failed to authorize video call");
+
+      const status = Number(error.response?.status);
+      const fromApi = extractResponseMessage(error);
+      const axiosText =
+        typeof error.message === 'string' && error.message.trim() !== '' ? error.message.trim() : '';
+
+      const ensureMessage = (msg: string) => (msg.trim() !== '' ? msg.trim() : 'Failed to authorize video call');
+
+      if (status === 500 || status === 502 || status === 503 || status === 504) {
+        throw new Error(
+          'Video call service is temporarily unavailable. Please try again in a few moments.'
+        );
       }
+      if (status === 404) {
+        throw new Error('Appointment not found or has expired.');
+      }
+      if (status === 403) {
+        throw new Error(
+          ensureMessage(fromApi || "You don't have permission to start this video call.")
+        );
+      }
+      if (status === 422) {
+        throw new Error(
+          ensureMessage(
+            fromApi ||
+              'This call cannot start right now. Check the appointment status, time window, and online vs in-person booking, then try again.'
+          )
+        );
+      }
+      if (status === 429) {
+        throw new Error('Too many requests. Please wait a moment and try again.');
+      }
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        throw new Error('Request timed out. Please check your connection and try again.');
+      }
+
+      if (fromApi) {
+        throw new Error(ensureMessage(fromApi));
+      }
+      if (axiosText) {
+        throw new Error(ensureMessage(axiosText));
+      }
+      if (Number.isFinite(status) && status > 0) {
+        throw new Error(`Could not start the call (HTTP ${status}). Please try again.`);
+      }
+      throw new Error('Failed to authorize video call');
     }
   }
 

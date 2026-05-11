@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
@@ -465,11 +465,11 @@ const CounselorVideo = () => {
         );
       } catch (err: unknown) {
         if (!cancelled) {
-          const errMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to start session";
+          const errMsg = getApiErrorMessage(err, "Failed to start session");
           toast.error(errMsg);
           
           // If it's a server error, provide a helpful fallback
-          if (errMsg.includes("temporarily unavailable") || errMsg.includes("500")) {
+          if (errMsg.toLowerCase().includes("unavailable") || errMsg.toLowerCase().includes("500") || errMsg.toLowerCase().includes("internal server error")) {
             toast.info("You can try refreshing the page or contact support if the issue persists.");
           }
           
@@ -1115,7 +1115,7 @@ const CounselorVideo = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">
-                                {isAnonymousSessionFlag(session.is_anonymous)
+                                {isAnonymousSessionFlag(session.is_anonymous) && !session.identity_visible_to_viewer
                                   ? anonymousLabelForCounselor()
                                   : getParticipantName(
                                       session.student,
