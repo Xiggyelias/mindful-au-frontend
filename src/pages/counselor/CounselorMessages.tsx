@@ -405,6 +405,38 @@ const CounselorMessages = () => {
     });
   }, [chats, deferredSearchQuery]);
 
+  const handleRowMouseEnter = useCallback((sessionId: number) => {
+    if (!user?.id) return;
+    const userIdStr = user.id.toString();
+    const sidStr = String(sessionId);
+    
+    hoverTimerRef.current = setTimeout(async () => {
+      // Only preload if not already cached
+      const existing = await loadPreloadedSessionMessages(sidStr, {
+        expectedOwnerUserId: userIdStr,
+      });
+      if (!existing || existing.length === 0) {
+        const rawMessages = await api.getMessages(sidStr, {
+          limit: 40,
+          mark_read: false,
+          timeout_ms: 5000,
+        }).catch(() => null);
+        if (rawMessages?.length) {
+          await savePreloadedSessionMessages(sidStr, rawMessages, {
+            ownerUserId: userIdStr,
+          });
+        }
+      }
+    }, 200);
+  }, [user?.id]);
+
+  const handleRowMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }, []);
+
   const selectConversationById = useCallback((id: number) => {
     if (!Number.isFinite(id) || id <= 0) return;
     setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
