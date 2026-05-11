@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { api, getApiErrorMessage } from '@/lib/api';
+import { uploadManager } from '@/lib/uploadManager';
 import {
   ensureAttachmentFile,
   inferAttachmentMessageType,
@@ -17,7 +18,7 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
   const [error, setError] = useState<string | null>(null);
 
   const uploadFile = useCallback(async (
-    input: File,
+    file: File,
     options?: { messageType?: 'file' | 'voice' }
   ): Promise<ChatMessage | null> => {
     if (!sessionId) {
@@ -25,23 +26,25 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
       return null;
     }
 
-    const normalizedFile = ensureAttachmentFile(input);
+    const normalizedFile = ensureAttachmentFile(file);
     const validationError = validateChatAttachment(normalizedFile);
     if (validationError) {
       setError(validationError);
       return null;
     }
 
+    const uploadId = `upload-${sessionId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     setIsUploading(true);
     setUploadProgress(0);
     setError(null);
 
     try {
-      const message = await api.uploadChatFile(sessionId, normalizedFile, {
-        message_type: options?.messageType ?? inferAttachmentMessageType(normalizedFile),
-        onUploadProgress: (progress) => {
-          setUploadProgress(progress);
-        },
+      const message = await uploadManager.enqueue(uploadId, normalizedFile, async (uploadFile, onProgress) => {
+        return await api.uploadChatFile(sessionId, uploadFile, {
+          message_type: options?.messageType ?? inferAttachmentMessageType(uploadFile),
+          onUploadProgress: onProgress,
+        });
       });
 
       setUploadProgress(100);
@@ -54,8 +57,32 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
       return null;
     } finally {
       setIsUploading(false);
+      // Clean up completed upload after a delay
+      setTimeout(() => uploadManager.cleanup(uploadId), 5000);
     }
   }, [sessionId]);
+
+  // Poll upload progress for UI updates when component is mounted
+  useEffect(() => {
+    if (!isUploading) return;
+
+    const interval = setInterval(() => {
+      // Find any active upload for this session
+      const activeUploads = Array.from(uploadManager.getUploads().entries())
+        .filter(([id]) => id.includes(`upload-${sessionId}`));
+      
+      if (activeUploads.length > 0) {
+        const [_, entry] = activeUploads[0];
+        setUploadProgress(entry.progress);
+        
+        if (entry.status === 'complete' || entry.status === 'error') {
+          setIsUploading(false);
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isUploading, sessionId]);
 
   const sendFileMessage = useCallback(async (
     file: File,

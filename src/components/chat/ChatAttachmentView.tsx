@@ -106,8 +106,9 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
         setPreviewUrl(freshUrl);
         setImageLoadFailed(false);
       } else if (freshUrl) {
-        // Same URL returned, it's expired
-        setImageLoadFailed(true);
+        // Same URL — still try it, don't give up
+        setPreviewUrl(freshUrl + (freshUrl.includes('?') ? '&' : '?') + '_t=' + Date.now());
+        setImageLoadFailed(false);
       } else {
         // No URL returned
         setImageLoadFailed(true);
@@ -188,7 +189,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
               alt={att.file_name}
               className="max-h-80 w-full object-cover"
               loading="lazy"
-              onError={() => void handleImageError()}
+              onError={() => { setTimeout(() => void handleImageError(), 400); }}
             />
           </a>
         )}
