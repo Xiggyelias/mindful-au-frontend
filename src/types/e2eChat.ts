@@ -4,6 +4,7 @@
 export type E2EVisualState =
   | "plain"
   | "decrypted"
+  | "decrypting"
   | "awaiting_key"
   | "needs_resync"
   | "payload_invalid";
