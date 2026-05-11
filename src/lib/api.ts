@@ -1194,6 +1194,7 @@ class ApiClient {
    * and Content-Disposition: attachment is honored as a file save.
    */
   async downloadChatMessageAttachment(messageId: number | string, fileName: string): Promise<boolean> {
+    console.log('[attachment] fetching messageId:', messageId, typeof messageId);
     try {
       const data = await this.getMessageAttachmentDownloadUrl(messageId);
       const downloadUrl = typeof data.download_url === 'string' ? data.download_url : '';

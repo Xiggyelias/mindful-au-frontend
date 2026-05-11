@@ -275,6 +275,7 @@ const CounselorMessages = () => {
   const [showThreadScrollToBottom, setShowThreadScrollToBottom] = useState(false);
   const hasShownLoadErrorRef = useRef(false);
   const loadSessionsGenerationRef = useRef(0);
+  const activeSessionIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
@@ -405,6 +406,7 @@ const CounselorMessages = () => {
     if (!Number.isFinite(id) || id <= 0) return;
     setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
     setSelectedChatId(id);
+    activeSessionIdRef.current = id; // Track currently open session
     void api.markSessionInboundRead(String(id)).catch(() => {});
   }, []);
 
@@ -500,6 +502,10 @@ const CounselorMessages = () => {
             ? pagedPayload.data
             : []
         ) as RawSession[];
+
+        console.log('[sessions] unread counts:', 
+          normalized.map(s => ({ id: s.id, unread: s.unread_count }))
+        );
 
         const receivedPage = Number(pagedPayload?.meta?.page);
         const receivedTotalPages = Number(pagedPayload?.meta?.total_pages);
@@ -602,7 +608,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
-              unreadCount: rowUnread,
+              unreadCount: session.id === activeSessionIdRef.current ? 0 : rowUnread,
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));
@@ -898,6 +904,7 @@ const CounselorMessages = () => {
       await api.escalatePeerSession(selectedSessionId);
       toast.success("Case escalated to counselor.");
       setSelectedChatId(null);
+      activeSessionIdRef.current = null; // Clear active session
       await loadSessions(false);
     } catch (error: unknown) {
       const errMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to escalate case";
@@ -926,6 +933,7 @@ const CounselorMessages = () => {
       await api.flagUrgentConcern(selectedSessionId, trimmed);
       toast.success("Urgent concern flagged. Case handed off to a counselor.");
       setSelectedChatId(null);
+      activeSessionIdRef.current = null; // Clear active session
       await loadSessions(false);
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, "Failed to flag urgent concern"));
@@ -1302,7 +1310,7 @@ const CounselorMessages = () => {
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                       <Menu className="h-5 w-5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSelectedChatId(null)}>
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => { setSelectedChatId(null); activeSessionIdRef.current = null; }}>
                       <X className="h-5 w-5" />
                     </Button>
                     <div
