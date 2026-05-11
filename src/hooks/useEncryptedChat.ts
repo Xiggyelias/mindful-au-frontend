@@ -123,7 +123,7 @@ const PEER_TYPING_IDLE_TIMEOUT_MS = 2400;
 const TYPING_STATUS_TIMEOUT_MS = 3200;
 const TYPING_POLL_INTERVAL_MS = 2800;
 const MAX_CLIENT_MESSAGES = 500;
-const DECRYPT_BATCH_SIZE = 16;
+const DECRYPT_BATCH_SIZE = 20;
 const E2E_VERSION = 'v1';
 const SESSION_KEY_PREFIX = 'chat_key_';
 const SESSION_KEY_V2_PREFIX = 'chat_key_v2_';
@@ -261,6 +261,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const sessionExpiredRef = useRef(false);
   
   // Stop all retry timers when session expires
   const stopAllRetries = useCallback(() => {
@@ -1317,6 +1318,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         if (status === 410) {
           setIsLoading(false);
           setSessionExpired(true);
+          sessionExpiredRef.current = true;
           // Clear ALL pending timers so nothing retries
           if (pollingTimeoutRef.current !== null) {
             window.clearTimeout(pollingTimeoutRef.current);
@@ -1997,6 +1999,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     };
 
     const scheduleNextPoll = () => {
+      if (sessionExpiredRef.current) return; // hard stop
       if (isDisposed || !isInitializedRef.current || sessionExpired) return;
       const now = Date.now();
       const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTypingRef.current;
@@ -2040,6 +2043,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       if (!sessionDetails || signal.aborted) {
         setIsLoading(false);
         setSessionExpired(true);
+        sessionExpiredRef.current = true;
         return;
       }
       
@@ -2101,6 +2105,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         if (status === 410) {
           setIsLoading(false);
           setSessionExpired(true);
+          sessionExpiredRef.current = true;
           return;
         }
         
