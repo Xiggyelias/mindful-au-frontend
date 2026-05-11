@@ -151,12 +151,12 @@ const AICard = memo(({ content, time, isThinking }: { content: string; time: str
     <div className="min-w-0 flex-1 max-w-[88%] sm:max-w-[82%] lg:max-w-[75%]">
       <div className="relative group">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-red-900/20 via-rose-800/10 to-transparent rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
-        <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/40 to-zinc-900/60 border border-white/[0.06] backdrop-blur-sm px-6 py-5 shadow-xl">
+        <div className="relative rounded-2xl bg-muted text-foreground border border-border backdrop-blur-sm px-6 py-5 shadow-xl">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-rose-500/20 via-red-400/10 to-transparent" />
-          <p className="text-[15px] leading-[1.7] text-zinc-200 whitespace-pre-wrap break-words">{content}</p>
+          <p className="text-[15px] leading-[1.7] whitespace-pre-wrap break-words">{content}</p>
         </div>
       </div>
-      <p className="mt-2 text-[10px] text-zinc-500 pl-2 tracking-wide uppercase">{time}</p>
+      <p className="mt-2 text-[10px] text-muted-foreground pl-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
 ));
@@ -179,17 +179,15 @@ const WellnessCapsule = ({ capsule, onClick, disabled }: {
       whileTap={{ scale: 0.97 }}
       className={cn(
         "relative group flex items-center gap-2 px-3.5 py-2 rounded-xl",
-        "border border-white/[0.08] bg-gradient-to-br backdrop-blur-md",
-        "hover:border-white/[0.15] transition-all duration-500",
-        "disabled:opacity-40 disabled:cursor-not-allowed",
-        capsule.color,
-        "shadow-lg", capsule.glow
+        "border border-border bg-muted text-foreground backdrop-blur-md",
+        "hover:border-border/80 transition-all duration-500",
+        capsule.color
       )}
     >
-      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.06] group-hover:bg-white/[0.1] transition-colors">
-        <Icon className="h-3.5 w-3.5 text-zinc-200" />
+      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted/50 group-hover:bg-muted transition-colors">
+        <Icon className="h-3.5 w-3.5 text-foreground" />
       </div>
-      <span className="text-sm font-medium text-zinc-200">{capsule.label}</span>
+      <span className="text-sm font-medium text-foreground">{capsule.label}</span>
     </motion.button>
   );
 };
@@ -204,7 +202,7 @@ const WellnessTyping = () => (
     className="flex gap-4"
   >
     <AICompanion isThinking />
-    <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-zinc-800/40 to-zinc-900/60 backdrop-blur-sm px-6 py-4 shadow-xl">
+    <div className="rounded-2xl border border-border bg-muted backdrop-blur-sm px-6 py-4 shadow-xl">
       <div className="flex items-center gap-1">
         {[0, 1, 2].map((i) => (
           <motion.div
@@ -214,7 +212,7 @@ const WellnessTyping = () => (
             transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
           />
         ))}
-        <span className="ml-3 text-xs text-zinc-500">Thinking...</span>
+        <span className="ml-3 text-xs text-muted-foreground">Thinking...</span>
       </div>
     </div>
   </motion.div>
@@ -235,9 +233,9 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-zinc-800/30 to-zinc-900/50 backdrop-blur-md p-5"
+      className="rounded-2xl border border-border bg-muted/50 backdrop-blur-md p-5"
     >
-      <p className="text-sm text-zinc-400 mb-3 flex items-center gap-2">
+      <p className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
         <Activity className="h-4 w-4 text-rose-400" />
         How are you feeling right now?
       </p>
@@ -249,13 +247,13 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
             whileTap={{ scale: 0.95 }}
             onClick={() => onSelect(`I'm feeling ${mood.label.toLowerCase()}`)}
             className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.06]",
-              "bg-gradient-to-br hover:border-white/[0.12] transition-all",
+              "flex items-center gap-2 px-3 py-2 rounded-xl border border-border",
+              "bg-muted hover:border-border/80 transition-all",
               mood.color
             )}
           >
             <span className="text-base">{mood.emoji}</span>
-            <span className="text-xs font-medium text-zinc-200">{mood.label}</span>
+            <span className="text-xs font-medium text-foreground">{mood.label}</span>
           </motion.button>
         ))}
       </div>
@@ -415,7 +413,7 @@ const StudentAISupport = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-hidden">
       <AmbientCanvas />
       <DashboardSidebar
         items={navItems}
@@ -432,7 +430,7 @@ const StudentAISupport = () => {
         />
 
         <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-4 lg:p-6">
-          <div className="flex-1 min-h-0 flex flex-col rounded-2xl sm:rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-zinc-900/40 to-black/60 backdrop-blur-xl shadow-2xl overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col rounded-2xl sm:rounded-[2rem] border border-border bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
             <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
@@ -440,27 +438,27 @@ const StudentAISupport = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full hover:bg-white/10"
+                    className="h-9 w-9 rounded-full hover:bg-muted/50"
                     onClick={handleBack}
                   >
-                    <History className="h-5 w-5 text-zinc-400 rotate-180" />
+                    <History className="h-5 w-5 text-muted-foreground rotate-180" />
                   </Button>
                   <AICompanion isThinking={isLoading} />
                   <div>
-                    <h1 className="text-base font-semibold text-zinc-100 tracking-tight">AI Wellness Assistant</h1>
+                    <h1 className="text-base font-semibold text-foreground tracking-tight">AI Wellness Assistant</h1>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      <span className="text-[11px] text-zinc-500">Always here for you</span>
+                      <span className="text-[11px] text-muted-foreground">Always here for you</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
-                    <Lock className="h-3 w-3 text-zinc-500" />
-                    <span className="text-[10px] text-zinc-500">Private</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 border border-border">
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground">Private</span>
                   </div>
                   <Button
                     variant="ghost"
@@ -474,10 +472,10 @@ const StudentAISupport = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full h-8 w-8 hover:bg-white/10"
+                    className="rounded-full h-8 w-8 hover:bg-muted/50"
                     onClick={() => toast.info("Your conversation is private and handled securely.")}
                   >
-                    <Heart className="h-4 w-4 text-zinc-500" />
+                    <Heart className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </div>
               </div>
@@ -517,8 +515,8 @@ const StudentAISupport = () => {
                       <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500/20 to-violet-500/20 mb-5">
                         <Sparkles className="h-7 w-7 text-rose-400" />
                       </div>
-                      <h2 className="text-lg font-semibold text-zinc-100 mb-2">Welcome to your safe space</h2>
-                      <p className="text-zinc-500 text-sm max-w-md mx-auto">
+                      <h2 className="text-lg font-semibold text-foreground mb-2">Welcome to your safe space</h2>
+                      <p className="text-muted-foreground text-sm max-w-md mx-auto">
                         I'm here to listen and support you. Share what's on your mind, or choose a topic below to get started.
                       </p>
                     </motion.div>
@@ -554,7 +552,7 @@ const StudentAISupport = () => {
             </div>
 
             {/* Input Area - Floating Premium Design */}
-            <div className="flex-shrink-0 border-t border-white/[0.04] bg-gradient-to-t from-black/60 to-transparent p-3 sm:p-5">
+            <div className="flex-shrink-0 border-t border-border bg-background p-3 sm:p-5">
               <div className="max-w-3xl mx-auto space-y-3">
                 {/* Crisis Alert */}
                 <AnimatePresence>
@@ -572,11 +570,11 @@ const StudentAISupport = () => {
                           </div>
                           <div>
                             <p className="font-semibold text-rose-400 text-sm">Immediate help recommended</p>
-                            <p className="text-sm text-zinc-300 mt-1">
+                            <p className="text-sm text-foreground mt-1">
                               Move toward another person or a safer place now. Use the emergency alert if you need a counselor response quickly.
                             </p>
                             {supportSignal.crisisHotline && (
-                              <p className="text-xs text-zinc-500 mt-2">Crisis contact: {supportSignal.crisisHotline}</p>
+                              <p className="text-xs text-muted-foreground mt-2">Crisis contact: {supportSignal.crisisHotline}</p>
                             )}
                           </div>
                         </div>
@@ -599,7 +597,7 @@ const StudentAISupport = () => {
                             variant="outline"
                             size="sm"
                             onClick={handleCallHotline}
-                            className="gap-2 border-white/10 hover:bg-white/5"
+                            className="gap-2 border-border hover:bg-muted/50"
                           >
                             <Phone className="h-4 w-4" />
                             Call Now
@@ -626,10 +624,10 @@ const StudentAISupport = () => {
                 <form onSubmit={handleSendMessage}>
                   <div className={cn(
                     "relative flex items-center rounded-2xl border transition-all duration-300",
-                    "bg-gradient-to-br from-zinc-800/60 to-zinc-900/40 backdrop-blur-md",
+                    "bg-muted backdrop-blur-md",
                     isFocused
                       ? "border-rose-500/30 shadow-lg shadow-rose-500/10"
-                      : "border-white/[0.06] hover:border-white/10"
+                      : "border-border hover:border-border/80"
                   )}>
                     <input
                       type="text"
@@ -639,14 +637,14 @@ const StudentAISupport = () => {
                       onBlur={() => setIsFocused(false)}
                       placeholder="Share what's on your mind..."
                       disabled={isLoading}
-                      className="flex-1 bg-transparent px-5 py-3.5 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
+                      className="flex-1 bg-transparent px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
                     />
                     <div className="flex items-center gap-2 pr-2">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-xl hover:bg-white/10 text-zinc-500 hover:text-zinc-300"
+                        className="h-9 w-9 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-foreground"
                         onClick={() => toast.info("Voice input coming soon!")}
                       >
                         <Mic className="h-5 w-5" />
@@ -673,7 +671,7 @@ const StudentAISupport = () => {
                 </form>
 
                 {/* Footer */}
-                <p className="text-center text-[10px] text-zinc-600 leading-relaxed">
+                <p className="text-center text-[10px] text-muted-foreground leading-relaxed">
                   I'm here to listen and support you. Remember, I'm an AI assistant and not a replacement for professional clinical help.
                 </p>
               </div>
