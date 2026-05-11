@@ -193,9 +193,11 @@ export const importKey = async (keyString: string): Promise<CryptoKey> => {
   if (!keyData || keyData.length !== 32) {
     throw new Error("Invalid raw AES key material");
   }
+  // Create a new Uint8Array from the buffer to ensure correct type
+  const keyBuffer = new Uint8Array(keyData);
   return await crypto.subtle.importKey(
     "raw",
-    keyData,
+    keyBuffer,
     { name: ALGORITHM, length: KEY_LENGTH },
     true,
     ["encrypt", "decrypt"]

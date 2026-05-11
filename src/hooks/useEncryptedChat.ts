@@ -20,6 +20,10 @@ import {
   persistSessionKey,
   deletePersistedSessionKey,
 } from '@/lib/chatSessionKeys';
+import {
+  getPreloadedSessionKey,
+  clearPreloadedKeys,
+} from '@/lib/encryptionPreloader';
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
 import { recordChatOpenLatency, recordWarmHydrateResult } from '@/lib/chatPerfMetrics';
