@@ -1043,12 +1043,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
                 sender_id: m.sender_id,
                 recipient_id: m.recipient_id,
                 created_at: m.created_at,
-                updated_at: m.updated_at,
                 message_type: m.message_type,
                 file_url: m.file_url,
                 is_encrypted: m.is_encrypted,
                 seen_at: m.seen_at,
-                delivered_at: m.delivered_at,
               }));
               await decryptMessages(rawMessages);
             }
@@ -1447,7 +1445,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         const beforeId = pageNum === 1 ? undefined : oldestMessageIdRef.current;
         const data = (await api.getMessages(sessionId, {
           before_id: beforeId,
-          limit: MESSAGE_POLL_TIMEOUT_MS === 5000 ? 50 : 25, // Use appropriate limit
+          limit: MESSAGE_POLL_TIMEOUT_MS <= 5000 ? 50 : 25, // Use appropriate limit
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
         })) as RawMessage[];
         
@@ -1525,12 +1523,10 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             sender_id: m.sender_id,
             recipient_id: m.recipient_id,
             created_at: m.created_at,
-            updated_at: m.updated_at,
             message_type: m.message_type,
             file_url: m.file_url,
             is_encrypted: m.is_encrypted,
             seen_at: m.seen_at,
-            delivered_at: m.delivered_at,
           }));
           await decryptMessages(rawMessages);
         }
