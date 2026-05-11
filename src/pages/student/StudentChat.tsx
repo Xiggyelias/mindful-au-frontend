@@ -593,6 +593,19 @@ const StudentChat = () => {
     !encryptionTimedOut &&
     (isSessionsLoading || (Boolean(activeSession) && !isEncryptionReady));
 
+  if (sessionExpired) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center 
+                      gap-3 text-muted-foreground">
+        <Lock className="h-8 w-8 opacity-40" />
+        <p className="text-sm font-medium">This session has ended.</p>
+        <p className="text-xs opacity-60">
+          This conversation is no longer available.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar

@@ -1099,6 +1099,7 @@ class ApiClient {
     if (response.status === 410) {
       const err = new Error('Session has ended') as any;
       err.status = 410;
+      err.response = { status: 410 };
       throw err;
     }
     

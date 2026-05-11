@@ -1315,15 +1315,29 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         setError(null);
         pollCountRef.current += 1;
       } catch (err: any) {
-        // 410 = session permanently closed — stop all retries immediately
-        const status = err?.response?.status ?? err?.status;
+        const status = err?.response?.status ?? err?.status ?? 0;
         if (status === 410) {
           setIsLoading(false);
           setSessionExpired(true);
-          stopAllRetries();
+          // Clear ALL pending timers so nothing retries
+          if (pollingTimeoutRef.current !== null) {
+            window.clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = null;
+          }
+          if (typingPollTimeoutRef.current !== null) {
+            window.clearTimeout(typingPollTimeoutRef.current);
+            typingPollTimeoutRef.current = null;
+          }
+          if (realtimeSyncTimeoutRef.current !== null) {
+            window.clearTimeout(realtimeSyncTimeoutRef.current);
+            realtimeSyncTimeoutRef.current = null;
+          }
+          if (peerTypingTimeoutRef.current !== null) {
+            window.clearTimeout(peerTypingTimeoutRef.current);
+            peerTypingTimeoutRef.current = null;
+          }
           return;
         }
-
         console.error('Failed to load messages:', err);
         if (messageCountRef.current === 0) {
           setError(extractApiErrorMessage(err, 'Failed to load messages'));
@@ -2021,6 +2035,17 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     const bootstrap = async (signal: AbortSignal) => {
       const bootstrapStartedAt = Date.now();
       let warmHydrateHit = false;
+      
+      // Check if session is already gone before any other work
+      const sessionDetails = await api.getSession(sessionId).catch((e: any) => {
+        if ((e?.response?.status ?? e?.status) === 410) return null;
+        throw e;
+      });
+      if (!sessionDetails || signal.aborted) {
+        setIsLoading(false);
+        setSessionExpired(true);
+        return;
+      }
       
       try {
         console.log(`[chat:${sessionId}] Starting bootstrap...`);
