@@ -29,7 +29,7 @@ class UploadManager {
   enqueue<T>(uploadId: string, file: File, uploadFn: (file: File, onProgress?: (progress: number) => void) => Promise<T>): Promise<T> {
     // Clean up any existing upload with same ID
     if (this.uploads.has(uploadId)) {
-      delete this.uploads.delete(uploadId);
+      this.uploads.delete(uploadId);
     }
 
     let resolve: (value: T) => void;
