@@ -23,19 +23,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
+import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
-import {
-  confirmProfileAnonymousModeTransition,
-  getProfileAnonymousModeSuccessTitle,
-  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-  PROFILE_ANON_MODE_UPDATE_ERROR,
-} from "@/lib/profileAnonymousMode";
+import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 
@@ -144,8 +138,8 @@ const StudentDashboard = () => {
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [isSavingAnonymousMode, setIsSavingAnonymousMode] = useState(false);
   const { user, refreshUser } = useAuth();
+  const { profileAnonymousMode, isSaving: isSavingAnonymousMode, toggleProfileAnonymousMode } = useProfileAnonymousMode();
   const {
     tip: dailyTip,
     isLoading: tipLoading,
@@ -423,27 +417,9 @@ const StudentDashboard = () => {
   };
 
   const handleAnonymousModeToggle = async (checked: boolean) => {
-    if (!user?.id) return;
-
-    if (!confirmProfileAnonymousModeTransition(user.profile?.anonymous_mode, checked)) {
-      return;
-    }
-
-    try {
-      setIsSavingAnonymousMode(true);
-      await api.updateProfile({ anonymous_mode: checked });
-      await refreshUser();
-      dispatchChatAnonymitySync();
-      await loadStats();
-      toast.success(getProfileAnonymousModeSuccessTitle(checked), {
-        description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-      });
-    } catch (error: unknown) {
-      const message = getApiErrorMessage(error, "Failed to update anonymous mode");
-      toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
-    } finally {
-      setIsSavingAnonymousMode(false);
-    }
+    await toggleProfileAnonymousMode(checked);
+    // Refresh dashboard stats after toggle so session labels update
+    await loadStats();
   };
 
   return (
@@ -670,7 +646,7 @@ const StudentDashboard = () => {
             <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <AnonymousModeToggle
                 id="student-anonymous-mode"
-                checked={isProfileAnonymousMode(user?.profile?.anonymous_mode)}
+                checked={profileAnonymousMode}
                 onCheckedChange={handleAnonymousModeToggle}
                 disabled={isSavingAnonymousMode}
               />

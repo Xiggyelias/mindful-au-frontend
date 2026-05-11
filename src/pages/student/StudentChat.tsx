@@ -35,13 +35,8 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
-import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
-import {
-  confirmProfileAnonymousModeTransition,
-  getProfileAnonymousModeSuccessTitle,
-  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-  PROFILE_ANON_MODE_UPDATE_ERROR,
-} from "@/lib/profileAnonymousMode";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import {
   hasCompletedLoginChatSecurity,
   markLoginChatSecurityComplete,
@@ -104,7 +99,6 @@ const StudentChat = () => {
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
-  const [isSavingProfileAnonymous, setIsSavingProfileAnonymous] = useState(false);
   const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(
     () => Boolean((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight)
   );
@@ -114,7 +108,11 @@ const StudentChat = () => {
   const hasLoadedCounselorsRef = useRef(false);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
-  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
+  const {
+    profileAnonymousMode,
+    isSaving: isSavingProfileAnonymous,
+    toggleProfileAnonymousMode,
+  } = useProfileAnonymousMode();
   const [hasLoginSecureSession, setHasLoginSecureSession] = useState(() =>
     hasCompletedLoginChatSecurity(user?.id)
   );
@@ -231,31 +229,10 @@ const StudentChat = () => {
   const handleSidebarAnonymousToggle = useCallback(
     async (checked: boolean) => {
       if (!user?.id) return;
-
-      if (!confirmProfileAnonymousModeTransition(user.profile?.anonymous_mode, checked)) {
-        return;
-      }
-
-      const revertTo = isProfileAnonymousMode(user?.profile?.anonymous_mode);
       setAnonymousStartMode(checked);
-
-      try {
-        setIsSavingProfileAnonymous(true);
-        await api.updateProfile({ anonymous_mode: checked });
-        await refreshUser();
-        dispatchChatAnonymitySync();
-        toast.success(getProfileAnonymousModeSuccessTitle(checked), {
-          description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-        });
-      } catch (error: unknown) {
-        setAnonymousStartMode(revertTo);
-        const message = getApiErrorMessage(error, "Failed to update anonymous mode");
-        toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
-      } finally {
-        setIsSavingProfileAnonymous(false);
-      }
+      await toggleProfileAnonymousMode(checked);
     },
-    [user?.id, user?.profile?.anonymous_mode, refreshUser, getApiErrorMessage, toast],
+    [toggleProfileAnonymousMode, user?.id],
   );
 
   const {

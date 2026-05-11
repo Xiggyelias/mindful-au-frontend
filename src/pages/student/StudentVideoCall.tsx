@@ -34,7 +34,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import type { Appointment } from "@/hooks/useChatSession";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -49,14 +48,8 @@ import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndica
 import {
   isAnonymousIdentityMaskedFromViewer,
   isAnonymousSessionFlag,
-  isProfileAnonymousMode,
 } from "@/lib/anonymousMode";
-import {
-  confirmProfileAnonymousModeTransition,
-  getProfileAnonymousModeSuccessTitle,
-  PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-  PROFILE_ANON_MODE_UPDATE_ERROR,
-} from "@/lib/profileAnonymousMode";
+import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 const navItems = [
@@ -103,7 +96,7 @@ const StudentVideoCall = () => {
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
   const [isStartingMode, setIsStartingMode] = useState<CallMode | null>(null);
   const [videoFit, setVideoFit] = useState<"cover" | "fit">("cover");
-  const [isUpdatingAnonymousMode, setIsUpdatingAnonymousMode] = useState(false);
+
   const [isOnline, setIsOnline] = useState(
     () => (typeof navigator === "undefined" ? true : navigator.onLine)
   );
@@ -111,7 +104,11 @@ const StudentVideoCall = () => {
   const [isRejoining, setIsRejoining] = useState(false);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
-  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
+  const {
+    profileAnonymousMode,
+    isSaving: isUpdatingAnonymousMode,
+    toggleProfileAnonymousMode,
+  } = useProfileAnonymousMode();
 
   const requestedAppointmentId = useMemo(() => {
     const parsed = Number(searchParams.get("appointment_id"));
@@ -451,26 +448,8 @@ const StudentVideoCall = () => {
   };
 
   const handleToggleAnonymousMode = async () => {
-    if (isUpdatingAnonymousMode) {
-      return;
-    }
-    const nextMode = !profileAnonymousMode;
-    if (!confirmProfileAnonymousModeTransition(user?.profile?.anonymous_mode, nextMode)) {
-      return;
-    }
-    setIsUpdatingAnonymousMode(true);
-    try {
-      await api.updateProfile({ anonymous_mode: nextMode });
-      await refreshUser();
-      dispatchChatAnonymitySync();
-      toast.success(getProfileAnonymousModeSuccessTitle(nextMode), {
-        description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
-      });
-    } catch {
-      toast.error(PROFILE_ANON_MODE_UPDATE_ERROR);
-    } finally {
-      setIsUpdatingAnonymousMode(false);
-    }
+    if (isUpdatingAnonymousMode) return;
+    await toggleProfileAnonymousMode(!profileAnonymousMode);
   };
 
   const handleAcceptIncomingCall = () => {
