@@ -192,6 +192,8 @@ type PersistedActiveCall = {
   sessionId: string;
   userId: string;
   reconnectUntil: number;
+  /** Persisted so anonymous audio-only calls are never restored as video after a refresh. */
+  audioOnly: boolean;
 };
 
 const readPersistedActiveCall = (): PersistedActiveCall | null => {
@@ -214,12 +216,13 @@ const readPersistedActiveCall = (): PersistedActiveCall | null => {
   }
 };
 
-const persistActiveCall = (sessionId: string, userId: string, reconnectUntil: number) => {
+const persistActiveCall = (sessionId: string, userId: string, reconnectUntil: number, audioOnly = false) => {
   try {
     const payload: PersistedActiveCall = {
       sessionId: String(sessionId || ""),
       userId: String(userId || ""),
       reconnectUntil,
+      audioOnly: Boolean(audioOnly),
     };
     localStorage.setItem(ACTIVE_CALL_STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -639,7 +642,7 @@ const createEnginePeerConnection = () => {
       clearEngineConnectionTimeout();
       clearEngineReconnectLoop();
       if (engine.sessionId && engine.userId) {
-        persistActiveCall(engine.sessionId, engine.userId, Date.now() + RECONNECT_WINDOW_MS);
+        persistActiveCall(engine.sessionId, engine.userId, Date.now() + RECONNECT_WINDOW_MS, engine.state.isAudioOnly);
       }
       setEngineState((prev) => ({
         ...prev,
@@ -703,7 +706,7 @@ const createEnginePeerConnection = () => {
       const deadline = Date.now() + RECONNECT_WINDOW_MS;
       engine.reconnectDeadlineMs = deadline;
       if (engine.sessionId && engine.userId) {
-        persistActiveCall(engine.sessionId, engine.userId, deadline);
+        persistActiveCall(engine.sessionId, engine.userId, deadline, engine.state.isAudioOnly);
       }
       setEngineState((prev) => ({
         ...prev,
@@ -1419,7 +1422,12 @@ const performEngineRejoin = async (): Promise<boolean> => {
       throw new Error("Call channel not available");
     }
 
-    const stream = await initializeEngineMedia(engine.state.isAudioOnly);
+    // Use persisted audioOnly flag to correctly restore anonymous calls after a page refresh.
+    // engine.state.isAudioOnly is always false on a fresh page load (default engine state),
+    // so we must read from localStorage to avoid restoring anonymous audio calls as video.
+    const persistedForRejoin = readPersistedActiveCall();
+    const rejoinAudioOnly = persistedForRejoin?.audioOnly ?? engine.state.isAudioOnly;
+    const stream = await initializeEngineMedia(rejoinAudioOnly);
     if (!stream) {
       setEngineState((prev) => ({
         ...prev,
