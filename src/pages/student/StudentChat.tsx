@@ -612,7 +612,6 @@ const StudentChat = () => {
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
-                currentUserId={user?.id?.toString()}
                 counselors={counselors}
                 isCounselorsLoading={isCounselorsLoading}
                 searchQuery={searchQuery}
@@ -631,6 +630,7 @@ const StudentChat = () => {
                 sessionTotalPages={sessionTotalPages}
                 onNextSessionPage={goToNextSessionPage}
                 onPrevSessionPage={goToPrevSessionPage}
+                ownerUserId={user?.id?.toString() ?? null}
               />
             </div>
 
@@ -853,13 +853,13 @@ const StudentChat = () => {
                     onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
                     fileInputRef={fileInputRef}
                   />
+
                 </>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-4 xl:hidden">
                   <ChatSidebar
                     sessions={sessions}
                     activeSession={activeSession}
-                    currentUserId={user?.id?.toString()}
                     counselors={counselors}
                     isCounselorsLoading={isCounselorsLoading}
                     searchQuery={searchQuery}
@@ -878,6 +878,7 @@ const StudentChat = () => {
                     sessionTotalPages={sessionTotalPages}
                     onNextSessionPage={goToNextSessionPage}
                     onPrevSessionPage={goToPrevSessionPage}
+                    ownerUserId={user?.id?.toString() ?? null}
                   />
                 </div>
               )}

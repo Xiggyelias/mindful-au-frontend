@@ -24,8 +24,6 @@ import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 interface ChatSidebarProps {
   sessions: Session[];
   activeSession: Session | null;
-  /** The authenticated user's own ID — used as the preload cache owner key. */
-  currentUserId?: string | null;
   counselors: any[];
   isCounselorsLoading: boolean;
   searchQuery: string;
@@ -50,12 +48,17 @@ interface ChatSidebarProps {
   sessionTotalPages: number;
   onNextSessionPage: () => void;
   onPrevSessionPage: () => void;
+  /**
+   * The authenticated user's ID — used as ownerUserId for hover-preload cache
+   * keying. Must come from useAuth(), NOT from activeSession (which is null
+   * on cold start and would silently disable all hover prefetching).
+   */
+  ownerUserId?: string | null;
 }
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   sessions,
   activeSession,
-  currentUserId,
   counselors,
   isCounselorsLoading,
   searchQuery,
@@ -74,16 +77,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   sessionTotalPages,
   onNextSessionPage,
   onPrevSessionPage,
+  ownerUserId,
 }) => {
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRowMouseEnter = (sessionId: string) => {
     console.log('[preload] hover start - sessionId:', sessionId);
-    // Use the explicit currentUserId prop so preload works even before
-    // a session is selected (activeSession is null on first open).
-    const userId = currentUserId
-      || activeSession?.student_id?.toString()
-      || activeSession?.counselor_id?.toString();
+    // Use the explicit ownerUserId prop (from useAuth) — NOT activeSession?.student_id
+    // because activeSession is null on cold start, silently disabling all hover preloads.
+    const userId = String(ownerUserId || '').trim() || null;
     if (!userId) return;
 
     hoverTimerRef.current = setTimeout(async () => {

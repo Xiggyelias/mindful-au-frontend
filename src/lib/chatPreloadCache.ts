@@ -1,3 +1,9 @@
+import {
+  getMemoryCache,
+  setMemoryCache,
+  type MemoryCacheEntry,
+} from '@/lib/chatMemoryCache';
+
 type PreloadedSessionSnapshot = {
   sessionId: string;
   savedAt: number;
@@ -40,16 +46,23 @@ export async function savePreloadedSessionMessages(
 ): Promise<void> {
   const id = String(sessionId || "").trim();
   if (!id) return;
-  const db = await openDb();
-  if (!db) return;
+
   const ownerUserId = String(opts?.ownerUserId || "").trim() || null;
   const keyScope = String(opts?.keyScope || "").trim() || null;
+  const sliced = messages.slice(-MAX_MESSAGES);
+
+  // ── L1 write-through ──────────────────────────────────────────────────────
+  setMemoryCache(id, sliced);
+
+  // ── L2 IndexedDB write ────────────────────────────────────────────────────
+  const db = await openDb();
+  if (!db) return;
   const snapshot: PreloadedSessionSnapshot = {
     sessionId: id,
     savedAt: Date.now(),
     ownerUserId,
     keyScope,
-    messages: messages.slice(-MAX_MESSAGES),
+    messages: sliced,
   };
   await new Promise<void>((resolve) => {
     try {
@@ -70,6 +83,15 @@ export async function loadPreloadedSessionMessages(
   console.log('[preload:read] checking cache for sessionId:', sessionId);
   const id = String(sessionId || "").trim();
   if (!id) return [];
+
+  // ── L1 memory cache (fastest path) ───────────────────────────────────────
+  const l1 = getMemoryCache(id);
+  if (l1) {
+    console.log('[preload:read] L1 MEMORY HIT:', sessionId, 'messages:', l1.messages.length);
+    return l1.messages;
+  }
+
+  // ── L2 IndexedDB ──────────────────────────────────────────────────────────
   const db = await openDb();
   if (!db) return [];
   const expectedOwnerUserId = String(opts?.expectedOwnerUserId || "").trim() || null;
@@ -103,6 +125,8 @@ export async function loadPreloadedSessionMessages(
           return;
         }
         console.log('[preload:read] CACHE HIT:', sessionId, 'messages:', row.messages.length);
+        // ── Prime L1 from IDB hit ────────────────────────────────────────
+        setMemoryCache(id, row.messages);
         resolve(row.messages);
       };
       req.onerror = () => {
