@@ -24,6 +24,8 @@ import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 interface ChatSidebarProps {
   sessions: Session[];
   activeSession: Session | null;
+  /** The authenticated user's own ID — used as the preload cache owner key. */
+  currentUserId?: string | null;
   counselors: any[];
   isCounselorsLoading: boolean;
   searchQuery: string;
@@ -53,6 +55,7 @@ interface ChatSidebarProps {
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   sessions,
   activeSession,
+  currentUserId,
   counselors,
   isCounselorsLoading,
   searchQuery,
@@ -76,7 +79,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const handleRowMouseEnter = (sessionId: string) => {
     console.log('[preload] hover start - sessionId:', sessionId);
-    const userId = activeSession?.student_id?.toString() || activeSession?.counselor_id?.toString();
+    // Use the explicit currentUserId prop so preload works even before
+    // a session is selected (activeSession is null on first open).
+    const userId = currentUserId
+      || activeSession?.student_id?.toString()
+      || activeSession?.counselor_id?.toString();
     if (!userId) return;
 
     hoverTimerRef.current = setTimeout(async () => {

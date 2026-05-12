@@ -450,28 +450,10 @@ const CounselorMessages = () => {
     }
   }, []);
 
-  const selectConversationById = useCallback((id: number) => {
-    if (!Number.isFinite(id) || id <= 0) return;
-    // Optimistically zero the badge immediately so the UI feels instant
-    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
-    setSelectedChatId(id);
-    activeSessionIdRef.current = id; // Track currently open session
+  // selectConversationById is defined AFTER loadSessions below so its
+  // useCallback dependency array never captures a stale reference.
 
-    // Fix 1: retry markSessionInboundRead once on failure so seen_at is always set
-    void api.markSessionInboundRead(String(id), { timeout_ms: 5000 }).catch(() => {
-      setTimeout(() => {
-        void api.markSessionInboundRead(String(id), { timeout_ms: 8000 }).catch(() => {});
-      }, 2000);
-    });
 
-    // Fix 3: silent reload 3s later so the poll-loop picks up the fresh seen_at
-    // count from the DB and doesn't re-inflate the badge on the next tick
-    setTimeout(() => {
-      void loadSessions(true);
-    }, 3000);
-  }, [loadSessions]);
-
-  
   const loadSessions = useCallback(
     async (silent = false) => {
       if (!user?.id) return;
@@ -766,6 +748,28 @@ const CounselorMessages = () => {
     },
     [chatPage, isPeerCounselor, targetSessionParam, targetStudentParam, user?.id]
   );
+
+  // Defined AFTER loadSessions so [loadSessions] dependency is never stale on the first render.
+  const selectConversationById = useCallback((id: number) => {
+    if (!Number.isFinite(id) || id <= 0) return;
+    // Optimistically zero the badge immediately so the UI feels instant
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
+    setSelectedChatId(id);
+    activeSessionIdRef.current = id;
+
+    // Retry mark-read once on failure so seen_at is always written to the DB
+    void api.markSessionInboundRead(String(id), { timeout_ms: 5000 }).catch(() => {
+      setTimeout(() => {
+        void api.markSessionInboundRead(String(id), { timeout_ms: 8000 }).catch(() => {});
+      }, 2000);
+    });
+
+    // Silent reload 3s later so the poll-loop picks up the fresh seen_at = 0
+    // from the DB and doesn't re-inflate the badge on the next tick
+    setTimeout(() => {
+      void loadSessions(true);
+    }, 3000);
+  }, [loadSessions]);
 
   useEffect(() => {
     if (!user?.id) return;
