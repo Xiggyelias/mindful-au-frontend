@@ -145,6 +145,7 @@ const CounselorDashboard = () => {
       }
 
       const appointmentRows = toList<Appointment>(appointmentsPayload);
+      console.log("DEBUG: CounselorDashboard appointments response:", appointmentsPayload);
       setAppointments(appointmentRows);
       setIsLoading(false);
 
@@ -202,6 +203,7 @@ const CounselorDashboard = () => {
 
         if (chatListResult.status === "fulfilled") {
           try {
+            console.log("DEBUG: CounselorDashboard chat list response:", chatListResult.value);
             const rawList = toList<Record<string, unknown>>(chatListResult.value);
             const chatRows = dedupeCounselorChatListRows(rawList, "dashboard");
             setOpenConversations(

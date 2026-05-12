@@ -200,6 +200,7 @@ const StudentDashboard = () => {
       let sessionItems: LiteSession[] = [];
       if (sessionsOutcome.status === "fulfilled") {
         sessionItems = parseSessionItems(sessionsOutcome.value);
+        console.log("DEBUG: StudentDashboard sessions response:", sessionsOutcome.value);
       } else {
         loadErrors.push(getApiErrorMessage(sessionsOutcome.reason, "Could not load chat sessions."));
         if (import.meta.env.DEV) {
@@ -210,6 +211,7 @@ const StudentDashboard = () => {
       let appointmentItems: AppointmentRecord[] = [];
       if (appointmentsOutcome.status === "fulfilled") {
         appointmentItems = parseAppointmentItems(appointmentsOutcome.value);
+        console.log("DEBUG: StudentDashboard appointments response:", appointmentsOutcome.value);
       } else {
         loadErrors.push(getApiErrorMessage(appointmentsOutcome.reason, "Could not load appointments."));
         if (import.meta.env.DEV) {

@@ -81,16 +81,19 @@ export async function loadPreloadedSessionMessages(
       req.onsuccess = () => {
         const row = req.result as PreloadedSessionSnapshot | undefined;
         if (!row || !Array.isArray(row.messages)) {
+          console.log('[preload:read] CACHE MISS:', sessionId);
           resolve([]);
           return;
         }
         const rowOwner = String(row.ownerUserId || "").trim() || null;
         if (expectedOwnerUserId && rowOwner && rowOwner !== expectedOwnerUserId) {
+          console.log('[preload:read] CACHE MISS (owner mismatch):', sessionId);
           resolve([]);
           return;
         }
         const rowKeyScope = String(row.keyScope || "").trim() || null;
         if (expectedKeyScope && rowKeyScope && rowKeyScope !== expectedKeyScope) {
+          console.log('[preload:read] CACHE MISS (scope mismatch):', sessionId);
           resolve([]);
           return;
         }

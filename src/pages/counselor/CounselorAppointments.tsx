@@ -600,13 +600,30 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    const isAnonymousApt = isAnonymousSessionFlag(apt.is_anonymous);
-                    const studentName = isAnonymousApt
-                      ? anonymousLabelForCounselor()
-                      : apt.student?.profile?.full_name ||
-                        apt.student?.email ||
-                        `Student #${String(apt.student_id || apt.id).slice(-4)}`;
-                    const isPhysical = String(apt.notes || "").toLowerCase().includes("physical");
+                    console.log('[apt debug]', {
+                      id: apt.id,
+                      is_anonymous: apt.is_anonymous,
+                      student_name: (apt as any).student_name,
+                      student: apt.student,
+                      session_type: (apt as any).session_type,
+                    });
+
+                    // Counselors always see real name — anonymous mode hides
+                    // identity from other students, not from the assigned counselor
+                    const studentName =
+                      (apt as any).student_name ||
+                      (apt as any).student?.name ||
+                      apt.student?.profile?.full_name ||
+                      apt.student?.email ||
+                      `Student #${String(apt.student_id || apt.id).slice(-4)}`;
+
+                    const isAnonymousApt = false; // counselors always see real identity
+
+                    const isPhysical =
+                      (apt as any).session_type === 'physical' ||
+                      (apt as any).location_type === 'physical' ||
+                      (apt as any).type === 'in_person' ||
+                      (apt.notes ?? '').toLowerCase().includes('physical');
                     const isUpdating = String(activeActionId) === String(apt.id);
                     const status = String(apt.status || "").toLowerCase();
                     const videoWindow = !isPhysical
