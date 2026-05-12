@@ -210,6 +210,7 @@ const readPersistedActiveCall = (): PersistedActiveCall | null => {
       sessionId: String(parsed.sessionId),
       userId: String(parsed.userId),
       reconnectUntil: parsed.reconnectUntil,
+      audioOnly: Boolean(parsed.audioOnly ?? false), // false = backwards compat with pre-fix records
     };
   } catch {
     return null;
