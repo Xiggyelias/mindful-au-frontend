@@ -10,8 +10,10 @@ import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { effectiveWebRtcCallMode } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
+import type { IncomingCallOverlayCall } from "@/components/call/IncomingCallOverlay";
 
-const POLL_MS = 4000;
+const POLL_MS = 1500;
 const AUTO_DISMISS_MS = 30_000;
 const TAB_FLASH_MS = 1000;
 
@@ -235,6 +237,27 @@ export function CounselorIncomingCallBanner({
     return null;
   }
 
+  // For a single incoming call, show the immersive full-screen overlay.
+  if (calls.length === 1) {
+    const call = calls[0];
+    const overlayCall: IncomingCallOverlayCall = {
+      id: call.id,
+      appointment_id: call.appointment_id,
+      callerName: call.student_name,
+      is_anonymous: call.is_anonymous,
+      call_type: call.call_type,
+      scheduled_at: call.scheduled_at,
+    };
+    return (
+      <IncomingCallOverlay
+        call={overlayCall}
+        busy={busyId === call.id}
+        onAccept={() => void handleAccept(call)}
+        onDecline={() => void handleDecline(call, "declined")}
+      />
+    );
+  }
+
   const visible = calls.slice(0, 4);
   const overflow = Math.max(0, calls.length - visible.length);
 
@@ -293,7 +316,7 @@ export function CounselorIncomingCallBanner({
                       callAnonymous ? "text-white/85" : "text-primary-foreground/85"
                     )}
                   >
-                    <span>{isVideo ? "Video call" : "Audio call"}</span>
+                    <span>{isVideo ? "Secure Video" : "Secure Audio"}</span>
                     {scheduleLabel && <span className="tabular-nums">{scheduleLabel}</span>}
                   </div>
                 </div>
