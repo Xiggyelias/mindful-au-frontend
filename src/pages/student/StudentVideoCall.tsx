@@ -49,6 +49,7 @@ import {
   isAnonymousIdentityMaskedFromViewer,
   isAnonymousSessionFlag,
 } from "@/lib/anonymousMode";
+import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
@@ -261,6 +262,13 @@ const StudentVideoCall = () => {
 
   useEffect(() => {
     void loadUpcomingVideoAppointments();
+  }, [loadUpcomingVideoAppointments]);
+
+  // Reload appointment list when anonymous mode is toggled so call_type enforcements reflect instantly.
+  useEffect(() => {
+    const onAnonymityChanged = () => void loadUpcomingVideoAppointments();
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
+    return () => window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
   }, [loadUpcomingVideoAppointments]);
 
   const activeAppointment = useMemo(

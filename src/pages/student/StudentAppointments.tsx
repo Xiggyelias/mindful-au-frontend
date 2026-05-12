@@ -38,6 +38,7 @@ import {
   prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -312,6 +313,12 @@ const StudentAppointments = () => {
       void loadCounselors(false);
     };
 
+    const onAnonymityChanged = () => {
+      // Anonymous mode was toggled — force reload so labels update immediately
+      // without waiting for the 60s poll or page focus.
+      void loadAppointments(false, { force: true });
+    };
+
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadAppointments(false);
@@ -321,12 +328,14 @@ const StudentAppointments = () => {
     window.addEventListener("focus", retryLoad);
     window.addEventListener("online", retryLoad);
     window.addEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", retryLoad);
       window.removeEventListener("online", retryLoad);
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
+      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
     };
   }, [loadAppointments, loadCounselors, user?.id]);
 

@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { format, isValid, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { StudentIncomingCallBanner } from "@/components/student/StudentIncomingCallBanner";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 
@@ -303,8 +304,17 @@ const StudentDashboard = () => {
       if (lastAt === 0 || Date.now() - lastAt < minIntervalMs) return;
       void loadStats();
     };
+    // Force-reload when anonymous mode is toggled so labels update immediately.
+    const onAnonymityChanged = () => {
+      if (!user?.id) return;
+      void loadStats();
+    };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
+    };
   }, [loadStats, user?.id]);
 
   const handlePanicButton = async () => {

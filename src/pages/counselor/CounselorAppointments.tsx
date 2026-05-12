@@ -37,6 +37,7 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -198,6 +199,9 @@ const CounselorAppointments = () => {
       void loadAppointments(false, { force: true });
     };
 
+    // When a student toggles anonymous mode off, immediately show their real name.
+    const onAnonymityChanged = () => void loadAppointments(false, { force: true });
+
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       retryLoad();
@@ -206,12 +210,14 @@ const CounselorAppointments = () => {
     window.addEventListener("focus", retryLoad);
     window.addEventListener("online", retryLoad);
     window.addEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
+    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", retryLoad);
       window.removeEventListener("online", retryLoad);
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
+      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
     };
   }, [loadAppointments, user?.id]);
 
