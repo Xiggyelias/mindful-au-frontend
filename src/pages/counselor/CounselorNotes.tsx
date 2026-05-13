@@ -93,17 +93,17 @@ function coerceString(value: unknown): string {
 
 function formatSessionTimestamp(value: unknown): string {
   const raw = coerceString(value);
-  if (!raw) return "â€”";
+  if (!raw) return "Ã¢â‚¬â€";
   const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return "â€”";
-  return format(d, "MMM d, yyyy â€¢ h:mm a");
+  if (!Number.isFinite(d.getTime())) return "Ã¢â‚¬â€";
+  return format(d, "MMM d, yyyy Ã¢â‚¬Â¢ h:mm a");
 }
 
 function formatRelativeUpdated(value: unknown): string {
   const raw = coerceString(value);
-  if (!raw) return "â€”";
+  if (!raw) return "Ã¢â‚¬â€";
   const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return "â€”";
+  if (!Number.isFinite(d.getTime())) return "Ã¢â‚¬â€";
   return formatDistanceToNow(d, { addSuffix: true });
 }
 
@@ -134,7 +134,7 @@ function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const timing =
     coerceString(whenSource) !== ""
       ? formatSessionTimestamp(whenSource)
-      : `${formatSessionTimestamp(s.created_at)} Â· not started`;
+      : `${formatSessionTimestamp(s.created_at)} Ã‚Â· not started`;
 
   const updatedIso = coerceString(s.updated_at) || coerceString(s.created_at) || "";
 
@@ -259,7 +259,7 @@ const CounselorNotes = () => {
 
   const deleteNote = async (sessionId: string) => {
     if (!canEditNotes) return;
-    if (!confirm("Clear this sessionâ€™s clinical notes?")) return;
+    if (!confirm("Clear this sessionÃ¢â‚¬â„¢s clinical notes?")) return;
     try {
       setIsDeleting(true);
       await api.deleteSessionNote(sessionId);
@@ -291,7 +291,7 @@ const CounselorNotes = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0 pl-0">
+      <div className="lg:pl-72 pl-0">
         <DashboardHeader title="Session Notes" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -334,7 +334,7 @@ const CounselorNotes = () => {
               <div className="relative flex-1 md:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by student, note text, or session IDâ€¦"
+                  placeholder="Search by student, note text, or session IDÃ¢â‚¬Â¦"
                   className="pl-9 bg-background/50 border-border/40 focus:bg-background transition-all"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -404,7 +404,7 @@ const CounselorNotes = () => {
               <AlertDescription>
                 {role === "admin"
                   ? "Administrators can review session metadata here; only the assigned counselor can add or change clinical notes (API policy)."
-                  : "Only assigned counselors can edit session notes. If you are a peer counselor, open the session in Messages for contextâ€”note edits are limited to the lead counselor."}
+                  : "Only assigned counselors can edit session notes. If you are a peer counselor, open the session in Messages for contextÃ¢â‚¬â€note edits are limited to the lead counselor."}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -427,7 +427,7 @@ const CounselorNotes = () => {
                     {isLoading ? (
                       <div className="p-8 text-center space-y-3">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                        <p className="text-xs text-muted-foreground">Loading sessionsâ€¦</p>
+                        <p className="text-xs text-muted-foreground">Loading sessionsÃ¢â‚¬Â¦</p>
                       </div>
                     ) : filteredSessions.length === 0 ? (
                       <div className="p-8 text-center text-muted-foreground">
@@ -511,7 +511,7 @@ const CounselorNotes = () => {
                       Note editor
                     </CardTitle>
                     <Badge variant="secondary" className="bg-background/80 w-fit">
-                      Session #{selectedSessionId ?? "â€”"}
+                      Session #{selectedSessionId ?? "Ã¢â‚¬â€"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -605,7 +605,7 @@ const CounselorNotes = () => {
                           </span>
                         </label>
                         <Textarea
-                          placeholder="SOAP, interventions, safety planning, referralsâ€¦"
+                          placeholder="SOAP, interventions, safety planning, referralsÃ¢â‚¬Â¦"
                           className="min-h-[420px] sm:min-h-[520px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-y p-4"
                           value={noteText}
                           disabled={!canEditNotes}
@@ -613,7 +613,7 @@ const CounselorNotes = () => {
                         />
                         <p className="text-[11px] text-muted-foreground">
                           Backend stores this in the session <code className="text-xs">notes</code> field. System lines
-                          like &quot;Video appointment #123&quot; are still notesâ€”add your clinical summary below them or
+                          like &quot;Video appointment #123&quot; are still notesÃ¢â‚¬â€add your clinical summary below them or
                           replace when appropriate.
                         </p>
                       </div>

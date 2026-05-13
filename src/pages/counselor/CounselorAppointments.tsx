@@ -405,7 +405,7 @@ const CounselorAppointments = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0 pl-0">
+      <div className="lg:pl-72 pl-0">
         <DashboardHeader title="Appointments" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
@@ -477,7 +477,7 @@ const CounselorAppointments = () => {
                   onClick={() => setBulkCancelOpen(false)}
                   disabled={bulkCancelSubmitting}
                 >
-                  âŒ No, Go Back
+                  Ã¢ÂÅ’ No, Go Back
                 </Button>
                 <Button
                   type="button"
@@ -486,7 +486,7 @@ const CounselorAppointments = () => {
                   onClick={() => void handleBulkCancelConfirm()}
                   disabled={bulkCancelSubmitting}
                 >
-                  âœ… Yes, Cancel
+                  Ã¢Å“â€¦ Yes, Cancel
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -614,7 +614,7 @@ const CounselorAppointments = () => {
                       session_type: (apt as any).session_type,
                     });
 
-                    // Counselors always see real name â€” anonymous mode hides
+                    // Counselors always see real name Ã¢â‚¬â€ anonymous mode hides
                     // identity from other students, not from the assigned counselor
                     const studentName =
                       (apt as any).student_name ||

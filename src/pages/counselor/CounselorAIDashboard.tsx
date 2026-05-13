@@ -236,7 +236,7 @@ const CounselorAIDashboard = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0 pl-0">
+      <div className="lg:pl-72 pl-0">
         <DashboardHeader title="AI Diagnostics Dashboard" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
@@ -476,7 +476,7 @@ const CounselorAIDashboard = () => {
                       <p className="text-foreground">
                         {selectedDiagnostic.student?.profile?.full_name || selectedDiagnostic.student?.email || "Student"}
                       </p>
-                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "â€”"}</p>
+                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "Ã¢â‚¬â€"}</p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Assessment Date: {format(new Date(selectedDiagnostic.created_at), "MMM d, yyyy h:mm a")}
                       </p>

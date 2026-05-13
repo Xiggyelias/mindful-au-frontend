@@ -180,7 +180,7 @@ const AdminAnalytics = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0 pl-0">
+      <div className="lg:pl-72 pl-0">
         <DashboardHeader
           title="Analytics"
           onMenuClick={() => setSidebarOpen(true)}

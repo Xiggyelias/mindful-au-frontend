@@ -73,7 +73,7 @@ function normalizeDurationMinutes(value: number): number {
   );
 }
 
-/** Value for `<input type="datetime-local" min=â€¦>` in the user's local timezone (no `Z`). */
+/** Value for `<input type="datetime-local" min=Ã¢â‚¬Â¦>` in the user's local timezone (no `Z`). */
 function toDatetimeLocalInputValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -314,7 +314,7 @@ const StudentAppointments = () => {
     };
 
     const onAnonymityChanged = () => {
-      // Anonymous mode was toggled â€” force reload so labels update immediately
+      // Anonymous mode was toggled Ã¢â‚¬â€ force reload so labels update immediately
       // without waiting for the 60s poll or page focus.
       void loadAppointments(false, { force: true });
     };
@@ -639,7 +639,7 @@ const StudentAppointments = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0 pl-0">
+      <div className="lg:pl-72 pl-0">
         <DashboardHeader
           title="My Appointments"
           onMenuClick={() => setSidebarOpen(true)}
@@ -693,7 +693,7 @@ const StudentAppointments = () => {
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                   Match score {Number(match.score ?? 0)}/100
-                                  {match.is_online ? " â€¢ online now" : ""}
+                                  {match.is_online ? " Ã¢â‚¬Â¢ online now" : ""}
                                 </p>
                               </div>
                               <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -728,7 +728,7 @@ const StudentAppointments = () => {
                         ) : availableCounselors.map((c: any) => (
                           <SelectItem key={c.id} value={String(c.id)}>
                             {c.profile?.full_name || c.email}
-                            {c.ml_match?.score ? ` â€¢ ${c.ml_match.score}/100` : ""}
+                            {c.ml_match?.score ? ` Ã¢â‚¬Â¢ ${c.ml_match.score}/100` : ""}
                             {c.is_online ? " (Online)" : ""}
                           </SelectItem>
                         ))}
@@ -822,7 +822,7 @@ const StudentAppointments = () => {
                             <span className="text-sm font-medium">Audio only</span>
                           </div>
                           <p className="text-xs text-muted-foreground pl-6">
-                            Voice onlyâ€”no camera required.
+                            Voice onlyÃ¢â‚¬â€no camera required.
                           </p>
                         </label>
                       </RadioGroup>
@@ -1035,9 +1035,9 @@ const StudentAppointments = () => {
                             {isPhysical
                               ? "Physical"
                               : prefersAudioOnlyOnlineCall(apt.notes) || isAppointmentAudioOnly(apt)
-                                ? "Online â€¢ Audio only"
-                                : "Online â€¢ Video"}
-                            {isAnonymous ? " â€¢ Anonymous" : ""}
+                                ? "Online Ã¢â‚¬Â¢ Audio only"
+                                : "Online Ã¢â‚¬Â¢ Video"}
+                            {isAnonymous ? " Ã¢â‚¬Â¢ Anonymous" : ""}
                           </p>
                           {isAnonymous && !isPhysical && (
                             <div className="mt-2 flex flex-wrap gap-2">
