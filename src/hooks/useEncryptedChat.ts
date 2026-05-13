@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getApiErrorMessage } from '@/lib/api';
-import { markSessionAsExpired } from '@/hooks/useChatSession';
+import { markSessionAsExpired, isSessionExpired } from '@/hooks/useChatSession';
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from '@/lib/crisisTerms';
 import {
   getOrCreateDeviceKeyPair,
@@ -2162,24 +2162,27 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         // Optimistic preload: fetch adjacent conversation history in the background
         const nextSessionId = getNextSessionId(sessionId);
         if (nextSessionId) {
-          void api.getMessages(nextSessionId, {
-            limit: 40,
-            mark_read: false,
-            timeout_ms: 5000,
-          }).then(rawMessages => {
-            if (rawMessages?.length) {
-              void savePreloadedSessionMessages(nextSessionId, rawMessages, {
-                ownerUserId: userId,
-              });
-            }
-          }).catch((err: any) => {
-            const status = err?.response?.status ?? err?.status;
-            if (status === 410) {
-              // Session is expired — remove it from preload silently
-              return;
-            }
-            // All other errors ignored silently
-          });
+          if (!isSessionExpired(nextSessionId)) {
+            void api.getMessages(nextSessionId, {
+              limit: 40,
+              mark_read: false,
+              timeout_ms: 5000,
+            }).then(rawMessages => {
+              if (rawMessages?.length) {
+                void savePreloadedSessionMessages(nextSessionId, rawMessages, {
+                  ownerUserId: userId,
+                });
+              }
+            }).catch((err: any) => {
+              const status = err?.response?.status ?? err?.status;
+              if (status === 410) {
+                markSessionAsExpired(nextSessionId);
+                return null;
+              }
+              // All other errors ignored silently
+              return null;
+            });
+          }
         }
 
         void runHandshakeHistoryCatchup();
