@@ -1176,6 +1176,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         setHasOlderMessages(false);
         return;
       }
+      // Universal firewall: if session has expired (410) refuse all further fetches
+      // regardless of who called us (realtime debounce, retryEncryption, visibility, poll).
+      if (sessionExpiredRef.current) return;
       if (loadInFlightRef.current) {
         if (!forceInitial) return;
         // forceInitial overrides the guard — wait briefly for any concurrent fetch to release.
@@ -1826,6 +1829,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
             realtimeSyncTimeoutRef.current = window.setTimeout(() => {
               realtimeSyncTimeoutRef.current = null;
+              if (sessionExpiredRef.current) return; // session gone — don't retry
               if (document.visibilityState !== 'visible') return;
               void loadMessages(false);
             }, REALTIME_SYNC_DEBOUNCE_MS);
@@ -1855,6 +1859,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
             realtimeSyncTimeoutRef.current = window.setTimeout(() => {
               realtimeSyncTimeoutRef.current = null;
+              if (sessionExpiredRef.current) return; // session gone — don't retry
               if (document.visibilityState !== 'visible') return;
               void loadMessages(true);
             }, REALTIME_SYNC_DEBOUNCE_MS);
