@@ -2138,6 +2138,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         await loadMessages(true, signal);
         console.log('[bootstrap] loadMessages done at:', Date.now() - bootstrapStartedAt, 'ms');
         if (isDisposed) return;
+        if (sessionExpiredRef.current) return;
         
         // Optimistic preload: fetch adjacent conversation history in the background
         const nextSessionId = getNextSessionId(sessionId);
