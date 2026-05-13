@@ -100,7 +100,9 @@ export function tryDecryptChatNotificationPreview(
     let payload: unknown;
     try {
       payload = await api.getMessages(sessionId, { after_id: afterId, limit: 8, mark_read: false });
-    } catch {
+    } catch (err: any) {
+      const status = (err as any)?.response?.status ?? (err as any)?.status;
+      if (status === 410) return null; // expired session — stop silently
       return null;
     }
 

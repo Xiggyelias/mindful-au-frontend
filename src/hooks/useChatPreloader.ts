@@ -184,7 +184,9 @@ async function prefetchOne(sessionId: string, ownerUserId: string | null): Promi
       }
       lastPrefetchedAtBySession.set(sessionId, Date.now());
       recordPrefetchResult(true);
-    } catch {
+    } catch (err: any) {
+      const status = (err as any)?.response?.status ?? (err as any)?.status;
+      if (status === 410) return; // expired session — stop silently
       recordPrefetchResult(false);
       // silent prefetch only
     } finally {
