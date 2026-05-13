@@ -469,7 +469,7 @@ const StudentDashboard = () => {
                   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
                   return (
                     <h2 className="text-3xl font-display font-bold text-foreground">
-                      Good {greeting}, {userName}! Ã¢Å“Â¨
+                      Good {greeting}, {userName}! ✨
                     </h2>
                   );
                 })()}
@@ -581,7 +581,7 @@ const StudentDashboard = () => {
           {/* Stats - with error display and loading indicator */}
           {statsLoading && (
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground" aria-live="polite">
-              Updating dashboardÃ¢â‚¬Â¦
+              Updating dashboard…
             </p>
           )}
           {statsError && (
@@ -607,17 +607,17 @@ const StudentDashboard = () => {
           >
             <StatsCard
               title="Open chats"
-              value={statsLoading ? "Ã¢â‚¬â€" : stats.sessions}
-              change={statsLoading ? "LoadingÃ¢â‚¬Â¦" : "Threads not ended yet"}
+              value={statsLoading ? "—" : stats.sessions}
+              change={statsLoading ? "Loading…" : "Threads not ended yet"}
               trend="neutral"
               icon={MessageSquare}
             />
             <StatsCard
               title="Wellness Score"
-              value={statsLoading ? "Ã¢â‚¬â€" : stats.wellness !== null ? `${stats.wellness}%` : "Ã¢â‚¬â€"}
+              value={statsLoading ? "—" : stats.wellness !== null ? `${stats.wellness}%` : "—"}
               change={
                 statsLoading
-                  ? "LoadingÃ¢â‚¬Â¦"
+                  ? "Loading…"
                   : stats.wellnessLabel || (stats.wellness !== null ? "Check in today" : "No data yet")
               }
               trend={statsLoading || stats.wellness === null ? "neutral" : stats.wellness >= 70 ? "up" : "neutral"}
@@ -625,17 +625,17 @@ const StudentDashboard = () => {
             />
             <StatsCard
               title="Upcoming Sessions"
-              value={statsLoading ? "Ã¢â‚¬â€" : stats.appointments}
-              change={statsLoading ? "LoadingÃ¢â‚¬Â¦" : "Confirmed & upcoming"}
+              value={statsLoading ? "—" : stats.appointments}
+              change={statsLoading ? "Loading…" : "Confirmed & upcoming"}
               trend="neutral"
               icon={Calendar}
             />
             <StatsCard
               title="AI assistant (30 days)"
-              value={statsLoading ? "Ã¢â‚¬â€" : stats.chats !== null ? stats.chats : "Ã¢â‚¬â€"}
+              value={statsLoading ? "—" : stats.chats !== null ? stats.chats : "—"}
               change={
                 statsLoading
-                  ? "LoadingÃ¢â‚¬Â¦"
+                  ? "Loading…"
                   : stats.chats !== null
                     ? "Messages from AI support"
                     : "No usage data yet"
@@ -798,8 +798,8 @@ const StudentDashboard = () => {
                               </>
                             ) : (
                               <>
-                                <span className="text-xs font-bold uppercase">Ã¢â‚¬â€</span>
-                                <span className="text-lg font-bold">Ã¢â‚¬â€</span>
+                                <span className="text-xs font-bold uppercase">—</span>
+                                <span className="text-lg font-bold">—</span>
                               </>
                             )}
                           </div>

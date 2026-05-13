@@ -1170,15 +1170,16 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
   const loadMessages = useCallback(
     async (forceInitial = false, signal?: AbortSignal) => {
+      if (sessionExpiredRef.current) {
+        detachRealtimeChannel();
+        return;
+      }
       if (!sessionId) {
         setIsLoading(false);
         setIsLoadingOlderMessages(false);
         setHasOlderMessages(false);
         return;
       }
-      // Universal firewall: if session has expired (410) refuse all further fetches
-      // regardless of who called us (realtime debounce, retryEncryption, visibility, poll).
-      if (sessionExpiredRef.current) return;
       if (loadInFlightRef.current) {
         if (!forceInitial) return;
         // forceInitial overrides the guard — wait briefly for any concurrent fetch to release.
@@ -2041,13 +2042,14 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       }
 
       pollingTimeoutRef.current = window.setTimeout(async () => {
-        if (sessionExpiredRef.current) return; // check inside timer
+        if (sessionExpiredRef.current) {
+          detachRealtimeChannel();
+          return;
+        }
         if (isDisposed || !isInitializedRef.current) return;
-
         if (document.visibilityState === 'visible') {
           await loadMessages(false);
         }
-
         if (!sessionExpiredRef.current && !isDisposed) {
           scheduleNextPoll();
         }

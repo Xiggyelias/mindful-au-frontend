@@ -210,7 +210,7 @@ const StudentDiagnosticAssessment = () => {
 
   const handleStartAssessment = () => {
     if (isQuestionnaireLoading) {
-      toast.info("Still loading the questionnaire Ã¢â‚¬â€ please wait.");
+      toast.info("Still loading the questionnaire — please wait.");
       return;
     }
     if (questionnaireError || questions.length === 0) {
@@ -248,7 +248,7 @@ const StudentDiagnosticAssessment = () => {
         continue;
       }
       if (!isAnswered(q, map[q.id])) {
-        toast.error(`Please answer: ${q.question.slice(0, 80)}${q.question.length > 80 ? "Ã¢â‚¬Â¦" : ""}`);
+        toast.error(`Please answer: ${q.question.slice(0, 80)}${q.question.length > 80 ? "…" : ""}`);
         return false;
       }
     }
@@ -367,7 +367,7 @@ const StudentDiagnosticAssessment = () => {
             <div className="flex items-center gap-2">
               {isOptional && (
                 <Badge variant="outline" className="text-muted-foreground font-normal">
-                  Optional Ã¢â‚¬â€ you can skip
+                  Optional — you can skip
                 </Badge>
               )}
               <span className="text-sm text-muted-foreground">
@@ -387,7 +387,7 @@ const StudentDiagnosticAssessment = () => {
 
         {isSafetySection ? (
           <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-foreground">
-            If youÃ¢â‚¬â„¢re in immediate danger, contact local emergency services. Honest answers help us prioritise care.
+            If you’re in immediate danger, contact local emergency services. Honest answers help us prioritise care.
           </div>
         ) : null}
 
@@ -603,7 +603,7 @@ const StudentDiagnosticAssessment = () => {
                 {isQuestionnaireLoading && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading questionnaireÃ¢â‚¬Â¦
+                    Loading questionnaire…
                   </div>
                 )}
 
@@ -626,7 +626,7 @@ const StudentDiagnosticAssessment = () => {
                   {isQuestionnaireLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      LoadingÃ¢â‚¬Â¦
+                      Loading…
                     </>
                   ) : (
                     "Start Assessment"
