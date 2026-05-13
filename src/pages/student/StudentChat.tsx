@@ -573,8 +573,8 @@ const StudentChat = () => {
 
   if (sessionExpired) {
     return (
-      <div className="flex h-full flex-col items-center justify-center 
-                      gap-3 text-muted-foreground">
+      <div className="flex h-screen w-full flex-col items-center justify-center 
+                      gap-3 text-muted-foreground px-4 text-center">
         <Lock className="h-8 w-8 opacity-40" />
         <p className="text-sm font-medium">This session has ended.</p>
         <p className="text-xs opacity-60">
@@ -594,7 +594,7 @@ const StudentChat = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex h-full min-w-0 flex-col overflow-hidden lg:pl-72">
+      <div className="flex h-full min-w-0 flex-col overflow-hidden lg:pl-72 pl-0">
         {!activeSession && (
           <DashboardHeader
             title="Clinical Support"
@@ -608,7 +608,7 @@ const StudentChat = () => {
         >
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Chat Sidebar */}
-            <div className="hidden w-80 shrink-0 xl:flex">
+            <div className="hidden w-72 shrink-0 xl:flex lg:flex">
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
@@ -645,7 +645,7 @@ const StudentChat = () => {
               )}
 
               {showEntryPreflight ? (
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 sm:px-6 text-center">
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
                     <Loader2 className="h-7 w-7 animate-spin text-primary" />
                   </div>
@@ -668,7 +668,7 @@ const StudentChat = () => {
               {activeSession && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
                 <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-amber-700">Connection is taking longer than expected</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-amber-700 text-center sm:text-left">Connection is taking longer than expected</span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -709,7 +709,7 @@ const StudentChat = () => {
               {activeSession ? (
                 <>
                   {/* Chat Header */}
-                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-4 border-b border-border/50 bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
+                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-4 lg:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
@@ -727,7 +727,7 @@ const StudentChat = () => {
                           .toUpperCase() || "SC"}
                       </div>
                       <div className="min-w-0">
-                        <h2 className="truncate text-base font-bold leading-tight lg:text-lg">
+                        <h2 className="truncate text-sm font-bold leading-tight sm:text-base lg:text-lg">
                           {activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <div className="mt-0.5 flex items-center gap-2">
@@ -756,7 +756,7 @@ const StudentChat = () => {
                       </div>
                     </div>
                     
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
                         checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
@@ -767,10 +767,10 @@ const StudentChat = () => {
                         <Shield className="h-3 w-3" />
                         <span>{isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
                       </div>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
                       </Button>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
                         <AlertTriangle className="h-5 w-5" />
                       </Button>
                     </div>
@@ -856,7 +856,7 @@ const StudentChat = () => {
 
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-4 xl:hidden">
+                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-3 sm:p-4 xl:hidden">
                   <ChatSidebar
                     sessions={sessions}
                     activeSession={activeSession}
@@ -888,7 +888,7 @@ const StudentChat = () => {
                     <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 shadow-2xl shadow-primary/5 mb-6">
                       <Shield className="h-16 w-16 text-primary" />
                     </div>
-                    <h2 className="text-3xl font-display font-bold tracking-tight mb-2">Clinical Safe Space</h2>
+                    <h2 className="text-2xl xl:text-3xl font-display font-bold tracking-tight mb-2">Clinical Safe Space</h2>
                     <p className="text-muted-foreground max-w-sm mx-auto leading-relaxed">
                       Select a conversation or start a new one to begin your secure, encrypted session with a qualified counselor.
                     </p>

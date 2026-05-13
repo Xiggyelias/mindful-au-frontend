@@ -684,7 +684,7 @@ const CounselorVideo = () => {
 
       <div className={cn(
         "transition-all duration-500",
-        isConnected ? "lg:pl-0" : "lg:pl-72"
+        isConnected ? "lg:pl-0" : "lg:pl-72 pl-0"
       )}>
         {!isConnected && (
           <DashboardHeader
@@ -695,21 +695,21 @@ const CounselorVideo = () => {
 
         <main className={cn(
           "transition-all duration-500",
-          isConnected ? "p-0 h-screen" : "p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-80px)]"
+          isConnected ? "p-0 h-screen" : "p-3 sm:p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-64px)] sm:h-[calc(100vh-80px)]"
         )}>
           <div className={cn(
             "grid gap-6 transition-all duration-500",
             isConnected 
-              ? "xl:grid-cols-[1fr_380px] h-full" 
+              ? "grid-cols-1 xl:grid-cols-[1fr_380px] h-full" 
               : localStream 
-                ? "xl:grid-cols-[minmax(0,1fr)_320px]" 
-                : "xl:grid-cols-[minmax(0,2fr)_360px]"
+                ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]" 
+                : "grid-cols-1 xl:grid-cols-[minmax(0,2fr)_360px]"
           )}>
             <Card
               variant="glass"
               className={cn(
                 "overflow-hidden transition-all duration-500",
-                isConnected ? "h-full border-primary/20 shadow-2xl" : "min-h-[72vh] xl:h-[calc(100vh-160px)]"
+                isConnected ? "h-full border-primary/20 shadow-2xl" : "min-h-[50vh] sm:min-h-[60vh] xl:h-[calc(100vh-160px)]"
               )}
             >
               <CardContent className="flex h-full flex-col gap-4 p-4">
@@ -798,7 +798,7 @@ const CounselorVideo = () => {
                     </div>
                   ) : (
                     <div className="flex h-full flex-col gap-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={isConnected ? "default" : activeSessionWindowStatus?.canStart ? "secondary" : "outline"}
@@ -916,7 +916,7 @@ const CounselorVideo = () => {
                           )}
                         </div>
 
-                        <div className="absolute bottom-3 right-3 w-28 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-40 md:w-52">
+                        <div className="absolute bottom-3 right-3 w-20 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-28 md:w-40 lg:w-52">
                           <div className="pointer-events-none absolute left-2 top-2 z-10">
                             <Badge
                               variant="secondary"
@@ -961,11 +961,11 @@ const CounselorVideo = () => {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                   <Button
                     variant={isMuted ? "destructive" : "outline"}
                     size="lg"
-                    className="h-14 w-14 rounded-full"
+                    className="h-11 w-11 sm:h-14 sm:w-14 rounded-full"
                     onClick={handleToggleMute}
                     disabled={!localStream}
                   >
@@ -974,7 +974,7 @@ const CounselorVideo = () => {
                   <Button
                     variant={isVideoOff ? "destructive" : "outline"}
                     size="lg"
-                    className="h-14 w-14 rounded-full"
+                    className="h-11 w-11 sm:h-14 sm:w-14 rounded-full"
                     onClick={handleToggleVideo}
                     disabled={!localStream || activeSessionAudioOnly}
                   >
@@ -984,7 +984,7 @@ const CounselorVideo = () => {
                     <Button
                       variant="destructive"
                       size="lg"
-                      className="h-14 rounded-full px-6"
+                      className="h-11 sm:h-14 rounded-full px-4 sm:px-6 text-sm"
                       onClick={handleEndCall}
                     >
                       <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
@@ -1058,7 +1058,7 @@ const CounselorVideo = () => {
             )}
 
             {!isConnected && (
-              <Card variant="glass" className="overflow-hidden h-fit">
+              <Card variant="glass" className="overflow-hidden h-fit max-h-[50vh] xl:max-h-none overflow-y-auto">
                 <CardHeader className="p-4 space-y-2">
                   <CardTitle className="text-lg">Upcoming Online Sessions</CardTitle>
                   <p className="text-sm text-muted-foreground line-clamp-2">
