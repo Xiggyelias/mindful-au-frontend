@@ -2011,42 +2011,54 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     }
 
     const onVisibilityOrFocus = () => {
-      if (!isInitializedRef.current || sessionExpired) return;
+      if (sessionExpiredRef.current) return; // ref — not stale state
+      if (!isInitializedRef.current) return;
       if (document.visibilityState !== 'visible') return;
       void loadMessages(false);
       void refreshPeerTypingStatus();
     };
 
     const scheduleNextPoll = () => {
-      if (sessionExpiredRef.current) return; // hard stop
-      if (isDisposed || !isInitializedRef.current || sessionExpired) return;
+      if (sessionExpiredRef.current) return; // ref — never stale
+      if (isDisposed || !isInitializedRef.current) return;
       const now = Date.now();
       const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTypingRef.current;
       const nextInterval = shouldBoost ? ACTIVE_POLLING_INTERVAL_MS : DEFAULT_POLLING_INTERVAL_MS;
 
+      if (pollingTimeoutRef.current !== null) {
+        window.clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
 
       pollingTimeoutRef.current = window.setTimeout(async () => {
+        if (sessionExpiredRef.current) return; // check inside timer
         if (isDisposed || !isInitializedRef.current) return;
 
         if (document.visibilityState === 'visible') {
           await loadMessages(false);
         }
 
-        scheduleNextPoll();
+        if (!sessionExpiredRef.current && !isDisposed) {
+          scheduleNextPoll();
+        }
       }, nextInterval);
     };
 
     const scheduleTypingPoll = () => {
-      if (isDisposed || !isInitializedRef.current || sessionExpired) return;
+      if (sessionExpiredRef.current) return; // ref — never stale
+      if (isDisposed || !isInitializedRef.current) return;
 
       typingPollTimeoutRef.current = window.setTimeout(async () => {
+        if (sessionExpiredRef.current) return; // check inside timer
         if (isDisposed || !isInitializedRef.current) return;
 
         if (document.visibilityState === 'visible') {
           await refreshPeerTypingStatus();
         }
 
-        scheduleTypingPoll();
+        if (!sessionExpiredRef.current && !isDisposed) {
+          scheduleTypingPoll();
+        }
       }, TYPING_POLL_INTERVAL_MS);
     };
 
@@ -2152,9 +2164,17 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       } catch (err: any) {
         const status = err?.response?.status ?? err?.status;
         if (status === 410) {
-          setIsLoading(false);
+          sessionExpiredRef.current = true; // ref first — stops all in-flight reschedules
           setSessionExpired(true);
-          sessionExpiredRef.current = true;
+          setIsLoading(false);
+          if (pollingTimeoutRef.current !== null) {
+            window.clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = null;
+          }
+          if (typingPollTimeoutRef.current !== null) {
+            window.clearTimeout(typingPollTimeoutRef.current);
+            typingPollTimeoutRef.current = null;
+          }
           return;
         }
         
@@ -2187,7 +2207,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     let sessionKeyRequestAttempts = 0;
     const maxSessionKeyRequestAttempts = 12;
     const sessionKeyRequestInterval = window.setInterval(() => {
-      if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts || sessionExpired) {
+      if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts || sessionExpiredRef.current) {
         window.clearInterval(sessionKeyRequestInterval);
         return;
       }
