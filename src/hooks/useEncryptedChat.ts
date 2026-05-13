@@ -1335,6 +1335,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           setIsLoading(false);
           setSessionExpired(true);
           sessionExpiredRef.current = true;
+          detachRealtimeChannel();
           // Clear ALL pending timers so nothing retries
           if (pollingTimeoutRef.current !== null) {
             window.clearTimeout(pollingTimeoutRef.current);
@@ -1827,6 +1828,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               return;
             }
 
+            if (sessionExpiredRef.current) return;
             realtimeSyncTimeoutRef.current = window.setTimeout(() => {
               realtimeSyncTimeoutRef.current = null;
               if (sessionExpiredRef.current) return; // session gone — don't retry
@@ -1857,6 +1859,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               return;
             }
 
+            if (sessionExpiredRef.current) return;
             realtimeSyncTimeoutRef.current = window.setTimeout(() => {
               realtimeSyncTimeoutRef.current = null;
               if (sessionExpiredRef.current) return; // session gone — don't retry
@@ -2166,6 +2169,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         if (status === 410) {
           sessionExpiredRef.current = true; // ref first — stops all in-flight reschedules
           setSessionExpired(true);
+          detachRealtimeChannel();
           setIsLoading(false);
           if (pollingTimeoutRef.current !== null) {
             window.clearTimeout(pollingTimeoutRef.current);
