@@ -1965,8 +1965,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       clearDecryptPlaintextCache();
       setMessages([]);
       setIsLoading(false);
-      sessionExpiredRef.current = false;
-      setSessionExpired(false);
       setIsLoadingOlderMessages(false);
       setHasOlderMessages(false);
       setIsEncryptionReady(false);
@@ -2004,8 +2002,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     clearDecryptPlaintextCache();
     setMessages([]);
     setIsLoading(true);
-    sessionExpiredRef.current = false;
-    setSessionExpired(false);
     setIsLoadingOlderMessages(false);
     setHasOlderMessages(true);
     setIsEncryptionReady(Boolean(runtimeContext));
