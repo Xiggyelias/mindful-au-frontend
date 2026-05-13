@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, Loader2, Menu, ShieldX, Volume2 } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Menu, ShieldX, Volume2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -32,6 +32,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     refreshNotifications,
     markAsRead,
     markAllAsRead,
+    deleteNotification,
   } = useNotifications();
 
   const formatTimestamp = (dateString?: string) => {
@@ -171,10 +172,41 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                     <button
                       key={notification.id}
                       type="button"
-                      className={`w-full text-left px-3 py-2.5 hover:bg-secondary/60 transition-colors border-b last:border-b-0 border-border/30 ${
+                      className={`group w-full text-left px-3 py-2.5 hover:bg-secondary/60 transition-colors border-b last:border-b-0 border-border/30 ${
                         notification.read ? "opacity-80" : ""
                       }`}
-                      onClick={() => void markAsRead(notification.id)}
+                      onClick={() => {
+                        void markAsRead(notification.id);
+                        
+                        // Navigate based on notification type/content
+                        const title = notification.title?.toLowerCase() ?? '';
+                        const meta = notification.meta;
+                        
+                        const currentPath = location.pathname.toLowerCase();
+                        let basePath = '/student';
+                        if (currentPath.startsWith('/counselor')) basePath = '/counselor';
+                        else if (currentPath.startsWith('/peer')) basePath = '/peer';
+                        else if (currentPath.startsWith('/admin')) basePath = '/admin';
+
+                        const getChatPath = () => {
+                          if (basePath === '/counselor') return '/counselor/messages';
+                          if (basePath === '/peer') return '/peer/chats';
+                          if (basePath === '/admin') return '/admin/dashboard';
+                          return '/student/chat';
+                        };
+
+                        if (meta?.chat_session_id) {
+                          navigate(`${getChatPath()}?session=${meta.chat_session_id}`);
+                        } else if (meta?.appointment_id) {
+                          navigate(`${basePath}/appointments`);
+                        } else if (title.includes('appointment')) {
+                          navigate(`${basePath}/appointments`);
+                        } else if (title.includes('session') || title.includes('message')) {
+                          navigate(getChatPath());
+                        } else if (title.includes('wellness')) {
+                          navigate(`${basePath}/wellness`);
+                        }
+                      }}
                     >
                       <div className="flex items-start gap-2">
                         <span
@@ -193,6 +225,16 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                             {notification.message}
                           </p>
                         </div>
+                        <button
+                          type="button"
+                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation(); // prevent triggering the parent onClick
+                            void deleteNotification(notification.id);
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </div>
                     </button>
                   ))}
