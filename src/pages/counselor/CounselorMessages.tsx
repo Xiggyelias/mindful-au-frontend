@@ -427,8 +427,9 @@ const CounselorMessages = () => {
           limit: 40,
           mark_read: false,
           timeout_ms: 5000,
-        }).catch((err) => {
-          console.log('[preload] fetch failed for:', sidStr, err);
+        }).catch((err: any) => {
+          const status = err?.response?.status ?? err?.status;
+          if (status === 410) return null; // expired session — skip silently
           return null;
         });
         if (rawMessages?.length) {
