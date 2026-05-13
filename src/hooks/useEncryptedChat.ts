@@ -167,8 +167,8 @@ const isTimeoutError = (error: unknown): boolean => {
     error instanceof Error
       ? error.message
       : typeof error === 'string'
-      ? error
-      : '';
+        ? error
+        : '';
 
   return /timeout/i.test(message);
 };
@@ -263,7 +263,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const sessionExpiredRef = useRef(false);
-  
+
   // Stop all retry timers when session expires
   const stopAllRetries = useCallback(() => {
     if (pollingTimeoutRef.current !== null) {
@@ -673,7 +673,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           ? Promise.resolve(preloadedSession)
           : (api.getSession(sessionId, { signal, minimal: true }) as Promise<Session | null | undefined>),
       ]);
-      
+
       deviceKeyPairRef.current = deviceKeyPair;
       hasSentPublicKeyRef.current = false;
       hasSentSessionKeyRef.current = false;
@@ -758,7 +758,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           peerPublicKeyRef.current = null;
           setIsEncryptionReady(false);
           storedKey = await loadPersistedSessionKey(activeSessionStorageKey);
-          
+
           // If we found a stored key, set it immediately so messages can start decrypting
           // while the handshake runs in the background
           if (storedKey) {
@@ -769,7 +769,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               sessionKeyStorageKeyRef.current = activeSessionStorageKey;
               setIsEncryptionReady(true);
               setError(null);
-              
+
               // Store in runtime cache for immediate access
               runtimeEncryptionContexts.set(getRuntimeEncryptionContextKey(sessionId, userId), {
                 key: importedKey,
@@ -778,7 +778,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
                 storageKey: activeSessionStorageKey,
                 peerPublicKey: peerPublicKeyRef.current,
               });
-              
+
               logCryptoDebug('session key loaded from storage before handshake', {
                 sessionId,
                 storageKeySuffix: peerIdRef.current || 'legacy',
@@ -815,11 +815,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         if (!storedKey && peerIdRef.current) {
           storedKey = getPreloadedSessionKey(sessionId, numericUserId, peerIdRef.current);
         }
-        
+
         if (storedKey) {
           // Parallel key import and persistence for faster startup
           const [importedKey] = await Promise.all([
-            encryptionKeyRef.current && keyStringRef.current === storedKey 
+            encryptionKeyRef.current && keyStringRef.current === storedKey
               ? Promise.resolve(encryptionKeyRef.current)
               : importKey(storedKey),
             persistSessionKey(activeSessionStorageKey, storedKey)
@@ -846,7 +846,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         );
 
         // Pre-import peer key while other operations run
-        peerPublicKeyRef.current = storedPeerKey 
+        peerPublicKeyRef.current = storedPeerKey
           ? await importPeerPublicKey(storedPeerKey)
           : null;
 
@@ -872,20 +872,20 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
       const targetPeerId = peerIdRef.current;
       const shouldRefreshHandshake = !storedKey || !peerPublicKeyRef.current;
-      
+
       // Parallel handshake operations when possible
       const handshakePromises: Promise<void>[] = [];
-      
+
       if (shouldRefreshHandshake) {
         handshakePromises.push(sendPublicKeyEnvelope(targetPeerId ?? undefined));
       }
-      
+
       // If we already know the peer key from cache, complete handshake immediately
       // so first outbound text is not delayed waiting for another poll cycle.
       if (!storedKey && targetPeerId !== null && peerPublicKeyRef.current && isSessionKeyInitiator()) {
         handshakePromises.push(sendSessionKeyEnvelope(targetPeerId));
       }
-      
+
       // Execute handshake operations in parallel
       if (handshakePromises.length > 0) {
         await Promise.all(handshakePromises);
@@ -1039,12 +1039,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           });
           setIsEncryptionReady(true);
           setError(null);
-          
+
           // Immediately decrypt all messages that were waiting for the key
-          setMessages(prev => prev.map(m => 
+          setMessages(prev => prev.map(m =>
             m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
           ));
-          
+
           // Trigger immediate re-decryption of all pending messages
           setTimeout(async () => {
             const pendingMessages = messages.filter(m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting');
@@ -1557,9 +1557,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     } else if (currentKey) {
       prevKeyRef.current = currentKey;
     }
-  // Intentionally NOT watching `messages` here — we use messagesRef to avoid
-  // re-running on every message change. The effect only needs to react to isEncryptionReady.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally NOT watching `messages` here — we use messagesRef to avoid
+    // re-running on every message change. The effect only needs to react to isEncryptionReady.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEncryptionReady, decryptMessages]);
 
   const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
@@ -2082,7 +2082,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       // Fetch session once and reuse it for initializeEncryption — avoids a double round-trip.
       try {
         console.log(`[chat:${sessionId}] Starting bootstrap...`);
-        
+
         const [sessionDetails, cachedMessages] = await Promise.all([
           api.getSession(sessionId, { minimal: true }).catch((e: any) => {
             if ((e?.response?.status ?? e?.status) === 410) return null;
@@ -2104,9 +2104,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         // Then pass sessionDetails to initializeEncryption
         await initializeEncryption(signal, sessionDetails);
         console.log('[bootstrap] init+cache done in:', Date.now() - bootstrapStartedAt, 'ms', 'cachedMessages:', cachedMessages?.length ?? 0);
-        
+
         if (isDisposed || signal.aborted) return;
-        
+
         setIsLoading(false); // ADD THIS — unblock UI immediately
         console.log('[bootstrap] UI unblocked at:', Date.now() - bootstrapStartedAt, 'ms');
 
@@ -2115,7 +2115,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         if (!isDisposed && cachedTyping) {
           applyPeerTypingState(cachedTyping.isPeerTyping === true);
         }
-        
+
         // Show UI immediately when cached messages are available
         if (normalizedCachedMessages.length > 0) {
           decryptMessages(normalizedCachedMessages).then((decryptedCached) => {
@@ -2139,7 +2139,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         console.log('[bootstrap] loadMessages done at:', Date.now() - bootstrapStartedAt, 'ms');
         if (isDisposed) return;
         if (sessionExpiredRef.current) return;
-        
+
         // Optimistic preload: fetch adjacent conversation history in the background
         const nextSessionId = getNextSessionId(sessionId);
         if (nextSessionId) {
@@ -2153,7 +2153,14 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
                 ownerUserId: userId,
               });
             }
-          }).catch(() => null); // Silent fallback
+          }).catch((err: any) => {
+            const status = err?.response?.status ?? err?.status;
+            if (status === 410) {
+              // Session is expired — remove it from preload silently
+              return;
+            }
+            // All other errors ignored silently
+          });
         }
 
         void runHandshakeHistoryCatchup();
@@ -2184,7 +2191,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           }
           return;
         }
-        
+
         if (!isDisposed) {
           console.error('[useEncryptedChat] Bootstrap failed:', err);
           const errorMessage = extractApiErrorMessage(err, 'Failed to load conversation');
