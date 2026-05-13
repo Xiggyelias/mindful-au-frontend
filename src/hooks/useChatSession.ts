@@ -3,6 +3,15 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 
+export const expiredSessionIds = new Set<string>();
+
+export const markSessionAsExpired = (sessionId: string) => {
+  expiredSessionIds.add(sessionId);
+};
+
+export const isSessionExpired = (sessionId: string): boolean =>
+  expiredSessionIds.has(sessionId);
+
 export interface Session {
   id: number;
   /** Real student user id for routing when `student_id` is masked (anonymous). */

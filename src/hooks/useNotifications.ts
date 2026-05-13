@@ -314,6 +314,27 @@ export const useNotifications = () => {
     }
   }, [loadNotifications, unreadCount]);
 
+  const deleteNotification = useCallback(
+    async (id: number) => {
+      // Optimistic remove
+      setNotifications((previous) =>
+        previous.filter((notification) => notification.id !== id)
+      );
+      setUnreadCount((previous) => {
+        const wasUnread = notifications.find((n) => n.id === id && !n.read);
+        return wasUnread ? Math.max(0, previous - 1) : previous;
+      });
+
+      try {
+        await api.deleteNotification(id);
+      } catch {
+        // Restore on failure
+        await loadNotifications({ silent: true });
+      }
+    },
+    [loadNotifications, notifications]
+  );
+
   useEffect(() => {
     if (!user?.id) {
       setDecryptedLines({});
@@ -429,5 +450,6 @@ export const useNotifications = () => {
     refreshNotifications,
     markAsRead,
     markAllAsRead,
+    deleteNotification,
   };
 };

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from "react";
-import { Session } from "@/hooks/useChatSession";
+import { Session, isSessionExpired } from "@/hooks/useChatSession";
 import { 
   Search, 
   MessageSquare, 
@@ -138,8 +138,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   // some sessions were anonymous) appears exactly once. The displayed row
   // reflects that counselor's MOST RECENT session, and the "(Session N)"
   // label reflects the total number of sessions the user has had with them.
+  const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
+
   const recentSupportRows = useMemo(() => {
-    if (!sessions || sessions.length === 0) return [];
+    if (!visibleSessions || visibleSessions.length === 0) return [];
 
     type GroupRow = {
       counselorId: number;
@@ -150,7 +152,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
     const groups = new Map<string, GroupRow>();
 
-    for (const session of sessions) {
+    for (const session of visibleSessions) {
       const counselorId = Number(session.counselor_id || session.peer_counselor_id || 0);
       const counselorName =
         session.counselor?.profile?.full_name ||
@@ -318,7 +320,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   </button>
                 );
               })}
-              {sessions.length === 0 && (
+              {visibleSessions.length === 0 && (
                 <div className="p-8 text-center space-y-2">
                   <MessageSquare className="h-8 w-8 text-muted-foreground/20 mx-auto" />
                   <p className="text-xs font-medium text-muted-foreground">No sessions yet</p>

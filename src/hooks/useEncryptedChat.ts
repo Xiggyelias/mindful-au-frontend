@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getApiErrorMessage } from '@/lib/api';
+import { markSessionAsExpired } from '@/hooks/useChatSession';
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from '@/lib/crisisTerms';
 import {
   getOrCreateDeviceKeyPair,
@@ -1333,10 +1334,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       } catch (err: any) {
         const status = err?.response?.status ?? err?.status ?? 0;
         if (status === 410) {
-          setIsLoading(false);
-          setSessionExpired(true);
           sessionExpiredRef.current = true;
-          detachRealtimeChannel();
+          setSessionExpired(true);
+          markSessionAsExpired(sessionId);
+          detachRealtimeChannel(); // ← ensure this is here
+          setIsLoading(false);
           // Clear ALL pending timers so nothing retries
           if (pollingTimeoutRef.current !== null) {
             window.clearTimeout(pollingTimeoutRef.current);
@@ -1790,6 +1792,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     let isDisposed = false;
 
     const setupRealtimeSync = async () => {
+      if (sessionExpiredRef.current) return;
       try {
         const { supabase } = await import('@/integrations/supabase/client');
         if (isDisposed) return;
@@ -2102,7 +2105,23 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         }
 
         // Then pass sessionDetails to initializeEncryption
-        await initializeEncryption(signal, sessionDetails);
+        const encryptionTimeout = new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Encryption timeout')), 5000)
+        );
+        await Promise.race([
+          initializeEncryption(signal, sessionDetails),
+          encryptionTimeout,
+        ]).catch(() => {
+          // Encryption timed out — continue anyway, messages may show
+          // awaiting_key state but UI is unblocked
+        });
+
+        // Force encryption ready if key already exists in runtime cache
+        if (encryptionKeyRef.current && !isEncryptionReady) {
+          setIsEncryptionReady(true);
+          setError(null);
+        }
+
         console.log('[bootstrap] init+cache done in:', Date.now() - bootstrapStartedAt, 'ms', 'cachedMessages:', cachedMessages?.length ?? 0);
 
         if (isDisposed || signal.aborted) return;

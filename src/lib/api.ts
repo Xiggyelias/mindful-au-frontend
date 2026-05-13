@@ -1425,6 +1425,11 @@ class ApiClient {
     return response.data;
   }
 
+  async deleteNotification(id: number | string) {
+    const response = await this.client.delete(`/notifications/${id}`);
+    return response.data;
+  }
+
   // Peer counselor
   async getPeerDashboard() {
     const response = await this.client.get('/peer/dashboard');

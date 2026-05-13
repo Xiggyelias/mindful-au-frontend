@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { isSessionExpired } from '@/hooks/useChatSession';
 import { resolveMessageAttachment } from "@/lib/chatAttachments";
 import { savePreloadedSessionMessages } from "@/lib/chatPreloadCache";
 import { saveTypingSnapshot } from "@/lib/chatTypingCache";
@@ -144,6 +145,7 @@ function warmImage(url: string): void {
 }
 
 async function prefetchOne(sessionId: string, ownerUserId: string | null): Promise<void> {
+  if (isSessionExpired(sessionId)) return;
   recordPrefetchAttempt();
   const now = Date.now();
   const last = Number(lastPrefetchedAtBySession.get(sessionId) || 0);
@@ -272,7 +274,9 @@ export function useChatPreloader(params: {
       return;
     }
 
-    const prioritized = [...sessions].sort((a, b) => {
+    const prioritized = [...sessions]
+      .filter(session => !isSessionExpired(String(session.id)))
+      .sort((a, b) => {
       const aUnread = Number(a.unread_count ?? a.unreadCount ?? 0);
       const bUnread = Number(b.unread_count ?? b.unreadCount ?? 0);
       if (aUnread !== bUnread) {
