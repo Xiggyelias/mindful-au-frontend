@@ -244,7 +244,7 @@ const AdminDashboard = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         <DashboardHeader
           title="Admin Dashboard"
           onMenuClick={() => setSidebarOpen(true)}

@@ -1935,6 +1935,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   }, [isPeerTyping]);
 
   useEffect(() => {
+    sessionExpiredRef.current = false;
+    setSessionExpired(false);
     if (!sessionId) {
       if (pollingTimeoutRef.current !== null) {
         window.clearTimeout(pollingTimeoutRef.current);
@@ -2077,36 +2079,29 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       let warmHydrateHit = false;
 
       // Fetch session once and reuse it for initializeEncryption — avoids a double round-trip.
-      let sessionDetails: Session | null | undefined;
-      try {
-        sessionDetails = await api.getSession(sessionId, { minimal: true });
-      } catch (e: any) {
-        if ((e?.response?.status ?? e?.status) === 410) {
-          setIsLoading(false);
-          setSessionExpired(true);
-          sessionExpiredRef.current = true;
-          return;
-        }
-        throw e;
-      }
-      if (!sessionDetails || signal.aborted) {
-        setIsLoading(false);
-        setSessionExpired(true);
-        sessionExpiredRef.current = true;
-        return;
-      }
-      
       try {
         console.log(`[chat:${sessionId}] Starting bootstrap...`);
         
-        // Pass the already-fetched session to avoid a second getSession call.
-        const [_, cachedMessages] = await Promise.all([
-          initializeEncryption(signal, sessionDetails),
+        const [sessionDetails, cachedMessages] = await Promise.all([
+          api.getSession(sessionId, { minimal: true }).catch((e: any) => {
+            if ((e?.response?.status ?? e?.status) === 410) return null;
+            throw e;
+          }),
           loadPreloadedSessionMessages(sessionId, {
             expectedOwnerUserId: userId,
             expectedKeyScope: sessionKeyStorageKeyRef.current,
           })
         ]);
+
+        if (!sessionDetails || signal.aborted) {
+          setIsLoading(false);
+          setSessionExpired(true);
+          sessionExpiredRef.current = true;
+          return;
+        }
+
+        // Then pass sessionDetails to initializeEncryption
+        await initializeEncryption(signal, sessionDetails);
         console.log('[bootstrap] init+cache done in:', Date.now() - bootstrapStartedAt, 'ms', 'cachedMessages:', cachedMessages?.length ?? 0);
         
         if (isDisposed || signal.aborted) return;

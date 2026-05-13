@@ -322,7 +322,7 @@ const CounselorDashboard = () => {
     };
   }, [isApprovedCounselor, user?.id]);
 
-  /** Keeps “today’s schedule” correct across midnight and long-lived tabs. */
+  /** Keeps â€œtodayâ€™s scheduleâ€ correct across midnight and long-lived tabs. */
   const [nowTicker, setNowTicker] = useState(() => Date.now());
   useEffect(() => {
     const tick = () => setNowTicker(Date.now());
@@ -453,7 +453,7 @@ const CounselorDashboard = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         <CounselorIncomingCallBanner
           enabled={Boolean(isApprovedCounselor)}
           onActiveChange={setIncomingCallBannerActive}
@@ -617,9 +617,9 @@ const CounselorDashboard = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })
-                                    : "—";
+                                    : "â€”";
                                 })()
-                              : "—"}
+                              : "â€”"}
                           </p>
                         </div>
                         <div className="flex-1">

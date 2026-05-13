@@ -143,7 +143,7 @@ const StudentWellness = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         <div className="flex items-center justify-between">
           <DashboardHeader title="Wellness Tracker" onMenuClick={() => setSidebarOpen(true)} />
           <Button

@@ -115,7 +115,7 @@ function buildPanicStudentSummary(log: {
     displayName,
     email,
     idNumber,
-    detailLine: parts.join(" · "),
+    detailLine: parts.join(" Â· "),
   };
 }
 
@@ -323,7 +323,7 @@ const AdminAlerts = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         <DashboardHeader
           title="System Alerts"
           onMenuClick={() => setSidebarOpen(true)}

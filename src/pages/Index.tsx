@@ -33,10 +33,10 @@ const Index = () => {
   const crisisAriaLabel = `${crisisHeadline}, ${crisisLinkText} (${crisisTelPlain})`;
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className="min-h-[100dvh] bg-background relative">
       <BackgroundEffects />
 
-      <div className="relative z-10 min-h-screen flex flex-col">
+      <div className="relative z-10 min-h-[100dvh] flex flex-col">
         {/* Header */}
         <header className="p-6 lg:p-8 flex items-center justify-between">
           <Logo size="md" />

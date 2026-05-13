@@ -225,9 +225,9 @@ const formatChatListTime = (dateString?: string) => {
   const d = parseBackendDate(dateString);
   if (!d) return "";
   if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
-  if (isYesterdayInDisplayZone(d)) return `Yesterday · ${formatInDisplayZone(d, "h:mm a")}`;
-  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d · h:mm a");
-  return formatInDisplayZone(d, "MMM d, yyyy · h:mm a");
+  if (isYesterdayInDisplayZone(d)) return `Yesterday Â· ${formatInDisplayZone(d, "h:mm a")}`;
+  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d Â· h:mm a");
+  return formatInDisplayZone(d, "MMM d, yyyy Â· h:mm a");
 };
 
 const getInitials = (name: string) => {
@@ -450,26 +450,7 @@ const CounselorMessages = () => {
     }
   }, []);
 
-  const selectConversationById = useCallback((id: number) => {
-    if (!Number.isFinite(id) || id <= 0) return;
-    // Optimistically zero the badge immediately so the UI feels instant
-    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
-    setSelectedChatId(id);
-    activeSessionIdRef.current = id; // Track currently open session
 
-    // Fix 1: retry markSessionInboundRead once on failure so seen_at is always set
-    void api.markSessionInboundRead(String(id), { timeout_ms: 5000 }).catch(() => {
-      setTimeout(() => {
-        void api.markSessionInboundRead(String(id), { timeout_ms: 8000 }).catch(() => {});
-      }, 2000);
-    });
-
-    // Fix 3: silent reload 3s later so the poll-loop picks up the fresh seen_at
-    // count from the DB and doesn't re-inflate the badge on the next tick
-    setTimeout(() => {
-      void loadSessions(true);
-    }, 3000);
-  }, [loadSessions]);
 
   
   const loadSessions = useCallback(
@@ -766,6 +747,27 @@ const CounselorMessages = () => {
     },
     [chatPage, isPeerCounselor, targetSessionParam, targetStudentParam, user?.id]
   );
+
+  const selectConversationById = useCallback((id: number) => {
+    if (!Number.isFinite(id) || id <= 0) return;
+    // Optimistically zero the badge immediately so the UI feels instant
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
+    setSelectedChatId(id);
+    activeSessionIdRef.current = id; // Track currently open session
+
+    // Fix 1: retry markSessionInboundRead once on failure so seen_at is always set
+    void api.markSessionInboundRead(String(id), { timeout_ms: 5000 }).catch(() => {
+      setTimeout(() => {
+        void api.markSessionInboundRead(String(id), { timeout_ms: 8000 }).catch(() => {});
+      }, 2000);
+    });
+
+    // Fix 3: silent reload 3s later so the poll-loop picks up the fresh seen_at
+    // count from the DB and doesn't re-inflate the badge on the next tick
+    setTimeout(() => {
+      void loadSessions(true);
+    }, 3000);
+  }, [loadSessions]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1240,7 +1242,7 @@ const CounselorMessages = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         {!selectedSessionId && (
           <DashboardHeader
             title={isPeerCounselor ? "Peer Support Messages" : "Messages"}
@@ -1249,7 +1251,7 @@ const CounselorMessages = () => {
         )}
 
         <main className="p-0 overflow-hidden h-full">
-          <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-screen" : "h-[calc(100vh-80px)]"}`}>
+          <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
             <Card variant="glass" className={`lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
@@ -1421,7 +1423,7 @@ const CounselorMessages = () => {
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                           <Shield className="h-3 w-3 shrink-0" />
                           <span className="whitespace-nowrap">
-                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing…"}
+                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securingâ€¦"}
                           </span>
                         </div>
                         {encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession && (
@@ -1465,7 +1467,7 @@ const CounselorMessages = () => {
                         disabled={isTriggeringEmergency}
                       >
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-xs font-semibold">{isTriggeringEmergency ? "Alerting…" : "Emergency"}</span>
+                        <span className="text-xs font-semibold">{isTriggeringEmergency ? "Alertingâ€¦" : "Emergency"}</span>
                       </Button>
                       {(selectedChat?.isAnonymous || isPeerCounselor) && (
                         <DropdownMenu>
@@ -1479,7 +1481,7 @@ const CounselorMessages = () => {
                             {selectedChat?.isAnonymous && (
                               <DropdownMenuItem onClick={() => void handleRevealIdentity()} disabled={isRevealingIdentity}>
                                 <Shield className="mr-2 h-4 w-4" />
-                                {isRevealingIdentity ? "Revealing…" : "Reveal identity"}
+                                {isRevealingIdentity ? "Revealingâ€¦" : "Reveal identity"}
                               </DropdownMenuItem>
                             )}
                             {selectedChat?.isAnonymous && isPeerCounselor && <DropdownMenuSeparator />}
@@ -1487,7 +1489,7 @@ const CounselorMessages = () => {
                               <>
                                 <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>
                                   <ArrowUpCircle className="mr-2 h-4 w-4" />
-                                  {isEscalating ? "Escalating…" : "Escalate to counselor"}
+                                  {isEscalating ? "Escalatingâ€¦" : "Escalate to counselor"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-orange-700 focus:text-orange-800 dark:text-orange-300 dark:focus:text-orange-200"
@@ -1495,7 +1497,7 @@ const CounselorMessages = () => {
                                   disabled={isFlaggingUrgent}
                                 >
                                   <AlertTriangle className="mr-2 h-4 w-4" />
-                                  {isFlaggingUrgent ? "Flagging…" : "Flag as urgent"}
+                                  {isFlaggingUrgent ? "Flaggingâ€¦" : "Flag as urgent"}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -1523,7 +1525,7 @@ const CounselorMessages = () => {
                 {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securing…</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securingâ€¦</span>
                   </div>
                 )}
                 {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (

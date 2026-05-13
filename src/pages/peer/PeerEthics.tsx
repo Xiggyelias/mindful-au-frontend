@@ -21,7 +21,7 @@ const PeerEthics = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 pl-0 pl-0">
         <DashboardHeader title="Ethics Guidelines" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">

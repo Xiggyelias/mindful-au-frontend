@@ -28,9 +28,9 @@ const navItems = [
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
 
-// ═══════════════════════════════════════════════════════════
-// WELLNESS CAPSULES — Interactive wellness action triggers
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WELLNESS CAPSULES â€” Interactive wellness action triggers
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const wellnessCapsules = [
   { icon: Wind, label: "Breathe", prompt: "Guide me through a breathing exercise", color: "from-cyan-500/30 to-blue-600/30", glow: "shadow-cyan-500/20" },
   { icon: Moon, label: "Sleep", prompt: "Help me relax before sleep", color: "from-violet-500/30 to-indigo-600/30", glow: "shadow-violet-500/20" },
@@ -40,9 +40,9 @@ const wellnessCapsules = [
   { icon: MessageCircle, label: "Talk", prompt: "I just want to talk", color: "from-sky-500/30 to-cyan-600/30", glow: "shadow-sky-500/20" },
 ];
 
-// ═══════════════════════════════════════════════════════════
-// AMBIENT CANVAS — Deep wellness atmosphere
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// AMBIENT CANVAS â€” Deep wellness atmosphere
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const AmbientCanvas = () => (
   <div className="fixed inset-0 pointer-events-none overflow-hidden">
     {/* Deep base layer */}
@@ -71,9 +71,9 @@ const AmbientCanvas = () => (
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════
-// FLOATING AI COMPANION — Emotional wellness presence
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// FLOATING AI COMPANION â€” Emotional wellness presence
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
   <div className="relative flex flex-col items-center">
     {/* Outer aura rings */}
@@ -111,9 +111,9 @@ const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════
-// WELLNESS CARD — User emotional expression card
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WELLNESS CARD â€” User emotional expression card
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const UserCard = memo(({ content, time }: { content: string; time: string }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
@@ -135,9 +135,9 @@ const UserCard = memo(({ content, time }: { content: string; time: string }) => 
 ));
 UserCard.displayName = "UserCard";
 
-// ═══════════════════════════════════════════════════════════
-// AI RESPONSE CARD — Elegant floating wellness response
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// AI RESPONSE CARD â€” Elegant floating wellness response
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const AICard = memo(({ content, time, isThinking }: { content: string; time: string; isThinking?: boolean }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
@@ -162,9 +162,9 @@ const AICard = memo(({ content, time, isThinking }: { content: string; time: str
 ));
 AICard.displayName = "AICard";
 
-// ═══════════════════════════════════════════════════════════
-// WELLNESS CAPSULE — Interactive emotional trigger
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WELLNESS CAPSULE â€” Interactive emotional trigger
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const WellnessCapsule = ({ capsule, onClick, disabled }: {
   capsule: typeof wellnessCapsules[0];
   onClick: () => void;
@@ -192,9 +192,9 @@ const WellnessCapsule = ({ capsule, onClick, disabled }: {
   );
 };
 
-// ═══════════════════════════════════════════════════════════
-// WELLNESS TYPING — Breathing AI presence
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WELLNESS TYPING â€” Breathing AI presence
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const WellnessTyping = () => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
@@ -218,15 +218,15 @@ const WellnessTyping = () => (
   </motion.div>
 );
 
-// ═══════════════════════════════════════════════════════════
-// MOOD CHECK — Quick emotional state selector
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// MOOD CHECK â€” Quick emotional state selector
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
   const moods = [
-    { emoji: "😊", label: "Good", color: "from-emerald-500/20 to-green-600/20" },
-    { emoji: "😐", label: "Okay", color: "from-amber-500/20 to-yellow-600/20" },
-    { emoji: "😔", label: "Low", color: "from-orange-500/20 to-red-600/20" },
-    { emoji: "😰", label: "Anxious", color: "from-rose-500/20 to-red-700/20" },
+    { emoji: "ðŸ˜Š", label: "Good", color: "from-emerald-500/20 to-green-600/20" },
+    { emoji: "ðŸ˜", label: "Okay", color: "from-amber-500/20 to-yellow-600/20" },
+    { emoji: "ðŸ˜”", label: "Low", color: "from-orange-500/20 to-red-600/20" },
+    { emoji: "ðŸ˜°", label: "Anxious", color: "from-rose-500/20 to-red-700/20" },
   ];
 
   return (
@@ -261,9 +261,9 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const StudentAISupport = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -423,7 +423,7 @@ const StudentAISupport = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 relative z-10 flex flex-col h-screen overflow-hidden">
+      <div className="lg:pl-72 pl-0 relative z-10 flex flex-col h-[100dvh] overflow-hidden">
         <DashboardHeader
           title="AI Support"
           onMenuClick={() => setSidebarOpen(true)}
