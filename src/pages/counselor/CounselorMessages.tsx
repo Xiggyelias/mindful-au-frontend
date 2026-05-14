@@ -82,6 +82,7 @@ import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
+  isAnonymousIdentityMaskedFromViewer,
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
 import {
@@ -606,6 +607,7 @@ const CounselorMessages = () => {
         const nextChats = Array.from(dedupedByConversation.values())
           .map(({ session }): ChatListItem => {
             const isAnonymous = isAnonymousSessionFlag(session.is_anonymous);
+            const isMasked = isAnonymousIdentityMaskedFromViewer(session);
             const anonymousLabel = anonymousLabelForCounselor();
             const numericStudentId = Number(session.student_id);
             const visibleStudentId =
@@ -618,13 +620,14 @@ const CounselorMessages = () => {
               session.peer_counselor?.profile?.full_name ||
               session.peer_counselor?.email ||
               (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
-            const name =
-              isAnonymous
-                ? anonymousLabel
-                : session.student?.profile?.full_name ||
-                  session.student?.email?.split("@")[0] ||
-                  `Student #${session.id}`;
-            const email = isAnonymous ? "" : session.student?.email || "";
+
+            const name = isMasked
+              ? anonymousLabel
+              : session.student?.profile?.full_name ||
+                session.student?.email?.split("@")[0] ||
+                (isAnonymous ? anonymousLabel : `Student #${session.id}`);
+
+            const email = isMasked ? "" : session.student?.email || "";
             const rowUnread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
 
             return {
@@ -1162,8 +1165,7 @@ const CounselorMessages = () => {
   }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages, selectedSessionId]);
 
   const threadStudentLabel = useMemo(
-    () =>
-      selectedChat?.isAnonymous ? anonymousLabelForCounselor() : (selectedChat?.studentName ?? "Student"),
+    () => selectedChat?.studentName ?? "Student",
     [selectedChat]
   );
 
@@ -1333,13 +1335,15 @@ const CounselorMessages = () => {
                           <div
                             className={cn(
                               "h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background",
-                              chat.isAnonymous
+                              chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
                                 ? "bg-black ring-red-600/70"
                                 : getUserColor(chat.studentName)
                             )}
                           >
                             <span className="text-white text-[11px] font-bold tracking-tight">
-                              {chat.isAnonymous ? "AU" : getInitials(chat.studentName)}
+                              {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
+                                ? "AU"
+                                : getInitials(chat.studentName)}
                             </span>
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1349,7 +1353,7 @@ const CounselorMessages = () => {
                                   "truncate text-[13px] font-semibold tracking-tight",
                                   isActive ? "text-foreground" : "text-foreground/90"
                                 )}>
-                                  {chat.isAnonymous ? anonymousLabelForCounselor() : chat.studentName}
+                                  {chat.studentName}
                                 </p>
                                 {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
                                 {chat.isPeerAssigned && (
@@ -1401,17 +1405,23 @@ const CounselorMessages = () => {
                     <div
                       className={cn(
                         "flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-inner ring-2 ring-background",
-                        selectedChat?.isAnonymous ? "bg-black ring-red-600/70" : getUserColor(selectedChat?.studentName || "Student")
+                        selectedChat?.isAnonymous && selectedChat?.studentName === anonymousLabelForCounselor()
+                          ? "bg-black ring-red-600/70"
+                          : getUserColor(selectedChat?.studentName || "Student")
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">
-                        {selectedChat ? (selectedChat.isAnonymous ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
+                        {selectedChat
+                          ? (selectedChat.isAnonymous && selectedChat.studentName === anonymousLabelForCounselor()
+                              ? "AU"
+                              : getInitials(selectedChat.studentName))
+                          : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="truncate text-base font-semibold leading-tight">
-                          {selectedChat?.isAnonymous ? anonymousLabelForCounselor() : selectedChat?.studentName || "Select a conversation"}
+                          {selectedChat?.studentName || "Select a conversation"}
                         </p>
                         {selectedChat?.isAnonymous && (
                           <AnonymousModeIndicator variant="badge" audience="counselor" />

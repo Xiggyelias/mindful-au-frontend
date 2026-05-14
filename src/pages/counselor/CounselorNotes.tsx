@@ -27,7 +27,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousSessionFlag,
+  isAnonymousIdentityMaskedFromViewer,
+} from "@/lib/anonymousMode";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -110,17 +114,17 @@ function formatRelativeUpdated(value: unknown): string {
 function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const id = String(s.id ?? "");
   const student = s.student;
-  const isAnon = isAnonymousSessionFlag(s.is_anonymous);
+  const isMasked = isAnonymousIdentityMaskedFromViewer(s);
 
   let studentLabel = "Student";
-  if (isAnon) {
-    const tag = coerceString(s.anonymous_display_id || s.anonymous_id).trim();
-    studentLabel = tag ? `Anonymous (${tag})` : "Anonymous student";
+  if (isMasked) {
+    studentLabel = anonymousLabelForCounselor();
   } else {
+    const isAnon = isAnonymousSessionFlag(s.is_anonymous);
     studentLabel =
       student?.profile?.full_name?.trim() ||
       student?.email?.split("@")[0]?.trim() ||
-      (s.student_id != null ? `Student #${s.student_id}` : "Student");
+      (isAnon ? anonymousLabelForCounselor() : (s.student_id != null ? `Student #${s.student_id}` : "Student"));
   }
 
   const rawNotes =

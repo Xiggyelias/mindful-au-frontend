@@ -35,7 +35,11 @@ import { CounselorSessionReminderBanner } from "@/components/counselor/Counselor
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { dedupeCounselorChatListRows, isValidChatListRow } from "@/lib/counselorChatListDedupe";
-import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousSessionFlag,
+  isAnonymousIdentityMaskedFromViewer,
+} from "@/lib/anonymousMode";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -83,6 +87,7 @@ function mapChatListRowsToOpenConversations(
     .slice(0, maxItems)
     .map((row) => {
     const isAnon = isAnonymousSessionFlag(row.is_anonymous);
+    const isMasked = isAnonymousIdentityMaskedFromViewer(row);
     const student = row.student as Record<string, unknown> | undefined;
     const profile = student?.profile as Record<string, unknown> | undefined;
     const fromApiName = String(profile?.full_name ?? "").trim();
@@ -95,9 +100,13 @@ function mapChatListRowsToOpenConversations(
         : Number.isInteger(peerSid) && peerSid > 0
           ? peerSid
           : row.id;
-    const label = isAnon
+
+    const label = isMasked
       ? anonymousLabelForCounselor()
-      : fromApiName || (email ? email.split("@")[0] : "") || `Student #${idFallback}`;
+      : fromApiName ||
+        (email ? email.split("@")[0] : "") ||
+        (isAnon ? anonymousLabelForCounselor() : `Student #${idFallback}`);
+
     return {
       sessionId: Number(row.id),
       label,
@@ -624,9 +633,11 @@ const CounselorDashboard = () => {
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
-                            {isAnonymousSessionFlag(apt.is_anonymous)
+                            {isAnonymousIdentityMaskedFromViewer(apt)
                               ? anonymousLabelForCounselor()
-                              : apt.student?.profile?.full_name || apt.student?.email || "Student"}
+                              : apt.student?.profile?.full_name ||
+                                apt.student?.email ||
+                                (isAnonymousSessionFlag(apt.is_anonymous) ? anonymousLabelForCounselor() : "Student")}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <p className="text-sm text-muted-foreground">
