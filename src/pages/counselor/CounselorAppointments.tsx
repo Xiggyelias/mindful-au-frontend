@@ -476,7 +476,7 @@ const CounselorAppointments = () => {
                   onClick={() => setBulkCancelOpen(false)}
                   disabled={bulkCancelSubmitting}
                 >
-                  Ã¢ÂÅ’ No, Go Back
+                  ✖ No, Go Back
                 </Button>
                 <Button
                   type="button"
@@ -485,7 +485,7 @@ const CounselorAppointments = () => {
                   onClick={() => void handleBulkCancelConfirm()}
                   disabled={bulkCancelSubmitting}
                 >
-                  Ã¢Å“â€¦ Yes, Cancel
+                  ✔ Yes, Cancel
                 </Button>
               </DialogFooter>
             </DialogContent>

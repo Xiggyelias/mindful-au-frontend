@@ -115,7 +115,7 @@ function buildPanicStudentSummary(log: {
     displayName,
     email,
     idNumber,
-    detailLine: parts.join(" Ã‚Â· "),
+    detailLine: parts.join(" · "),
   };
 }
 
