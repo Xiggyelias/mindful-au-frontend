@@ -615,14 +615,16 @@ const CounselorAppointments = () => {
 
                     // Counselors always see real name — anonymous mode hides
                     // identity from other students, not from the assigned counselor
-                    const studentName =
-                      (apt as any).student_name ||
-                      (apt as any).student?.name ||
-                      apt.student?.profile?.full_name ||
-                      apt.student?.email ||
-                      `Student #${String(apt.student_id || apt.id).slice(-4)}`;
+                    const isMasked = isAnonymousIdentityMaskedFromViewer(apt);
+                    const isAnonymousApt = isAnonymousSessionFlag(apt.is_anonymous);
 
-                    const isAnonymousApt = false; // counselors always see real identity
+                    const studentName = isMasked
+                      ? anonymousLabelForCounselor()
+                      : (apt as any).student_name ||
+                        (apt as any).student?.name ||
+                        apt.student?.profile?.full_name ||
+                        apt.student?.email ||
+                        (isAnonymousApt ? anonymousLabelForCounselor() : `Student #${String(apt.student_id || apt.id).slice(-4)}`);
 
                     const isPhysical =
                       (apt as any).session_type === 'physical' ||

@@ -24,6 +24,7 @@ export interface Session {
   session_type: string | null;
   is_anonymous?: boolean;
   anonymous_id?: string | null;
+  unread_count?: number;
   created_at: string;
   counselor?: {
     id: number;
@@ -325,9 +326,14 @@ export const useChatSession = (userId: number | undefined) => {
     }
   }, [userId]);
 
-  const selectSession = (session: Session | null) => {
+  const selectSession = useCallback((session: Session | null) => {
+    if (session) {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === session.id ? { ...s, unread_count: 0 } : s))
+      );
+    }
     setActiveSession(session);
-  };
+  }, []);
 
   const canGoToPrevPage = sessionPage > 1;
   const canGoToNextPage = sessionPage < sessionTotalPages;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Shield,
@@ -95,6 +95,7 @@ const StudentChat = () => {
   const [counselorTotalPages, setCounselorTotalPages] = useState(1);
   const counselorPageRef = useRef(counselorPage);
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
@@ -478,7 +479,14 @@ const StudentChat = () => {
       return;
     }
     const session = sessions.find(s => s.id.toString() === id);
-    if (session) selectSession(session);
+    if (session) {
+      selectSession(session);
+      void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(() => {
+        setTimeout(() => {
+          void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch(() => {});
+        }, 2000);
+      });
+    }
   }, [sessions, selectSession]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
@@ -614,7 +622,7 @@ const StudentChat = () => {
                 activeSession={activeSession}
                 counselors={counselors}
                 isCounselorsLoading={isCounselorsLoading}
-                searchQuery={searchQuery}
+                searchQuery={deferredSearchQuery}
                 onSearchChange={setSearchQuery}
                 onSelectSession={handleSelectSessionById}
                 onStartSession={handleStartSessionWrapper}
@@ -718,7 +726,9 @@ const StudentChat = () => {
                         <X className="h-5 w-5" />
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
-                        {(activeSession.counselor?.profile?.full_name || "Support")
+                        {(activeSession.assigned_role === 'peer_counselor'
+                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
+                            : activeSession.counselor?.profile?.full_name || "Support")
                           .split(/\s+/)
                           .filter(Boolean)
                           .slice(0, 2)
@@ -728,7 +738,9 @@ const StudentChat = () => {
                       </div>
                       <div className="min-w-0">
                         <h2 className="truncate text-sm font-bold leading-tight sm:text-base lg:text-lg">
-                          {activeSession.counselor?.profile?.full_name || "Support Session"}
+                          {activeSession.assigned_role === 'peer_counselor'
+                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support Session"
+                            : activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <div className="mt-0.5 flex items-center gap-2">
                           <span
@@ -862,7 +874,7 @@ const StudentChat = () => {
                     activeSession={activeSession}
                     counselors={counselors}
                     isCounselorsLoading={isCounselorsLoading}
-                    searchQuery={searchQuery}
+                    searchQuery={deferredSearchQuery}
                     onSearchChange={setSearchQuery}
                     onSelectSession={handleSelectSessionById}
                     onStartSession={handleStartSessionWrapper}
