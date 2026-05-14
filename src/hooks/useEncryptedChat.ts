@@ -2106,7 +2106,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
         // Then pass sessionDetails to initializeEncryption
         const encryptionTimeout = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Encryption timeout')), 5000)
+          setTimeout(() => reject(new Error('Encryption timeout')), 3000)
         );
         await Promise.race([
           initializeEncryption(signal, sessionDetails),
@@ -2115,6 +2115,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           // Encryption timed out — continue anyway, messages may show
           // awaiting_key state but UI is unblocked
         });
+        // Even if encryption times out, continue loading messages.
+        // They will show awaiting_key and decrypt when key arrives.
+        if (!isDisposed && !signal.aborted) {
+          setIsLoading(false);
+        }
 
         // Force encryption ready if key already exists in runtime cache
         if (encryptionKeyRef.current && !isEncryptionReady) {
@@ -2185,12 +2190,15 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           }
         }
 
-        void runHandshakeHistoryCatchup();
-
-        // If non-initiator still doesn't have encryption key, request it from initiator via realtime
-        if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
-          void requestSessionKey();
-        }
+        void runHandshakeHistoryCatchup().then(() => {
+          if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {
+            // Request key immediately and again after 2 seconds.
+            void requestSessionKey();
+            window.setTimeout(() => {
+              if (!encryptionKeyRef.current) void requestSessionKey();
+            }, 2000);
+          }
+        });
 
         await refreshPeerTypingStatus();
         scheduleNextPoll();
@@ -2309,23 +2317,33 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     if (!sessionId || !hasValidUserId) return;
     setError(null);
 
+    // Clear all stored keys for this session.
     const peer = peerIdRef.current;
     if (peer !== null && Number.isFinite(peer) && peer > 0) {
       await deletePersistedSessionKey(getSessionKeyStorageKey(sessionId, numericUserId, peer));
     }
     await deletePersistedSessionKey(getLegacySessionKeyStorageKey(sessionId));
     runtimeEncryptionContexts.delete(getRuntimeEncryptionContextKey(sessionId, userId));
+
+    // Also clear peer public key so a fresh public-key envelope is sent.
+    localStorage.removeItem(getPeerKeyStorageKey(sessionId, numericUserId));
+    if (peerIdRef.current) {
+      localStorage.removeItem(getPeerKeyStorageKey(sessionId, peerIdRef.current));
+    }
+
     encryptionKeyRef.current = null;
     keyStringRef.current = null;
     peerPublicKeyRef.current = null;
     sessionKeyStorageKeyRef.current = null;
+    hasSentPublicKeyRef.current = false;
+    hasSentSessionKeyRef.current = false;
     setIsEncryptionReady(false);
 
     isInitializedRef.current = false;
     await initializeEncryption();
     if (isInitializedRef.current) {
       await loadMessages(true);
-      await runHandshakeHistoryCatchup();
+      void runHandshakeHistoryCatchup();
 
       // If non-initiator still doesn't have encryption key, request it from initiator
       if (!encryptionKeyRef.current && !isSessionKeyInitiator() && peerIdRef.current) {

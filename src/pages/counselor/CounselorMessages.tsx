@@ -225,9 +225,9 @@ const formatChatListTime = (dateString?: string) => {
   const d = parseBackendDate(dateString);
   if (!d) return "";
   if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
-  if (isYesterdayInDisplayZone(d)) return `Yesterday Ã‚Â· ${formatInDisplayZone(d, "h:mm a")}`;
-  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d Ã‚Â· h:mm a");
-  return formatInDisplayZone(d, "MMM d, yyyy Ã‚Â· h:mm a");
+  if (isYesterdayInDisplayZone(d)) return `Yesterday - ${formatInDisplayZone(d, "h:mm a")}`;
+  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d - h:mm a");
+  return formatInDisplayZone(d, "MMM d, yyyy - h:mm a");
 };
 
 const getInitials = (name: string) => {
@@ -1424,7 +1424,7 @@ const CounselorMessages = () => {
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                           <Shield className="h-3 w-3 shrink-0" />
                           <span className="whitespace-nowrap">
-                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "SecuringÃ¢â‚¬Â¦"}
+                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}
                           </span>
                         </div>
                         {encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession && (
@@ -1468,7 +1468,7 @@ const CounselorMessages = () => {
                         disabled={isTriggeringEmergency}
                       >
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-xs font-semibold">{isTriggeringEmergency ? "AlertingÃ¢â‚¬Â¦" : "Emergency"}</span>
+                        <span className="text-xs font-semibold">{isTriggeringEmergency ? "Alerting..." : "Emergency"}</span>
                       </Button>
                       {(selectedChat?.isAnonymous || isPeerCounselor) && (
                         <DropdownMenu>
@@ -1482,7 +1482,7 @@ const CounselorMessages = () => {
                             {selectedChat?.isAnonymous && (
                               <DropdownMenuItem onClick={() => void handleRevealIdentity()} disabled={isRevealingIdentity}>
                                 <Shield className="mr-2 h-4 w-4" />
-                                {isRevealingIdentity ? "RevealingÃ¢â‚¬Â¦" : "Reveal identity"}
+                                {isRevealingIdentity ? "Revealing..." : "Reveal identity"}
                               </DropdownMenuItem>
                             )}
                             {selectedChat?.isAnonymous && isPeerCounselor && <DropdownMenuSeparator />}
@@ -1490,7 +1490,7 @@ const CounselorMessages = () => {
                               <>
                                 <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>
                                   <ArrowUpCircle className="mr-2 h-4 w-4" />
-                                  {isEscalating ? "EscalatingÃ¢â‚¬Â¦" : "Escalate to counselor"}
+                                  {isEscalating ? "Escalating..." : "Escalate to counselor"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-orange-700 focus:text-orange-800 dark:text-orange-300 dark:focus:text-orange-200"
@@ -1498,7 +1498,7 @@ const CounselorMessages = () => {
                                   disabled={isFlaggingUrgent}
                                 >
                                   <AlertTriangle className="mr-2 h-4 w-4" />
-                                  {isFlaggingUrgent ? "FlaggingÃ¢â‚¬Â¦" : "Flag as urgent"}
+                                  {isFlaggingUrgent ? "Flagging..." : "Flag as urgent"}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -1526,7 +1526,7 @@ const CounselorMessages = () => {
                 {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
                   <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">SecuringÃ¢â‚¬Â¦</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securing...</span>
                   </div>
                 )}
                 {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
