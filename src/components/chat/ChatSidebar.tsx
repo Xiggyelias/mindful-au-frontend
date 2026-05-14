@@ -193,7 +193,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     );
 
     return rows;
-  }, [sessions]);
+  }, [visibleSessions]);
 
   return (
     <div className="flex h-full w-full flex-col border-r border-border/50 bg-background">

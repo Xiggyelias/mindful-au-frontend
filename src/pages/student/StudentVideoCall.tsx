@@ -103,7 +103,7 @@ const StudentVideoCall = () => {
   );
   const [rejoinSecondsLeft, setRejoinSecondsLeft] = useState<number | null>(null);
   const [isRejoining, setIsRejoining] = useState(false);
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
   const {
     profileAnonymousMode,

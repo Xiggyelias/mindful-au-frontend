@@ -13,6 +13,9 @@ type OutboundErr = { id: number; ok: false; reason: string };
 
 const ALGO = "AES-GCM";
 
+/** Cache imported keys to avoid redundant importKey calls */
+const keyCache = new Map<string, CryptoKey>();
+
 function decodeBase64(b64: string): Uint8Array | null {
   try {
     const binary = atob(b64.trim());
@@ -39,20 +42,31 @@ self.onmessage = async (e: MessageEvent<Inbound>) => {
     self.postMessage(res);
     return;
   }
-  const keyBytes = decodeBase64(keyRawB64);
-  if (!keyBytes || keyBytes.length !== 32) {
-    const res: OutboundErr = { id, ok: false, reason: "bad_key" };
-    self.postMessage(res);
-    return;
-  }
+
   try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      keyBytes,
-      { name: ALGO, length: 256 },
-      false,
-      ["decrypt"]
-    );
+    let key = keyCache.get(keyRawB64);
+    if (!key) {
+      const keyBytes = decodeBase64(keyRawB64);
+      if (!keyBytes || keyBytes.length !== 32) {
+        const res: OutboundErr = { id, ok: false, reason: "bad_key" };
+        self.postMessage(res);
+        return;
+      }
+      key = await crypto.subtle.importKey(
+        "raw",
+        keyBytes,
+        { name: ALGO, length: 256 },
+        false,
+        ["decrypt"]
+      );
+      // Limit cache size to prevent memory leaks if many keys are used
+      if (keyCache.size > 50) {
+        const firstKey = keyCache.keys().next().value;
+        if (firstKey !== undefined) keyCache.delete(firstKey);
+      }
+      keyCache.set(keyRawB64, key);
+    }
+
     const iv = combined.slice(0, 12);
     const ciphertext = combined.slice(12);
     const decrypted = await crypto.subtle.decrypt({ name: ALGO, iv }, key, ciphertext);
