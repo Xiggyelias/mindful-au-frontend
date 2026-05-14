@@ -305,12 +305,19 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       {getInitials(name)}
                     </div>
                     <div className="flex-1 text-left min-w-0">
-                      <p className="font-bold truncate text-sm">
-                        {name}
-                        <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">
-                          (Session {totalSessions})
-                        </span>
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-bold truncate text-sm">
+                          {name}
+                          <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">
+                            (Session {totalSessions})
+                          </span>
+                        </p>
+                        {session.unread_count != null && session.unread_count > 0 && !isActive && (
+                          <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white shadow-sm">
+                            {session.unread_count > 99 ? "99+" : session.unread_count}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1">
                         {isPeer && <Users className="h-2.5 w-2.5" />}
                         {isPeer ? "Peer Support" : "Professional"}

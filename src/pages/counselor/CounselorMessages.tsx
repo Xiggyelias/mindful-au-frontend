@@ -1166,8 +1166,7 @@ const CounselorMessages = () => {
   }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages, selectedSessionId]);
 
   const threadStudentLabel = useMemo(
-    () =>
-      selectedChat?.isAnonymous ? anonymousLabelForCounselor() : (selectedChat?.studentName ?? "Student"),
+    () => selectedChat?.studentName ?? "Student",
     [selectedChat]
   );
 
@@ -1337,7 +1336,7 @@ const CounselorMessages = () => {
                           <div
                             className={cn(
                               "h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background",
-                              chat.isAnonymous
+                              chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
                                 ? "bg-black ring-red-600/70"
                                 : getUserColor(chat.studentName)
                             )}
@@ -1407,7 +1406,9 @@ const CounselorMessages = () => {
                     <div
                       className={cn(
                         "flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-inner ring-2 ring-background",
-                        selectedChat?.isAnonymous ? "bg-black ring-red-600/70" : getUserColor(selectedChat?.studentName || "Student")
+                        selectedChat?.isAnonymous && selectedChat?.studentName === anonymousLabelForCounselor()
+                          ? "bg-black ring-red-600/70"
+                          : getUserColor(selectedChat?.studentName || "Student")
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">

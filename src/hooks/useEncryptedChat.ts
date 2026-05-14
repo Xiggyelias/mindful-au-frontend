@@ -1216,7 +1216,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           )
         ) {
           void api.markSessionInboundRead(sessionId, { timeout_ms: 5000 }).catch(() => {
-            // Read receipts are eventually corrected by the next full sync.
+            setTimeout(() => {
+              void api.markSessionInboundRead(sessionId, { timeout_ms: 8000 }).catch(() => {});
+            }, 2000);
           });
         }
 
@@ -2000,7 +2002,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     const scheduleNextPoll = () => {
       if (sessionExpiredRef.current) return; // ref — never stale
-      if (isDisposed || !isInitializedRef.current) return;
+      if (isDisposed || !isInitializedRef.current) {
+        if (!isDisposed && !sessionExpiredRef.current) {
+          pollingTimeoutRef.current = window.setTimeout(scheduleNextPoll, 2000);
+        }
+        return;
+      }
       const now = Date.now();
       const shouldBoost = (now - lastActiveAtRef.current < POLLING_BOOST_DURATION_MS) || isPeerTypingRef.current;
       const nextInterval = shouldBoost ? ACTIVE_POLLING_INTERVAL_MS : DEFAULT_POLLING_INTERVAL_MS;
@@ -2027,7 +2034,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     const scheduleTypingPoll = () => {
       if (sessionExpiredRef.current) return; // ref — never stale
-      if (isDisposed || !isInitializedRef.current) return;
+      if (isDisposed || !isInitializedRef.current) {
+        if (!isDisposed && !sessionExpiredRef.current) {
+          typingPollTimeoutRef.current = window.setTimeout(scheduleTypingPoll, 2000);
+        }
+        return;
+      }
 
       typingPollTimeoutRef.current = window.setTimeout(async () => {
         if (sessionExpiredRef.current) return; // check inside timer

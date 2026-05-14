@@ -223,10 +223,10 @@ const WellnessTyping = () => (
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
   const moods = [
-    { emoji: "ðŸ˜Š", label: "Good", color: "from-emerald-500/20 to-green-600/20" },
-    { emoji: "ðŸ˜", label: "Okay", color: "from-amber-500/20 to-yellow-600/20" },
-    { emoji: "ðŸ˜”", label: "Low", color: "from-orange-500/20 to-red-600/20" },
-    { emoji: "ðŸ˜°", label: "Anxious", color: "from-rose-500/20 to-red-700/20" },
+    { label: "Good", color: "from-emerald-500/20 to-green-600/20" },
+    { label: "Okay", color: "from-amber-500/20 to-yellow-600/20" },
+    { label: "Low", color: "from-orange-500/20 to-red-600/20" },
+    { label: "Anxious", color: "from-rose-500/20 to-red-700/20" },
   ];
 
   return (
@@ -252,7 +252,6 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
               mood.color
             )}
           >
-            <span className="text-base">{mood.emoji}</span>
             <span className="text-xs font-medium text-foreground">{mood.label}</span>
           </motion.button>
         ))}

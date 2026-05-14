@@ -102,7 +102,10 @@ function mapChatListRowsToOpenConversations(
           : row.id;
     const label = isMasked
       ? anonymousLabelForCounselor()
-      : fromApiName || (email ? email.split("@")[0] : "") || `Student #${idFallback}`;
+      : fromApiName ||
+        (email ? email.split("@")[0] : "") ||
+        (isAnon ? anonymousLabelForCounselor() : `Student #${idFallback}`);
+
     return {
       sessionId: Number(row.id),
       label,
@@ -327,7 +330,7 @@ const CounselorDashboard = () => {
     };
   }, [isApprovedCounselor, user?.id]);
 
-  /** Keeps Ã¢â‚¬Å“todayÃ¢â‚¬â„¢s scheduleÃ¢â‚¬Â correct across midnight and long-lived tabs. */
+  /** Keeps "today's schedule" correct across midnight and long-lived tabs. */
   const [nowTicker, setNowTicker] = useState(() => Date.now());
   useEffect(() => {
     const tick = () => setNowTicker(Date.now());
@@ -622,16 +625,18 @@ const CounselorDashboard = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })
-                                    : "Ã¢â‚¬â€";
+                                    : "—";
                                 })()
-                              : "Ã¢â‚¬â€"}
+                              : "—"}
                           </p>
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
                             {isAnonymousIdentityMaskedFromViewer(apt)
                               ? anonymousLabelForCounselor()
-                              : apt.student?.profile?.full_name || apt.student?.email || "Student"}
+                              : apt.student?.profile?.full_name ||
+                                apt.student?.email ||
+                                (isAnonymousSessionFlag(apt.is_anonymous) ? anonymousLabelForCounselor() : "Student")}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <p className="text-sm text-muted-foreground">
