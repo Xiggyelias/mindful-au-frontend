@@ -22,6 +22,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousIdentityMaskedFromViewer
+} from "@/lib/anonymousMode";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -115,12 +120,14 @@ const CounselorAIDashboard = () => {
         const studentRaw = (raw.student as StudentObservation["student"]) || { id: 0, name: "Student", email: "" };
         const reasons = Array.isArray(raw.reasons) ? raw.reasons : [];
         const trendRaw = raw.trend as StudentObservation["trend"] | undefined;
+        const isMasked = isAnonymousIdentityMaskedFromViewer(raw as any);
+
         return {
           student_id: Number(raw.student_id) || 0,
           student: {
             id: Number(studentRaw.id) || 0,
-            name: String(studentRaw.name || "Student"),
-            email: String(studentRaw.email || ""),
+            name: isMasked ? anonymousLabelForCounselor() : String(studentRaw.name || "Student"),
+            email: isMasked ? "" : String(studentRaw.email || ""),
           },
           risk_level: normalizeRiskLevel(raw.risk_level),
           risk_score: clampPercent(raw.risk_score),
@@ -147,12 +154,14 @@ const CounselorAIDashboard = () => {
           const found = observations.find((o) => o.student_id === Number(raw.student_id));
           if (found) return found;
           const studentRaw = (raw.student as StudentObservation["student"]) || { id: 0, name: "Student", email: "" };
+          const isMasked = isAnonymousIdentityMaskedFromViewer(raw as any);
+
           return {
             student_id: Number(raw.student_id) || 0,
             student: {
               id: Number(studentRaw.id) || 0,
-              name: String(studentRaw.name || "Student"),
-              email: String(studentRaw.email || ""),
+              name: isMasked ? anonymousLabelForCounselor() : String(studentRaw.name || "Student"),
+              email: isMasked ? "" : String(studentRaw.email || ""),
             },
             risk_level: normalizeRiskLevel(raw.risk_level),
             risk_score: clampPercent(raw.risk_score),
@@ -345,8 +354,15 @@ const CounselorAIDashboard = () => {
                         <div key={observation.student_id} className="p-4 rounded-lg border bg-card space-y-3">
                           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
-                              <p className="font-semibold text-foreground">{observation.student.name}</p>
-                              <p className="text-xs text-muted-foreground">{observation.student.email}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-foreground">{observation.student.name}</p>
+                                {observation.student.email === "" && (
+                                  <AnonymousModeIndicator variant="badge" audience="counselor" />
+                                )}
+                              </div>
+                              {observation.student.email !== "" && (
+                                <p className="text-xs text-muted-foreground">{observation.student.email}</p>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRiskColor(observation.risk_level)} ${getRiskBgColor(observation.risk_level)}`}>
@@ -398,8 +414,15 @@ const CounselorAIDashboard = () => {
                         >
                           <div className="flex items-start justify-between mb-3">
                             <div>
-                              <p className="font-semibold text-foreground">{observation.student.name}</p>
-                              <p className="text-sm text-muted-foreground">{observation.student.email}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-foreground">{observation.student.name}</p>
+                                {observation.student.email === "" && (
+                                  <AnonymousModeIndicator variant="badge" audience="counselor" />
+                                )}
+                              </div>
+                              {observation.student.email !== "" && (
+                                <p className="text-sm text-muted-foreground">{observation.student.email}</p>
+                              )}
                             </div>
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRiskColor(observation.risk_level)}`}>
                               {observation.risk_level.toUpperCase()} - {observation.risk_score}%
@@ -431,30 +454,36 @@ const CounselorAIDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {recentDiagnostics.slice(0, 10).map((diagnostic) => (
-                      <div
-                        key={diagnostic.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
-                        onClick={() => setSelectedDiagnostic(diagnostic)}
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">
-                            {diagnostic.student?.profile?.full_name || diagnostic.student?.email || "Student"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(diagnostic.created_at), "MMM d, yyyy h:mm a")}
-                          </p>
+                    {recentDiagnostics.slice(0, 10).map((diagnostic) => {
+                      const isMasked = isAnonymousIdentityMaskedFromViewer(diagnostic);
+                      const name = isMasked ? anonymousLabelForCounselor() : (diagnostic.student?.profile?.full_name || diagnostic.student?.email || "Student");
+
+                      return (
+                        <div
+                          key={diagnostic.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+                          onClick={() => setSelectedDiagnostic(diagnostic)}
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-foreground">{name}</p>
+                              {isMasked && <AnonymousModeIndicator variant="badge" audience="counselor" />}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(diagnostic.created_at), "MMM d, yyyy h:mm a")}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Progress value={clampPercent(diagnostic.total_score)} className="w-24 h-2" />
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-medium ${getRiskColor(normalizeRiskLevel(diagnostic.risk_level))}`}
+                            >
+                              {normalizeRiskLevel(diagnostic.risk_level)}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <Progress value={clampPercent(diagnostic.total_score)} className="w-24 h-2" />
-                          <span
-                            className={`px-2 py-1 rounded text-xs font-medium ${getRiskColor(normalizeRiskLevel(diagnostic.risk_level))}`}
-                          >
-                            {normalizeRiskLevel(diagnostic.risk_level)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {recentDiagnostics.length === 0 && (
                       <p className="text-sm text-muted-foreground">No recent assessments yet.</p>
                     )}
@@ -473,10 +502,21 @@ const CounselorAIDashboard = () => {
                   <CardContent className="space-y-6">
                     <div>
                       <h4 className="font-semibold text-foreground mb-2">Student Information</h4>
-                      <p className="text-foreground">
-                        {selectedDiagnostic.student?.profile?.full_name || selectedDiagnostic.student?.email || "Student"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "Ã¢â‚¬â€"}</p>
+                      {(() => {
+                        const isMasked = isAnonymousIdentityMaskedFromViewer(selectedDiagnostic);
+                        const name = isMasked ? anonymousLabelForCounselor() : (selectedDiagnostic.student?.profile?.full_name || selectedDiagnostic.student?.email || "Student");
+                        return (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <p className="text-foreground">{name}</p>
+                              {isMasked && <AnonymousModeIndicator variant="badge" audience="counselor" />}
+                            </div>
+                            {!isMasked && (
+                              <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "—"}</p>
+                            )}
+                          </>
+                        );
+                      })()}
                       <p className="text-sm text-muted-foreground mt-1">
                         Assessment Date: {format(new Date(selectedDiagnostic.created_at), "MMM d, yyyy h:mm a")}
                       </p>

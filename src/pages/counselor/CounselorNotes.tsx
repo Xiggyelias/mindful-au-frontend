@@ -27,7 +27,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousSessionFlag,
+  isAnonymousIdentityMaskedFromViewer
+} from "@/lib/anonymousMode";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -111,11 +115,12 @@ function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const id = String(s.id ?? "");
   const student = s.student;
   const isAnon = isAnonymousSessionFlag(s.is_anonymous);
+  const isMasked = isAnonymousIdentityMaskedFromViewer(s as any);
 
   let studentLabel = "Student";
-  if (isAnon) {
+  if (isMasked) {
     const tag = coerceString(s.anonymous_display_id || s.anonymous_id).trim();
-    studentLabel = tag ? `Anonymous (${tag})` : "Anonymous student";
+    studentLabel = tag ? `Anonymous (${tag})` : anonymousLabelForCounselor();
   } else {
     studentLabel =
       student?.profile?.full_name?.trim() ||

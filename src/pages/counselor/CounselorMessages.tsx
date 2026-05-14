@@ -82,6 +82,7 @@ import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
+  isAnonymousIdentityMaskedFromViewer,
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
 import {
@@ -163,6 +164,7 @@ type ChatListItem = {
   studentEmail: string;
   isAnonymous: boolean;
   anonymousId: string;
+  identityVisibleToViewer: boolean;
   status: string | null;
   lastActivity: string;
   preview: string;
@@ -606,6 +608,7 @@ const CounselorMessages = () => {
         const nextChats = Array.from(dedupedByConversation.values())
           .map(({ session }): ChatListItem => {
             const isAnonymous = isAnonymousSessionFlag(session.is_anonymous);
+            const isMasked = isAnonymousIdentityMaskedFromViewer(session);
             const anonymousLabel = anonymousLabelForCounselor();
             const numericStudentId = Number(session.student_id);
             const visibleStudentId =
@@ -619,12 +622,12 @@ const CounselorMessages = () => {
               session.peer_counselor?.email ||
               (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
             const name =
-              isAnonymous
+              isMasked
                 ? anonymousLabel
                 : session.student?.profile?.full_name ||
                   session.student?.email?.split("@")[0] ||
                   `Student #${session.id}`;
-            const email = isAnonymous ? "" : session.student?.email || "";
+            const email = isMasked ? "" : session.student?.email || "";
             const rowUnread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
 
             return {
@@ -635,6 +638,7 @@ const CounselorMessages = () => {
               studentEmail: email,
               isAnonymous,
               anonymousId: String(session.anonymous_id ?? "").trim(),
+              identityVisibleToViewer: Boolean(session.identity_visible_to_viewer),
               status: session.status || null,
               lastActivity: session.updated_at || session.created_at || "",
               preview: !isOpenSession(session.status)
@@ -1253,7 +1257,7 @@ const CounselorMessages = () => {
 
         <main className="p-0 overflow-hidden h-full">
           <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
-            <Card variant="glass" className={`lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
+            <Card variant="glass" className={`w-72 shrink-0 hidden lg:flex lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1339,7 +1343,9 @@ const CounselorMessages = () => {
                             )}
                           >
                             <span className="text-white text-[11px] font-bold tracking-tight">
-                              {chat.isAnonymous ? "AU" : getInitials(chat.studentName)}
+                              {chat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: chat.isAnonymous, identity_visible_to_viewer: chat.identityVisibleToViewer })
+                                ? "AU"
+                                : getInitials(chat.studentName)}
                             </span>
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1349,7 +1355,7 @@ const CounselorMessages = () => {
                                   "truncate text-[13px] font-semibold tracking-tight",
                                   isActive ? "text-foreground" : "text-foreground/90"
                                 )}>
-                                  {chat.isAnonymous ? anonymousLabelForCounselor() : chat.studentName}
+                                  {chat.studentName}
                                 </p>
                                 {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
                                 {chat.isPeerAssigned && (
@@ -1387,7 +1393,7 @@ const CounselorMessages = () => {
 
             <Card
               variant="glass"
-              className={`flex min-h-0 flex-1 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
+              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
               <CardHeader className="shrink-0 space-y-0 border-b border-border/50 px-4 py-3 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1405,13 +1411,13 @@ const CounselorMessages = () => {
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">
-                        {selectedChat ? (selectedChat.isAnonymous ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
+                        {selectedChat ? (selectedChat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: selectedChat.isAnonymous, identity_visible_to_viewer: selectedChat.identityVisibleToViewer }) ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="truncate text-base font-semibold leading-tight">
-                          {selectedChat?.isAnonymous ? anonymousLabelForCounselor() : selectedChat?.studentName || "Select a conversation"}
+                          {selectedChat?.studentName || "Select a conversation"}
                         </p>
                         {selectedChat?.isAnonymous && (
                           <AnonymousModeIndicator variant="badge" audience="counselor" />

@@ -46,7 +46,7 @@ const wellnessCapsules = [
 const AmbientCanvas = () => (
   <div className="fixed inset-0 pointer-events-none overflow-hidden">
     {/* Deep base layer */}
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-950/40 via-black to-black" />
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-500/10 via-background to-background" />
     {/* Floating orbs */}
     <motion.div
       className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full"
@@ -101,7 +101,7 @@ const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
       <Sparkles className="h-7 w-7 text-white" />
     </motion.div>
     {/* Status dot */}
-    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 border border-white/10 backdrop-blur-md">
+    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/60 border border-border backdrop-blur-md">
       <span className="relative flex h-2 w-2">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -111,9 +111,9 @@ const AICompanion = ({ isThinking }: { isThinking?: boolean }) => (
   </div>
 );
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// WELLNESS CARD â€” User emotional expression card
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// WELLNESS CARD — User emotional expression card
+// ═══════════════════════════════════════════════════════════════════════════════════════════
 const UserCard = memo(({ content, time }: { content: string; time: string }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.96 }}
@@ -124,12 +124,12 @@ const UserCard = memo(({ content, time }: { content: string; time: string }) => 
     <div className="max-w-[90%] sm:max-w-[80%] lg:max-w-[70%]">
       <div className="relative group">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500/20 to-red-600/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
-        <div className="relative rounded-2xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-white/[0.06] px-6 py-4 shadow-xl">
+        <div className="relative rounded-2xl bg-primary text-primary-foreground border border-input px-6 py-4 shadow-xl">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-rose-500/30 to-transparent" />
-          <p className="text-[15px] leading-relaxed text-zinc-100 whitespace-pre-wrap break-words">{content}</p>
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>
         </div>
       </div>
-      <p className="mt-2 text-[10px] text-zinc-500 text-right pr-2 tracking-wide uppercase">{time}</p>
+      <p className="mt-2 text-[10px] text-muted-foreground text-right pr-2 tracking-wide uppercase">{time}</p>
     </div>
   </motion.div>
 ));
@@ -153,7 +153,7 @@ const AICard = memo(({ content, time, isThinking }: { content: string; time: str
         <div className="absolute -inset-0.5 bg-gradient-to-r from-red-900/20 via-rose-800/10 to-transparent rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
         <div className="relative rounded-2xl bg-muted text-foreground border border-border backdrop-blur-sm px-6 py-5 shadow-xl">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-rose-500/20 via-red-400/10 to-transparent" />
-          <p className="text-[15px] leading-[1.7] whitespace-pre-wrap break-words">{content}</p>
+          <p className="text-[15px] font-medium leading-[1.7] whitespace-pre-wrap break-words">{content}</p>
         </div>
       </div>
       <p className="mt-2 text-[10px] text-muted-foreground pl-2 tracking-wide uppercase">{time}</p>
@@ -432,7 +432,7 @@ const StudentAISupport = () => {
         <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-4 lg:p-6">
           <div className="flex-1 min-h-0 flex flex-col rounded-2xl sm:rounded-[2rem] border border-border bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* AI Header - Compact & Premium */}
-            <div className="flex-shrink-0 border-b border-white/[0.04] bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
+            <div className="flex-shrink-0 border-b border-border bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Button
@@ -637,7 +637,7 @@ const StudentAISupport = () => {
                       onBlur={() => setIsFocused(false)}
                       placeholder="Share what's on your mind..."
                       disabled={isLoading}
-                      className="flex-1 bg-transparent px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                      className="flex-1 bg-background border border-input rounded-l-2xl px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
                     />
                     <div className="flex items-center gap-2 pr-2">
                       <Button
