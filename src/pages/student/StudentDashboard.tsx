@@ -61,6 +61,7 @@ type LiteSession = {
   is_anonymous?: boolean;
   anonymous_id?: string | null;
   assigned_role?: string | null;
+  unread_count?: number;
   counselor?: { profile?: { full_name?: string | null } | null } | null;
   peer_counselor?: { profile?: { full_name?: string | null } | null } | null;
 };
@@ -745,7 +746,14 @@ const StudentDashboard = () => {
                                   : "Professional support"}
                             </p>
                           </div>
-                          <span className="text-sm font-semibold text-primary whitespace-nowrap">Resume</span>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            {session.unread_count != null && session.unread_count > 0 && (
+                              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow-sm">
+                                {session.unread_count > 99 ? "99+" : session.unread_count}
+                              </span>
+                            )}
+                            <span className="text-sm font-semibold text-primary whitespace-nowrap">Resume</span>
+                          </div>
                         </div>
                       );
                     })
