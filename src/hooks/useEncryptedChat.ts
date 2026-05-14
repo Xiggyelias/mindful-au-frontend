@@ -2236,7 +2236,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const maxSessionKeyRequestAttempts = 12;
     const sessionKeyRequestInterval = window.setInterval(() => {
       if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts || sessionExpiredRef.current) {
-        window.clearInterval(sessionKeyRequestInterval);
+        window.clearTimeout(loadingTimeoutId);
+      window.clearInterval(sessionKeyRequestInterval);
         return;
       }
       sessionKeyRequestAttempts++;
@@ -2273,7 +2274,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     runHandshakeHistoryCatchup,
     sessionId,
     userId,
-    getNextSessionId,
+    
     ]);
 
   const refreshMessages = useCallback(
