@@ -476,7 +476,7 @@ const CounselorAIDashboard = () => {
                       <p className="text-foreground">
                         {selectedDiagnostic.student?.profile?.full_name || selectedDiagnostic.student?.email || "Student"}
                       </p>
-                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "Ã¢â‚¬â€"}</p>
+                      <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "—"}</p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Assessment Date: {format(new Date(selectedDiagnostic.created_at), "MMM d, yyyy h:mm a")}
                       </p>

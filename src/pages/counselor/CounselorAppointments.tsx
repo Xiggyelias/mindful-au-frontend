@@ -613,7 +613,7 @@ const CounselorAppointments = () => {
                       session_type: (apt as any).session_type,
                     });
 
-                    // Counselors always see real name Ã¢â‚¬â€ anonymous mode hides
+                    // Counselors always see real name — anonymous mode hides
                     // identity from other students, not from the assigned counselor
                     const studentName =
                       (apt as any).student_name ||

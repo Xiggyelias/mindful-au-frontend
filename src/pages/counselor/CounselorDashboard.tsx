@@ -322,7 +322,7 @@ const CounselorDashboard = () => {
     };
   }, [isApprovedCounselor, user?.id]);
 
-  /** Keeps Ã¢â‚¬Å“todayÃ¢â‚¬â„¢s scheduleÃ¢â‚¬Â correct across midnight and long-lived tabs. */
+  /** Keeps "today's schedule" correct across midnight and long-lived tabs. */
   const [nowTicker, setNowTicker] = useState(() => Date.now());
   useEffect(() => {
     const tick = () => setNowTicker(Date.now());
@@ -617,9 +617,9 @@ const CounselorDashboard = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })
-                                    : "Ã¢â‚¬â€";
+                                    : "—";
                                 })()
-                              : "Ã¢â‚¬â€"}
+                              : "—"}
                           </p>
                         </div>
                         <div className="flex-1">
