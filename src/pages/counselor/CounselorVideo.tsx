@@ -698,12 +698,12 @@ const CounselorVideo = () => {
           isConnected ? "p-0 h-screen" : "p-3 sm:p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-64px)] sm:h-[calc(100vh-80px)]"
         )}>
           <div className={cn(
-            "grid gap-6 transition-all duration-500",
+            "grid grid-cols-1 gap-6 transition-all duration-500",
             isConnected 
-              ? "grid-cols-1 xl:grid-cols-[1fr_380px] h-full" 
+              ? "xl:grid-cols-[1fr_380px] h-full"
               : localStream 
-                ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]" 
-                : "grid-cols-1 xl:grid-cols-[minmax(0,2fr)_360px]"
+                ? "xl:grid-cols-[minmax(0,1fr)_320px]"
+                : "xl:grid-cols-[minmax(0,2fr)_360px]"
           )}>
             <Card
               variant="glass"

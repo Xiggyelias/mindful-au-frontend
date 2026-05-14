@@ -164,6 +164,7 @@ type ChatListItem = {
   studentEmail: string;
   isAnonymous: boolean;
   anonymousId: string;
+  identityVisibleToViewer: boolean;
   status: string | null;
   lastActivity: string;
   preview: string;
@@ -620,13 +621,12 @@ const CounselorMessages = () => {
               session.peer_counselor?.profile?.full_name ||
               session.peer_counselor?.email ||
               (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
-
-            const name = isMasked
-              ? anonymousLabel
-              : session.student?.profile?.full_name ||
-                session.student?.email?.split("@")[0] ||
-                (isAnonymous ? anonymousLabel : `Student #${session.id}`);
-
+            const name =
+              isMasked
+                ? anonymousLabel
+                : session.student?.profile?.full_name ||
+                  session.student?.email?.split("@")[0] ||
+                  `Student #${session.id}`;
             const email = isMasked ? "" : session.student?.email || "";
             const rowUnread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
 
@@ -638,6 +638,7 @@ const CounselorMessages = () => {
               studentEmail: email,
               isAnonymous,
               anonymousId: String(session.anonymous_id ?? "").trim(),
+              identityVisibleToViewer: Boolean(session.identity_visible_to_viewer),
               status: session.status || null,
               lastActivity: session.updated_at || session.created_at || "",
               preview: !isOpenSession(session.status)
@@ -1255,7 +1256,7 @@ const CounselorMessages = () => {
 
         <main className="p-0 overflow-hidden h-full">
           <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
-            <Card variant="glass" className={`lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
+            <Card variant="glass" className={`w-72 shrink-0 hidden lg:flex lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1341,7 +1342,7 @@ const CounselorMessages = () => {
                             )}
                           >
                             <span className="text-white text-[11px] font-bold tracking-tight">
-                              {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
+                              {chat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: chat.isAnonymous, identity_visible_to_viewer: chat.identityVisibleToViewer })
                                 ? "AU"
                                 : getInitials(chat.studentName)}
                             </span>
@@ -1391,7 +1392,7 @@ const CounselorMessages = () => {
 
             <Card
               variant="glass"
-              className={`flex min-h-0 flex-1 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
+              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
               <CardHeader className="shrink-0 space-y-0 border-b border-border/50 px-4 py-3 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1411,11 +1412,7 @@ const CounselorMessages = () => {
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">
-                        {selectedChat
-                          ? (selectedChat.isAnonymous && selectedChat.studentName === anonymousLabelForCounselor()
-                              ? "AU"
-                              : getInitials(selectedChat.studentName))
-                          : <User className="h-4 w-4 text-muted-foreground" />}
+                        {selectedChat ? (selectedChat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: selectedChat.isAnonymous, identity_visible_to_viewer: selectedChat.identityVisibleToViewer }) ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">

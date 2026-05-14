@@ -2085,7 +2085,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         // Then pass sessionDetails to initializeEncryption
         // Reduced timeout for encryption init to ensure UI is unblocked faster.
         const encryptionTimeout = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Encryption timeout')), 2000)
+          setTimeout(() => reject(new Error('Encryption timeout')), 3000)
         );
         await Promise.race([
           initializeEncryption(signal, sessionDetails),
@@ -2093,6 +2093,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         ]).catch(() => {
           // Encryption timed out — continue anyway, messages may show
           // awaiting_key state but UI is unblocked
+          if (!isDisposed) setIsLoading(false);
         });
         // Even if encryption times out, continue loading messages.
         // They will show awaiting_key and decrypt when key arrives.
@@ -2309,9 +2310,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     // Also clear peer public key so a fresh public-key envelope is sent.
     localStorage.removeItem(getPeerKeyStorageKey(sessionId, numericUserId));
-    if (peerIdRef.current) {
-      localStorage.removeItem(getPeerKeyStorageKey(sessionId, peerIdRef.current));
-    }
+    if (peerIdRef.current) localStorage.removeItem(getPeerKeyStorageKey(sessionId, peerIdRef.current));
+    hasSentPublicKeyRef.current = false;
+    hasSentSessionKeyRef.current = false;
 
     encryptionKeyRef.current = null;
     keyStringRef.current = null;
