@@ -2214,7 +2214,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     const controller = new AbortController();
     const loadingTimeoutId = window.setTimeout(() => {
-      if (!isDisposed && (isInitializedRef.current === false || isLoading)) {
+      if (!isDisposed && (isInitializedRef.current === false || loadInFlightRef.current)) {
         console.warn('[useEncryptedChat] Loading timeout - recovering state');
         setError('Conversation is taking a bit longer to load...');
         setIsLoading(false);

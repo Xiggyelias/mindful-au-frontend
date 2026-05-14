@@ -329,6 +329,7 @@ export const useChatSession = (userId: number | undefined) => {
   useEffect(() => {
     const handleExpired = () => {
       setSessions(prev => prev.filter(s => !isSessionExpired(String(s.id))));
+      setActiveSession(prev => prev && isSessionExpired(String(prev.id)) ? null : prev);
     };
     window.addEventListener('CHAT_SESSION_EXPIRED', handleExpired);
     return () => window.removeEventListener('CHAT_SESSION_EXPIRED', handleExpired);
