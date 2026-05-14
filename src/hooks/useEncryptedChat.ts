@@ -2274,9 +2274,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     sessionId,
     userId,
     getNextSessionId,
-    isEncryptionReady,
-    isLoading,
-  ]);
+    ]);
 
   const refreshMessages = useCallback(
     async (opts?: { forceFull?: boolean }) => {
