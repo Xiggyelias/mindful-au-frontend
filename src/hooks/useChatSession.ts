@@ -283,7 +283,7 @@ export const useChatSession = (userId: number | undefined) => {
         }
       }
 
-      const normalizedSessions = Array.from(dedupedByConversation.values());
+      const normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
       setSessions(normalizedSessions);
       const cacheKey = `student_chat_sessions_${userId}_${sessionPageRef.current}`;
       localStorage.setItem(
@@ -325,6 +325,14 @@ export const useChatSession = (userId: number | undefined) => {
       sessionsRequestInFlightRef.current = null;
     }
   }, [userId]);
+
+  useEffect(() => {
+    const handleExpired = () => {
+      setSessions(prev => prev.filter(s => !isSessionExpired(String(s.id))));
+    };
+    window.addEventListener('CHAT_SESSION_EXPIRED', handleExpired);
+    return () => window.removeEventListener('CHAT_SESSION_EXPIRED', handleExpired);
+  }, []);
 
   const selectSession = useCallback((session: Session | null) => {
     if (session) {

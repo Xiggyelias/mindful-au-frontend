@@ -263,6 +263,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const sessionExpiredRef = useRef(false);
+  const bootstrapRunningRef = useRef(false);
 
   const encryptionKeyRef = useRef<CryptoKey | null>(null);
   const keyStringRef = useRef<string | null>(null);
@@ -2220,6 +2221,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         loadInFlightRef.current = false;
       }
     }, 12000);
+
+    if (bootstrapRunningRef.current) return;
+    bootstrapRunningRef.current = true;
 
     void bootstrap(controller.signal).finally(() => {
       window.clearTimeout(loadingTimeoutId);
