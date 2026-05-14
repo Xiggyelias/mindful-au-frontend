@@ -139,7 +139,7 @@ const StudentDashboard = () => {
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const { profileAnonymousMode, isSaving: isSavingAnonymousMode, toggleProfileAnonymousMode } = useProfileAnonymousMode();
   const {
     tip: dailyTip,
@@ -276,7 +276,7 @@ const StudentDashboard = () => {
     } finally {
       setStatsLoading(false);
     }
-  }, [user?.id, getApiErrorMessage]);
+  }, [user?.id]);
 
   // Reset state when user changes
   useEffect(() => {

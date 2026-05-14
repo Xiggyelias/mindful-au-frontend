@@ -326,10 +326,6 @@ const exportDevicePublicKey = async (publicKey: CryptoKey): Promise<string> => {
   return arrayBufferToBase64(exported);
 };
 
-const exportDevicePrivateKey = async (privateKey: CryptoKey): Promise<string> => {
-  const exported = await crypto.subtle.exportKey("pkcs8", privateKey);
-  return arrayBufferToBase64(exported);
-};
 
 const importDevicePublicKey = async (publicKeyBase64: string): Promise<CryptoKey> => {
   return crypto.subtle.importKey(
@@ -344,18 +340,6 @@ const importDevicePublicKey = async (publicKeyBase64: string): Promise<CryptoKey
   );
 };
 
-const importDevicePrivateKey = async (privateKeyBase64: string): Promise<CryptoKey> => {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    base64ToArrayBuffer(privateKeyBase64),
-    {
-      name: DEVICE_KEY_ALGORITHM,
-      hash: DEVICE_KEY_HASH,
-    },
-    true,
-    ["decrypt"]
-  );
-};
 
 export const getOrCreateDeviceKeyPair = async (): Promise<DeviceKeyPair> => {
   // Try to load existing keys from IndexedDB

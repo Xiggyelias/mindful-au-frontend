@@ -23,7 +23,6 @@ import {
 } from '@/lib/chatSessionKeys';
 import {
   getPreloadedSessionKey,
-  clearPreloadedKeys,
 } from '@/lib/encryptionPreloader';
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
@@ -265,25 +264,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const [sessionExpired, setSessionExpired] = useState(false);
   const sessionExpiredRef = useRef(false);
 
-  // Stop all retry timers when session expires
-  const stopAllRetries = useCallback(() => {
-    if (pollingTimeoutRef.current !== null) {
-      window.clearTimeout(pollingTimeoutRef.current);
-      pollingTimeoutRef.current = null;
-    }
-    if (typingPollTimeoutRef.current !== null) {
-      window.clearTimeout(typingPollTimeoutRef.current);
-      typingPollTimeoutRef.current = null;
-    }
-    if (realtimeSyncTimeoutRef.current !== null) {
-      window.clearTimeout(realtimeSyncTimeoutRef.current);
-      realtimeSyncTimeoutRef.current = null;
-    }
-    if (peerTypingTimeoutRef.current !== null) {
-      window.clearTimeout(peerTypingTimeoutRef.current);
-      peerTypingTimeoutRef.current = null;
-    }
-  }, []);
   const encryptionKeyRef = useRef<CryptoKey | null>(null);
   const keyStringRef = useRef<string | null>(null);
   const deviceKeyPairRef = useRef<DeviceKeyPair | null>(null);
@@ -1041,29 +1021,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           setIsEncryptionReady(true);
           setError(null);
 
-          // Immediately decrypt all messages that were waiting for the key
-          setMessages(prev => prev.map(m =>
-            m.e2eVisual === 'awaiting_key' ? { ...m, e2eVisual: 'decrypting' as const } : m
-          ));
-
-          // Trigger immediate re-decryption of all pending messages
-          setTimeout(async () => {
-            const pendingMessages = messages.filter(m => m.e2eVisual === 'awaiting_key' || m.e2eVisual === 'decrypting');
-            if (pendingMessages.length > 0) {
-              const rawMessages: RawMessage[] = pendingMessages.map(m => ({
-                id: m.id,
-                content: m.content,
-                sender_id: m.sender_id,
-                recipient_id: m.recipient_id,
-                created_at: m.created_at,
-                message_type: m.message_type,
-                file_url: m.file_url,
-                is_encrypted: m.is_encrypted,
-                seen_at: m.seen_at,
-              }));
-              await decryptMessages(rawMessages);
-            }
-          }, 0);
           hasUndecryptedMessagesRef.current = true;
         } catch {
           return true;
@@ -1373,7 +1330,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         loadInFlightRef.current = false;
       }
     },
-    [decryptMessages, numericUserId, sessionId, userId]
+    [decryptMessages, numericUserId, sessionId, userId, detachRealtimeChannel]
   );
 
   const loadOlderMessages = useCallback(
@@ -1571,7 +1528,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     }
     // Intentionally NOT watching `messages` here — we use messagesRef to avoid
     // re-running on every message change. The effect only needs to react to isEncryptionReady.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEncryptionReady, decryptMessages]);
 
   const sendMessage = useCallback(async (content: string, fileUrl?: string, messageType: string = 'text') => {
@@ -2300,6 +2256,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     runHandshakeHistoryCatchup,
     sessionId,
     userId,
+    getNextSessionId,
+    isEncryptionReady,
+    isLoading,
   ]);
 
   const refreshMessages = useCallback(
