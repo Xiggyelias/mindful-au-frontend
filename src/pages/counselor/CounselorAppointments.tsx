@@ -36,11 +36,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
-import {
-  anonymousLabelForCounselor,
-  isAnonymousSessionFlag,
-  isAnonymousIdentityMaskedFromViewer,
-} from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -618,7 +613,7 @@ const CounselorAppointments = () => {
                       session_type: (apt as any).session_type,
                     });
 
-                    // Counselors always see real name Ã¢â‚¬â€ anonymous mode hides
+                    // Counselors always see real name — anonymous mode hides
                     // identity from other students, not from the assigned counselor
                     const isMasked = isAnonymousIdentityMaskedFromViewer(apt);
                     const isAnonymousApt = isAnonymousSessionFlag(apt.is_anonymous);

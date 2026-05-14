@@ -69,6 +69,7 @@ export function logCryptoDebug(message: string, detail?: Record<string, unknown>
 const DECRYPT_OK_CACHE_MAX = 250;
 const decryptPlaintextCache = new Map<string, string>();
 const aesKeyFingerprintCache = new WeakMap<CryptoKey, string>();
+const exportedKeyCache = new WeakMap<CryptoKey, string>();
 
 const makePayloadDigestKey = (trimmedCipher: string): string => {
   if (trimmedCipher.length <= 120) {
@@ -184,8 +185,12 @@ export const generateEncryptionKey = async (): Promise<CryptoKey> => {
 };
 
 export const exportKey = async (key: CryptoKey): Promise<string> => {
+  const cached = exportedKeyCache.get(key);
+  if (cached) return cached;
   const exported = await crypto.subtle.exportKey("raw", key);
-  return arrayBufferToBase64(exported);
+  const b64 = arrayBufferToBase64(exported);
+  exportedKeyCache.set(key, b64);
+  return b64;
 };
 
 export const importKey = async (keyString: string): Promise<CryptoKey> => {
@@ -321,10 +326,6 @@ const exportDevicePublicKey = async (publicKey: CryptoKey): Promise<string> => {
   return arrayBufferToBase64(exported);
 };
 
-const exportDevicePrivateKey = async (privateKey: CryptoKey): Promise<string> => {
-  const exported = await crypto.subtle.exportKey("pkcs8", privateKey);
-  return arrayBufferToBase64(exported);
-};
 
 const importDevicePublicKey = async (publicKeyBase64: string): Promise<CryptoKey> => {
   return crypto.subtle.importKey(
@@ -339,18 +340,6 @@ const importDevicePublicKey = async (publicKeyBase64: string): Promise<CryptoKey
   );
 };
 
-const importDevicePrivateKey = async (privateKeyBase64: string): Promise<CryptoKey> => {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    base64ToArrayBuffer(privateKeyBase64),
-    {
-      name: DEVICE_KEY_ALGORITHM,
-      hash: DEVICE_KEY_HASH,
-    },
-    true,
-    ["decrypt"]
-  );
-};
 
 export const getOrCreateDeviceKeyPair = async (): Promise<DeviceKeyPair> => {
   // Try to load existing keys from IndexedDB
