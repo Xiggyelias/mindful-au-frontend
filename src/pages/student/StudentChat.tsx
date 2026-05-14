@@ -737,10 +737,8 @@ const StudentChat = () => {
                           .toUpperCase() || "SC"}
                       </div>
                       <div className="min-w-0">
-                        <h2 className="truncate text-sm font-bold leading-tight sm:text-base lg:text-lg">
-                          {activeSession.assigned_role === 'peer_counselor'
-                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support Session"
-                            : activeSession.counselor?.profile?.full_name || "Support Session"}
+                        <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
+                          {activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <div className="mt-0.5 flex items-center gap-2">
                           <span

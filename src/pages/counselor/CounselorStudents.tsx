@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousIdentityMaskedFromViewer
+} from "@/lib/anonymousMode";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -156,12 +160,16 @@ const CounselorStudents = () => {
       const latestRisk = latestRiskByStudent.get(studentId)?.riskLevel || "low";
       const lastTouchedMillis = lastTouchedByStudent.get(studentId) || 0;
 
+      const isMasked = preferredChat && isAnonymousIdentityMaskedFromViewer(preferredChat);
+
       return {
         id: student.id,
-        name:
-          student.profile?.full_name ||
-          student.email?.split("@")[0] ||
-          `Student #${String(student.id).slice(-4)}`,
+        name: isMasked
+          ? anonymousLabelForCounselor()
+          : student.profile?.full_name ||
+            student.email?.split("@")[0] ||
+            `Student #${String(student.id).slice(-4)}`,
+        isAnonymous: Boolean(isMasked),
         sessions: totalSessionsByStudent.get(studentId) || 0,
         lastSession: lastTouchedMillis
           ? formatDistanceToNow(new Date(lastTouchedMillis), { addSuffix: true })
@@ -591,7 +599,12 @@ const CounselorStudents = () => {
                           </span>
                         </div>
                         <div>
-                          <p className="font-medium text-foreground">{student.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground">{student.name}</p>
+                            {student.isAnonymous && (
+                              <AnonymousModeIndicator variant="badge" audience="counselor" />
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground">
                             {student.sessions} sessions - Last: {student.lastSession}
                           </p>

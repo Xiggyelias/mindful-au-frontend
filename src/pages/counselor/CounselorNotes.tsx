@@ -30,7 +30,7 @@ import { api } from "@/lib/api";
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
-  isAnonymousIdentityMaskedFromViewer,
+  isAnonymousIdentityMaskedFromViewer
 } from "@/lib/anonymousMode";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -114,11 +114,13 @@ function formatRelativeUpdated(value: unknown): string {
 function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const id = String(s.id ?? "");
   const student = s.student;
-  const isMasked = isAnonymousIdentityMaskedFromViewer(s);
+  const isAnon = isAnonymousSessionFlag(s.is_anonymous);
+  const isMasked = isAnonymousIdentityMaskedFromViewer(s as any);
 
   let studentLabel = "Student";
   if (isMasked) {
-    studentLabel = anonymousLabelForCounselor();
+    const tag = coerceString(s.anonymous_display_id || s.anonymous_id).trim();
+    studentLabel = tag ? `Anonymous (${tag})` : anonymousLabelForCounselor();
   } else {
     const isAnon = isAnonymousSessionFlag(s.is_anonymous);
     studentLabel =

@@ -36,6 +36,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import {
+  anonymousLabelForCounselor,
+  isAnonymousIdentityMaskedFromViewer
+} from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -613,18 +617,12 @@ const CounselorAppointments = () => {
                       session_type: (apt as any).session_type,
                     });
 
-                    // Counselors always see real name — anonymous mode hides
-                    // identity from other students, not from the assigned counselor
-                    const isMasked = isAnonymousIdentityMaskedFromViewer(apt);
-                    const isAnonymousApt = isAnonymousSessionFlag(apt.is_anonymous);
-
-                    const studentName = isMasked
-                      ? anonymousLabelForCounselor()
-                      : (apt as any).student_name ||
-                        (apt as any).student?.name ||
-                        apt.student?.profile?.full_name ||
-                        apt.student?.email ||
-                        (isAnonymousApt ? anonymousLabelForCounselor() : `Student #${String(apt.student_id || apt.id).slice(-4)}`);
+                    const isAnonymousApt = false;
+                    const studentName =
+                      (apt as any).student_name ||
+                      (apt as any).student?.name ||
+                      (apt as any).student?.full_name ||
+                      'Student';
 
                     const isPhysical =
                       (apt as any).session_type === 'physical' ||

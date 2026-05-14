@@ -87,7 +87,7 @@ function mapChatListRowsToOpenConversations(
     .slice(0, maxItems)
     .map((row) => {
     const isAnon = isAnonymousSessionFlag(row.is_anonymous);
-    const isMasked = isAnonymousIdentityMaskedFromViewer(row);
+    const isMasked = isAnonymousIdentityMaskedFromViewer(row as any);
     const student = row.student as Record<string, unknown> | undefined;
     const profile = student?.profile as Record<string, unknown> | undefined;
     const fromApiName = String(profile?.full_name ?? "").trim();
@@ -100,7 +100,6 @@ function mapChatListRowsToOpenConversations(
         : Number.isInteger(peerSid) && peerSid > 0
           ? peerSid
           : row.id;
-
     const label = isMasked
       ? anonymousLabelForCounselor()
       : fromApiName ||
