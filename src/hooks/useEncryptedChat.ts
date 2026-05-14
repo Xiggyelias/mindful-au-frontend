@@ -1150,7 +1150,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       };
 
       const visibleMessages: ChatMessage[] = [];
-      const visibleRawMessages = ordered.filter((message) => !parseEnvelope(message.content));
+      const visibleRawMessages: RawMessage[] = [];
+
+      for (const msg of ordered) {
+        if (!parseEnvelope(msg.content)) {
+          visibleRawMessages.push(msg);
+        }
+      }
 
       for (let i = 0; i < visibleRawMessages.length; i += DECRYPT_BATCH_SIZE) {
         const chunk = visibleRawMessages.slice(i, i + DECRYPT_BATCH_SIZE);
@@ -1458,18 +1464,19 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     if (encryptionKeyRef.current) return;
     if (isSessionKeyInitiator()) return;
 
-    const MAX_PAGES = 50;
+    const MAX_PAGES = 25;
+    const PAGE_SIZE = 50;
 
     let localOldestId = oldestMessageIdRef.current;
 
     for (let page = 0; page < MAX_PAGES; page++) {
-      if (encryptionKeyRef.current) break;
+      if (encryptionKeyRef.current || sessionExpiredRef.current) break;
       if (localOldestId <= 0) break;
 
       try {
         const data = (await api.getMessages(sessionId, {
           before_id: localOldestId,
-          limit: 50,
+          limit: PAGE_SIZE,
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
         })) as RawMessage[];
 
@@ -1490,7 +1497,10 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         }
 
         if (foundKey) break;
-        if (data.length < 50) break; // Reached the start of history.
+        if (data.length < PAGE_SIZE) break; // Reached the start of history.
+
+        // Yield to the main thread to keep UI responsive
+        await sleep(40);
       } catch (err) {
         console.warn(`[runHandshakeHistoryCatchup] page ${page} failed:`, err);
         break;
@@ -2105,8 +2115,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         }
 
         // Then pass sessionDetails to initializeEncryption
+        // Reduced timeout for encryption init to ensure UI is unblocked faster.
         const encryptionTimeout = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Encryption timeout')), 3000)
+          setTimeout(() => reject(new Error('Encryption timeout')), 2000)
         );
         await Promise.race([
           initializeEncryption(signal, sessionDetails),
