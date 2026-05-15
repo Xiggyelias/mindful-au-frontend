@@ -37,6 +37,13 @@ interface UseEncryptedChatProps {
 
 const MESSAGE_POLL_TIMEOUT_MS = 5000;
 const OLDER_MESSAGE_BATCH_LIMIT = 30;
+const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 3000;
+const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 9000;
+const TYPING_POLL_INTERVAL_ACTIVE_MS = 5000;
+const TYPING_POLL_INTERVAL_HIDDEN_MS = 12000;
+const POLL_JITTER_MAX_MS = 600;
+
+const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
 
 export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -185,10 +192,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       window.clearTimeout(pollingTimeoutRef.current);
     }
     if (sessionExpiredRef.current) return;
+    const baseInterval = document.visibilityState === 'visible'
+      ? MESSAGE_POLL_INTERVAL_ACTIVE_MS
+      : MESSAGE_POLL_INTERVAL_HIDDEN_MS;
     pollingTimeoutRef.current = window.setTimeout(async () => {
       await loadMessages(false);
       scheduleNextPoll();
-    }, 1000) as unknown as number;
+    }, baseInterval + getJitter()) as unknown as number;
   }, [loadMessages]);
 
   const refreshPeerTypingStatus = useCallback(async () => {
@@ -208,10 +218,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       window.clearTimeout(typingPollTimeoutRef.current);
     }
     if (sessionExpiredRef.current) return;
+    const baseInterval = document.visibilityState === 'visible'
+      ? TYPING_POLL_INTERVAL_ACTIVE_MS
+      : TYPING_POLL_INTERVAL_HIDDEN_MS;
     typingPollTimeoutRef.current = window.setTimeout(async () => {
       await refreshPeerTypingStatus();
       scheduleTypingPoll();
-    }, 2000) as unknown as number;
+    }, baseInterval + getJitter()) as unknown as number;
   }, [refreshPeerTypingStatus]);
 
   useEffect(() => {
