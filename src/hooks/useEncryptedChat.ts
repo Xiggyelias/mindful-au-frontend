@@ -2216,7 +2216,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const loadingTimeoutId = window.setTimeout(() => {
       if (!isDisposed && (isInitializedRef.current === false || loadInFlightRef.current)) {
         console.warn('[useEncryptedChat] Loading timeout - recovering state');
-        setError('Conversation is taking a bit longer to load...');
+        setError((prev) => prev || 'Conversation is taking a bit longer to load...');
         setIsLoading(false);
         loadInFlightRef.current = false;
       }
@@ -2236,8 +2236,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const maxSessionKeyRequestAttempts = 12;
     const sessionKeyRequestInterval = window.setInterval(() => {
       if (encryptionKeyRef.current || isSessionKeyInitiator() || sessionKeyRequestAttempts >= maxSessionKeyRequestAttempts || sessionExpiredRef.current) {
-        window.clearTimeout(loadingTimeoutId);
-      window.clearInterval(sessionKeyRequestInterval);
+        window.clearInterval(sessionKeyRequestInterval);
         return;
       }
       sessionKeyRequestAttempts++;
@@ -2246,6 +2245,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     return () => {
       isDisposed = true;
+      window.clearTimeout(loadingTimeoutId);
       window.clearInterval(sessionKeyRequestInterval);
       if (pollingTimeoutRef.current !== null) {
         window.clearTimeout(pollingTimeoutRef.current);

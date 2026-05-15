@@ -800,7 +800,7 @@ class ApiClient {
   async getMe(params?: { timeout_ms?: number }) {
     const timeoutMs =
       typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
-        ? Math.floor(params.timeout_ms)
+        ? Math.floor(params.timeout_ms) + 5000
         : DEFAULT_READ_TIMEOUT_MS;
     const response = await this.client.get('/me', { timeout: timeoutMs });
     return response.data;
@@ -1136,7 +1136,7 @@ class ApiClient {
   ) {
     const timeoutMs =
       typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
-        ? Math.floor(params.timeout_ms)
+        ? Math.floor(params.timeout_ms) + 5000
         : DEFAULT_READ_TIMEOUT_MS;
     const queryParams: Record<string, unknown> = {
       after_id: params?.after_id,
@@ -1292,7 +1292,7 @@ class ApiClient {
   async getTypingState(sessionId: string, params?: { timeout_ms?: number }) {
     const timeoutMs =
       typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
-        ? Math.floor(params.timeout_ms)
+        ? Math.floor(params.timeout_ms) + 5000
         : 5000;
     const response = await this.client.get(`/sessions/${sessionId}/typing`, { timeout: timeoutMs });
     return response.data as { is_typing?: boolean; user_id?: number | null };
