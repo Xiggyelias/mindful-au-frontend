@@ -1,8 +1,4 @@
 import { api } from "@/lib/api";
-import type { Session } from "@/hooks/useChatSession";
-import { loadPersistedSessionKey } from "@/lib/chatSessionKeys";
-import { decryptChatPayload, importKey } from "@/lib/encryption";
-import { getChatSessionKeyStorageKeyV2, resolveChatPeerIdForE2E } from "@/lib/chatE2ESessionKey";
 
 const PREVIEW_MAX = 80;
 
@@ -44,10 +40,6 @@ function clipPreview(text: string): string {
   return `${t.slice(0, PREVIEW_MAX - 1)}…`;
 }
 
-/**
- * Best-effort: decrypt inbound chat text for notification / digest previews when this device has the session AES key.
- * Never throws. Does not log plaintext.
- */
 export function tryDecryptChatNotificationPreview(
   userId: number,
   sessionId: string,
@@ -71,31 +63,6 @@ export function tryDecryptChatNotificationPreview(
   }
 
   const promise = (async (): Promise<string | null> => {
-    let session: Session;
-    try {
-      session = (await api.getSession(sessionId)) as Session;
-    } catch {
-      return null;
-    }
-
-    const peerId = resolveChatPeerIdForE2E(session, userId);
-    if (peerId === null || !Number.isFinite(peerId) || peerId <= 0) {
-      return null;
-    }
-
-    const storageKey = getChatSessionKeyStorageKeyV2(sessionId, userId, peerId);
-    const rawKey = await loadPersistedSessionKey(storageKey);
-    if (!rawKey) {
-      return null;
-    }
-
-    let cryptoKey: CryptoKey;
-    try {
-      cryptoKey = await importKey(rawKey);
-    } catch {
-      return null;
-    }
-
     const afterId = Math.max(0, messageId - 1);
     let payload: unknown;
     try {
@@ -115,13 +82,7 @@ export function tryDecryptChatNotificationPreview(
     if (!row.is_encrypted) {
       return clipPreview(row.content);
     }
-
-    const result = await decryptChatPayload(row.content, cryptoKey);
-    if (!result.ok) {
-      return null;
-    }
-
-    return clipPreview(result.plaintext);
+    return "[Message sent with previous encryption - not readable]";
   })().finally(() => {
     inflight.delete(cacheKey);
   });

@@ -26,7 +26,7 @@ interface ChatInputProps {
   isSending: boolean;
   isUploading: boolean;
   uploadProgress: number;
-  isEncryptionReady: boolean;
+  
   isVoiceMode: boolean;
   recording: any;
   recordingTime: number;
@@ -51,7 +51,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   isSending,
   isUploading,
   uploadProgress,
-  isEncryptionReady,
+  
   isVoiceMode,
   recording,
   recordingTime,
@@ -183,9 +183,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     onTypingChange?.(nextMessage.trim().length > 0);
                   }}
                   onBlur={() => onTypingChange?.(false)}
-                  placeholder={isEncryptionReady ? "Type your message..." : "Securing your chat..."}
+                  placeholder="Type your message..."
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 h-12 text-base px-2"
-                  disabled={isSending || !isEncryptionReady}
+                  disabled={isSending || false}
                 />
               </>
             )}
@@ -212,7 +212,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
               type="submit"
               size="icon"
               className="h-12 w-12 rounded-full shadow-lg shadow-primary/20 transition-transform active:scale-95"
-              disabled={(!message.trim() && !selectedFile && !recording) || isSending || !isEncryptionReady}
+              disabled={(!message.trim() && !selectedFile && !recording) || isSending || false}
               aria-label={isSending ? "Sending message" : "Send message"}
             >
               {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}

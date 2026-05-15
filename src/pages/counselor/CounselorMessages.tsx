@@ -50,10 +50,8 @@ import {
   messageIsAttachmentFirst,
   validateChatAttachment,
 } from "@/lib/chatAttachments";
-import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
 import { CounselorMessageThread } from "@/components/chat/CounselorMessageThread";
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
-import type { E2EVisualState } from "@/types/e2eChat";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -271,11 +269,7 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
-  const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
-  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(
-    () => Boolean((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight)
-  );
+  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -288,9 +282,6 @@ const CounselorMessages = () => {
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
-  const [hasLoginSecureSession, setHasLoginSecureSession] = useState(() =>
-    hasCompletedLoginChatSecurity(user?.id)
-  );
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
 
@@ -359,15 +350,13 @@ const CounselorMessages = () => {
     isLoading: messagesLoading,
     isLoadingOlderMessages,
     hasOlderMessages,
-    isEncryptionReady,
+    
     isPeerTyping,
     error: chatError,
-    sendMessage: sendEncryptedMessage,
+    sendMessage,
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
-    retryEncryption,
-    nudgeEncryptionHandshake,
     deleteMessage,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
@@ -375,31 +364,22 @@ const CounselorMessages = () => {
     sessions: filteredChats,
   });
 
-  const isEncryptionReadyRef = useRef(isEncryptionReady);
+  const trueRef = useRef(true);
   const chatErrorRef = useRef(chatError);
   useEffect(() => {
-    isEncryptionReadyRef.current = isEncryptionReady;
+    trueRef.current = true;
     chatErrorRef.current = chatError;
-  }, [isEncryptionReady, chatError]);
+  }, [ chatError]);
 
   useEffect(() => {
     setHasLoginSecureSession(hasCompletedLoginChatSecurity(user?.id));
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id || !isEncryptionReady) return;
+    if (!user?.id || !true) return;
     markLoginChatSecurityComplete(user.id);
     setHasLoginSecureSession(true);
-  }, [isEncryptionReady, user?.id]);
-
-  useEffect(() => {
-    if (
-      (location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight &&
-      !hasLoginSecureSession
-    ) {
-      setIsEntryPreflightActive(true);
-    }
-  }, [hasLoginSecureSession, location.state]);
+  }, [ user?.id]);
 
   const {
     sendFileMessage,
@@ -838,10 +818,7 @@ const CounselorMessages = () => {
       if (!canModerateChat) return;
       setDeletingMessageIds((prev) => new Set(prev).add(messageId));
       try {
-        const ok = await deleteMessage(messageId);
-        if (!ok) {
-          toast.error("Could not delete message");
-        }
+        await deleteMessage(messageId);
       } finally {
         setDeletingMessageIds((prev) => {
           const next = new Set(prev);
@@ -853,32 +830,16 @@ const CounselorMessages = () => {
     [canModerateChat, deleteMessage]
   );
 
-  // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
-  useEffect(() => {
-    if (!selectedSessionId || hasLoginSecureSession || isEncryptionReady || chatError) {
-      setEncryptionTimedOut(false);
-      return;
-    }
-    setEncryptionTimedOut(false);
-    const timer = window.setTimeout(() => {
-      if (!isEncryptionReadyRef.current && !chatErrorRef.current) {
-        setEncryptionTimedOut(true);
-      }
-    }, 15000);
-    return () => window.clearTimeout(timer);
-  }, [selectedSessionId, hasLoginSecureSession, isEncryptionReady, chatError]);
+
 
   useEffect(() => {
     if (!isEntryPreflightActive) return;
-    if ((!selectedSessionId && !isLoadingChats) || hasLoginSecureSession || isEncryptionReady || chatError || encryptionTimedOut) {
+    if ((!selectedSessionId && !isLoadingChats) || chatError) {
       setIsEntryPreflightActive(false);
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     }
   }, [
     chatError,
-    encryptionTimedOut,
-    hasLoginSecureSession,
-    isEncryptionReady,
     isEntryPreflightActive,
     isLoadingChats,
     location.pathname,
@@ -887,15 +848,7 @@ const CounselorMessages = () => {
     selectedSessionId,
   ]);
 
-  const handleRetryEncryption = useCallback(async () => {
-    setIsRetryingEncryption(true);
-    setEncryptionTimedOut(false);
-    try {
-      await retryEncryption();
-    } finally {
-      setIsRetryingEncryption(false);
-    }
-  }, [retryEncryption]);
+
 
   useEffect(() => {
     if (chatError) {
@@ -923,7 +876,7 @@ const CounselorMessages = () => {
     e.preventDefault();
     const hasPayload = isPeerCounselor ? Boolean(message.trim()) : Boolean(message.trim() || selectedFile);
     if (!hasPayload || isSending || !selectedSessionId) return;
-    if (message.trim() && !isEncryptionReady) {
+    if (message.trim() && !true) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
     }
@@ -957,7 +910,7 @@ const CounselorMessages = () => {
       }
 
       if (message.trim()) {
-        const sentText = await sendEncryptedMessage(message.trim());
+        const sentText = await sendMessage(message.trim());
         if (!sentText) {
           if (!chatError) {
             toast.error("Failed to send message");
@@ -1134,12 +1087,7 @@ const CounselorMessages = () => {
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
-  const showEntryPreflight =
-    isEntryPreflightActive &&
-    !hasLoginSecureSession &&
-    !chatError &&
-    !encryptionTimedOut &&
-    (isLoadingChats || (Boolean(selectedSessionId) && !isEncryptionReady));
+  const showEntryPreflight = isEntryPreflightActive && !chatError && isLoadingChats;
 
   const handlePrevPage = () => {
     if (!canGoToPrevPage || isLoadingChats) return;
@@ -1175,66 +1123,13 @@ const CounselorMessages = () => {
       return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
     }
 
-    const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
-    if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
-      return (
-        <EncryptedMessagePlaceholder
-          state={msg.e2eVisual as "awaiting_key" | "needs_resync" | "payload_invalid"}
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={() => {
-            void nudgeEncryptionHandshake();
-          }}
-          onResyncDevice={() => {
-            void handleRetryEncryption();
-          }}
-        />
-      );
-    }
-
-    const legacyBracket =
-      msg.is_encrypted &&
-      typeof msg.decryptedContent === "string" &&
-      /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
-    if (legacyBracket) {
-      return (
-        <EncryptedMessagePlaceholder
-          state="needs_resync"
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={() => {
-            void nudgeEncryptionHandshake();
-          }}
-          onResyncDevice={() => {
-            void handleRetryEncryption();
-          }}
-        />
-      );
-    }
-
-    if (
-      msg.is_encrypted &&
-      !msg.e2eVisual &&
-      !String(msg.decryptedContent || "").trim() &&
-      typeof msg.content === "string" &&
-      LOOKS_LIKE_E2E_CIPHER(msg.content)
-    ) {
-      return (
-        <EncryptedMessagePlaceholder
-          state="awaiting_key"
-          isOutgoing={isOutgoing}
-          onRetryDecrypt={() => {
-            void nudgeEncryptionHandshake();
-          }}
-          onResyncDevice={() => {
-            void handleRetryEncryption();
-          }}
-        />
-      );
+    if (msg.is_encrypted && !msg.decryptedContent) {
+      return <p className="text-xs italic text-muted-foreground">[Message sent with previous encryption - not readable]</p>;
     }
 
     const content = msg.decryptedContent || msg.content || "";
-
     return <p>{content}</p>;
-  }, [handleRetryEncryption, nudgeEncryptionHandshake]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -1431,21 +1326,10 @@ const CounselorMessages = () => {
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                           <Shield className="h-3 w-3 shrink-0" />
                           <span className="whitespace-nowrap">
-                            {isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}
+                            Session active
                           </span>
                         </div>
-                        {encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 shrink-0 rounded-full border-amber-500/35 px-2 text-[10px] text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
-                            onClick={handleRetryEncryption}
-                            disabled={isRetryingEncryption}
-                          >
-                            {isRetryingEncryption ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
-                            Retry
-                          </Button>
-                        )}
+                        
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span
@@ -1522,48 +1406,17 @@ const CounselorMessages = () => {
                     <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
                       <Loader2 className="h-7 w-7 animate-spin text-primary" />
                     </div>
-                    <h2 className="text-xl font-display font-bold tracking-tight">Securing Your Chat</h2>
+                    <h2 className="text-xl font-display font-bold tracking-tight">Opening chat</h2>
                     <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                      Verifying the private session key before opening this conversation.
+                      Loading your latest conversation.
                     </p>
                   </div>
                 ) : (
                 <>
-                {/* Mobile encryption status banner */}
-                {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
-                  <div className="shrink-0 lg:hidden bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary/80">Securing...</span>
-                  </div>
-                )}
-                {selectedSessionId && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
-                  <div className="shrink-0 lg:hidden bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-2">
-                    <AlertTriangle className="h-3 w-3 text-amber-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Connection timeout</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10 ml-1"
-                      onClick={handleRetryEncryption}
-                      disabled={isRetryingEncryption}
-                    >
-                      {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
-                    </Button>
-                  </div>
-                )}
                 {selectedSessionId && chatError && (
                   <div className="shrink-0 lg:hidden bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-2">
                     <AlertTriangle className="h-3 w-3 text-destructive" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-destructive/80 truncate">{chatError}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] rounded-full border-destructive/30 text-destructive hover:bg-destructive/10 ml-1"
-                      onClick={handleRetryEncryption}
-                      disabled={isRetryingEncryption}
-                    >
-                      {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
-                    </Button>
                   </div>
                 )}
                 <div className="min-h-0 flex-1 flex flex-col">
@@ -1580,7 +1433,7 @@ const CounselorMessages = () => {
                       </p>
                       <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-full text-xs">
                         <Shield className="h-3 w-3 text-success" />
-                        <span>Encrypted and secure</span>
+                        <span>Session active</span>
                       </div>
                     </div>
                   ) : messagesLoading ? (
@@ -1614,9 +1467,7 @@ const CounselorMessages = () => {
                       onAtBottomChange={handleCounselorThreadAtBottomChange}
                       showScrollToBottom={showThreadScrollToBottom}
                       scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                      onRetryLoad={() => {
-                        void retryEncryption();
-                      }}
+                      onRetryLoad={() => {}}
                     />
                   )}
                 </div>
@@ -1805,7 +1656,7 @@ const CounselorMessages = () => {
                         isSending ||
                         isUploading ||
                         (!message.trim() && !selectedFile && !recording) ||
-                        (Boolean(message.trim()) && !isEncryptionReady)
+                        (Boolean(message.trim()) && !true)
                       }
                     >
                       {isSending || isUploading ? (

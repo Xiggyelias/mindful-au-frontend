@@ -37,10 +37,6 @@ import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndica
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
-import {
-  hasCompletedLoginChatSecurity,
-  markLoginChatSecurityComplete,
-} from "@/lib/chatLoginSecurity";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -100,9 +96,7 @@ const StudentChat = () => {
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
-  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(
-    () => Boolean((location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight)
-  );
+  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -114,9 +108,6 @@ const StudentChat = () => {
     isSaving: isSavingProfileAnonymous,
     toggleProfileAnonymousMode,
   } = useProfileAnonymousMode();
-  const [hasLoginSecureSession, setHasLoginSecureSession] = useState(() =>
-    hasCompletedLoginChatSecurity(user?.id)
-  );
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -177,51 +168,20 @@ const StudentChat = () => {
     isLoading: messagesLoading,
     isLoadingOlderMessages,
     hasOlderMessages,
-    isEncryptionReady,
+    
     isPeerTyping,
     error: chatError,
     sessionExpired,
-    sendMessage: sendEncryptedMessage,
+    sendMessage,
     deleteMessage,
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
-    retryEncryption,
-    nudgeEncryptionHandshake,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
     sessions: sessions,
   });
-
-  const [encryptionTimedOut, setEncryptionTimedOut] = useState(false);
-  const [isRetryingEncryption, setIsRetryingEncryption] = useState(false);
-  const isEncryptionReadyRef = useRef(isEncryptionReady);
-  const chatErrorRef = useRef(chatError);
-
-  useEffect(() => {
-    isEncryptionReadyRef.current = isEncryptionReady;
-    chatErrorRef.current = chatError;
-  }, [isEncryptionReady, chatError]);
-
-  useEffect(() => {
-    setHasLoginSecureSession(hasCompletedLoginChatSecurity(user?.id));
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || !isEncryptionReady) return;
-    markLoginChatSecurityComplete(user.id);
-    setHasLoginSecureSession(true);
-  }, [isEncryptionReady, user?.id]);
-
-  useEffect(() => {
-    if (
-      (location.state as { secureChatPreflight?: boolean } | null)?.secureChatPreflight &&
-      !hasLoginSecureSession
-    ) {
-      setIsEntryPreflightActive(true);
-    }
-  }, [hasLoginSecureSession, location.state]);
 
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
@@ -249,49 +209,21 @@ const StudentChat = () => {
     return cleanup;
   }, [cleanup]);
 
-  // Encryption timeout: if not ready after 15s, show fallback UI (refs avoid stale timer callbacks)
-  useEffect(() => {
-    if (!sessionId || hasLoginSecureSession || isEncryptionReady || chatError) {
-      setEncryptionTimedOut(false);
-      return;
-    }
-    setEncryptionTimedOut(false);
-    const timer = window.setTimeout(() => {
-      if (!isEncryptionReadyRef.current && !chatErrorRef.current) {
-        setEncryptionTimedOut(true);
-      }
-    }, 15000);
-    return () => window.clearTimeout(timer);
-  }, [sessionId, hasLoginSecureSession, isEncryptionReady, chatError]);
-
   useEffect(() => {
     if (!isEntryPreflightActive) return;
-    if ((!activeSession && !isSessionsLoading) || hasLoginSecureSession || isEncryptionReady || chatError || encryptionTimedOut) {
+    if ((!activeSession && !isSessionsLoading) || chatError) {
       setIsEntryPreflightActive(false);
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     }
   }, [
     activeSession,
     chatError,
-    encryptionTimedOut,
-    hasLoginSecureSession,
-    isEncryptionReady,
     isEntryPreflightActive,
     isSessionsLoading,
     location.pathname,
     location.search,
     navigate,
   ]);
-
-  const handleRetryEncryption = useCallback(async () => {
-    setIsRetryingEncryption(true);
-    setEncryptionTimedOut(false);
-    try {
-      await retryEncryption();
-    } finally {
-      setIsRetryingEncryption(false);
-    }
-  }, [retryEncryption]);
 
   // Load counselors
   useEffect(() => {
@@ -366,7 +298,7 @@ const StudentChat = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!message.trim() && !selectedFile && !recording) || isSending || !sessionId) return;
-    if (message.trim() && !isEncryptionReady) {
+    if (message.trim() && !true) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
     }
@@ -386,7 +318,7 @@ const StudentChat = () => {
         }
       }
       if (message.trim()) {
-        const success = await sendEncryptedMessage(message.trim());
+        const success = await sendMessage(message.trim());
         if (success) {
           setMessage("");
           notifyTyping(false);
@@ -574,10 +506,8 @@ const StudentChat = () => {
     : isSavingProfileAnonymous;
   const showEntryPreflight =
     isEntryPreflightActive &&
-    !hasLoginSecureSession &&
     !chatError &&
-    !encryptionTimedOut &&
-    (isSessionsLoading || (Boolean(activeSession) && !isEncryptionReady));
+    isSessionsLoading;
 
   if (sessionExpired) {
     return (
@@ -657,66 +587,22 @@ const StudentChat = () => {
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
                     <Loader2 className="h-7 w-7 animate-spin text-primary" />
                   </div>
-                  <h2 className="text-xl font-display font-bold tracking-tight">Securing Your Chat</h2>
+                  <h2 className="text-xl font-display font-bold tracking-tight">Opening chat</h2>
                   <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                    Verifying the private session key before opening this conversation.
+                    Loading your latest conversation.
                   </p>
                 </div>
               ) : (
               <>
-              {/* Handshake Indicator - non-blocking inline banner */}
-              {activeSession && !hasLoginSecureSession && !isEncryptionReady && !chatError && !encryptionTimedOut && (
-                <div className="shrink-0 bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-center gap-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-primary/80">Securing your chat…</span>
-                </div>
-              )}
-
-              {/* Encryption Timeout Fallback */}
-              {activeSession && !hasLoginSecureSession && !isEncryptionReady && !chatError && encryptionTimedOut && (
-                <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-amber-700 text-center sm:text-left">Connection is taking longer than expected</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-3 text-xs rounded-full border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
-                    onClick={handleRetryEncryption}
-                    disabled={isRetryingEncryption}
-                  >
-                    {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                    {isRetryingEncryption ? "Retrying…" : "Retry Connection"}
-                  </Button>
-                </div>
-              )}
-
-              {/* Encryption Error */}
               {activeSession && chatError && (
-                <div className="shrink-0 bg-destructive/10 border-b border-destructive/20 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+                <div className="shrink-0 bg-destructive/10 border-b border-destructive/20 px-4 py-3 flex items-center justify-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-destructive/80">{chatError}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-3 text-xs rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
-                    onClick={handleRetryEncryption}
-                    disabled={isRetryingEncryption}
-                  >
-                    {isRetryingEncryption ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                    {isRetryingEncryption ? "Retrying…" : "Retry"}
-                  </Button>
-                </div>
-              )}
-
-              {activeSession && isAnonymousSessionFlag(activeSession.is_anonymous) && (
-                <div className="shrink-0 border-b border-red-600/50 bg-black px-4 py-2">
-                  <AnonymousModeIndicator variant="banner" audience="student" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-destructive/80">Chat error</span>
                 </div>
               )}
 
               {activeSession ? (
                 <>
-                  {/* Chat Header */}
                   <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-4 lg:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
@@ -727,8 +613,8 @@ const StudentChat = () => {
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
                         {(activeSession.assigned_role === 'peer_counselor'
-                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
-                            : activeSession.counselor?.profile?.full_name || "Support")
+                          ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
+                          : activeSession.counselor?.profile?.full_name || "Support")
                           .split(/\s+/)
                           .filter(Boolean)
                           .slice(0, 2)
@@ -741,31 +627,13 @@ const StudentChat = () => {
                           {activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <div className="mt-0.5 flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "h-2 w-2 shrink-0 rounded-full",
-                              chatError
-                                ? "bg-destructive"
-                                : isEncryptionReady || hasLoginSecureSession
-                                  ? "bg-emerald-500"
-                                  : encryptionTimedOut
-                                    ? "bg-amber-500"
-                                    : "animate-pulse bg-amber-400",
-                            )}
-                          />
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", chatError ? "bg-destructive" : "bg-emerald-500")} />
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                            {chatError
-                              ? "Secure chat error"
-                              : encryptionTimedOut && !isEncryptionReady && !hasLoginSecureSession
-                                ? "Encryption setup delayed"
-                                : !isEncryptionReady && !hasLoginSecureSession
-                                  ? "Securing encryption…"
-                                  : "Session active"}
+                            {chatError ? "Chat error" : "Session active"}
                           </span>
                         </div>
                       </div>
                     </div>
-                    
                     <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
@@ -775,7 +643,7 @@ const StudentChat = () => {
                       />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
-                        <span>{isEncryptionReady || hasLoginSecureSession ? "Encrypted" : encryptionTimedOut ? "Timeout" : "Securing..."}</span>
+                        <span>Active</span>
                       </div>
                       <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
@@ -790,7 +658,7 @@ const StudentChat = () => {
                   <MessageList
                     conversationKey={String(sessionId ?? "")}
                     messages={messages}
-                    isLoading={messagesLoading || (!isEncryptionReady && !chatError)}
+                    isLoading={messagesLoading}
                     isLoadingOlderMessages={isLoadingOlderMessages}
                     hasOlderMessages={hasOlderMessages}
                     isAtBottom={isAtBottom}
@@ -807,13 +675,7 @@ const StudentChat = () => {
                     scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                     messageScrollAreaRef={messageScrollAreaRef as any}
                     scrollRef={scrollRef}
-                    onRetryDecrypt={() => {
-                      void nudgeEncryptionHandshake();
-                    }}
-                    onResyncDevice={handleRetryEncryption}
-                    onRetryLoad={() => {
-                      void retryEncryption();
-                    }}
+                    onRetryLoad={() => {}}
                   />
 
                   {/* Chat Input */}
@@ -821,8 +683,7 @@ const StudentChat = () => {
                     message={message}
                     isSending={isSending}
                     isUploading={isUploading}
-                    uploadProgress={uploadProgress}
-                    isEncryptionReady={isEncryptionReady}
+                    uploadProgress={uploadProgress}
                     isVoiceMode={isVoiceMode}
                     recording={recording}
                     recordingTime={recordingTime}

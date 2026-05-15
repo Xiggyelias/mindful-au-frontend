@@ -4,19 +4,13 @@ import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, Refre
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
-import { EncryptedMessagePlaceholder } from "@/components/chat/EncryptedMessagePlaceholder";
 import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import { messageIsAttachmentFirst } from "@/lib/chatAttachments";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
 import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
-import type { E2EVisualState } from "@/types/e2eChat";
 import { Session } from "@/hooks/useChatSession";
 
-const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
-  const t = s.trim();
-  return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
-};
 
 const formatTimeLabel = (dateString: string): string => {
   try {
@@ -54,56 +48,13 @@ const MessageBubble = React.memo(
       if (messageIsAttachmentFirst(msg)) {
         return <ChatAttachmentView message={msg} isOutgoing={isMe} />;
       }
-
-      // Add shimmer for decrypting messages
-      if (msg.is_encrypted === true && !msg.decryptedContent && msg.e2eVisual === "decrypting") {
-        return <div className="h-4 w-48 rounded bg-white/10 animate-pulse" />;
-      }
-
-      const failVisuals: E2EVisualState[] = ["awaiting_key", "needs_resync", "payload_invalid"];
-      if (msg.is_encrypted && msg.e2eVisual && failVisuals.includes(msg.e2eVisual)) {
+      if (msg.is_encrypted && !msg.decryptedContent) {
         return (
-          <EncryptedMessagePlaceholder
-            state={msg.e2eVisual as "awaiting_key" | "needs_resync" | "payload_invalid"}
-            isOutgoing={isMe}
-            onRetryDecrypt={onRetryDecrypt}
-            onResyncDevice={onResyncDevice}
-          />
+          <p className="text-xs italic text-muted-foreground">
+            [Message sent with previous encryption - not readable]
+          </p>
         );
       }
-
-      const legacyBracket =
-        msg.is_encrypted &&
-        typeof msg.decryptedContent === "string" &&
-        /^\s*\[(Encrypted message|Unable to decrypt)/i.test(msg.decryptedContent);
-      if (legacyBracket) {
-        return (
-          <EncryptedMessagePlaceholder
-            state="needs_resync"
-            isOutgoing={isMe}
-            onRetryDecrypt={onRetryDecrypt}
-            onResyncDevice={onResyncDevice}
-          />
-        );
-      }
-
-      if (
-        msg.is_encrypted &&
-        !msg.e2eVisual &&
-        !String(msg.decryptedContent || "").trim() &&
-        typeof msg.content === "string" &&
-        LOOKS_LIKE_E2E_CIPHER(msg.content)
-      ) {
-        return (
-          <EncryptedMessagePlaceholder
-            state="awaiting_key"
-            isOutgoing={isMe}
-            onRetryDecrypt={onRetryDecrypt}
-            onResyncDevice={onResyncDevice}
-          />
-        );
-      }
-
       const content = msg.decryptedContent ?? msg.content;
       return <p className="whitespace-pre-wrap break-words">{content}</p>;
     };
@@ -294,7 +245,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           <div className="space-y-2">
             <h3 className="text-2xl font-display font-bold tracking-tight">Your Safe Space</h3>
             <p className="text-muted-foreground leading-relaxed">
-              Every word you share here is private and end-to-end encrypted. What would you like to talk about today?
+              This space is private and supportive. What would you like to talk about today?
             </p>
           </div>
           <div className="grid gap-3 pt-4">
