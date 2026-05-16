@@ -148,6 +148,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       counselorName: string;
       sessions: Session[];
       latest: Session;
+      unreadCount: number;
     };
 
     const groups = new Map<string, GroupRow>();
@@ -167,11 +168,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           counselorName,
           sessions: [session],
           latest: session,
+          unreadCount: Math.max(0, Number(session.unread_count || 0)),
         });
         continue;
       }
 
       existing.sessions.push(session);
+      existing.unreadCount += Math.max(0, Number(session.unread_count || 0));
       const currentLatestTime = new Date(existing.latest.created_at).getTime();
       const candidateTime = new Date(session.created_at).getTime();
       if (Number.isFinite(candidateTime) && candidateTime > currentLatestTime) {
@@ -183,6 +186,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       counselorId: group.counselorId,
       session: group.latest,
       totalSessions: group.sessions.length,
+      unreadCount: group.unreadCount,
     }));
 
     // Most recently active counselors first.
@@ -258,7 +262,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="space-y-1">
-              {recentSupportRows.map(({ session, totalSessions, counselorId }) => {
+              {recentSupportRows.map(({ session, totalSessions, counselorId, unreadCount }) => {
                 const name =
                   session.counselor?.profile?.full_name ||
                   session.peer_counselor?.profile?.full_name ||
@@ -312,9 +316,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             (Session {totalSessions})
                           </span>
                         </p>
-                        {session.unread_count != null && session.unread_count > 0 && !isActive && (
+                        {unreadCount > 0 && !isActive && (
                           <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white shadow-sm">
-                            {session.unread_count > 99 ? "99+" : session.unread_count}
+                            {unreadCount > 99 ? "99+" : unreadCount}
                           </span>
                         )}
                       </div>
