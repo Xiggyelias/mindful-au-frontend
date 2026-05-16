@@ -609,20 +609,20 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    console.log('[apt debug]', {
-                      id: apt.id,
+                    const isAnonymousApt = isAnonymousIdentityMaskedFromViewer({
                       is_anonymous: apt.is_anonymous,
-                      student_name: (apt as any).student_name,
-                      student: apt.student,
-                      session_type: (apt as any).session_type,
+                      identity_visible_to_viewer: apt.identity_visible_to_viewer,
                     });
-
-                    const isAnonymousApt = false;
-                    const studentName =
-                      (apt as any).student_name ||
-                      (apt as any).student?.name ||
-                      (apt as any).student?.full_name ||
-                      'Student';
+                    const studentName = isAnonymousApt
+                      ? anonymousLabelForCounselor()
+                      : (
+                          apt.student?.profile?.full_name ||
+                          apt.student?.email?.split("@")[0] ||
+                          (apt as any).student_name ||
+                          (apt as any).student?.name ||
+                          (apt as any).student?.full_name ||
+                          `Student #${String(apt.student_id || apt.id)}`
+                        );
 
                     const isPhysical =
                       (apt as any).session_type === 'physical' ||
