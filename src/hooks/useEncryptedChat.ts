@@ -45,6 +45,19 @@ const POLL_JITTER_MAX_MS = 600;
 
 const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
 
+const isE2EHandshakeEnvelope = (content: string): boolean => {
+  if (content.startsWith('{"__e2e"')) return true;
+  if (content.includes('"kind":"pub"')) return true;
+  if (content.includes('"kind":"key"')) return true;
+  return false;
+};
+
+const filterVisibleMessages = <T extends { content?: unknown }>(msgs: T[]): T[] =>
+  msgs.filter((msg) => {
+    const content = String(msg.content || '');
+    return !isE2EHandshakeEnvelope(content);
+  });
+
 export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -106,7 +119,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         if (signal?.aborted) return;
 
         if (Array.isArray(rawMessages) && rawMessages.length > 0) {
-          const formatted = rawMessages.map((msg: any) => ({
+          const visibleMessages = filterVisibleMessages(rawMessages);
+          const formatted = visibleMessages.map((msg: any) => ({
             ...msg,
             decryptedContent: msg.content,
             e2eVisual: 'plain' as const,
@@ -159,7 +173,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       });
 
       if (Array.isArray(rawMessages) && rawMessages.length > 0) {
-        const formatted = rawMessages.map((msg: any) => ({
+        const visibleMessages = filterVisibleMessages(rawMessages);
+        const formatted = visibleMessages.map((msg: any) => ({
           ...msg,
           decryptedContent: msg.content,
           e2eVisual: 'plain' as const,
@@ -252,7 +267,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           expectedOwnerUserId: userId,
         });
         if (Array.isArray(cached) && cached.length > 0 && !controller.signal.aborted) {
-          const preloaded = cached.map((msg: any) => ({
+          const visibleMessages = filterVisibleMessages(cached);
+          const preloaded = visibleMessages.map((msg: any) => ({
             ...msg,
             decryptedContent: msg.content,
             e2eVisual: 'plain' as const,
@@ -323,7 +339,6 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           content,
           is_encrypted: false,
           message_type: messageType,
-          file_url: fileUrl,
         };
         const savedRaw = await api.sendMessage(sessionId, payload);
         const savedMsg = {
@@ -367,6 +382,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   );
 
   const registerServerMessage = useCallback((raw: RawMessage) => {
+    if (isE2EHandshakeEnvelope(String(raw.content || ''))) return;
     const formatted = {
       ...raw,
       decryptedContent: raw.content,
