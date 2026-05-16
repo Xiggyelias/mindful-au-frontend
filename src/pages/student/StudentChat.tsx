@@ -96,7 +96,6 @@ const StudentChat = () => {
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
-  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -208,22 +207,6 @@ const StudentChat = () => {
   useEffect(() => {
     return cleanup;
   }, [cleanup]);
-
-  useEffect(() => {
-    if (!isEntryPreflightActive) return;
-    if ((!activeSession && !isSessionsLoading) || chatError) {
-      setIsEntryPreflightActive(false);
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-    }
-  }, [
-    activeSession,
-    chatError,
-    isEntryPreflightActive,
-    isSessionsLoading,
-    location.pathname,
-    location.search,
-    navigate,
-  ]);
 
   // Load counselors
   useEffect(() => {
@@ -504,10 +487,7 @@ const StudentChat = () => {
   const unifiedAnonymousToggleDisabled = activeSession
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
-  const showEntryPreflight =
-    isEntryPreflightActive &&
-    !chatError &&
-    isSessionsLoading;
+  const showEntryPreflight = false;
 
   if (sessionExpired) {
     return (
@@ -582,17 +562,6 @@ const StudentChat = () => {
                 </div>
               )}
 
-              {showEntryPreflight ? (
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 sm:px-6 text-center">
-                  <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
-                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                  </div>
-                  <h2 className="text-xl font-display font-bold tracking-tight">Opening chat</h2>
-                  <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                    Loading your latest conversation.
-                  </p>
-                </div>
-              ) : (
               <>
               {activeSession && chatError && (
                 <div className="shrink-0 bg-destructive/10 border-b border-destructive/20 px-4 py-3 flex items-center justify-center gap-2">
@@ -766,7 +735,6 @@ const StudentChat = () => {
                  </div>
               )}
               </>
-              )}
             </div>
           </div>
         </ErrorBoundary>
