@@ -339,6 +339,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           content,
           is_encrypted: false,
           message_type: messageType,
+          file_url: fileUrl,
         };
         const savedRaw = await api.sendMessage(sessionId, payload);
         const savedMsg = {
