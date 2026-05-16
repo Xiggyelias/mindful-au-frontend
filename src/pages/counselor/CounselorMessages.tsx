@@ -83,10 +83,6 @@ import {
   isAnonymousIdentityMaskedFromViewer,
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
-import {
-  hasCompletedLoginChatSecurity,
-  markLoginChatSecurityComplete,
-} from "@/lib/chatLoginSecurity";
 
 const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
   const t = s.trim();
@@ -119,6 +115,7 @@ const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
 const CHAT_LIST_CACHE_VERSION = 6;
 const ONLINE_WINDOW_SECONDS = 10 * 60;
+const CHAT_LIST_MIN_REFRESH_GAP_MS = 4000;
 
 type RawSession = {
   id: number;
@@ -276,6 +273,8 @@ const CounselorMessages = () => {
   const [showThreadScrollToBottom, setShowThreadScrollToBottom] = useState(false);
   const hasShownLoadErrorRef = useRef(false);
   const loadSessionsGenerationRef = useRef(0);
+  const loadSessionsInFlightRef = useRef<Promise<void> | null>(null);
+  const lastLoadSessionsAtRef = useRef(0);
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user, role } = useAuth();
@@ -364,23 +363,6 @@ const CounselorMessages = () => {
     sessions: filteredChats,
   });
 
-  const trueRef = useRef(true);
-  const chatErrorRef = useRef(chatError);
-  useEffect(() => {
-    trueRef.current = true;
-    chatErrorRef.current = chatError;
-  }, [ chatError]);
-
-  useEffect(() => {
-    setHasLoginSecureSession(hasCompletedLoginChatSecurity(user?.id));
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || !true) return;
-    markLoginChatSecurityComplete(user.id);
-    setHasLoginSecureSession(true);
-  }, [ user?.id]);
-
   const {
     sendFileMessage,
     isUploading,
@@ -439,7 +421,15 @@ const CounselorMessages = () => {
   const loadSessions = useCallback(
     async (silent = false) => {
       if (!user?.id) return;
+      if (loadSessionsInFlightRef.current) {
+        await loadSessionsInFlightRef.current;
+        return;
+      }
+      if (silent && Date.now() - lastLoadSessionsAtRef.current < CHAT_LIST_MIN_REFRESH_GAP_MS) {
+        return;
+      }
 
+      const runner = (async () => {
       const generation = ++loadSessionsGenerationRef.current;
 
       try {
@@ -725,9 +715,17 @@ const CounselorMessages = () => {
           hasShownLoadErrorRef.current = true;
         }
       } finally {
+        lastLoadSessionsAtRef.current = Date.now();
         if (!silent) {
           setIsLoadingChats(false);
         }
+      }
+      })();
+      loadSessionsInFlightRef.current = runner;
+      try {
+        await runner;
+      } finally {
+        loadSessionsInFlightRef.current = null;
       }
     },
     [chatPage, isPeerCounselor, targetSessionParam, targetStudentParam, user?.id]
