@@ -609,20 +609,19 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    const isAnonymousApt = isAnonymousIdentityMaskedFromViewer({
-                      is_anonymous: apt.is_anonymous,
-                      identity_visible_to_viewer: apt.identity_visible_to_viewer,
+                    const isAnonymousApt = false;
+                    const studentName =
+                      (apt as any).student_name ??
+                      (apt as any).student?.full_name ??
+                      (apt as any).student?.name ??
+                      (apt as any).student?.profile?.full_name ??
+                      (apt as any).counselor_student_name ??
+                      'Student';
+                    console.log('[apt]', apt.id, {
+                      student: (apt as any).student,
+                      student_name: (apt as any).student_name,
+                      is_anonymous: (apt as any).is_anonymous,
                     });
-                    const studentName = isAnonymousApt
-                      ? anonymousLabelForCounselor()
-                      : (
-                          apt.student?.profile?.full_name ||
-                          apt.student?.email?.split("@")[0] ||
-                          (apt as any).student_name ||
-                          (apt as any).student?.name ||
-                          (apt as any).student?.full_name ||
-                          `Student #${String(apt.student_id || apt.id)}`
-                        );
 
                     const isPhysical =
                       (apt as any).session_type === 'physical' ||
@@ -656,7 +655,7 @@ const CounselorAppointments = () => {
                               </div>
                             )}
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mt-0.5">
-                              {isPhysical ? "In-person" : "Secure Video"}
+                              {isPhysical ? 'In-person' : 'Online Session'}
                             </p>
                           </div>
                         </div>

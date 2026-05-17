@@ -316,11 +316,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             (Session {totalSessions})
                           </span>
                         </p>
-                        {unreadCount > 0 && !isActive && (
-                          <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white shadow-sm">
-                            {unreadCount > 99 ? "99+" : unreadCount}
-                          </span>
-                        )}
                       </div>
                       <p className="text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1">
                         {isPeer && <Users className="h-2.5 w-2.5" />}
@@ -328,6 +323,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         {isAnon ? " \u2022 Anon" : ""}
                       </p>
                     </div>
+                    {unreadCount > 0 && (
+                      <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm shrink-0">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
