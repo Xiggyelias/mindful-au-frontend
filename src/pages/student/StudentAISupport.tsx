@@ -312,6 +312,10 @@ const StudentAISupport = () => {
   };
 
   const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
     navigate("/student/dashboard");
   };
 
@@ -439,6 +443,9 @@ const StudentAISupport = () => {
                     size="icon"
                     className="h-9 w-9 rounded-full hover:bg-muted/50"
                     onClick={handleBack}
+                    type="button"
+                    aria-label="Go back"
+                    title="Go back"
                   >
                     <History className="h-5 w-5 text-muted-foreground rotate-180" />
                   </Button>

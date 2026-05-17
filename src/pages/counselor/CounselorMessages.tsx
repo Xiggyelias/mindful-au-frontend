@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -249,7 +249,6 @@ const getUserColor = (name: string) => {
 
 const CounselorMessages = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
@@ -266,7 +265,6 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [isEntryPreflightActive, setIsEntryPreflightActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -831,24 +829,6 @@ const CounselorMessages = () => {
 
 
   useEffect(() => {
-    if (!isEntryPreflightActive) return;
-    if ((!selectedSessionId && !isLoadingChats) || chatError) {
-      setIsEntryPreflightActive(false);
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-    }
-  }, [
-    chatError,
-    isEntryPreflightActive,
-    isLoadingChats,
-    location.pathname,
-    location.search,
-    navigate,
-    selectedSessionId,
-  ]);
-
-
-
-  useEffect(() => {
     if (chatError) {
       toast.error(chatError);
     }
@@ -1085,7 +1065,6 @@ const CounselorMessages = () => {
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
-  const showEntryPreflight = isEntryPreflightActive && !chatError && isLoadingChats;
 
   const handlePrevPage = () => {
     if (!canGoToPrevPage || isLoadingChats) return;
@@ -1321,11 +1300,9 @@ const CounselorMessages = () => {
                             Peer
                           </span>
                         )}
-                        <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                          <Shield className="h-3 w-3 shrink-0" />
-                          <span className="whitespace-nowrap">
-                            Session active
-                          </span>
+                        <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
+                          <Shield className="h-3 w-3" />
+                          <span>Active</span>
                         </div>
                         
                       </div>
@@ -1399,17 +1376,6 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col p-0 bg-gradient-to-b from-background to-secondary/5 pt-0">
-                {showEntryPreflight ? (
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-                    <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
-                      <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                    </div>
-                    <h2 className="text-xl font-display font-bold tracking-tight">Opening chat</h2>
-                    <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                      Loading your latest conversation.
-                    </p>
-                  </div>
-                ) : (
                 <>
                 {selectedSessionId && chatError && (
                   <div className="shrink-0 lg:hidden bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-2">
@@ -1666,7 +1632,6 @@ const CounselorMessages = () => {
                   </div>
                 </form>
                 </>
-                )}
               </CardContent>
             </Card>
           </div>

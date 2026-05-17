@@ -487,7 +487,6 @@ const StudentChat = () => {
   const unifiedAnonymousToggleDisabled = activeSession
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
-  const showEntryPreflight = false;
 
   if (sessionExpired) {
     return (

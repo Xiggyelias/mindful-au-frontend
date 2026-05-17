@@ -123,6 +123,12 @@ function resolveRecentConversationTitle(session: LiteSession): string {
   return name && name !== "" ? name : "Support";
 }
 
+function parseWellnessScore(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -253,7 +259,7 @@ const StudentDashboard = () => {
       setStats({
         sessions: sessionItems.filter((s) => s.status !== "completed" && s.status !== "cancelled").length,
         appointments: upcomingAppointmentCount,
-        wellness: Number(summary?.scores?.wellness_score) || null,
+        wellness: parseWellnessScore(summary?.scores?.wellness_score),
         wellnessLabel: summary?.labels?.wellness ?? null,
         chats: aiChatCount,
       });
