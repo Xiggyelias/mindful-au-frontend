@@ -54,6 +54,8 @@ interface DiagnosticData {
     category_alerts?: Record<string, string>;
   };
   created_at: string;
+  is_anonymous?: boolean;
+  identity_visible_to_viewer?: boolean;
 }
 
 interface StudentObservation {

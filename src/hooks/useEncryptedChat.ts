@@ -342,9 +342,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           file_url: fileUrl,
         };
         const savedRaw = await api.sendMessage(sessionId, payload);
+        console.log('[sendMessage] api response:', savedRaw);
+        // Handle both { message: {...} } and direct message object
+        const rawMsg = savedRaw?.message ?? savedRaw;
         const savedMsg = {
-          ...savedRaw.message,
-          decryptedContent: savedRaw.message.content,
+          ...rawMsg,
+          decryptedContent: rawMsg.content,
           e2eVisual: 'plain' as const,
         };
 
