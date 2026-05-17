@@ -46,9 +46,12 @@ const POLL_JITTER_MAX_MS = 600;
 const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
 
 const isE2EHandshakeEnvelope = (content: string): boolean => {
-  if (content.startsWith('{"__e2e"')) return true;
-  if (content.includes('"kind":"pub"')) return true;
-  if (content.includes('"kind":"key"')) return true;
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.__e2e === 'v1') return true;
+  } catch {
+    // not JSON; keep message visible
+  }
   return false;
 };
 
@@ -217,7 +220,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   }, [loadMessages]);
 
   const refreshPeerTypingStatus = useCallback(async () => {
-    if (!hasValidUserId || sessionExpiredRef.current) return;
+    if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
     try {
       const data = await api.getTypingState(sessionId, { timeout_ms: 5000 });
       if (data?.is_typing !== undefined) {
@@ -229,6 +232,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   }, [sessionId, hasValidUserId]);
 
   const scheduleTypingPoll = useCallback(() => {
+    if (!sessionId) return;
     if (typingPollTimeoutRef.current !== null) {
       window.clearTimeout(typingPollTimeoutRef.current);
     }
@@ -237,10 +241,17 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       ? TYPING_POLL_INTERVAL_ACTIVE_MS
       : TYPING_POLL_INTERVAL_HIDDEN_MS;
     typingPollTimeoutRef.current = window.setTimeout(async () => {
+      if (!sessionId) {
+        if (typingPollTimeoutRef.current !== null) {
+          window.clearTimeout(typingPollTimeoutRef.current);
+          typingPollTimeoutRef.current = null;
+        }
+        return;
+      }
       await refreshPeerTypingStatus();
       scheduleTypingPoll();
     }, baseInterval + getJitter()) as unknown as number;
-  }, [refreshPeerTypingStatus]);
+  }, [sessionId, refreshPeerTypingStatus]);
 
   useEffect(() => {
     if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
@@ -379,10 +390,10 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
   const notifyTyping = useCallback(
     (isTyping: boolean) => {
-      if (sessionExpiredRef.current) return;
+      if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
       api.setTypingState(sessionId, isTyping).catch(() => {});
     },
-    [sessionId]
+    [sessionId, hasValidUserId]
   );
 
   const registerServerMessage = useCallback((raw: RawMessage) => {

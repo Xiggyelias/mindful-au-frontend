@@ -41,6 +41,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // Never intercept API calls - let them go directly to server
+  if (url.hostname === 'mindfulapi.africau.co.zw') {
+    return; // bypass service worker completely for all API calls
+  }
 
   // ✅ Never intercept signed file URLs — let them go straight to network
   if (
