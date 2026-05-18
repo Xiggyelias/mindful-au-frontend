@@ -1257,11 +1257,23 @@ class ApiClient {
       if (!downloadUrl) {
         return false;
       }
-      const res = await fetch(downloadUrl);
+
+      let res: Response | null = null;
+      try {
+        res = await fetch(downloadUrl);
+      } catch {
+        // fetch threw (e.g. CORS blocked on S3 pre-signed URL) — the URL is still
+        // valid, so open it directly in a new tab while still within the user-gesture
+        // window (no second round-trip needed).
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+        return true;
+      }
+
       if (!res.ok) {
         window.open(downloadUrl, '_blank', 'noopener,noreferrer');
         return true;
       }
+
       const blob = await res.blob();
       const safeName = String(fileName || '').trim() || 'attachment';
       triggerBlobDownload(blob, safeName);
