@@ -80,7 +80,6 @@ import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
-  isAnonymousIdentityMaskedFromViewer,
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
 
@@ -114,6 +113,7 @@ const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
 const CHAT_LIST_CACHE_VERSION = 6;
+const IDENTITY_REVEAL_GRANTS_KEY = "counselor_identity_reveal_grants_v1";
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 const CHAT_LIST_MIN_REFRESH_GAP_MS = 4000;
 
@@ -155,6 +155,8 @@ type ChatListItem = {
   id: number;
   studentId: number | null;
   counselorId: number;
+  realStudentName: string;
+  realStudentEmail: string;
   studentName: string;
   studentEmail: string;
   isAnonymous: boolean;
@@ -183,6 +185,33 @@ type ChatListResponse = RawSession[] | { data?: RawSession[]; meta?: ChatListMet
 
 const getChatListCacheKey = (isPeerCounselor: boolean, page: number) =>
   `counselor_chat_list_v${CHAT_LIST_CACHE_VERSION}_${isPeerCounselor ? "peer" : "counselor"}_${page}`;
+
+const readIdentityRevealGrants = (): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(IDENTITY_REVEAL_GRANTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const normalized: Record<string, string> = {};
+    Object.entries(parsed || {}).forEach(([sessionId, version]) => {
+      if (typeof sessionId === "string" && typeof version === "string" && version.trim() !== "") {
+        normalized[sessionId] = version;
+      }
+    });
+    return normalized;
+  } catch {
+    return {};
+  }
+};
+
+const writeIdentityRevealGrants = (grants: Record<string, string>) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(IDENTITY_REVEAL_GRANTS_KEY, JSON.stringify(grants));
+  } catch {
+    // Ignore localStorage failures.
+  }
+};
 
 const isOpenSession = (status: string | null | undefined) =>
   status !== "completed" && status !== "cancelled";
@@ -275,12 +304,16 @@ const CounselorMessages = () => {
   const lastLoadSessionsAtRef = useRef(0);
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingIdentityRevealGrantSessionIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
+  const [identityRevealGrants, setIdentityRevealGrants] = useState<Record<string, string>>(
+    () => readIdentityRevealGrants()
+  );
 
   // Voice recording functionality
   const {
@@ -370,6 +403,28 @@ const CounselorMessages = () => {
   } = useFileAttachment({
     sessionId: selectedSessionId,
   });
+
+  const withIdentityMaskedForViewer = useCallback(
+    (chat: ChatListItem): ChatListItem => {
+      const realName = String(chat.realStudentName || chat.studentName || "Student").trim() || "Student";
+      const realEmail = String(chat.realStudentEmail || chat.studentEmail || "").trim();
+      const grantVersion = identityRevealGrants[String(chat.id)] || "";
+      const canShowIdentity = chat.identityVisibleToViewer && grantVersion === chat.lastActivity;
+      const isMaskedForViewer = chat.isAnonymous && !canShowIdentity;
+      return {
+        ...chat,
+        realStudentName: realName,
+        realStudentEmail: realEmail,
+        studentName: isMaskedForViewer ? anonymousLabelForCounselor() : realName,
+        studentEmail: isMaskedForViewer ? "" : realEmail,
+      };
+    },
+    [identityRevealGrants]
+  );
+
+  useEffect(() => {
+    writeIdentityRevealGrants(identityRevealGrants);
+  }, [identityRevealGrants]);
 
 
   const handleRowMouseEnter = useCallback((sessionId: number) => {
@@ -470,7 +525,7 @@ const CounselorMessages = () => {
                 Date.now() - savedAt <= CHAT_LIST_CACHE_TTL_MS &&
                 cachedChats.length > 0
               ) {
-                setChats(cachedChats);
+                setChats(cachedChats.map((chat) => withIdentityMaskedForViewer(chat)));
                 setChatTotalPages(Math.max(1, Number(parsed?.total_pages || 1)));
                 setChatTotalItems(Math.max(0, Number(parsed?.total_items || cachedChats.length)));
                 setSelectedChatId((current) => current ?? cachedChats[0]?.id ?? null);
@@ -573,11 +628,9 @@ const CounselorMessages = () => {
           }
         }
 
-        const nextChats = Array.from(dedupedByConversation.values())
+        const nextChatsRaw = Array.from(dedupedByConversation.values())
           .map(({ session }): ChatListItem => {
             const isAnonymous = isAnonymousSessionFlag(session.is_anonymous);
-            const isMasked = isAnonymousIdentityMaskedFromViewer(session);
-            const anonymousLabel = anonymousLabelForCounselor();
             const numericStudentId = Number(session.student_id);
             const visibleStudentId =
               Number.isInteger(numericStudentId) && numericStudentId > 0
@@ -589,21 +642,21 @@ const CounselorMessages = () => {
               session.peer_counselor?.profile?.full_name ||
               session.peer_counselor?.email ||
               (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
-            const name =
-              isMasked
-                ? anonymousLabel
-                : session.student?.profile?.full_name ||
-                  session.student?.email?.split("@")[0] ||
-                  `Student #${session.id}`;
-            const email = isMasked ? "" : session.student?.email || "";
+            const realName =
+              session.student?.profile?.full_name ||
+              session.student?.email?.split("@")[0] ||
+              `Student #${session.id}`;
+            const realEmail = session.student?.email || "";
             const rowUnread = Math.max(0, Math.floor(Number(session.unread_count ?? 0)));
 
             return {
               id: Number(session.id),
               studentId: visibleStudentId,
               counselorId: Number(session.counselor_id),
-              studentName: name,
-              studentEmail: email,
+              realStudentName: realName,
+              realStudentEmail: realEmail,
+              studentName: realName,
+              studentEmail: realEmail,
               isAnonymous,
               anonymousId: String(session.anonymous_id ?? "").trim(),
               identityVisibleToViewer: Boolean(session.identity_visible_to_viewer),
@@ -627,6 +680,20 @@ const CounselorMessages = () => {
             };
           })
           .sort((a, b) => toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity));
+
+        const pendingRevealSessionId = pendingIdentityRevealGrantSessionIdRef.current;
+        if (pendingRevealSessionId) {
+          const justRevealed = nextChatsRaw.find((chat) => chat.id === pendingRevealSessionId);
+          if (justRevealed?.identityVisibleToViewer) {
+            setIdentityRevealGrants((prev) => ({
+              ...prev,
+              [String(pendingRevealSessionId)]: justRevealed.lastActivity,
+            }));
+          }
+          pendingIdentityRevealGrantSessionIdRef.current = null;
+        }
+
+        const nextChats = nextChatsRaw.map((chat) => withIdentityMaskedForViewer(chat));
 
         const targetSessionId = targetSessionParam ? Number(targetSessionParam) : null;
         const targetStudentId = targetStudentParam ? Number(targetStudentParam) : null;
@@ -726,7 +793,7 @@ const CounselorMessages = () => {
         loadSessionsInFlightRef.current = null;
       }
     },
-    [chatPage, isPeerCounselor, targetSessionParam, targetStudentParam, user?.id]
+    [chatPage, isPeerCounselor, targetSessionParam, targetStudentParam, user?.id, withIdentityMaskedForViewer]
   );
 
   const selectConversationById = useCallback((id: number) => {
@@ -794,6 +861,10 @@ const CounselorMessages = () => {
     window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnon);
     return () => window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnon);
   }, [loadSessions, user?.id]);
+
+  useEffect(() => {
+    setChats((prev) => prev.map((chat) => withIdentityMaskedForViewer(chat)));
+  }, [withIdentityMaskedForViewer]);
 
   const prevMessagesLoadingRef = useRef(false);
   useEffect(() => {
@@ -1000,6 +1071,7 @@ const CounselorMessages = () => {
     setIsRevealingIdentity(true);
     try {
       await api.revealAnonymousIdentity(selectedSessionId, reason.trim());
+      pendingIdentityRevealGrantSessionIdRef.current = Number(selectedSessionId);
       toast.success("Identity revealed and logged.");
       await loadSessions(true);
     } catch (error) {
@@ -1217,7 +1289,7 @@ const CounselorMessages = () => {
                             )}
                           >
                             <span className="text-white text-[11px] font-bold tracking-tight">
-                              {chat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: chat.isAnonymous, identity_visible_to_viewer: chat.identityVisibleToViewer })
+                              {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
                                 ? "AU"
                                 : getInitials(chat.studentName)}
                             </span>
@@ -1287,7 +1359,7 @@ const CounselorMessages = () => {
                       )}
                     >
                       <span className="text-[11px] font-bold text-white">
-                        {selectedChat ? (selectedChat.isAnonymous && isAnonymousIdentityMaskedFromViewer({ is_anonymous: selectedChat.isAnonymous, identity_visible_to_viewer: selectedChat.identityVisibleToViewer }) ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
+                        {selectedChat ? (selectedChat.isAnonymous && selectedChat.studentName === anonymousLabelForCounselor() ? "AU" : getInitials(selectedChat.studentName)) : <User className="h-4 w-4 text-muted-foreground" />}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
