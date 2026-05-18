@@ -56,7 +56,12 @@ const ALLOWED_MIME_TYPES = new Set([
   'audio/x-m4a',
   'audio/aac',
   'audio/m4a',
+  // PHP finfo reports WebM containers as video/webm regardless of audio-only content
+  'video/webm',
 ]);
+
+/** Strip codec parameters — e.g. "audio/webm;codecs=opus" → "audio/webm". */
+const baseMime = (raw: string) => raw.split(';')[0].trim().toLowerCase();
 
 export const CHAT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const CHAT_ATTACHMENT_ACCEPT =
@@ -79,11 +84,14 @@ export const ensureAttachmentFile = (input: File): File => {
     return file;
   }
 
+  const normalised = baseMime(file.type);
   const extension =
-    AUDIO_EXTENSION_BY_MIME[file.type] ||
-    String(file.type.split('/')[1] || 'bin').replace(/[^a-zA-Z0-9]/g, '') ||
+    AUDIO_EXTENSION_BY_MIME[normalised] ||
+    String(normalised.split('/')[1] || 'bin').replace(/[^a-zA-Z0-9]/g, '') ||
     'bin';
-  const prefix = file.type.startsWith('audio/') ? 'voice_message' : 'attachment';
+  const prefix = normalised.startsWith('audio/') || normalised === 'video/webm'
+    ? 'voice_message'
+    : 'attachment';
   const generatedName = `${prefix}_${Date.now()}.${extension}`;
 
   return new File([file], generatedName, {
@@ -103,7 +111,7 @@ export const validateChatAttachment = (input: File): string | null => {
     return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV, WEBM, OGG, M4A, AAC.';
   }
 
-  const mimeType = String(file.type || '').toLowerCase();
+  const mimeType = baseMime(file.type || '');
   if (mimeType !== '' && !ALLOWED_MIME_TYPES.has(mimeType)) {
     return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV, WEBM, OGG, M4A, AAC.';
   }
