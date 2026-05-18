@@ -462,7 +462,7 @@ const StudentAppointments = () => {
       const sessionNotes =
         form.mode === "physical"
           ? "Physical"
-          : form.is_anonymous || form.online_media === "audio"
+          : form.is_anonymous
             ? "Online audio"
             : "Online";
 
