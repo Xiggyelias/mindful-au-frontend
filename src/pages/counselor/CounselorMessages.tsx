@@ -235,9 +235,17 @@ const formatChatListTime = (dateString?: string) => {
   const d = parseBackendDate(dateString);
   if (!d) return "";
   if (isTodayInDisplayZone(d)) return formatInDisplayZone(d, "h:mm a");
-  if (isYesterdayInDisplayZone(d)) return `Yesterday - ${formatInDisplayZone(d, "h:mm a")}`;
-  if (isThisYearInDisplayZone(d)) return formatInDisplayZone(d, "MMM d - h:mm a");
-  return formatInDisplayZone(d, "MMM d, yyyy - h:mm a");
+  if (isYesterdayInDisplayZone(d)) return "Yesterday";
+  
+  // WhatsApp-like: show day name if within the last 7 days
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - d.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) {
+    return formatInDisplayZone(d, "EEEE");
+  }
+  
+  return formatInDisplayZone(d, "d/M/yy");
 };
 
 const getInitials = (name: string) => {
@@ -1328,67 +1336,71 @@ const CounselorMessages = () => {
                             }
                           }}
                           className={cn(
-                            "mx-2 my-1 cursor-pointer rounded-2xl border border-transparent px-3 py-2.5 transition-colors outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary/35",
+                            "flex cursor-pointer items-center gap-3 border-b border-slate-100 dark:border-slate-800/40 px-4 py-3.5 transition-colors outline-none",
                             isActive
-                              ? "border-primary/20 bg-primary/[0.08] shadow-sm dark:bg-primary/10"
-                              : "hover:bg-muted/60 dark:hover:bg-muted/25"
+                              ? "bg-slate-100/90 dark:bg-slate-800/60"
+                              : "hover:bg-slate-50/70 dark:hover:bg-slate-800/25"
                           )}
                           onClick={() => selectConversationById(chat.id)}
                           onMouseEnter={() => handleRowMouseEnter(chat.id)}
                           onMouseLeave={handleRowMouseLeave}
                         >
-                          <div className="flex items-center gap-3">
+                          {/* Avatar */}
                           <div
                             className={cn(
-                              "h-11 w-11 shrink-0 rounded-full flex items-center justify-center shadow-inner ring-2 ring-background",
+                              "h-12 w-12 shrink-0 rounded-full flex items-center justify-center shadow-sm ring-2 ring-background",
                               chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
                                 ? "bg-black ring-red-600/70"
                                 : getUserColor(chat.studentName)
                             )}
                           >
-                            <span className="text-white text-[11px] font-bold tracking-tight">
+                            <span className="text-white text-xs font-bold tracking-tight">
                               {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
                                 ? "AU"
                                 : getInitials(chat.studentName)}
                             </span>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="mb-0.5 flex items-start justify-between gap-2">
-                              <div className="flex min-w-0 flex-wrap items-center gap-1">
+
+                          {/* Info Column */}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            {/* Top Row: Name + Badges on Left, Time on Right */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-1.5">
                                 <p className={cn(
-                                  "truncate text-[13px] font-semibold tracking-tight",
-                                  isActive ? "text-foreground" : "text-foreground/90"
+                                  "truncate text-sm font-semibold tracking-tight",
+                                  isActive ? "text-foreground font-bold" : "text-foreground/90"
                                 )}>
                                   {chat.studentName}
                                 </p>
                                 {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
                                 {chat.isPeerAssigned && (
-                                  <span className="rounded-md bg-primary/12 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                                  <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary shrink-0">
                                     Peer
                                   </span>
                                 )}
                               </div>
-                              <span className="flex shrink-0 items-center gap-1.5">
-                                {chat.unreadCount > 0 && (
-                                  <span
-                                    className="flex h-[1.35rem] min-w-[1.35rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm ring-2 ring-background"
-                                    aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
-                                  >
-                                    {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                                  </span>
-                                )}
-                                <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground">
-                                  {formatChatListTime(chat.lastActivity)}
-                                </span>
+                              <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground/80">
+                                {formatChatListTime(chat.lastActivity)}
                               </span>
                             </div>
-                            <p className="line-clamp-2 text-[12px] leading-snug text-muted-foreground">
-                              {chat.preview}
-                            </p>
+
+                            {/* Bottom Row: Message Preview on Left, Unread Badge on Right */}
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-[13px] text-muted-foreground/85 flex-1 pr-1.5">
+                                {chat.preview}
+                              </p>
+                              {chat.unreadCount > 0 && (
+                                <span
+                                  className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm"
+                                  aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
+                                >
+                                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
+                      );
                     })
                   )}
                 </ScrollArea>

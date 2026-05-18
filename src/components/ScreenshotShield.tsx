@@ -113,7 +113,7 @@ export const ScreenshotShield = () => {
           <div className="absolute left-4 top-4 rounded bg-black/45 px-2 py-1 text-[10px] font-medium tracking-wide text-white/80">
             {watermarkIdentity} • {timestampLabel}
           </div>
-          <div className="absolute bottom-4 right-4 rounded bg-black/45 px-2 py-1 text-[10px] font-medium tracking-wide text-white/80">
+          <div className="absolute bottom-20 right-4 rounded bg-black/45 px-2 py-1 text-[10px] font-medium tracking-wide text-white/80">
             Confidential CMS session
           </div>
         </div>

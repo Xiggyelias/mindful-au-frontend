@@ -204,6 +204,19 @@ export function VoiceMemoPlayer({
     el.addEventListener("loadedmetadata", onDur);
     el.addEventListener("durationchange", onDur);
     el.addEventListener("ended", onEnd);
+
+    // If the audio metadata is already loaded (cached/local blob), set duration immediately
+    if (Number.isFinite(el.duration) && el.duration > 0) {
+      setDuration(el.duration);
+    } else {
+      // Force load to override browser lazy-loading optimizations on hidden media elements
+      try {
+        el.load();
+      } catch (e) {
+        // ignore
+      }
+    }
+
     return () => {
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("loadedmetadata", onDur);
@@ -375,7 +388,7 @@ export function VoiceMemoPlayer({
       "shadow-sm animate-voice-bubble-in",
       className
     )}>
-      <audio ref={audioRef} src={src} preload={preloadMode} playsInline className="sr-only" />
+      <audio ref={audioRef} src={src} preload={preloadMode === "none" ? "none" : "auto"} playsInline className="sr-only" />
 
       {/* Play / Pause */}
       <Button
