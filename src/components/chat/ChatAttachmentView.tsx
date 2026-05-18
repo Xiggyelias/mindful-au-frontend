@@ -243,26 +243,18 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     // then fall back to the server URL once the upload resolves.
     const playbackSrc = (msg.localBlobUrl || resolvedUrl).trim();
     return (
-      <div className="max-w-[min(100%,20rem)] space-y-2">
-        <VoiceMemoPlayer
-          src={playbackSrc}
-          mimeType={att.file_type}
-          headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
-          fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
-          bubbleRole={isOutgoing ? "outgoing" : "incoming"}
-          isUploading={msg.isUploading}
-          uploadProgress={uploadProgress}
-          uploadFailed={msg.uploadFailed}
-          onRetry={onRetry}
-          onDelete={onDelete}
-        />
-        {/* Only show the external download button when not in upload/failed state */}
-        {!msg.isUploading && !msg.uploadFailed && hasPreviewUrl && (
-          <div className={cn("flex justify-end", isOutgoing && "text-primary-foreground")}>
-            {downloadControl}
-          </div>
-        )}
-      </div>
+      <VoiceMemoPlayer
+        src={playbackSrc}
+        mimeType={att.file_type}
+        headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
+        fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
+        bubbleRole={isOutgoing ? "outgoing" : "incoming"}
+        isUploading={msg.isUploading}
+        uploadProgress={uploadProgress}
+        uploadFailed={msg.uploadFailed}
+        onRetry={onRetry}
+        onDelete={onDelete}
+      />
     );
   }
 

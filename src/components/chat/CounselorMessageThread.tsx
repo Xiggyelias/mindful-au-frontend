@@ -108,6 +108,14 @@ const CounselorMessageRow = React.memo(
 
         <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
           <div className={cn("flex items-end gap-1", isMine ? "flex-row-reverse" : "flex-row")}>
+            {/* Attachment-first messages (voice notes, files, images) supply their own
+                visual bubble via ChatAttachmentView — skip the outer wrapper so we
+                don't get a double-bubble with extra padding. */}
+            {msg.message_type === "voice" || msg.message_type === "file" || msg.has_file ? (
+              <div className="min-w-0">
+                <ChatMessageErrorBoundary>{renderMessageContent(msg, isMine)}</ChatMessageErrorBoundary>
+              </div>
+            ) : (
             <div
               className={cn(
                 "rounded-2xl border px-4 py-3 shadow-sm transition-colors duration-200",
@@ -120,6 +128,7 @@ const CounselorMessageRow = React.memo(
                 <ChatMessageErrorBoundary>{renderMessageContent(msg, isMine)}</ChatMessageErrorBoundary>
               </div>
             </div>
+            )}
             {canModerateChat ? (
               <Button
                 type="button"

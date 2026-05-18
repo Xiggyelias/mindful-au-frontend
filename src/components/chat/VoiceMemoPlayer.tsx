@@ -2,15 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pause,
   Play,
-  RotateCcw,
   AlertTriangle,
   Loader2,
   Trash2,
-  Download,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatChatFileSize } from "@/lib/chatAttachments";
 
 export type VoiceMemoBubbleRole = "outgoing" | "incoming";
 
@@ -21,11 +19,11 @@ function formatPlayTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const NUM_BARS = 36;
+const NUM_BARS = 40;
 
 /**
- * Generate deterministic waveform bar heights from a seed string.
- * Combines multiple sine harmonics for a natural-sounding profile.
+ * Deterministic waveform profile from a seed string.
+ * Combines multiple sine harmonics for a natural-looking voice shape.
  */
 function buildWaveformBars(seed: string): number[] {
   let h = 0;
@@ -33,12 +31,12 @@ function buildWaveformBars(seed: string): number[] {
   const phase = (h % 100) * 0.0628;
   return Array.from({ length: NUM_BARS }, (_, i) => {
     const v =
-      0.22 +
-      0.32 * Math.abs(Math.sin(i * 0.68 + phase)) +
+      0.18 +
+      0.34 * Math.abs(Math.sin(i * 0.68 + phase)) +
       0.22 * Math.abs(Math.sin(i * 1.37 + 0.9)) +
-      0.12 * Math.abs(Math.sin(i * 2.5 + phase * 0.4)) +
+      0.14 * Math.abs(Math.sin(i * 2.5 + phase * 0.4)) +
       0.06 * Math.abs(Math.sin(i * 4.1));
-    return Math.min(1, Math.max(0.1, v));
+    return Math.min(1, Math.max(0.08, v));
   });
 }
 
@@ -59,8 +57,8 @@ export interface VoiceMemoPlayerProps {
 export function VoiceMemoPlayer({
   src,
   mimeType: _mimeType,
-  headline,
-  fileSizeBytes,
+  headline: _headline,
+  fileSizeBytes: _fileSizeBytes,
   bubbleRole,
   className,
   isUploading = false,
@@ -169,47 +167,35 @@ export function VoiceMemoPlayer({
   const cycleSpeed = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;
-    const steps = [0.75, 1, 1.5, 2];
+    const steps = [1, 1.5, 2];
     const next = steps[(steps.indexOf(speed) + 1) % steps.length] ?? 1;
     el.playbackRate = next;
     setSpeed(next);
   }, [speed]);
 
-  const replayFromStart = useCallback(async () => {
-    const el = audioRef.current;
-    if (!el) return;
-    el.currentTime = 0;
-    setCurrent(0);
-    try { await el.play(); setPlaying(true); } catch { setPlaying(false); }
-  }, []);
-
   const pct = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
   const isOutgoing = bubbleRole === "outgoing";
   const waveformBars = useMemo(() => buildWaveformBars(src), [src]);
 
-  // ── Colour tokens ──────────────────────────────────────────────────────────
-  const shell = isOutgoing
-    ? "border-primary-foreground/15 bg-primary-foreground/[0.06]"
-    : "border-border/50 bg-background/70 backdrop-blur-sm dark:bg-slate-900/50";
-  const metaCls = isOutgoing
-    ? "text-primary-foreground/70"
-    : "text-muted-foreground";
-  const barPlayed = isOutgoing ? "bg-primary-foreground/95" : "bg-primary";
-  const barUnplayed = isOutgoing ? "bg-primary-foreground/20" : "bg-muted-foreground/25";
-  const barBreathing = isOutgoing ? "bg-primary-foreground" : "bg-primary";
-  const btnClass = isOutgoing
-    ? "border-primary-foreground/30 bg-primary-foreground/[0.08] text-primary-foreground hover:bg-primary-foreground/18"
-    : "border-border/70 bg-background/90 text-foreground hover:bg-muted/80 dark:bg-slate-800/80 dark:border-slate-700/60";
-  const ghostBtnCls = isOutgoing
-    ? "text-primary-foreground/80 hover:bg-primary-foreground/12"
-    : "text-foreground/70 hover:bg-muted/60";
+  // ── Colour tokens (WhatsApp-style) ─────────────────────────────────────────
+  // Outgoing: white play button + white waveform on primary bg (handled by parent bubble)
+  // Incoming: primary play button + primary waveform on muted bg
+  const playBtnCls = isOutgoing
+    ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/25 hover:bg-primary-foreground/30"
+    : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20";
+  const barPlayed = isOutgoing ? "bg-primary-foreground" : "bg-primary";
+  const barUnplayed = isOutgoing ? "bg-primary-foreground/30" : "bg-foreground/20";
+  const timeCls = isOutgoing ? "text-primary-foreground/80" : "text-muted-foreground";
+  const speedCls = isOutgoing
+    ? "text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground"
+    : "text-muted-foreground hover:bg-muted hover:text-foreground";
 
-  // ── Failed state ─────────────────────────────────────────────────────────
+  // ── Failed state ──────────────────────────────────────────────────────────
   if (uploadFailed) {
     return (
       <div
         className={cn(
-          "flex max-w-[min(100%,22rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
+          "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
           isOutgoing
             ? "border-destructive/25 bg-destructive/8"
             : "border-destructive/18 bg-destructive/[0.04]",
@@ -223,19 +209,13 @@ export function VoiceMemoPlayer({
           <AlertTriangle className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-semibold text-destructive leading-tight">
-            Failed to send
-          </p>
-          <p className={cn("text-[11px] leading-tight mt-0.5", metaCls)}>
-            Voice note not delivered
-          </p>
+          <p className="truncate text-[12px] font-semibold text-destructive leading-tight">Failed to send</p>
+          <p className={cn("text-[11px] leading-tight mt-0.5", timeCls)}>Voice note not delivered</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {onRetry && (
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              type="button" variant="outline" size="sm"
               className="h-8 gap-1.5 px-2.5 text-[11px] font-bold text-destructive border-destructive/30 hover:bg-destructive/8 hover:text-destructive"
               onClick={onRetry}
             >
@@ -245,9 +225,7 @@ export function VoiceMemoPlayer({
           )}
           {onDelete && (
             <Button
-              type="button"
-              variant="ghost"
-              size="icon"
+              type="button" variant="ghost" size="icon"
               className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
               onClick={onDelete}
               aria-label="Delete failed voice note"
@@ -266,44 +244,37 @@ export function VoiceMemoPlayer({
     return (
       <div
         className={cn(
-          "flex max-w-[min(100%,22rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
-          shell,
+          "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-3",
+          isOutgoing
+            ? "bg-primary text-primary-foreground"
+            : "border border-border/50 bg-muted/30",
           className
         )}
       >
         <div className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
-          btnClass
+          playBtnCls
         )}>
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
-
-        <div className="min-w-0 flex-1 space-y-2.5">
-          <div className={cn(
-            "flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider",
-            metaCls
-          )}>
-            <span className="truncate">{headline}</span>
-            <span className="shrink-0 tabular-nums ml-2">{clampedProgress}%</span>
-          </div>
-
+        <div className="min-w-0 flex-1 space-y-2">
           {/* Animated waveform bars */}
-          <div className="flex h-7 items-end gap-[2px]" aria-hidden>
+          <div className="flex h-8 items-end gap-[2.5px]" aria-hidden>
             {waveformBars.map((h, i) => (
               <div
                 key={i}
-                className={cn("w-[3px] rounded-full animate-voice-bar", barPlayed)}
+                className={cn("rounded-full animate-voice-bar", barPlayed)}
                 style={{
+                  width: "2.5px",
                   height: `${Math.round(h * 100)}%`,
-                  animationDelay: `${(i * 30) % 800}ms`,
-                  opacity: 0.35 + 0.5 * h,
+                  animationDelay: `${(i * 25) % 700}ms`,
+                  opacity: 0.3 + 0.5 * h,
                 }}
               />
             ))}
           </div>
-
           {/* Upload progress track */}
-          <div className={cn("h-1 w-full rounded-full overflow-hidden", barUnplayed)}>
+          <div className={cn("h-[3px] w-full rounded-full overflow-hidden", barUnplayed)}>
             <div
               className={cn("h-full rounded-full transition-[width] duration-300", barPlayed)}
               style={{ width: `${clampedProgress}%` }}
@@ -314,19 +285,21 @@ export function VoiceMemoPlayer({
     );
   }
 
-  // ── Normal playback state ─────────────────────────────────────────────────
+  // ── Normal playback ───────────────────────────────────────────────────────
   return (
     <div
       className={cn(
-        "flex max-w-[min(100%,22rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
-        shell,
-        "shadow-sm",
+        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
+        isOutgoing
+          ? "bg-primary text-primary-foreground"
+          : "border border-border/50 bg-muted/30",
+        "shadow-sm animate-voice-bubble-in",
         className
       )}
     >
       <audio ref={audioRef} src={src} preload={preloadMode} playsInline className="sr-only" />
 
-      {/* Play / Pause button */}
+      {/* ── Play / Pause ─────────────────────────────────────────────────── */}
       <Button
         type="button"
         variant="outline"
@@ -335,7 +308,7 @@ export function VoiceMemoPlayer({
         aria-label={playing ? "Pause voice note" : "Play voice note"}
         className={cn(
           "h-10 w-10 shrink-0 rounded-full border shadow-none transition-transform duration-150 active:scale-95",
-          btnClass
+          playBtnCls
         )}
         onClick={() => void togglePlay()}
       >
@@ -344,10 +317,10 @@ export function VoiceMemoPlayer({
           : <Play className="h-4 w-4 translate-x-[1px]" />}
       </Button>
 
-      {/* Waveform + controls column */}
-      <div className="min-w-0 flex-1 space-y-1.5">
+      {/* ── Waveform + time ──────────────────────────────────────────────── */}
+      <div className="min-w-0 flex-1 space-y-1">
 
-        {/* ── Seekable waveform ─────────────────────────────────────────── */}
+        {/* Seekable waveform */}
         <div
           ref={seekBarRef}
           role="slider"
@@ -356,48 +329,33 @@ export function VoiceMemoPlayer({
           aria-valuemax={Math.round(duration) || 0}
           aria-valuenow={Math.round(current)}
           aria-label="Playback position"
-          className="group flex h-8 cursor-pointer touch-none select-none items-end gap-[2.5px] outline-none"
+          className="flex h-8 cursor-pointer touch-none select-none items-end gap-[2px] outline-none"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onKeyDown={(ev) => {
             const el = audioRef.current;
             if (!el || !duration) return;
-            if (ev.key === "ArrowLeft") {
-              ev.preventDefault();
-              el.currentTime = Math.max(0, el.currentTime - 3);
-            } else if (ev.key === "ArrowRight") {
-              ev.preventDefault();
-              el.currentTime = Math.min(duration, el.currentTime + 3);
-            }
+            if (ev.key === "ArrowLeft") { ev.preventDefault(); el.currentTime = Math.max(0, el.currentTime - 3); }
+            else if (ev.key === "ArrowRight") { ev.preventDefault(); el.currentTime = Math.min(duration, el.currentTime + 3); }
           }}
         >
           {waveformBars.map((h, i) => {
             const barPct = ((i + 1) / NUM_BARS) * 100;
             const played = barPct <= pct;
-            // Bars within 2 positions behind the playhead get a breathing animation
-            const nearCursor =
-              playing &&
-              barPct > pct - (2 * 100) / NUM_BARS &&
-              barPct <= pct;
-
+            const nearCursor = playing && barPct > pct - (2 * 100) / NUM_BARS && barPct <= pct;
             return (
               <div
                 key={i}
                 className={cn(
                   "rounded-full transition-[height] duration-75",
                   played ? barPlayed : barUnplayed,
-                  nearCursor && barBreathing,
                   nearCursor && "animate-waveform-breath"
                 )}
                 style={{
-                  width: "3px",
-                  height: nearCursor
-                    ? `${Math.round(h * 112)}%`
-                    : played
-                    ? `${Math.round(h * 100)}%`
-                    : `${Math.round(h * 100)}%`,
-                  opacity: played ? (nearCursor ? 1 : 0.92) : 0.38,
+                  width: "2.5px",
+                  height: `${Math.round(h * (nearCursor ? 112 : 100))}%`,
+                  opacity: played ? (nearCursor ? 1 : 0.9) : 0.35,
                   flexShrink: 0,
                   animationDuration: nearCursor ? `${380 + (i % 3) * 80}ms` : undefined,
                 }}
@@ -406,67 +364,28 @@ export function VoiceMemoPlayer({
           })}
         </div>
 
-        {/* ── Time row + controls ───────────────────────────────────────── */}
-        <div className="flex items-center justify-between gap-1">
-          {/* Time display */}
-          <span
-            className={cn("text-[10px] tabular-nums font-semibold leading-none", metaCls)}
-            aria-live="polite"
-          >
-            {formatPlayTime(current)}
-            <span className={cn("font-normal opacity-50 mx-0.5")}>/</span>
-            {duration > 0 ? formatPlayTime(duration) : "—:——"}
+        {/* Time + speed row */}
+        <div className="flex items-center justify-between">
+          <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
+            {playing || current > 0
+              ? formatPlayTime(current)
+              : duration > 0
+              ? formatPlayTime(duration)
+              : "0:00"}
           </span>
 
-          {/* Right-side controls */}
-          <div className="flex items-center gap-0.5">
-            {fileSizeBytes && fileSizeBytes > 0 && (
-              <span className={cn("text-[10px] opacity-50 mr-0.5", metaCls)}>
-                {formatChatFileSize(fileSizeBytes)}
-              </span>
+          {/* Speed toggle — subtle, only visible on hover / tap */}
+          <button
+            type="button"
+            onClick={cycleSpeed}
+            aria-label={`Playback speed ${speed}×, tap to change`}
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums transition-colors duration-150",
+              speedCls
             )}
-
-            {/* Replay */}
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className={cn("h-7 w-7 rounded-full", ghostBtnCls)}
-              onClick={() => void replayFromStart()}
-              aria-label="Replay from start"
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-
-            {/* Speed */}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-7 min-w-[2.25rem] rounded-full px-1.5 text-[11px] font-bold tabular-nums",
-                ghostBtnCls
-              )}
-              onClick={cycleSpeed}
-              aria-label={`Playback speed ${speed}×, tap to change`}
-            >
-              {speed}×
-            </Button>
-
-            {/* Download */}
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className={cn("h-7 w-7 rounded-full", ghostBtnCls)}
-              aria-label="Download voice note"
-              onClick={() => {
-                if (src) window.open(src, "_blank", "noopener,noreferrer");
-              }}
-            >
-              <Download className="h-3 w-3" />
-            </Button>
-          </div>
+          >
+            {speed === 1 ? "1×" : `${speed}×`}
+          </button>
         </div>
       </div>
     </div>
@@ -497,8 +416,7 @@ export function VoiceRecordingPresenceStrip({
       aria-hidden
     >
       {bars
-        ? // Live Web Audio bars
-          bars.slice(0, 20).map((level, i) => (
+        ? bars.slice(0, 20).map((level, i) => (
             <span
               key={i}
               className="inline-block w-[3px] origin-bottom rounded-full bg-primary/70"
@@ -509,8 +427,7 @@ export function VoiceRecordingPresenceStrip({
               }}
             />
           ))
-        : // CSS animated fallback
-          [0, 120, 240, 120, 0].map((delay, i) => (
+        : [0, 120, 240, 120, 0].map((delay, i) => (
             <span
               key={i}
               className={cn(

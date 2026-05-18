@@ -383,10 +383,22 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
   const deleteMessage = useCallback(
     async (messageId: number) => {
+      // Snapshot the message before removing it so we can restore on failure.
+      let removed: ChatMessage | undefined;
+      setMessages((prev) => {
+        removed = prev.find((m) => m.id === messageId);
+        return prev.filter((m) => m.id !== messageId);
+      });
       try {
-        setMessages((prev) => prev.filter((m) => m.id !== messageId));
         await api.deleteMessage(sessionId, messageId);
       } catch (err) {
+        // Restore the message in the list so nothing is silently lost.
+        if (removed) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === messageId)) return prev;
+            return [...prev, removed!].sort((a, b) => a.id - b.id);
+          });
+        }
         toast.error('Failed to delete message');
       }
     },
