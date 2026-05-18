@@ -502,7 +502,7 @@ const StudentChat = () => {
   }
 
   return (
-    <div className="h-screen bg-background overflow-hidden">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-background to-emerald-50/40">
       <DashboardSidebar
         items={navItems}
         userType="student"
@@ -523,9 +523,9 @@ const StudentChat = () => {
           title="Something went wrong"
           description="The clinical chat encountered an unexpected error. This might be due to a connection issue or an encryption sync failure."
         >
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:p-4">
             {/* Chat Sidebar */}
-            <div className="hidden w-72 shrink-0 xl:flex lg:flex">
+            <div className="hidden w-72 shrink-0 xl:flex lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-sm lg:backdrop-blur">
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
@@ -552,7 +552,7 @@ const StudentChat = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-secondary/5">
+            <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background via-background to-slate-50/60 lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-sm">
               {/* Session Expired - Check FIRST before any other UI */}
               {sessionExpired && (
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground text-sm">
@@ -571,7 +571,7 @@ const StudentChat = () => {
 
               {activeSession ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-4 lg:px-6">
+                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/90 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-4 lg:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
@@ -594,6 +594,9 @@ const StudentChat = () => {
                         <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
                           {activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
+                        <p className="truncate text-[11px] text-muted-foreground sm:text-xs">
+                          Confidential support conversation
+                        </p>
                         <div className="mt-0.5 flex items-center gap-2">
                           <span className={cn("h-2 w-2 shrink-0 rounded-full", chatError ? "bg-destructive" : "bg-emerald-500")} />
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -723,14 +726,17 @@ const StudentChat = () => {
               )}
               
               {!activeSession && (
-                 <div className="hidden xl:flex flex-1 flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-700">
-                    <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 shadow-2xl shadow-primary/5 mb-6">
+                 <div className="hidden xl:flex flex-1 flex-col items-center justify-center p-10 text-center animate-in fade-in zoom-in duration-700">
+                    <div className="mb-6 rounded-[2.5rem] border border-emerald-200/60 bg-gradient-to-br from-emerald-100 via-white to-slate-100 p-6 shadow-xl shadow-emerald-100/60">
                       <Shield className="h-16 w-16 text-primary" />
                     </div>
-                    <h2 className="text-2xl xl:text-3xl font-display font-bold tracking-tight mb-2">Clinical Safe Space</h2>
-                    <p className="text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                      Select a conversation or start a new one to begin your secure, encrypted session with a qualified counselor.
+                    <h2 className="mb-2 text-2xl font-display font-bold tracking-tight xl:text-3xl">Start Your Conversation</h2>
+                    <p className="mx-auto mb-4 max-w-sm leading-relaxed text-muted-foreground">
+                      Choose an existing thread or begin a new chat to connect with a counselor in a secure, encrypted space.
                     </p>
+                    <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+                      End-to-end encrypted support
+                    </div>
                  </div>
               )}
               </>

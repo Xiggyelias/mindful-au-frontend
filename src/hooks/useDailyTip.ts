@@ -51,8 +51,34 @@ const writeCachedTip = (userId: number, tip: DailyTip | null) => {
   }
 };
 
+const pickFallbackTipForRole = (
+  tips: DailyTip[],
+  role: "admin" | "counselor" | "peer_counselor" | "student" | null
+): DailyTip | null => {
+  if (!Array.isArray(tips) || tips.length === 0) {
+    return null;
+  }
+
+  const audiencePool = role ? ["all", role] : ["all"];
+  const eligible = tips
+    .filter((tip) => tip && tip.is_active !== false)
+    .filter((tip) => audiencePool.includes(String(tip.audience || "all")));
+
+  if (eligible.length === 0) {
+    return null;
+  }
+
+  const scored = eligible.sort((a, b) => {
+    const aPriority = Number.isFinite(Number(a.priority)) ? Number(a.priority) : 0;
+    const bPriority = Number.isFinite(Number(b.priority)) ? Number(b.priority) : 0;
+    return bPriority - aPriority;
+  });
+
+  return scored[0] ?? null;
+};
+
 export const useDailyTip = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const cachedTip = useMemo(() => readCachedTip(user?.id ?? null), [user?.id]);
   const [tip, setTip] = useState<DailyTip | null>(cachedTip);
   const [isLoading, setIsLoading] = useState(!cachedTip);
@@ -80,7 +106,13 @@ export const useDailyTip = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const nextTip = await api.getWellnessTip();
+      let nextTip = await api.getWellnessTip();
+
+      if (!nextTip) {
+        const tips = await api.getTips();
+        nextTip = pickFallbackTipForRole(tips, role);
+      }
+
       applyTip(nextTip);
       if (!nextTip) {
         setError("No active wellness tip is available right now.");
@@ -91,7 +123,7 @@ export const useDailyTip = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [applyTip, user?.id]);
+  }, [applyTip, role, user?.id]);
 
   const toggleFavorite = useCallback(async () => {
     if (!tip?.id) {

@@ -24,7 +24,7 @@ interface DashboardHeaderProps {
 export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
   const {
     notifications,
     unreadCount,
@@ -69,6 +69,76 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       : "/";
 
     navigate(quickExitPath, { replace: true });
+  };
+
+  const resolveNotificationDestination = (notification: {
+    title?: string;
+    message?: string;
+    type?: string;
+    meta?: Record<string, unknown> | null;
+  }): string | null => {
+    const title = String(notification.title || "").toLowerCase();
+    const message = String(notification.message || "").toLowerCase();
+    const meta = notification.meta || {};
+
+    const currentPath = location.pathname.toLowerCase();
+    const basePath = currentPath.startsWith("/admin")
+      ? "/admin"
+      : currentPath.startsWith("/counselor")
+      ? "/counselor"
+      : currentPath.startsWith("/peer")
+      ? "/peer"
+      : "/student";
+
+    const getChatPath = () => {
+      if (basePath === "/counselor") return "/counselor/messages";
+      if (basePath === "/peer") return "/peer/chats";
+      if (basePath === "/admin") return "/admin/dashboard";
+      return "/student/chat";
+    };
+
+    const chatSessionId = Number((meta as { chat_session_id?: unknown }).chat_session_id);
+    if (Number.isFinite(chatSessionId) && chatSessionId > 0) {
+      return `${getChatPath()}?session=${chatSessionId}`;
+    }
+
+    const appointmentId = Number((meta as { appointment_id?: unknown }).appointment_id);
+    if (Number.isFinite(appointmentId) && appointmentId > 0) {
+      if (basePath === "/admin") return "/admin/alerts";
+      return `${basePath}/appointments`;
+    }
+
+    const looksLikeEmergency =
+      notification.type === "panic" ||
+      title.includes("panic") ||
+      title.includes("emergency") ||
+      title.includes("escalation") ||
+      message.includes("panic") ||
+      message.includes("emergency") ||
+      message.includes("escalat");
+
+    if (looksLikeEmergency) {
+      if (basePath === "/admin" || role === "admin") return "/admin/alerts";
+      if (basePath === "/peer" || role === "peer_counselor") return "/peer/escalations";
+      if (basePath === "/counselor" || role === "counselor") return "/counselor/students";
+      return "/student/chat";
+    }
+
+    if (title.includes("appointment")) {
+      if (basePath === "/admin") return "/admin/alerts";
+      return `${basePath}/appointments`;
+    }
+
+    if (title.includes("session") || title.includes("message")) {
+      return getChatPath();
+    }
+
+    if (title.includes("wellness")) {
+      if (basePath === "/admin") return "/admin/dashboard";
+      return `${basePath}/wellness`;
+    }
+
+    return null;
   };
 
   return (
@@ -166,7 +236,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                 No notifications yet
               </div>
             ) : (
-              <ScrollArea className="max-h-96">
+              <ScrollArea className="h-[min(24rem,70vh)]">
                 <div className="py-1">
                   {notifications.map((notification) => (
                     <button
@@ -177,34 +247,9 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                       }`}
                       onClick={() => {
                         void markAsRead(notification.id);
-                        
-                        // Navigate based on notification type/content
-                        const title = notification.title?.toLowerCase() ?? '';
-                        const meta = notification.meta;
-                        
-                        const currentPath = location.pathname.toLowerCase();
-                        let basePath = '/student';
-                        if (currentPath.startsWith('/counselor')) basePath = '/counselor';
-                        else if (currentPath.startsWith('/peer')) basePath = '/peer';
-                        else if (currentPath.startsWith('/admin')) basePath = '/admin';
-
-                        const getChatPath = () => {
-                          if (basePath === '/counselor') return '/counselor/messages';
-                          if (basePath === '/peer') return '/peer/chats';
-                          if (basePath === '/admin') return '/admin/dashboard';
-                          return '/student/chat';
-                        };
-
-                        if (meta?.chat_session_id) {
-                          navigate(`${getChatPath()}?session=${meta.chat_session_id}`);
-                        } else if (meta?.appointment_id) {
-                          navigate(`${basePath}/appointments`);
-                        } else if (title.includes('appointment')) {
-                          navigate(`${basePath}/appointments`);
-                        } else if (title.includes('session') || title.includes('message')) {
-                          navigate(getChatPath());
-                        } else if (title.includes('wellness')) {
-                          navigate(`${basePath}/wellness`);
+                        const destination = resolveNotificationDestination(notification);
+                        if (destination) {
+                          navigate(destination);
                         }
                       }}
                     >
@@ -215,13 +260,15 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                           }`}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold truncate">{notification.title}</p>
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold break-words whitespace-normal leading-snug pr-1">
+                              {notification.title}
+                            </p>
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 pt-0.5">
                               {formatTimestamp(notification.created_at)}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="text-xs text-muted-foreground mt-0.5 break-all whitespace-normal leading-relaxed">
                             {notification.message}
                           </p>
                         </div>
