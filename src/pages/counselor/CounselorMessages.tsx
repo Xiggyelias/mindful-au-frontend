@@ -1109,7 +1109,7 @@ const CounselorMessages = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
       <DashboardSidebar
         items={navItems}
         userType={isPeerCounselor ? "peer" : "counselor"}
@@ -1126,15 +1126,15 @@ const CounselorMessages = () => {
           />
         )}
 
-        <main className="p-0 overflow-hidden h-full">
-          <div className={`grid min-h-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
-            <Card variant="glass" className={`w-72 shrink-0 hidden lg:flex lg:col-span-1 rounded-none border-y-0 border-l-0 shadow-none ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
+        <main className="h-full overflow-hidden p-0 lg:p-4">
+          <div className={`grid min-h-0 gap-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
+            <Card variant="glass" className={`w-80 shrink-0 hidden lg:flex lg:col-span-1 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search conversations..."
-                    className="pl-9"
+                    className="pl-9 rounded-xl border-slate-200/80 bg-white/90 shadow-sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -1178,6 +1178,9 @@ const CounselorMessages = () => {
                 <ScrollArea className="h-[calc(100vh-220px)]">
                   {!isLoadingChats && filteredChats.length === 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
+                        <MessageSquare className="h-6 w-6" />
+                      </div>
                       No conversations found
                     </div>
                   ) : (
@@ -1264,9 +1267,9 @@ const CounselorMessages = () => {
 
             <Card
               variant="glass"
-              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:col-span-2 rounded-none border-y-0 border-r-0 shadow-none ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
+              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:col-span-2 lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35 ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
-              <CardHeader className="shrink-0 space-y-0 border-b border-border/50 px-4 py-3 sm:px-5">
+              <CardHeader className="shrink-0 space-y-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
@@ -1375,7 +1378,7 @@ const CounselorMessages = () => {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="flex min-h-0 flex-1 flex-col p-0 bg-gradient-to-b from-background to-secondary/5 pt-0">
+              <CardContent className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-slate-50/70 p-0 pt-0">
                 <>
                 {selectedSessionId && chatError && (
                   <div className="shrink-0 lg:hidden bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center justify-center gap-2">
@@ -1386,8 +1389,8 @@ const CounselorMessages = () => {
                 <div className="min-h-0 flex-1 flex flex-col">
                   {!selectedSessionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground p-8 text-center space-y-4">
-                      <div className="h-24 w-24 rounded-[2rem] bg-secondary/30 flex items-center justify-center mb-4">
-                        <MessageSquare className="h-12 w-12 opacity-20" />
+                      <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-[2rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-100 via-white to-sky-100 shadow-lg shadow-emerald-100/60">
+                        <MessageSquare className="h-12 w-12 text-emerald-700/70" />
                       </div>
                       <h3 className="text-2xl font-bold text-foreground">Student Conversations</h3>
                       <p className="max-w-xs">
@@ -1395,7 +1398,7 @@ const CounselorMessages = () => {
                           ? `Last activity ${formatChatListTime(selectedChat.lastActivity)}`
                           : "Select a student conversation to start chatting"}
                       </p>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-full text-xs">
+                      <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">
                         <Shield className="h-3 w-3 text-success" />
                         <span>Session active</span>
                       </div>
@@ -1482,8 +1485,8 @@ const CounselorMessages = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-border/50 bg-background/50">
-                  <div className="relative flex items-end gap-2 p-2 bg-background border border-border/50 rounded-[1.5rem] shadow-sm focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                <form onSubmit={handleSendMessage} className="border-t border-border/60 bg-gradient-to-b from-background/80 to-background p-3 sm:p-4">
+                  <div className="relative flex items-end gap-2 rounded-[1.5rem] border border-slate-200/80 bg-white/90 p-2 shadow-lg shadow-slate-200/35 backdrop-blur-md transition-all focus-within:ring-2 focus-within:ring-primary/10">
                     <input
                       type="file"
                       ref={fileInputRef}

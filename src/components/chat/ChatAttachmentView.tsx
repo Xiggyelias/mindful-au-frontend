@@ -50,7 +50,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
   const messageId = Number(msg.id);
 
   const handleDownload = async () => {
-    console.log('handleDownload - messageId:', messageId, 'type:', typeof messageId, 'isValidInteger:', Number.isInteger(messageId) && messageId > 0);
     if (Number.isInteger(messageId) && messageId > 0) {
       setDownloading(true);
       try {
@@ -81,7 +80,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
   };
 
   const handleImageError = async () => {
-    console.log('handleImageError - messageId:', messageId, 'type:', typeof messageId, 'isValidInteger:', Number.isInteger(messageId) && messageId > 0);
     if (!Number.isInteger(messageId) || messageId <= 0) {
       setImageLoadFailed(true);
       return;

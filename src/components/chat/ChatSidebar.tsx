@@ -434,11 +434,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      {unreadCount > 0 && (
-                        <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm shrink-0">
-                          {unreadCount > 99 ? '99+' : unreadCount}
-                        </span>
-                      )}
+                      <span
+                        className={cn(
+                          "flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums shadow-sm shrink-0",
+                          unreadCount > 0
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-200/80 text-slate-600"
+                        )}
+                        aria-label={`${unreadCount} unread message${unreadCount === 1 ? "" : "s"}`}
+                      >
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
                       <button
                         type="button"
                         onClick={togglePin}

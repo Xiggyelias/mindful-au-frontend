@@ -763,25 +763,13 @@ const StudentChat = () => {
                     onFileSelect={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        if (activeSession?.assigned_role === 'peer_counselor') {
-                          toast.error("Peer support sessions are text-only for now.");
-                          return;
-                        }
                         setSelectedFile(file);
                       }
                     }}
                     onAttachClick={() => {
-                      if (activeSession?.assigned_role === 'peer_counselor') {
-                        toast.error("Peer support sessions are text-only for now.");
-                        return;
-                      }
                       fileInputRef.current?.click();
                     }}
                     onVoiceToggle={() => {
-                      if (activeSession?.assigned_role === 'peer_counselor') {
-                        toast.error("Peer support sessions are text-only for now.");
-                        return;
-                      }
                       if (isRecording) { stopRecording(); setIsVoiceMode(false); }
                       else { setIsVoiceMode(true); startRecording(); }
                     }}

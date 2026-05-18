@@ -262,6 +262,19 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
 
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 flex flex-col">
+      {messages.length === 0 && !error ? (
+        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-8">
+          <div className="pointer-events-none absolute -left-16 top-16 h-48 w-48 rounded-full bg-emerald-300/20 blur-3xl" />
+          <div className="pointer-events-none absolute bottom-8 right-10 h-56 w-56 rounded-full bg-sky-300/20 blur-3xl" />
+          <div className="relative w-full max-w-lg rounded-[2rem] border border-slate-200/70 bg-white/75 p-8 text-center shadow-xl backdrop-blur-sm">
+            <div className="mx-auto mb-4 inline-flex rounded-[1.75rem] border border-emerald-200/70 bg-emerald-100/80 p-5 shadow-sm">
+              <Loader2 className="h-8 w-8 text-emerald-700 animate-spin" />
+            </div>
+            <h3 className="text-xl font-display font-bold tracking-tight text-slate-900">Preparing secure thread</h3>
+            <p className="mt-2 text-sm text-muted-foreground">Encrypted conversation context is loading.</p>
+          </div>
+        </div>
+      ) : null}
       <Virtuoso
         style={{ height: "100%" }}
         data={messages}
@@ -297,9 +310,9 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
               <div className="h-1 shrink-0" aria-hidden />
             ),
           Footer: () => (
-            <div className="mx-auto w-full max-w-3xl space-y-3 px-3 md:max-w-none md:px-6 lg:py-2">
+            <div className="mx-auto w-full max-w-3xl space-y-3 px-3 md:max-w-none md:px-6 lg:py-2 motion-reduce:animate-none">
               {isPeerTyping && (
-                <div className="flex items-end gap-2.5">
+                <div className="flex items-end gap-2.5 motion-reduce:animate-none">
                   <div
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(studentLabel)}`}
                   >
@@ -356,7 +369,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
           type="button"
           size="icon"
           variant="secondary"
-          className="absolute bottom-4 right-4 z-40 h-10 w-10 rounded-full border border-border/50 shadow-lg transition-transform hover:scale-105 md:bottom-6 md:right-6"
+          className="absolute bottom-4 right-4 z-40 h-10 w-10 rounded-full border border-border/50 shadow-lg transition-transform hover:scale-105 motion-reduce:transition-none md:bottom-6 md:right-6"
           onClick={scrollToBottom}
           aria-label="Scroll to bottom of messages"
         >
