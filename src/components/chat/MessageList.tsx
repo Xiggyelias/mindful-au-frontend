@@ -365,7 +365,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   // This keeps student/counselor threads visible even when Virtuoso state drifts.
   if (messages.length <= 200) {
     return (
-      <div ref={messageScrollAreaRef} onScroll={handlePlainScroll} className="flex-1 relative overflow-auto flex flex-col min-h-0">
+      <div ref={messageScrollAreaRef} onScroll={handlePlainScroll} className="h-full flex-1 relative overflow-auto flex flex-col min-h-0">
         <div className="px-4 pt-3 lg:px-6">
           {hasOlderMessages && (
             <div className="flex justify-center pb-4 pt-2">
@@ -438,7 +438,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   }
 
   return (
-    <div ref={messageScrollAreaRef} className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+    <div ref={messageScrollAreaRef} className="h-full flex-1 relative overflow-hidden flex flex-col min-h-0">
       <Virtuoso
         style={{ height: "100%" }}
         data={messages}

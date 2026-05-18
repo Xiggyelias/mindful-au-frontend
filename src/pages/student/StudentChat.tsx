@@ -626,9 +626,9 @@ const StudentChat = () => {
                     </div>
                   </div>
 
-                  <div className="flex min-h-0 flex-1">
+                  <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Message List */}
-                    <div className="min-h-0 flex-1">
+                    <div className="min-h-0 flex-1 overflow-hidden">
                       <MessageList
                         conversationKey={String(sessionId ?? "")}
                         messages={messages}

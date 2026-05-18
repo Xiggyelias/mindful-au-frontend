@@ -14,6 +14,7 @@ import {
   Users,
   ClipboardCheck,
   Shield,
+  Award,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -21,6 +22,7 @@ import { StatsCard } from "@/components/StatsCard";
 import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
@@ -73,6 +75,11 @@ type AppointmentRecord = {
   counselor_id?: number | string | null;
   notes?: string | null;
   counselor?: { profile?: { full_name?: string | null } | null } | null;
+};
+
+type StudentBadgeItem = {
+  id: string;
+  label: string;
 };
 
 const UPCOMING_APPOINTMENT_STATUSES = ["scheduled", "confirmed", "pending"] as const;
@@ -146,6 +153,7 @@ const StudentDashboard = () => {
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [studentBadges, setStudentBadges] = useState<StudentBadgeItem[]>([]);
   const { user } = useAuth();
   const { profileAnonymousMode, isSaving: isSavingAnonymousMode, toggleProfileAnonymousMode } = useProfileAnonymousMode();
   const {
@@ -261,6 +269,33 @@ const StudentDashboard = () => {
         chats: aiChatCount,
       });
 
+      const rawBadges =
+        summary?.badges ??
+        summary?.ml_insights?.badges ??
+        summary?.ml_insights?.feature_snapshot?.badges ??
+        [];
+      const parsedBadges = Array.isArray(rawBadges)
+        ? rawBadges
+            .map((entry: unknown, index: number): StudentBadgeItem | null => {
+              if (typeof entry === "string") {
+                const label = entry.trim();
+                if (!label) return null;
+                return { id: `badge-${index}-${label.toLowerCase()}`, label };
+              }
+              if (entry && typeof entry === "object") {
+                const obj = entry as { id?: unknown; label?: unknown; title?: unknown; name?: unknown };
+                const label = String(obj.label ?? obj.title ?? obj.name ?? "").trim();
+                if (!label) return null;
+                const idRaw = String(obj.id ?? "").trim();
+                const id = idRaw !== "" ? idRaw : `badge-${index}-${label.toLowerCase()}`;
+                return { id, label };
+              }
+              return null;
+            })
+            .filter((badge): badge is StudentBadgeItem => badge !== null)
+        : [];
+      setStudentBadges(parsedBadges);
+
       setStatsError(loadErrors.length ? loadErrors.slice(0, 2).join(" ") : null);
       setUpcomingAppointments(upcomingApts);
       
@@ -289,6 +324,7 @@ const StudentDashboard = () => {
     setStats({ sessions: 0, appointments: 0, wellness: null, wellnessLabel: null, chats: null });
     setUpcomingAppointments([]);
     setDailyMood(null);
+    setStudentBadges([]);
     setStatsError(null);
     setStatsLoading(Boolean(user?.id));
   }, [user?.id]);
@@ -648,6 +684,36 @@ const StudentDashboard = () => {
               icon={Bot}
             />
           </div>
+
+          <Card className="border border-border/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-primary" />
+                Your Badges
+              </CardTitle>
+              <CardDescription>
+                Milestones you have earned from your wellness and support journey.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {studentBadges.length === 0 ? (
+                <div className="rounded-2xl border-2 border-dashed border-border/60 bg-secondary/20 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-muted-foreground">No badges yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Keep engaging with sessions and wellness check-ins to unlock badges.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {studentBadges.map((badge) => (
+                    <Badge key={badge.id} variant="outline" className="rounded-full px-3 py-1">
+                      {badge.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="border border-border/60 shadow-sm mb-8">
             <CardHeader>

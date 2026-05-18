@@ -82,7 +82,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onPrevSessionPage,
   ownerUserId,
 }) => {
-  const [conversationFilter, setConversationFilter] = useState<"all" | "unread" | "active" | "pinned" | "archived">("all");
+  const [conversationFilter, setConversationFilter] = useState<"unread" | "active" | "pinned" | "archived">("active");
   const [pinnedSessionIds, setPinnedSessionIds] = useState<number[]>([]);
   const [archivedSessionIds, setArchivedSessionIds] = useState<number[]>([]);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,7 +239,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       if (conversationFilter === "pinned") return isPinned;
       if (conversationFilter === "unread") return unreadCount > 0;
       if (conversationFilter === "active") return Boolean(session.is_active);
-      return true;
+      return false;
     });
   }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds]);
 
@@ -278,7 +278,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         </div>
         <div className="mt-3 flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/80 p-1">
           {[
-            { id: "all", label: "All" },
             { id: "unread", label: "Unread" },
             { id: "active", label: "Active" },
             { id: "pinned", label: "Pinned" },
@@ -287,7 +286,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setConversationFilter(tab.id as "all" | "unread" | "active" | "pinned" | "archived")}
+              onClick={() => setConversationFilter(tab.id as "unread" | "active" | "pinned" | "archived")}
               className={cn(
                 "rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors",
                 conversationFilter === tab.id
@@ -465,8 +464,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
                     <MessageSquare className="h-5 w-5" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">No active sessions yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Students will appear here once connected.</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {conversationFilter === "unread" && "No unread conversations"}
+                    {conversationFilter === "active" && "No active sessions yet"}
+                    {conversationFilter === "pinned" && "No pinned conversations"}
+                    {conversationFilter === "archived" && "No archived conversations"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {conversationFilter === "unread" && "New messages will show up here."}
+                    {conversationFilter === "active" && "Students will appear here once connected."}
+                    {conversationFilter === "pinned" && "Pin a conversation to keep it easy to find."}
+                    {conversationFilter === "archived" && "Archived conversations can be restored anytime."}
+                  </p>
                 </div>
               )}
             </div>
