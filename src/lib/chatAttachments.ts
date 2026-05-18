@@ -100,12 +100,12 @@ export const validateChatAttachment = (input: File): string | null => {
 
   const extension = String(file.name.split('.').pop() || '').toLowerCase();
   if (!ALLOWED_EXTENSIONS.has(extension)) {
-    return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV.';
+    return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV, WEBM, OGG, M4A, AAC.';
   }
 
   const mimeType = String(file.type || '').toLowerCase();
   if (mimeType !== '' && !ALLOWED_MIME_TYPES.has(mimeType)) {
-    return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV.';
+    return 'File type not supported. Allowed: JPG, PNG, GIF, PDF, DOCX, TXT, MP3, WAV, WEBM, OGG, M4A, AAC.';
   }
 
   return null;

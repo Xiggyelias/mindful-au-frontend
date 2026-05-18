@@ -305,11 +305,14 @@ const CounselorMessages = () => {
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIdentityRevealGrantSessionIdRef = useRef<number | null>(null);
+  const voiceHoldStartYRef = useRef<number | null>(null);
+  const voiceHoldPointerIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [voiceLocked, setVoiceLocked] = useState(false);
   const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
   const [identityRevealGrants, setIdentityRevealGrants] = useState<Record<string, string>>(
     () => readIdentityRevealGrants()
@@ -1129,6 +1132,56 @@ const CounselorMessages = () => {
   const handleVoiceCancel = () => {
     cancelRecording();
     setIsVoiceMode(false);
+    setVoiceLocked(false);
+  };
+
+  const sendVoiceNow = useCallback(async () => {
+    if (!recording || isSending || !selectedSessionId) return;
+    setIsSending(true);
+    try {
+      const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
+      if (sentVoice) {
+        registerServerMessage(sentVoice);
+        clearRecording();
+        setIsVoiceMode(false);
+        setVoiceLocked(false);
+      } else {
+        toast.error("Failed to send voice message");
+      }
+    } finally {
+      setIsSending(false);
+    }
+  }, [recording, isSending, selectedSessionId, sendFileMessage, registerServerMessage, clearRecording]);
+
+  const handleVoicePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (isSending || isUploading || !selectedSessionId) return;
+    voiceHoldPointerIdRef.current = e.pointerId;
+    voiceHoldStartYRef.current = e.clientY;
+    setVoiceLocked(false);
+    if (!isVoiceMode) {
+      setIsVoiceMode(true);
+      if (!recording && !isRecording) {
+        startRecording();
+      }
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleVoicePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (voiceLocked || voiceHoldStartYRef.current == null || !isVoiceMode) return;
+    if (voiceHoldStartYRef.current - e.clientY >= 70) {
+      setVoiceLocked(true);
+    }
+  };
+
+  const handleVoicePointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (voiceHoldPointerIdRef.current !== e.pointerId) return;
+    if (!voiceLocked && isRecording) {
+      stopRecording();
+      await sendVoiceNow();
+    }
+    voiceHoldPointerIdRef.current = null;
+    voiceHoldStartYRef.current = null;
   };
 
   const formatFileSize = (bytes: number) => {
@@ -1618,7 +1671,14 @@ const CounselorMessages = () => {
                               variant="ghost" 
                               size="icon"
                               className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
-                              onClick={handleVoiceToggle}
+                              onClick={() => {
+                                if (voiceLocked) {
+                                  handleVoiceToggle();
+                                }
+                              }}
+                              onPointerDown={handleVoicePointerDown}
+                              onPointerMove={handleVoicePointerMove}
+                              onPointerUp={(e) => void handleVoicePointerUp(e)}
                               disabled={isSending || isUploading || !selectedSessionId}
                             >
                               <Mic className="h-5 w-5 text-muted-foreground/60" />
@@ -1631,6 +1691,9 @@ const CounselorMessages = () => {
                             <>
                               <VoiceRecordingPresenceStrip className="h-9 shrink-0" />
                               <span className="text-xs tabular-nums text-muted-foreground font-medium">{formatRecordingTime(recordingTime)}</span>
+                              {voiceLocked && (
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">Locked</span>
+                              )}
                               <div className="flex-1 h-1.5 rounded-full bg-muted/70 overflow-hidden">
                                 <div
                                   className="h-full w-full origin-left animate-pulse bg-primary/40"
@@ -1665,6 +1728,17 @@ const CounselorMessages = () => {
                                 >
                                   <Square className="h-3.5 w-3.5" />
                                 </Button>
+                                {voiceLocked && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 rounded-lg border-primary/35 px-2 text-[10px] font-semibold"
+                                    onClick={() => void sendVoiceNow()}
+                                  >
+                                    Send
+                                  </Button>
+                                )}
                               </div>
                             </>
                           ) : (

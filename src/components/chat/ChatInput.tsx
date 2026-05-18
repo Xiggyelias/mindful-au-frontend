@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import { 
   Send, 
   Paperclip, 
@@ -38,6 +38,7 @@ interface ChatInputProps {
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachClick: () => void;
   onVoiceToggle: () => void;
+  onVoiceSendNow?: () => Promise<void> | void;
   onVoicePause: () => void;
   onVoiceResume: () => void;
   onVoiceCancel: () => void;
@@ -63,6 +64,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   onFileSelect,
   onAttachClick,
   onVoiceToggle,
+  onVoiceSendNow,
   onVoicePause,
   onVoiceResume,
   onVoiceCancel,
@@ -70,10 +72,48 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   onEmojiClick,
   fileInputRef,
 }) => {
+  const [voiceLocked, setVoiceLocked] = useState(false);
+  const holdStartYRef = useRef<number | null>(null);
+  const holdPointerIdRef = useRef<number | null>(null);
+  const holdStartedRecordingRef = useRef(false);
+  const lockThresholdPx = 70;
+
   const formatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (isSending) return;
+    holdPointerIdRef.current = e.pointerId;
+    holdStartYRef.current = e.clientY;
+    holdStartedRecordingRef.current = false;
+    setVoiceLocked(false);
+    if (!isVoiceMode) {
+      holdStartedRecordingRef.current = true;
+      onVoiceToggle();
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (voiceLocked || !isVoiceMode) return;
+    if (holdStartYRef.current == null) return;
+    const deltaY = holdStartYRef.current - e.clientY;
+    if (deltaY >= lockThresholdPx) {
+      setVoiceLocked(true);
+    }
+  };
+
+  const handleMicPointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (holdPointerIdRef.current !== e.pointerId) return;
+    if (!voiceLocked && isVoiceMode) {
+      onVoiceToggle(); // stop recording
+      await Promise.resolve(onVoiceSendNow?.()); // release-to-send
+    }
+    holdPointerIdRef.current = null;
+    holdStartYRef.current = null;
   };
 
   return (
@@ -120,7 +160,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                 <div className="flex items-center gap-2">
                   <VoiceRecordingPresenceStrip className="h-8 shrink-0" />
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Recording voice memo
+                    {voiceLocked ? "Voice memo locked" : "Recording voice memo"}
                   </span>
                   <span className="text-sm tabular-nums text-foreground font-medium ml-auto">{formatRecordingTime(recordingTime)}</span>
                 </div>
@@ -153,6 +193,17 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     <Trash2 className="h-3.5 w-3.5 mr-1" />
                     Discard
                   </Button>
+                  {voiceLocked && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => void onVoiceSendNow?.()}
+                    >
+                      Send
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -201,7 +252,15 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                   ? "border-primary/40 text-primary hover:bg-primary/10"
                   : "bg-white/90 hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary shadow-lg"
               }`}
-              onClick={onVoiceToggle}
+              onClick={() => {
+                if (voiceLocked) {
+                  onVoiceToggle();
+                  return;
+                }
+              }}
+              onPointerDown={handleMicPointerDown}
+              onPointerMove={handleMicPointerMove}
+              onPointerUp={(e) => void handleMicPointerUp(e)}
               disabled={isSending}
               aria-label={isVoiceMode ? "Stop and send recording" : "Record voice memo"}
             >

@@ -39,15 +39,32 @@ export function VoiceMemoPlayer({
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [preloadMode, setPreloadMode] = useState<"metadata" | "none">("metadata");
+
+  useEffect(() => {
+    try {
+      const conn = (navigator as any)?.connection;
+      if (conn?.saveData === true || /(^|-)2g/.test(String(conn?.effectiveType || ""))) {
+        setPreloadMode("none");
+      } else {
+        setPreloadMode("metadata");
+      }
+    } catch {
+      setPreloadMode("metadata");
+    }
+  }, []);
 
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     el.pause();
     el.currentTime = 0;
+    el.playbackRate = 1;
     setPlaying(false);
     setCurrent(0);
     setDuration(0);
+    setSpeed(1);
   }, [src]);
 
   useEffect(() => {
@@ -121,6 +138,27 @@ export function VoiceMemoPlayer({
     ? "border-primary-foreground/35 bg-primary-foreground/[0.1] text-primary-foreground hover:bg-primary-foreground/20"
     : "border-border/80 bg-background/80 text-foreground hover:bg-muted/90";
 
+  const cycleSpeed = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+    el.playbackRate = next;
+    setSpeed(next);
+  }, [speed]);
+
+  const replayFromStart = useCallback(async () => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = 0;
+    setCurrent(0);
+    try {
+      await el.play();
+      setPlaying(true);
+    } catch {
+      setPlaying(false);
+    }
+  }, []);
+
   return (
     <div
       className={cn(
@@ -129,7 +167,7 @@ export function VoiceMemoPlayer({
         className
       )}
     >
-      <audio ref={audioRef} src={src} preload="metadata" playsInline className="hidden" />
+      <audio ref={audioRef} src={src} preload={preloadMode} playsInline className="hidden" />
 
       <Button
         type="button"
@@ -181,9 +219,33 @@ export function VoiceMemoPlayer({
           />
         </div>
 
-        {fileSizeBytes && fileSizeBytes > 0 ? (
-          <p className={cn("text-[10px] font-medium opacity-70", meta)}>{formatChatFileSize(fileSizeBytes)}</p>
-        ) : null}
+        <div className="flex items-center justify-between gap-2">
+          {fileSizeBytes && fileSizeBytes > 0 ? (
+            <p className={cn("text-[10px] font-medium opacity-70", meta)}>{formatChatFileSize(fileSizeBytes)}</p>
+          ) : <span />}
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={cn("h-6 px-2 text-[10px] font-semibold", isOutgoing ? "text-primary-foreground/85" : "text-foreground")}
+              onClick={cycleSpeed}
+              aria-label="Change playback speed"
+            >
+              {speed}x
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={cn("h-6 px-2 text-[10px] font-semibold", isOutgoing ? "text-primary-foreground/85" : "text-foreground")}
+              onClick={() => void replayFromStart()}
+              aria-label="Replay recording"
+            >
+              Replay
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

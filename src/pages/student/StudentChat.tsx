@@ -95,6 +95,7 @@ const StudentChat = () => {
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
+  const [hasVoiceSendFailed, setHasVoiceSendFailed] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -298,6 +299,10 @@ const StudentChat = () => {
         if (sentVoice) {
           registerServerMessage(sentVoice);
           clearRecording();
+          setHasVoiceSendFailed(false);
+        } else {
+          setHasVoiceSendFailed(true);
+          toast.error("Failed to send voice message");
         }
       }
       if (message.trim()) {
@@ -315,6 +320,24 @@ const StudentChat = () => {
     }
     setIsSending(false);
   };
+
+  const sendVoiceNow = useCallback(async () => {
+    if (!recording || !sessionId || isSending) return;
+    setIsSending(true);
+    try {
+      const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
+      if (sentVoice) {
+        registerServerMessage(sentVoice);
+        clearRecording();
+        setHasVoiceSendFailed(false);
+      } else {
+        setHasVoiceSendFailed(true);
+        toast.error("Failed to send voice message");
+      }
+    } finally {
+      setIsSending(false);
+    }
+  }, [recording, sessionId, isSending, sendFileMessage, registerServerMessage, clearRecording]);
 
   const handleStartVideoCall = async () => {
     if (!activeSession?.counselor_id) return toast.error("No active conversation");
@@ -681,9 +704,10 @@ const StudentChat = () => {
                       if (isRecording) { stopRecording(); setIsVoiceMode(false); }
                       else { setIsVoiceMode(true); startRecording(); }
                     }}
+                    onVoiceSendNow={sendVoiceNow}
                     onVoicePause={pauseRecording}
                     onVoiceResume={resumeRecording}
-                    onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); }}
+                    onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); setHasVoiceSendFailed(false); }}
                     onRemoveFile={() => setSelectedFile(null)}
                     onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
                     fileInputRef={fileInputRef}
