@@ -314,7 +314,7 @@ export function VoiceMemoPlayer({
   if (uploadFailed) {
     return (
       <div className={cn(
-        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
+        "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
         isOutgoing
           ? "border-destructive/25 bg-destructive/8"
           : "border-destructive/18 bg-destructive/[0.04]",
@@ -349,27 +349,36 @@ export function VoiceMemoPlayer({
 
   // ── Uploading state ───────────────────────────────────────────────────────
   if (isUploading) {
-    const clampedProgress = Math.min(100, Math.max(0, uploadProgress));
     return (
       <div className={cn(
-        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-3",
+        "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
         isOutgoing ? "bg-primary text-primary-foreground" : "border border-border/50 bg-muted/30",
         className
       )}>
+        {/* Spinner in place of play button */}
         <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full border", playBtnCls)}>
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex h-8 items-end gap-[2.5px]" aria-hidden>
+
+        {/* Waveform + "Sending…" label — no progress bar */}
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex h-8 items-end gap-[2px]" aria-hidden>
             {staticBars.map((h, i) => (
-              <div key={i} className={cn("rounded-full animate-voice-bar", barPlayed)}
-                style={{ width: "2.5px", height: `${Math.round(h * 100)}%`, animationDelay: `${(i * 25) % 700}ms`, opacity: 0.3 + 0.5 * h }} />
+              <div
+                key={i}
+                className={cn("rounded-full animate-voice-bar", barPlayed)}
+                style={{
+                  width: "2.5px",
+                  height: `${Math.round(h * 100)}%`,
+                  animationDelay: `${(i * 28) % 800}ms`,
+                  opacity: 0.22 + 0.42 * h,
+                }}
+              />
             ))}
           </div>
-          <div className={cn("h-[3px] w-full rounded-full overflow-hidden", barUnplayed)}>
-            <div className={cn("h-full rounded-full transition-[width] duration-300", barPlayed)}
-              style={{ width: `${clampedProgress}%` }} />
-          </div>
+          <span className={cn("block text-[11px] font-medium leading-none", timeCls)}>
+            Sending…
+          </span>
         </div>
       </div>
     );
@@ -378,7 +387,7 @@ export function VoiceMemoPlayer({
   // ── Normal playback ───────────────────────────────────────────────────────
   return (
     <div className={cn(
-      "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
+      "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
       isOutgoing ? "bg-primary text-primary-foreground" : "border border-border/50 bg-muted/30",
       "shadow-sm animate-voice-bubble-in",
       className

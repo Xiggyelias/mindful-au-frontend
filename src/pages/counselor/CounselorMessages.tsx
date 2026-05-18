@@ -1147,8 +1147,6 @@ const CounselorMessages = () => {
     if (!selectedSessionId) return;
     const file = await stopAndGetRecording();
     if (!file) return;
-    setIsVoiceMode(false);
-    setVoiceLocked(false);
     await sendVoiceInternal(file);
   }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, sendVoiceInternal]);
 
