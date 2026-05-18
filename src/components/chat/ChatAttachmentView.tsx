@@ -48,7 +48,9 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     refreshingPreviewRef.current = false;
     attemptedPreviewRefreshRef.current = false;
   }, [resolvedUrl]);
-  const kind = getAttachmentKind(att);
+  // Pass message_type so voice notes are always routed to the audio player even
+  // when PHP finfo returns video/webm or audio/x-matroska instead of audio/webm.
+  const kind = getAttachmentKind(att, msg.message_type);
   const hasSize = Number(att.file_size) > 0;
   const messageId = Number(msg.id);
 
@@ -237,38 +239,29 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
 
   if (kind === "audio") {
     const isVoiceMemo = msg.message_type === "voice";
-    // Show player if we have a URL, are uploading, or failed (failed shows its own state)
-    if (hasPreviewUrl || msg.isUploading || msg.uploadFailed) {
-      // Use local blob URL for immediate playback while the upload is in-flight
-      const playbackSrc = (msg.localBlobUrl || resolvedUrl).trim();
-      return (
-        <div className="max-w-[min(100%,20rem)] space-y-2">
-          <VoiceMemoPlayer
-            src={playbackSrc}
-            mimeType={att.file_type}
-            headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
-            fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
-            bubbleRole={isOutgoing ? "outgoing" : "incoming"}
-            isUploading={msg.isUploading}
-            uploadProgress={uploadProgress}
-            uploadFailed={msg.uploadFailed}
-            onRetry={onRetry}
-            onDelete={onDelete}
-          />
-          {!msg.isUploading && !msg.uploadFailed && (
-            <div className={cn("flex justify-end", isOutgoing && "text-primary-foreground")}>
-              {downloadControl}
-            </div>
-          )}
-        </div>
-      );
-    }
-
+    // Use local blob URL for immediate playback while the upload is in-flight,
+    // then fall back to the server URL once the upload resolves.
+    const playbackSrc = (msg.localBlobUrl || resolvedUrl).trim();
     return (
-      <div className="flex max-w-sm flex-col gap-2 rounded-2xl border border-border/60 bg-background/50 p-3">
-        <p className="text-sm font-medium">{isVoiceMemo ? "Voice memo" : "Audio attachment"}</p>
-        {hasSize ? <p className="text-xs opacity-70">{formatChatFileSize(att.file_size)}</p> : null}
-        <div className="flex justify-end">{downloadControl}</div>
+      <div className="max-w-[min(100%,20rem)] space-y-2">
+        <VoiceMemoPlayer
+          src={playbackSrc}
+          mimeType={att.file_type}
+          headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
+          fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
+          bubbleRole={isOutgoing ? "outgoing" : "incoming"}
+          isUploading={msg.isUploading}
+          uploadProgress={uploadProgress}
+          uploadFailed={msg.uploadFailed}
+          onRetry={onRetry}
+          onDelete={onDelete}
+        />
+        {/* Only show the external download button when not in upload/failed state */}
+        {!msg.isUploading && !msg.uploadFailed && hasPreviewUrl && (
+          <div className={cn("flex justify-end", isOutgoing && "text-primary-foreground")}>
+            {downloadControl}
+          </div>
+        )}
       </div>
     );
   }

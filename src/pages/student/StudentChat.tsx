@@ -767,6 +767,7 @@ const StudentChat = () => {
                     onVoicePause={pauseRecording}
                     onVoiceResume={resumeRecording}
                     onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); }}
+                    onVoiceError={(err) => toast.error(err.message)}
                     onRemoveFile={() => setSelectedFile(null)}
                     onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
                     fileInputRef={fileInputRef}

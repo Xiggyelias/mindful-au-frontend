@@ -119,10 +119,17 @@ export const validateChatAttachment = (input: File): string | null => {
   return null;
 };
 
-export const getAttachmentKind = (attachment?: ChatAttachment | null): 'image' | 'audio' | 'document' | 'file' => {
+export const getAttachmentKind = (attachment?: ChatAttachment | null, messageType?: string): 'image' | 'audio' | 'document' | 'file' => {
+  // message_type="voice" is canonical — always treat as audio regardless of server MIME
+  if (messageType === 'voice') return 'audio';
   const mimeType = String(attachment?.file_type || '').toLowerCase();
   if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('audio/')) return 'audio';
+  // audio/* covers normal cases; video/webm and *matroska* cover PHP finfo variants
+  if (
+    mimeType.startsWith('audio/') ||
+    mimeType === 'video/webm' ||
+    mimeType.includes('matroska')
+  ) return 'audio';
   if (
     mimeType === 'application/pdf' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||

@@ -53,6 +53,13 @@ export const useVoiceRecorder = () => {
   const mimeTypeRef = useRef<string>("");
   const extensionRef = useRef<string>("webm");
   const pendingStopResolveRef = useRef<((file: File | null) => void) | null>(null);
+  /**
+   * Set to true by stopAndGetRecording/cancelRecording when the recorder hasn't
+   * started yet (still awaiting getUserMedia). startRecording checks this after
+   * getUserMedia resolves so it can abort the stream immediately instead of
+   * starting a recorder that nobody will ever stop.
+   */
+  const cancelledDuringStartRef = useRef<boolean>(false);
 
   // Web Audio API refs for live level analysis
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -91,13 +98,47 @@ export const useVoiceRecorder = () => {
   }, []);
 
   const startRecording = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    cancelledDuringStartRef.current = false;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error(
+        "Microphone access is not available. Make sure you're using a secure (HTTPS) connection."
+      );
+    }
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (err) {
+      const name = (err as DOMException)?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        throw new Error(
+          "Microphone access was denied. Please allow microphone access in your browser settings and try again."
+        );
+      }
+      if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        throw new Error("No microphone found. Please connect a microphone and try again.");
+      }
+      if (name === "NotReadableError" || name === "TrackStartError") {
+        throw new Error("Microphone is in use by another application. Please close it and try again.");
+      }
+      throw new Error("Could not access microphone. Please check your browser settings.");
+    }
+
+    // If stopAndGetRecording/cancelRecording was called while we were waiting for
+    // getUserMedia (e.g. pointer released before permission dialog resolved),
+    // abort cleanly instead of starting a recorder nobody will stop.
+    if (cancelledDuringStartRef.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+
     streamRef.current = stream;
     audioChunksRef.current = [];
     pauseAccumulatedRef.current = 0;
@@ -219,6 +260,9 @@ export const useVoiceRecorder = () => {
   const stopAndGetRecording = useCallback((): Promise<File | null> => {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === "inactive") {
+      // Recorder hasn't started yet (still awaiting getUserMedia) — flag the
+      // pending start so it aborts as soon as getUserMedia resolves.
+      cancelledDuringStartRef.current = true;
       return Promise.resolve(recording?.blob ?? null);
     }
     return new Promise<File | null>((resolve) => {
@@ -269,6 +313,8 @@ export const useVoiceRecorder = () => {
   }, [isRecording, isPaused]);
 
   const cancelRecording = useCallback(() => {
+    // Signal any pending getUserMedia to abort if it resolves late.
+    cancelledDuringStartRef.current = true;
     _stopTimer();
     _stopAnalyser();
     pendingStopResolveRef.current = null;

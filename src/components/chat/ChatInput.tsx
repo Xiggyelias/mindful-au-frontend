@@ -49,6 +49,8 @@ interface ChatInputProps {
   onVoicePause: () => void;
   onVoiceResume: () => void;
   onVoiceCancel: () => void;
+  /** Called when microphone access fails — show a user-facing error toast here. */
+  onVoiceError?: (error: Error) => void;
   onRemoveFile: () => void;
   onEmojiClick: (emojiData: { emoji: string }) => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
@@ -92,6 +94,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     onVoicePause,
     onVoiceResume,
     onVoiceCancel,
+    onVoiceError,
     onRemoveFile,
     onEmojiClick,
     fileInputRef,
@@ -119,8 +122,12 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       setMicState("recording");
       try {
         await onVoiceStart();
-      } catch {
+      } catch (err) {
         setMicState("idle");
+        holdStartYRef.current = null;
+        holdStartXRef.current = null;
+        holdPointerIdRef.current = null;
+        onVoiceError?.(err instanceof Error ? err : new Error("Could not access microphone."));
       }
     };
 
@@ -434,7 +441,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               )}
 
               {/* Mic button */}
-              <div className="relative">
+              {/* touch-action:none prevents mobile browsers from cancelling
+                  pointer events mid-gesture (scroll/zoom interference). */}
+              <div className="relative" style={{ touchAction: "none" }}>
                 <Button
                   type="button"
                   variant="secondary"
