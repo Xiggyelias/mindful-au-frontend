@@ -586,7 +586,7 @@ const StudentVideoCall = () => {
 
   const handleStartCall = useCallback(async () => {
     if (activeAppointment && isAppointmentAudioOnly(activeAppointment)) {
-      toast.message("This session is audio-only (anonymous or audio booking). Use Start audio call.");
+      toast.message("This session is audio-only. Use the audio call option to connect.");
       return;
     }
     await beginCall("video");

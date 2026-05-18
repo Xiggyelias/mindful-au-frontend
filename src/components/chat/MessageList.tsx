@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -186,6 +186,72 @@ export const MessageList: React.FC<MessageListProps> = ({
   const firstItemIndex = useVirtuosoFirstItemIndex(messages, conversationKey);
   const olderInflightRef = useRef(false);
 
+  // ── Plain DOM path scroll logic (messages.length <= 200) ────────────────
+  const NEAR_BOTTOM_THRESHOLD = 150;
+  const isNearBottomRef = useRef(true);
+  const prevMessageCountRef = useRef(0);
+  // Saved (scrollHeight - scrollTop) before older messages are prepended,
+  // so we can restore position after the DOM update.
+  const savedDistanceFromBottomRef = useRef<number | null>(null);
+
+  const handlePlainScroll = useCallback(() => {
+    const container = messageScrollAreaRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceToBottom = scrollHeight - clientHeight - scrollTop;
+    const nearBottom = distanceToBottom <= NEAR_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = nearBottom;
+    onAtBottomChange?.(nearBottom);
+  }, [messageScrollAreaRef, onAtBottomChange]);
+
+  // Save scroll anchor before older messages load (fires before paint).
+  useLayoutEffect(() => {
+    if (messages.length > 200) return;
+    if (isLoadingOlderMessages) {
+      const container = messageScrollAreaRef.current;
+      if (container) {
+        savedDistanceFromBottomRef.current =
+          container.scrollHeight - container.scrollTop;
+      }
+    }
+  }, [isLoadingOlderMessages, messages.length, messageScrollAreaRef]);
+
+  // Restore scroll anchor after older messages are prepended.
+  useLayoutEffect(() => {
+    if (messages.length > 200) return;
+    if (!isLoadingOlderMessages && savedDistanceFromBottomRef.current !== null) {
+      const container = messageScrollAreaRef.current;
+      if (container) {
+        container.scrollTop =
+          container.scrollHeight - savedDistanceFromBottomRef.current;
+      }
+      savedDistanceFromBottomRef.current = null;
+    }
+  }, [isLoadingOlderMessages, messages.length, messageScrollAreaRef]);
+
+  // Reset per-session scroll tracking when the conversation changes.
+  useEffect(() => {
+    prevMessageCountRef.current = 0;
+    isNearBottomRef.current = true;
+    savedDistanceFromBottomRef.current = null;
+  }, [conversationKey]);
+
+  // Auto-scroll to bottom when new messages arrive (or on first load).
+  useEffect(() => {
+    if (messages.length > 200) return;
+    const isInitialLoad =
+      prevMessageCountRef.current === 0 && messages.length > 0;
+    const hasNewMessages = messages.length > prevMessageCountRef.current;
+    if (isInitialLoad || (hasNewMessages && isNearBottomRef.current)) {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollIntoView({
+          behavior: isInitialLoad ? "auto" : "smooth",
+        });
+      });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length, scrollRef]);
+
   const typingLabel =
     activeSession?.assigned_role === "peer_counselor" && Number(activeSession?.peer_counselor_id) > 0
       ? "Peer supporter is typing…"
@@ -299,7 +365,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   // This keeps student/counselor threads visible even when Virtuoso state drifts.
   if (messages.length <= 200) {
     return (
-      <div ref={messageScrollAreaRef} className="flex-1 relative overflow-auto flex flex-col min-h-0">
+      <div ref={messageScrollAreaRef} onScroll={handlePlainScroll} className="flex-1 relative overflow-auto flex flex-col min-h-0">
         <div className="px-4 pt-3 lg:px-6">
           {hasOlderMessages && (
             <div className="flex justify-center pb-4 pt-2">

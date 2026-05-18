@@ -488,7 +488,7 @@ const StudentAppointments = () => {
         }
         await api.createAppointment({
           ...basePayload,
-          notes: form.mode === "physical" ? "Physical" : "Online",
+          notes: sessionNotes,
         });
       }
       toast({ title: "Appointment booked!" });
@@ -863,7 +863,9 @@ const StudentAppointments = () => {
                         setForm((prev) => ({
                           ...prev,
                           is_anonymous: Boolean(checked),
-                          ...(prev.mode === "online" && checked ? { online_media: "audio" as const } : {}),
+                          ...(prev.mode === "online"
+                            ? { online_media: checked ? ("audio" as const) : ("video" as const) }
+                            : {}),
                         }))
                       }
                     />
