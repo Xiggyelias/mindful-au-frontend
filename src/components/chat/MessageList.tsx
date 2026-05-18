@@ -203,10 +203,13 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   if (isLoading && messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm font-medium text-muted-foreground">Loading conversation...</p>
+      <div className="flex-1 p-6">
+        <div className="space-y-4 animate-pulse">
+          {Array.from({ length: 6 }, (_, idx) => (
+            <div key={idx} className={cn("flex", idx % 2 === 0 ? "justify-start" : "justify-end")}>
+              <div className={cn("h-14 rounded-3xl bg-slate-200/80", idx % 2 === 0 ? "w-2/3" : "w-1/2")} />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -237,18 +240,21 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-md w-full text-center space-y-6">
-          <div className="inline-flex rounded-[2rem] border border-primary/10 bg-primary/10 p-5">
-            <Shield className="h-12 w-12 text-primary" />
+      <div className="relative flex-1 overflow-hidden p-8">
+        <div className="pointer-events-none absolute -left-16 top-16 h-48 w-48 rounded-full bg-emerald-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-8 right-10 h-56 w-56 rounded-full bg-sky-300/20 blur-3xl" />
+        <div className="relative mx-auto flex h-full max-w-lg items-center justify-center">
+          <div className="w-full rounded-[2rem] border border-slate-200/70 bg-white/75 p-8 text-center shadow-xl backdrop-blur-sm dark:bg-slate-900/55">
+          <div className="mx-auto mb-4 inline-flex rounded-[1.75rem] border border-emerald-200/70 bg-emerald-100/80 p-5 shadow-sm">
+            <Shield className="h-10 w-10 text-emerald-700 animate-pulse" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-2xl font-display font-bold tracking-tight">Your Safe Space</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              This space is private and supportive. What would you like to talk about today?
+            <h3 className="text-2xl font-display font-bold tracking-tight text-slate-900 dark:text-slate-50">Start a Safe Conversation</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Select a student conversation to begin. This private channel is designed for calm, supportive, secure communication.
             </p>
           </div>
-          <div className="grid gap-3 pt-4">
+          <div className="grid gap-3 pt-5">
             {(
               [
                 {
@@ -282,6 +288,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 </p>
               )
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -324,10 +331,10 @@ export const MessageList: React.FC<MessageListProps> = ({
               <div className="h-2 shrink-0" aria-hidden />
             ),
           Footer: () => (
-            <div className="space-y-6 pb-6">
+            <div className="space-y-6 pb-6 motion-reduce:animate-none">
               {isPeerTyping && (
-                <div className="flex items-center gap-3 px-4 lg:px-6 animate-in fade-in slide-in-from-left-2 duration-500">
-                  <div className="flex gap-1 p-3 rounded-full bg-secondary/50 border border-border/50">
+                <div className="flex items-center gap-3 px-4 lg:px-6 animate-in fade-in slide-in-from-left-2 duration-500 motion-reduce:animate-none">
+                  <div className="flex gap-1 rounded-full border border-emerald-200/60 bg-emerald-50/80 p-3 dark:bg-emerald-950/35">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
                     <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
                     <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
@@ -351,7 +358,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           const isDeleting = deletingMessageIds.has(msg.id);
 
           return (
-            <div className="px-4 lg:px-6 pb-6 animate-in slide-in-from-bottom-2 duration-300">
+            <div className="animate-in slide-in-from-bottom-2 px-4 pb-6 duration-300 motion-reduce:animate-none lg:px-6">
               <MessageBubble
                 msg={msg}
                 isMe={isMe}
@@ -371,7 +378,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         <Button
           size="icon"
           variant="secondary"
-          className="absolute bottom-6 right-6 h-10 w-10 rounded-full shadow-2xl border border-border/50 animate-in zoom-in fade-in duration-300 z-40 hover:scale-110 transition-transform"
+          className="absolute bottom-6 right-6 z-40 h-10 w-10 rounded-full border border-border/50 shadow-2xl animate-in zoom-in fade-in duration-300 transition-transform hover:scale-110 motion-reduce:animate-none motion-reduce:transition-none"
           onClick={scrollToBottom}
           aria-label="Scroll to bottom of messages"
         >

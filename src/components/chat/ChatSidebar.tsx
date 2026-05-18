@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Session, isSessionExpired } from "@/hooks/useChatSession";
 import { 
   Search, 
@@ -9,7 +9,10 @@ import {
   ChevronLeft, 
   ChevronRight,
   MoreVertical,
-  Plus
+  Plus,
+  Pin,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
@@ -79,7 +82,31 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onPrevSessionPage,
   ownerUserId,
 }) => {
+  const [conversationFilter, setConversationFilter] = useState<"all" | "unread" | "active" | "pinned" | "archived">("all");
+  const [pinnedSessionIds, setPinnedSessionIds] = useState<number[]>([]);
+  const [archivedSessionIds, setArchivedSessionIds] = useState<number[]>([]);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SIDEBAR_PREFS_KEY = "student_chat_sidebar_prefs_v1";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_PREFS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { pinned?: number[]; archived?: number[] };
+      if (Array.isArray(parsed?.pinned)) setPinnedSessionIds(parsed.pinned.map(Number).filter(Number.isFinite));
+      if (Array.isArray(parsed?.archived)) setArchivedSessionIds(parsed.archived.map(Number).filter(Number.isFinite));
+    } catch {
+      // Ignore local preference parsing failures.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_PREFS_KEY, JSON.stringify({ pinned: pinnedSessionIds, archived: archivedSessionIds }));
+    } catch {
+      // Ignore local preference persistence failures.
+    }
+  }, [pinnedSessionIds, archivedSessionIds]);
 
   const handleRowMouseEnter = (sessionId: string) => {
     console.log('[preload] hover start - sessionId:', sessionId);
@@ -199,32 +226,92 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return rows;
   }, [visibleSessions]);
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredRecentSupportRows = useMemo(() => {
+    return recentSupportRows.filter(({ session, unreadCount }) => {
+      const sessionNumericId = Number(session.id);
+      const isArchived = archivedSessionIds.includes(sessionNumericId);
+      const isPinned = pinnedSessionIds.includes(sessionNumericId);
+      const name = (
+        session.counselor?.profile?.full_name ||
+        session.peer_counselor?.profile?.full_name ||
+        "Counselor"
+      ).toLowerCase();
+      const bySearch = normalizedQuery === "" || name.includes(normalizedQuery);
+      if (!bySearch) return false;
+      if (conversationFilter === "archived") return isArchived;
+      if (isArchived) return false;
+      if (conversationFilter === "pinned") return isPinned;
+      if (conversationFilter === "unread") return unreadCount > 0;
+      if (conversationFilter === "active") return Boolean(session.is_active);
+      return true;
+    });
+  }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds]);
+
+  const filteredCounselors = useMemo(() => {
+    return counselors.filter((c) =>
+      normalizedQuery === "" ||
+      String(c?.profile?.full_name || "Counselor").toLowerCase().includes(normalizedQuery)
+    );
+  }, [counselors, normalizedQuery]);
+
+  const counselorSkeletons = Array.from({ length: 4 }, (_, idx) => idx);
+  const hasRecentSupport = filteredRecentSupportRows.length > 0;
+  const hasAvailableCounselors = filteredCounselors.length > 0;
+
   return (
-    <div className="flex h-full w-full flex-col border-r border-border/50 bg-background">
-      <div className="space-y-5 p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-display font-bold tracking-tight">Conversations</h2>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More options">
-            <MoreVertical className="h-4 w-4" />
+    <div className="flex h-full w-full flex-col bg-gradient-to-b from-slate-50/90 via-background to-emerald-50/40">
+      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/80 px-4 pb-4 pt-4 backdrop-blur-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-display font-bold tracking-tight text-slate-900 dark:text-slate-100">Counseling Inbox</h2>
+            <p className="text-xs text-muted-foreground">Safe, private and real-time support</p>
+          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl border border-border/50 bg-white/80 shadow-sm" aria-label="More options">
+            <MoreVertical className="h-4 w-4 text-slate-600" />
           </Button>
         </div>
 
         <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
           <Input 
-            placeholder="Search counselors..." 
-            className="h-11 rounded-2xl border-border/60 bg-secondary/20 pl-10 focus-visible:ring-2 focus-visible:ring-primary/10"
+            placeholder="Search by counselor or session..." 
+            className="h-11 rounded-2xl border-slate-200/80 bg-white/90 pl-10 shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+        <div className="mt-3 flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/80 p-1">
+          {[
+            { id: "all", label: "All" },
+            { id: "unread", label: "Unread" },
+            { id: "active", label: "Active" },
+            { id: "pinned", label: "Pinned" },
+            { id: "archived", label: "Archived" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setConversationFilter(tab.id as "all" | "unread" | "active" | "pinned" | "archived")}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                conversationFilter === tab.id
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100"
+              )}
+              aria-pressed={conversationFilter === tab.id}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         <div
           className={cn(
-            "flex items-center justify-between rounded-2xl border p-3 transition-colors",
+            "mt-4 flex items-center justify-between rounded-2xl border p-3 shadow-sm transition-colors",
             anonymousStartMode
-              ? "border-red-600 bg-black text-white shadow-[inset_0_0_0_1px_rgba(220,38,38,0.35)]"
-              : "border-primary/10 bg-primary/5"
+              ? "border-rose-700 bg-slate-950 text-white shadow-[inset_0_0_0_1px_rgba(190,24,93,0.4)]"
+              : "border-emerald-200/80 bg-emerald-50/70"
           )}
         >
           <div className="flex items-center gap-2">
@@ -249,20 +336,20 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="px-3 pb-6 space-y-8">
+        <div className="space-y-8 px-3 pb-8 pt-4">
           <div className="space-y-2">
-            <div className="px-3 flex items-center justify-between">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Recent Support</h3>
+            <div className="flex items-center justify-between px-3">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/70">Recent Support</h3>
               {sessionTotalPages > 1 && (
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevSessionPage} disabled={sessionPage === 1} aria-label="Previous sessions page"><ChevronLeft className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextSessionPage} disabled={sessionPage === sessionTotalPages} aria-label="Next sessions page"><ChevronRight className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg" onClick={onPrevSessionPage} disabled={sessionPage === 1} aria-label="Previous sessions page"><ChevronLeft className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg" onClick={onNextSessionPage} disabled={sessionPage === sessionTotalPages} aria-label="Next sessions page"><ChevronRight className="h-3 w-3" /></Button>
                 </div>
               )}
             </div>
             
             <div className="space-y-1">
-              {recentSupportRows.map(({ session, totalSessions, counselorId, unreadCount }) => {
+              {filteredRecentSupportRows.map(({ session, totalSessions, counselorId, unreadCount }) => {
                 const name =
                   session.counselor?.profile?.full_name ||
                   session.peer_counselor?.profile?.full_name ||
@@ -270,6 +357,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const isActive = activeSession?.id === session.id;
                 const isPeer = session.assigned_role === "peer_counselor";
                 const isAnon = isAnonymousSessionFlag(session.is_anonymous);
+                const sessionNumericId = Number(session.id);
+                const isPinned = pinnedSessionIds.includes(sessionNumericId);
+                const isArchived = archivedSessionIds.includes(sessionNumericId);
 
                 const handleRowClick = () => {
                   // Anonymous rows must always open a brand-new chat session so
@@ -290,6 +380,22 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   }
                   onSelectSession(String(session.id));
                 };
+                const togglePin = (e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.stopPropagation();
+                  setPinnedSessionIds((prev) =>
+                    prev.includes(sessionNumericId)
+                      ? prev.filter((id) => id !== sessionNumericId)
+                      : [...prev, sessionNumericId]
+                  );
+                };
+                const toggleArchive = (e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.stopPropagation();
+                  setArchivedSessionIds((prev) =>
+                    prev.includes(sessionNumericId)
+                      ? prev.filter((id) => id !== sessionNumericId)
+                      : [...prev, sessionNumericId]
+                  );
+                };
 
                 return (
                   <button
@@ -297,13 +403,14 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onClick={handleRowClick}
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
-                    className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-colors group ${
+                    className={`group w-full rounded-2xl border p-3 shadow-sm transition-all duration-200 ${
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "hover:bg-secondary/50 text-foreground"
+                        ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
+                        : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
                     }`}
                   >
-                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ${
+                    <div className="flex items-center gap-3">
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ring-2 ring-white/50 ${
                       isActive ? "bg-white/20" : getUserColor(name) + " text-white"
                     }`}>
                       {getInitials(name)}
@@ -317,24 +424,48 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                           </span>
                         </p>
                       </div>
-                      <p className="text-[10px] uppercase font-black tracking-widest opacity-60 flex items-center gap-1">
+                      <p className="text-[10px] uppercase font-black tracking-widest opacity-70 flex items-center gap-1">
                         {isPeer && <Users className="h-2.5 w-2.5" />}
                         {isPeer ? "Peer Support" : "Professional"}
                         {isAnon ? " \u2022 Anon" : ""}
+                        {isPinned ? " \u2022 Pinned" : ""}
+                        {isArchived ? " \u2022 Archived" : ""}
                       </p>
                     </div>
-                    {unreadCount > 0 && (
-                      <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm shrink-0">
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </span>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {unreadCount > 0 && (
+                        <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm shrink-0">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={togglePin}
+                        className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isPinned && "text-emerald-700")}
+                        aria-label={isPinned ? "Unpin conversation" : "Pin conversation"}
+                      >
+                        <Pin className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleArchive}
+                        className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isArchived && "text-amber-700")}
+                        aria-label={isArchived ? "Restore conversation" : "Archive conversation"}
+                      >
+                        {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   </button>
                 );
               })}
-              {visibleSessions.length === 0 && (
-                <div className="p-8 text-center space-y-2">
-                  <MessageSquare className="h-8 w-8 text-muted-foreground/20 mx-auto" />
-                  <p className="text-xs font-medium text-muted-foreground">No sessions yet</p>
+              {!hasRecentSupport && (
+                <div className="rounded-2xl border border-dashed border-slate-300/70 bg-white/70 p-5 text-center shadow-sm">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
+                    <MessageSquare className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">No active sessions yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Students will appear here once connected.</p>
                 </div>
               )}
             </div>
@@ -342,26 +473,34 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
           <div className="space-y-4">
             <div className="px-3 flex items-center justify-between">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Available Now</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/70">Available Now</h3>
               {counselorTotalPages > 1 && (
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onPrevCounselorPage} disabled={counselorPage === 1} aria-label="Previous counselors page"><ChevronLeft className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onNextCounselorPage} disabled={counselorPage === counselorTotalPages} aria-label="Next counselors page"><ChevronRight className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg" onClick={onPrevCounselorPage} disabled={counselorPage === 1} aria-label="Previous counselors page"><ChevronLeft className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg" onClick={onNextCounselorPage} disabled={counselorPage === counselorTotalPages} aria-label="Next counselors page"><ChevronRight className="h-3 w-3" /></Button>
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
               {isCounselorsLoading ? (
-                <div className="flex flex-col items-center py-8 gap-3">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Finding counselors...</p>
-                </div>
+                counselorSkeletons.map((item) => (
+                  <div key={item} className="animate-pulse rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-slate-200/80" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-2/3 rounded bg-slate-200/80" />
+                        <div className="h-2 w-1/2 rounded bg-slate-200/70" />
+                      </div>
+                      <div className="h-8 w-8 rounded-full bg-slate-200/80" />
+                    </div>
+                  </div>
+                ))
               ) : (
-                counselors.map((counselor) => {
+                filteredCounselors.map((counselor) => {
                   const name = counselor.profile?.full_name || "Counselor";
                   return (
-                    <div key={counselor.id} className="rounded-2xl border border-border/50 bg-secondary/20 p-3 transition-colors group hover:border-primary/20">
+                    <div key={counselor.id} className="group rounded-2xl border border-slate-200/70 bg-white/85 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white">
                       <div className="flex items-center gap-3">
                         <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-xs text-white ${getUserColor(name)}`}>
                           {getInitials(name)}
@@ -376,7 +515,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-8 w-8 rounded-full bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all"
+                          className="h-8 w-8 rounded-full bg-emerald-100/80 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all"
                           onClick={() => onStartSession(counselor.id, anonymousStartMode)}
                           aria-label={`Start session with ${counselor.profile?.full_name || "counselor"}`}
                         >
@@ -387,8 +526,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   );
                 })
               )}
-              {!isCounselorsLoading && counselors.length === 0 && (
-                <p className="text-center text-xs text-muted-foreground py-8">No counselors found</p>
+              {!isCounselorsLoading && !hasAvailableCounselors && (
+                <div className="rounded-2xl border border-dashed border-slate-300/70 bg-white/70 p-5 text-center text-xs text-muted-foreground">
+                  No counselors found for this filter.
+                </div>
               )}
             </div>
           </div>

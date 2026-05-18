@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Shield,
@@ -15,6 +15,8 @@ import {
   Menu,
   ClipboardCheck,
   Lock,
+  Clock3,
+  Activity,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -110,6 +112,8 @@ const StudentChat = () => {
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [sessionNoteDraft, setSessionNoteDraft] = useState("");
 
   // Voice recording functionality
   const {
@@ -277,6 +281,39 @@ const StudentChat = () => {
   useEffect(() => {
     setDeletingMessageIds(new Set());
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setSessionNoteDraft("");
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(`student_chat_note_${sessionId}`);
+      setSessionNoteDraft(raw || "");
+    } catch {
+      setSessionNoteDraft("");
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      localStorage.setItem(`student_chat_note_${sessionId}`, sessionNoteDraft);
+    } catch {
+      // Ignore local notes persistence issues.
+    }
+  }, [sessionId, sessionNoteDraft]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setNotesOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -488,6 +525,29 @@ const StudentChat = () => {
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
 
+  const sessionDurationLabel = useMemo(() => {
+    if (!activeSession?.created_at) return "New session";
+    const started = new Date(activeSession.created_at);
+    if (Number.isNaN(started.getTime())) return "Session active";
+    const elapsedMs = Date.now() - started.getTime();
+    if (elapsedMs < 60_000) return "Just started";
+    const mins = Math.floor(elapsedMs / 60_000);
+    if (mins < 60) return `${mins}m in session`;
+    const hrs = Math.floor(mins / 60);
+    const rem = mins % 60;
+    return `${hrs}h ${rem}m in session`;
+  }, [activeSession?.created_at]);
+
+  const emotionalToneLabel = useMemo(() => {
+    const latest = [...messages].reverse().find((m) => (m.decryptedContent || m.content || "").trim() !== "");
+    const text = String(latest?.decryptedContent || latest?.content || "").toLowerCase();
+    if (!text) return "Calm";
+    if (/(panic|overwhelmed|anxious|stressed|urgent|fear|afraid|crisis)/.test(text)) return "Needs attention";
+    if (/(sad|down|tired|alone|depressed|low)/.test(text)) return "Low mood";
+    if (/(okay|thanks|better|good|great|hopeful|calm)/.test(text)) return "Stabilizing";
+    return "Calm";
+  }, [messages]);
+
   if (sessionExpired) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center 
@@ -502,7 +562,7 @@ const StudentChat = () => {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-background to-emerald-50/40">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
       <DashboardSidebar
         items={navItems}
         userType="student"
@@ -523,9 +583,9 @@ const StudentChat = () => {
           title="Something went wrong"
           description="The clinical chat encountered an unexpected error. This might be due to a connection issue or an encryption sync failure."
         >
-          <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:p-4">
+          <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:p-4 lg:gap-4">
             {/* Chat Sidebar */}
-            <div className="hidden w-72 shrink-0 xl:flex lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-sm lg:backdrop-blur">
+            <div className="hidden w-80 shrink-0 lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 lg:backdrop-blur">
               <ChatSidebar
                 sessions={sessions}
                 activeSession={activeSession}
@@ -552,7 +612,7 @@ const StudentChat = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background via-background to-slate-50/60 lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-sm">
+            <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background via-background to-slate-50/70 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35">
               {/* Session Expired - Check FIRST before any other UI */}
               {sessionExpired && (
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground text-sm">
@@ -571,7 +631,7 @@ const StudentChat = () => {
 
               {activeSession ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/90 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-4 lg:px-6">
+                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-4 lg:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
@@ -579,7 +639,7 @@ const StudentChat = () => {
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => selectSession(null)}>
                         <X className="h-5 w-5" />
                       </Button>
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">
                         {(activeSession.assigned_role === 'peer_counselor'
                           ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
                           : activeSession.counselor?.profile?.full_name || "Support")
@@ -602,6 +662,17 @@ const StudentChat = () => {
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                             {chatError ? "Chat error" : "Session active"}
                           </span>
+                          <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure E2E channel</span>
+                        </div>
+                        <div className="mt-1 hidden items-center gap-3 text-[10px] text-muted-foreground sm:flex">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3 className="h-3 w-3" />
+                            {sessionDurationLabel}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Activity className="h-3 w-3" />
+                            Mood: {emotionalToneLabel}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -619,35 +690,61 @@ const StudentChat = () => {
                       <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
                       </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="hidden rounded-full border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 lg:inline-flex"
+                        onClick={() => setNotesOpen((prev) => !prev)}
+                      >
+                        {notesOpen ? "Hide notes" : "Quick notes"}
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
                         <AlertTriangle className="h-5 w-5" />
                       </Button>
                     </div>
                   </div>
 
-                  {/* Message List */}
-                  <MessageList
-                    conversationKey={String(sessionId ?? "")}
-                    messages={messages}
-                    isLoading={messagesLoading}
-                    isLoadingOlderMessages={isLoadingOlderMessages}
-                    hasOlderMessages={hasOlderMessages}
-                    isAtBottom={isAtBottom}
-                    showScrollToBottom={showScrollToBottom}
-                    user={user}
-                    activeSession={activeSession}
-                    isPeerTyping={isPeerTyping}
-                    deletingMessageIds={deletingMessageIds}
-                    error={chatError}
-                    onAtBottomChange={handleAtBottomChange}
-                    onLoadOlder={async () => { await loadOlderMessages(); }}
-                    onDeleteMessage={handleDeleteMessageWrapper}
-                    onStarterPrompt={setMessage}
-                    scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                    messageScrollAreaRef={messageScrollAreaRef as any}
-                    scrollRef={scrollRef}
-                    onRetryLoad={() => {}}
-                  />
+                  <div className="flex min-h-0 flex-1">
+                    {/* Message List */}
+                    <div className="min-h-0 flex-1">
+                      <MessageList
+                        conversationKey={String(sessionId ?? "")}
+                        messages={messages}
+                        isLoading={messagesLoading}
+                        isLoadingOlderMessages={isLoadingOlderMessages}
+                        hasOlderMessages={hasOlderMessages}
+                        isAtBottom={isAtBottom}
+                        showScrollToBottom={showScrollToBottom}
+                        user={user}
+                        activeSession={activeSession}
+                        isPeerTyping={isPeerTyping}
+                        deletingMessageIds={deletingMessageIds}
+                        error={chatError}
+                        onAtBottomChange={handleAtBottomChange}
+                        onLoadOlder={async () => { await loadOlderMessages(); }}
+                        onDeleteMessage={handleDeleteMessageWrapper}
+                        onStarterPrompt={setMessage}
+                        scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                        messageScrollAreaRef={messageScrollAreaRef as any}
+                        scrollRef={scrollRef}
+                        onRetryLoad={() => {}}
+                      />
+                    </div>
+                    {notesOpen && (
+                      <aside className="hidden w-72 shrink-0 border-l border-slate-200/80 bg-slate-50/70 p-3 lg:flex lg:flex-col">
+                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quick Notes</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Private local note for this session.</p>
+                        <textarea
+                          value={sessionNoteDraft}
+                          onChange={(e) => setSessionNoteDraft(e.target.value)}
+                          placeholder="Capture key points, follow-up items, and tone..."
+                          className="mt-3 min-h-[180px] w-full flex-1 resize-none rounded-xl border border-slate-300/80 bg-white/90 p-3 text-sm outline-none ring-0 focus:border-emerald-300"
+                        />
+                        <p className="mt-2 text-[10px] text-muted-foreground">Shortcut: Ctrl/Cmd + Shift + N</p>
+                      </aside>
+                    )}
+                  </div>
 
                   {/* Chat Input */}
                   <ChatInput
@@ -698,7 +795,7 @@ const StudentChat = () => {
 
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-3 sm:p-4 xl:hidden">
+                <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto p-3 sm:p-4 lg:hidden">
                   <ChatSidebar
                     sessions={sessions}
                     activeSession={activeSession}
@@ -726,16 +823,44 @@ const StudentChat = () => {
               )}
               
               {!activeSession && (
-                 <div className="hidden xl:flex flex-1 flex-col items-center justify-center p-10 text-center animate-in fade-in zoom-in duration-700">
-                    <div className="mb-6 rounded-[2.5rem] border border-emerald-200/60 bg-gradient-to-br from-emerald-100 via-white to-slate-100 p-6 shadow-xl shadow-emerald-100/60">
-                      <Shield className="h-16 w-16 text-primary" />
+                 <div className="hidden lg:flex flex-1 flex-col items-center justify-center p-10 text-center animate-in fade-in zoom-in duration-700">
+                    <div className="mb-6 rounded-[2.5rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-100 via-white to-sky-100 p-6 shadow-xl shadow-emerald-100/60">
+                      <Shield className="h-16 w-16 text-emerald-700" />
                     </div>
-                    <h2 className="mb-2 text-2xl font-display font-bold tracking-tight xl:text-3xl">Start Your Conversation</h2>
-                    <p className="mx-auto mb-4 max-w-sm leading-relaxed text-muted-foreground">
-                      Choose an existing thread or begin a new chat to connect with a counselor in a secure, encrypted space.
+                    <h2 className="mb-2 text-2xl font-display font-bold tracking-tight xl:text-3xl">Welcome to Your Counseling Space</h2>
+                    <p className="mx-auto mb-3 max-w-md leading-relaxed text-muted-foreground">
+                      Select a student conversation from the left panel to begin a supportive real-time session.
                     </p>
-                    <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+                    <p className="mx-auto mb-5 max-w-md text-sm text-muted-foreground">
+                      No active sessions yet. Students will appear here once connected.
+                    </p>
+                    <div className="mb-4 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                       End-to-end encrypted support
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        className="rounded-xl bg-gradient-to-r from-emerald-600 to-primary px-5 text-white shadow-md shadow-emerald-300/30"
+                        onClick={() => {
+                          const firstCounselor = counselors[0];
+                          if (firstCounselor?.id) {
+                            handleStartSessionWrapper(firstCounselor.id, sidebarAnonymousChecked);
+                          } else {
+                            toast.message("No available counselor right now. Please refresh shortly.");
+                          }
+                        }}
+                      >
+                        Start Session
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl border-slate-300 bg-white/80"
+                        onClick={() => window.location.reload()}
+                      >
+                        Refresh Conversations
+                      </Button>
                     </div>
                  </div>
               )}

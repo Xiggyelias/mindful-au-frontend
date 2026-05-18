@@ -77,7 +77,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   };
 
   return (
-    <div className="border-t border-border/50 bg-background/95 p-4">
+    <div className="border-t border-border/60 bg-gradient-to-b from-background/80 to-background p-3 sm:p-4">
       <form onSubmit={onSubmit} className="space-y-4">
         {isUploading && (
           <div className="space-y-2 animate-in slide-in-from-bottom-2 duration-300">
@@ -109,9 +109,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
           </div>
         )}
 
-        <div className="flex items-end gap-3">
+        <div className="flex items-end gap-2 sm:gap-3">
           <div
-            className={`flex-1 relative flex bg-secondary/30 rounded-[2rem] border border-border/50 focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/5 transition-all duration-300 ${
+            className={`relative flex flex-1 rounded-[1.75rem] border border-slate-200/80 bg-white/85 shadow-lg shadow-slate-200/40 backdrop-blur-md transition-all duration-300 motion-reduce:transition-none focus-within:border-emerald-300 focus-within:ring-4 focus-within:ring-emerald-100/70 dark:border-slate-700/60 dark:bg-slate-900/70 ${
               isVoiceMode ? "items-stretch py-2 min-h-[5.25rem]" : "items-center"
             }`}
           >
@@ -183,23 +183,23 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     onTypingChange?.(nextMessage.trim().length > 0);
                   }}
                   onBlur={() => onTypingChange?.(false)}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-transparent border-none focus-visible:ring-0 h-12 text-base px-2"
+                  placeholder="Write a supportive message..."
+                  className="h-12 flex-1 border-none bg-transparent px-2 text-base focus-visible:ring-0"
                   disabled={isSending || false}
                 />
               </>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end pb-0.5">
             <Button
               type="button"
               variant={isVoiceMode ? "outline" : "secondary"}
               size="icon"
-              className={`h-12 w-12 rounded-full shadow-sm transition-all duration-300 ${
+              className={`h-12 w-12 rounded-full shadow-sm transition-all duration-300 motion-reduce:transition-none ${
                 isVoiceMode
                   ? "border-primary/40 text-primary hover:bg-primary/10"
-                  : "hover:bg-primary/10 hover:text-primary shadow-lg"
+                  : "bg-white/90 hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary shadow-lg"
               }`}
               onClick={onVoiceToggle}
               disabled={isSending}
@@ -211,7 +211,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(({
             <Button
               type="submit"
               size="icon"
-              className="h-12 w-12 rounded-full shadow-lg shadow-primary/20 transition-transform active:scale-95"
+              className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-500 to-primary shadow-lg shadow-emerald-300/40 transition-transform hover:-translate-y-0.5 active:scale-95 motion-reduce:transition-none"
               disabled={(!message.trim() && !selectedFile && !recording) || isSending || false}
               aria-label={isSending ? "Sending message" : "Send message"}
             >
