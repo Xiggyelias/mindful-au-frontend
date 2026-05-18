@@ -252,6 +252,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const counselorSkeletons = Array.from({ length: 4 }, (_, idx) => idx);
   const hasRecentSupport = filteredRecentSupportRows.length > 0;
+  const hasAnyRecentSupport = recentSupportRows.length > 0;
   const hasAvailableCounselors = filteredCounselors.length > 0;
 
   return (
@@ -476,6 +477,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     {conversationFilter === "pinned" && "Pin a conversation to keep it easy to find."}
                     {conversationFilter === "archived" && "Archived conversations can be restored anytime."}
                   </p>
+                  {hasAnyRecentSupport && conversationFilter !== "active" && (
+                    <div className="mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => setConversationFilter("active")}
+                      >
+                        View active conversations
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
