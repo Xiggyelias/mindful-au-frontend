@@ -37,6 +37,7 @@ import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndica
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
+import { useConfirm } from "@/hooks/useConfirm";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -75,6 +76,7 @@ const COUNSELOR_LIST_TIMEOUT_MS = 30000;
 const COUNSELOR_PAGE_SIZE = 24;
 
 const StudentChat = () => {
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -419,7 +421,13 @@ const StudentChat = () => {
   };
 
   const handleTriggerEmergency = async () => {
-    if (!window.confirm("Trigger emergency alert? Our crisis team will be notified immediately.")) return;
+    const ok = await confirm({
+      title: "Trigger emergency alert?",
+      description: "Our crisis team will be notified immediately.",
+      confirmLabel: "Send alert",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       setIsTriggeringEmergency(true);
 
@@ -516,7 +524,7 @@ const StudentChat = () => {
       const turningOn = checked && !sessionIsAnonymous;
       const turningOff = !checked && sessionIsAnonymous;
       if (turningOn || turningOff) {
-        const ok = window.confirm(
+        const ok = await confirm(
           turningOn
             ? "Turn on anonymous mode for this chat?\n\nOlder messages stay exactly as you sent them. New messages and activity use anonymous identity for your counselor. Continue?"
             : "Turn off anonymous mode for this chat?\n\nOlder anonymous messages stay in that context on your counselor's screen. Your real name applies to new activity in this thread. Continue?",
@@ -524,7 +532,7 @@ const StudentChat = () => {
         if (!ok) return;
       }
     } else if (sessionIsAnonymous && !checked) {
-      const ok = window.confirm(
+      const ok = await confirm(
         "Turning this off will show your real name to this counselor for active chats. Continue?",
       );
       if (!ok) return;

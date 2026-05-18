@@ -3,7 +3,6 @@ import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
 import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
 import { playMessageNotificationSound } from '@/lib/sounds/notificationSoundManager';
-import { toast } from 'sonner';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 
 export type E2EVisualState = 'plain';
@@ -85,6 +84,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const isInitializedRef = useRef(false);
   const sessionExpiredRef = useRef(false);
   const bootstrapRunningRef = useRef(false);
+  /** Tracks whether we have told the server "I am typing = true" so we know
+   *  when to send a cancellation on tab hide / page close. */
+  const isTypingRef = useRef(false);
+  /** Always reflects the current sessionId so event-listener closures can read
+   *  it without becoming stale. */
+  const sessionIdRef = useRef(sessionId);
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
@@ -99,6 +104,69 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     setError(null);
     setIsLoading(true);
   }, [sessionId]);
+
+  // Keep sessionIdRef in sync so page-unload listeners always have the current value.
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // When the session changes (user switches chat) or the component unmounts while
+  // the user was typing, immediately clear our typing state on the old session so
+  // the peer's indicator disappears straight away.
+  useEffect(() => {
+    return () => {
+      if (isTypingRef.current) {
+        const sid = sessionIdRef.current;
+        if (sid && !sessionExpiredRef.current) {
+          isTypingRef.current = false;
+          api.setTypingState(sid, false).catch(() => {});
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Clear typing state when the tab is hidden (switch / minimise) or the page is
+  // being destroyed (close / navigate away).  A regular fetch won't survive page
+  // teardown, so we use fetch({ keepalive: true }) which browsers guarantee to
+  // deliver even after the JS context is torn down.
+  useEffect(() => {
+    if (!sessionId || !hasValidUserId) return;
+
+    const sendStopTypingBeacon = () => {
+      if (!isTypingRef.current) return;
+      const sid = sessionIdRef.current;
+      if (!sid) return;
+      isTypingRef.current = false;
+      const base = api.getBaseUrl().replace(/\/$/, '');
+      const url = `${base}/sessions/${sid}/typing`;
+      const token = api.getToken();
+      // keepalive: true — browser queues this even after the document is gone.
+      fetch(url, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ is_typing: false }),
+      }).catch(() => {});
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        sendStopTypingBeacon();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', sendStopTypingBeacon);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', sendStopTypingBeacon);
+    };
+  }, [sessionId, hasValidUserId]);
 
   const stopRealtimeAndTimers = useCallback(() => {
     if (pollingTimeoutRef.current !== null) {
@@ -391,21 +459,16 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       });
       try {
         await api.deleteMessage(sessionId, messageId);
-      } catch (err) {
-        // Restore the message in the list so nothing is silently lost.
+      } catch {
+        // Restore the message so nothing is silently lost.
+        // No toast — the message reappearing in the list is sufficient feedback,
+        // and avoids spurious errors when the server rejects the delete (e.g.
+        // permission denied, already deleted, or network hiccup).
         if (removed) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === messageId)) return prev;
             return [...prev, removed!].sort((a, b) => a.id - b.id);
           });
-        }
-        // Suppress toast for permission-denied / method-not-allowed errors —
-        // e.g. students attempting to delete their own messages when the server
-        // doesn't permit it. The message is silently restored above either way.
-        const status =
-          (err as { response?: { status?: number } })?.response?.status ?? 0;
-        if (status !== 403 && status !== 405 && status !== 401) {
-          toast.error('Failed to delete message');
         }
       }
     },
@@ -415,6 +478,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const notifyTyping = useCallback(
     (isTyping: boolean) => {
       if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
+      isTypingRef.current = isTyping;
       api.setTypingState(sessionId, isTyping).catch(() => {});
     },
     [sessionId, hasValidUserId]

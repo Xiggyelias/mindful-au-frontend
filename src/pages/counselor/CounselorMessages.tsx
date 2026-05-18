@@ -43,6 +43,7 @@ import { CounselorMessageThread } from "@/components/chat/CounselorMessageThread
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   formatInDisplayZone,
   isThisYearInDisplayZone,
@@ -260,6 +261,7 @@ const getUserColor = (name: string) => {
 };
 
 const CounselorMessages = () => {
+  const { confirm, prompt } = useConfirm();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
@@ -1013,7 +1015,11 @@ const CounselorMessages = () => {
   const handleEscalateToCounselor = async () => {
     if (!selectedSessionId || !isPeerCounselor) return;
 
-    const confirmed = window.confirm("Escalate this case to a professional counselor now?");
+    const confirmed = await confirm({
+      title: "Escalate case?",
+      description: "Escalate this case to a professional counselor now?",
+      confirmLabel: "Escalate",
+    });
     if (!confirmed) return;
 
     try {
@@ -1034,10 +1040,13 @@ const CounselorMessages = () => {
   const handleFlagUrgent = async () => {
     if (!selectedSessionId || !isPeerCounselor || isFlaggingUrgent) return;
 
-    const reason = window.prompt(
-      "Describe the urgent concern (required). This will hand the case off to a counselor immediately:",
-      ""
-    );
+    const reason = await prompt({
+      title: "Flag urgent concern",
+      description: "Describe the urgent concern (required). This will hand the case off to a counselor immediately.",
+      inputPlaceholder: "Describe the concern…",
+      confirmLabel: "Flag urgent",
+      variant: "destructive",
+    });
     if (reason === null) return;
     const trimmed = reason.trim();
     if (trimmed.length < 5) {
@@ -1062,9 +1071,12 @@ const CounselorMessages = () => {
   const handleEmergencyEscalation = async () => {
     if (!selectedSessionId || isTriggeringEmergency) return;
 
-    const confirmed = window.confirm(
-      "Trigger emergency escalation for this conversation now? This sends immediate alerts."
-    );
+    const confirmed = await confirm({
+      title: "Trigger emergency escalation?",
+      description: "This will send immediate alerts to the crisis team.",
+      confirmLabel: "Trigger",
+      variant: "destructive",
+    });
     if (!confirmed) return;
 
     try {
@@ -1088,10 +1100,14 @@ const CounselorMessages = () => {
     if (!selectedSessionId || !selectedChat?.isAnonymous || isRevealingIdentity) {
       return;
     }
-    const reason = window.prompt(
-      "Provide reason for identity reveal (required for audit):",
-      "Emergency safeguarding assessment"
-    );
+    const reason = await prompt({
+      title: "Reveal anonymous identity",
+      description: "Provide reason for identity reveal (required for audit):",
+      inputPlaceholder: "Emergency safeguarding assessment",
+      defaultValue: "Emergency safeguarding assessment",
+      confirmLabel: "Reveal identity",
+      variant: "destructive",
+    });
     if (!reason || reason.trim().length < 5) {
       toast.error("A detailed reason is required (minimum 5 characters).");
       return;

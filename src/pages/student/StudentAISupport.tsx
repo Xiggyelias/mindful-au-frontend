@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo, type FormEvent } from "react";
+import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
@@ -16,6 +16,7 @@ import { useAIChat } from "@/hooks/useAIChat";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -264,6 +265,7 @@ const MoodCheck = ({ onSelect }: { onSelect: (mood: string) => void }) => {
 // MAIN COMPONENT
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const StudentAISupport = () => {
+  const { confirm } = useConfirm();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
@@ -302,14 +304,20 @@ const StudentAISupport = () => {
     setHasNewMessages(false);
   };
 
-  const handleResetChat = () => {
+  const handleResetChat = useCallback(async () => {
     if (messages.length === 0) return;
-    if (window.confirm("Are you sure you want to clear your conversation history?")) {
+    const ok = await confirm({
+      title: "Clear conversation?",
+      description: "Are you sure you want to clear your conversation history?",
+      confirmLabel: "Clear",
+      variant: "destructive",
+    });
+    if (ok) {
       clearMessages();
       setShowMoodCheck(true);
       toast.success("Conversation cleared");
     }
-  };
+  }, [clearMessages, confirm, messages.length]);
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -470,7 +478,7 @@ const StudentAISupport = () => {
                     variant="ghost"
                     size="icon"
                     className="rounded-full h-8 w-8 hover:bg-rose-500/10 text-rose-400"
-                    onClick={handleResetChat}
+                    onClick={() => { void handleResetChat(); }}
                     title="Reset Conversation"
                   >
                     <Zap className="h-4 w-4" />

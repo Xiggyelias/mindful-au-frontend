@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
@@ -59,6 +60,7 @@ const formatTimestamp = (value?: string | null): string => {
 };
 
 const AdminAIReports = () => {
+  const { confirm } = useConfirm();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
@@ -171,9 +173,13 @@ const AdminAIReports = () => {
   };
 
   const handleDeleteReport = async (id: number) => {
-    if (!window.confirm("Delete this report? This action cannot be undone.")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete report?",
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
 
     try {
       setDeletingReportId(id);

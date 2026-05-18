@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -55,6 +56,7 @@ const formatStaffRole = (role: string | null) => {
 };
 
 const AdminCounselors = () => {
+  const { confirm } = useConfirm();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Admin";
@@ -116,7 +118,12 @@ const AdminCounselors = () => {
   };
 
   const handleReject = async (id: number) => {
-    const confirmed = window.confirm("Remove this staff account?");
+    const confirmed = await confirm({
+      title: "Remove staff account?",
+      description: "This will revoke access for this staff member.",
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
     if (!confirmed) return;
 
     try {
@@ -155,9 +162,12 @@ const AdminCounselors = () => {
   const handleRejectSelected = async () => {
     if (selectedIds.size === 0) return;
 
-    const confirmed = window.confirm(
-      `Remove ${selectedIds.size} selected staff account(s)?`
-    );
+    const confirmed = await confirm({
+      title: `Remove ${selectedIds.size} staff account${selectedIds.size === 1 ? "" : "s"}?`,
+      description: "This will revoke access for the selected staff members.",
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
     if (!confirmed) return;
 
     try {

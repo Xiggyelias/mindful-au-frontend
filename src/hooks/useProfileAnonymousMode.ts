@@ -11,12 +11,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { isProfileAnonymousMode } from "@/lib/anonymousMode";
 import {
-  confirmProfileAnonymousModeTransition,
+  PROFILE_ANON_MODE_OFF_CONFIRMATION,
   getProfileAnonymousModeSuccessTitle,
   PROFILE_ANON_MODE_TOAST_DESCRIPTION,
   PROFILE_ANON_MODE_UPDATE_ERROR,
 } from "@/lib/profileAnonymousMode";
 import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
+import { useConfirm } from "@/hooks/useConfirm";
 
 export interface UseProfileAnonymousModeReturn {
   /** Current profile-level anonymous mode derived from `user.profile.anonymous_mode`. */
@@ -33,6 +34,7 @@ export interface UseProfileAnonymousModeReturn {
 
 export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
   const { user, refreshUser } = useAuth();
+  const { confirm } = useConfirm();
   const [isSaving, setIsSaving] = useState(false);
 
   const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
@@ -41,8 +43,10 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
     async (nextChecked: boolean) => {
       if (!user?.id || isSaving) return;
 
-      if (!confirmProfileAnonymousModeTransition(user.profile?.anonymous_mode, nextChecked)) {
-        return;
+      const current = isProfileAnonymousMode(user.profile?.anonymous_mode);
+      if (current && !nextChecked) {
+        const ok = await confirm(PROFILE_ANON_MODE_OFF_CONFIRMATION);
+        if (!ok) return;
       }
 
       setIsSaving(true);
@@ -60,7 +64,7 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
         setIsSaving(false);
       }
     },
-    [isSaving, refreshUser, user?.id, user?.profile?.anonymous_mode],
+    [confirm, isSaving, refreshUser, user?.id, user?.profile?.anonymous_mode],
   );
 
   return {

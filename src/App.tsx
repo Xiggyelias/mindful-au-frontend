@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { BandwidthProvider } from "@/hooks/useBandwidthMode";
+import { ConfirmDialogProvider } from "@/hooks/useConfirm";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
@@ -96,6 +97,7 @@ const App = () => (
             }}
           >
             <AuthProvider>
+              <ConfirmDialogProvider>
               <ChatIncomingNotificationHost />
               <PushNotificationPrompt />
               <PwaInstallBanner />
@@ -368,6 +370,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+              </ConfirmDialogProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>
