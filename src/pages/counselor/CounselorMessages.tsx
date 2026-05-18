@@ -1313,7 +1313,7 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-220px)]">
+                <ScrollArea className="h-[calc(100vh-220px)] pr-3">
                   {!isLoadingChats && filteredChats.length === 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">
                       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
@@ -1336,7 +1336,7 @@ const CounselorMessages = () => {
                             }
                           }}
                           className={cn(
-                            "flex cursor-pointer items-center gap-3 border-b border-slate-100 dark:border-slate-800/40 px-4 py-3.5 transition-colors outline-none",
+                            "flex cursor-pointer items-center gap-3 border-b border-slate-100 dark:border-slate-800/40 pl-4 pr-6 py-3.5 transition-colors outline-none",
                             isActive
                               ? "bg-slate-100/90 dark:bg-slate-800/60"
                               : "hover:bg-slate-50/70 dark:hover:bg-slate-800/25"
