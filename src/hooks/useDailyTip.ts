@@ -109,8 +109,13 @@ export const useDailyTip = () => {
       let nextTip = await api.getWellnessTip();
 
       if (!nextTip) {
-        const tips = await api.getTips();
-        nextTip = pickFallbackTipForRole(tips, role);
+        // /tips is admin-managed in some environments.
+        // Avoid surfacing "Admin access required" to non-admin dashboards.
+        const canReadTipsLibrary = role === "admin";
+        if (canReadTipsLibrary) {
+          const tips = await api.getTips();
+          nextTip = pickFallbackTipForRole(tips, role);
+        }
       }
 
       applyTip(nextTip);
