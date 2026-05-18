@@ -15,8 +15,6 @@ import {
   Menu,
   ClipboardCheck,
   Lock,
-  Clock3,
-  Activity,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -490,29 +488,6 @@ const StudentChat = () => {
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
 
-  const sessionDurationLabel = useMemo(() => {
-    if (!activeSession?.created_at) return "New session";
-    const started = new Date(activeSession.created_at);
-    if (Number.isNaN(started.getTime())) return "Session active";
-    const elapsedMs = Date.now() - started.getTime();
-    if (elapsedMs < 60_000) return "Just started";
-    const mins = Math.floor(elapsedMs / 60_000);
-    if (mins < 60) return `${mins}m in session`;
-    const hrs = Math.floor(mins / 60);
-    const rem = mins % 60;
-    return `${hrs}h ${rem}m in session`;
-  }, [activeSession?.created_at]);
-
-  const emotionalToneLabel = useMemo(() => {
-    const latest = [...messages].reverse().find((m) => (m.decryptedContent || m.content || "").trim() !== "");
-    const text = String(latest?.decryptedContent || latest?.content || "").toLowerCase();
-    if (!text) return "Calm";
-    if (/(panic|overwhelmed|anxious|stressed|urgent|fear|afraid|crisis)/.test(text)) return "Needs attention";
-    if (/(sad|down|tired|alone|depressed|low)/.test(text)) return "Low mood";
-    if (/(okay|thanks|better|good|great|hopeful|calm)/.test(text)) return "Stabilizing";
-    return "Calm";
-  }, [messages]);
-
   if (sessionExpired) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center 
@@ -628,16 +603,6 @@ const StudentChat = () => {
                             {chatError ? "Chat error" : "Session active"}
                           </span>
                           <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure E2E channel</span>
-                        </div>
-                        <div className="mt-1 hidden items-center gap-3 text-[10px] text-muted-foreground sm:flex">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock3 className="h-3 w-3" />
-                            {sessionDurationLabel}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Activity className="h-3 w-3" />
-                            Mood: {emotionalToneLabel}
-                          </span>
                         </div>
                       </div>
                     </div>

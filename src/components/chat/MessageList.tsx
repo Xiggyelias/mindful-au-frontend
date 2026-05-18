@@ -295,6 +295,82 @@ export const MessageList: React.FC<MessageListProps> = ({
     );
   }
 
+  // Reliability fallback: avoid virtualization glitches on common chat sizes.
+  // This keeps student/counselor threads visible even when Virtuoso state drifts.
+  if (messages.length <= 200) {
+    return (
+      <div ref={messageScrollAreaRef} className="flex-1 relative overflow-auto flex flex-col min-h-0">
+        <div className="px-4 pt-3 lg:px-6">
+          {hasOlderMessages && (
+            <div className="flex justify-center pb-4 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void onLoadOlder()}
+                disabled={isLoadingOlderMessages}
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
+                aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
+              >
+                {isLoadingOlderMessages ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                ) : (
+                  <MessageSquare className="h-3 w-3 mr-2" />
+                )}
+                {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
+              </Button>
+            </div>
+          )}
+          {messages.map((msg, idx) => {
+            const prev = idx > 0 ? messages[idx - 1] ?? null : null;
+            const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
+            const timeLabel = formatTimeLabel(msg.created_at);
+            const showTime = idx === 0 || !prev || formatTimeLabel(prev.created_at) !== timeLabel;
+            const isDeleting = deletingMessageIds.has(msg.id);
+            return (
+              <div key={msg.id} className="animate-in slide-in-from-bottom-2 pb-6 duration-300 motion-reduce:animate-none">
+                <MessageBubble
+                  msg={msg}
+                  isMe={isMe}
+                  showTime={showTime}
+                  timeLabel={timeLabel}
+                  isDeleting={isDeleting}
+                  onDeleteMessage={onDeleteMessage}
+                  onRetryDecrypt={onRetryDecrypt}
+                  onResyncDevice={onResyncDevice}
+                />
+              </div>
+            );
+          })}
+          {isPeerTyping && (
+            <div className="flex items-center gap-3 pb-4 animate-in fade-in slide-in-from-left-2 duration-500 motion-reduce:animate-none">
+              <div className="flex gap-1 rounded-full border border-emerald-200/60 bg-emerald-50/80 p-3 dark:bg-emerald-950/35">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                {typingLabel}
+              </span>
+            </div>
+          )}
+          <div ref={scrollRef} className="h-px w-full" />
+        </div>
+
+        {showScrollToBottom && (
+          <Button
+            size="icon"
+            variant="secondary"
+            className="absolute bottom-6 right-6 z-40 h-10 w-10 rounded-full border border-border/50 shadow-2xl animate-in zoom-in fade-in duration-300 transition-transform hover:scale-110 motion-reduce:animate-none motion-reduce:transition-none"
+            onClick={scrollToBottom}
+            aria-label="Scroll to bottom of messages"
+          >
+            <ArrowDown className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div ref={messageScrollAreaRef} className="flex-1 relative overflow-hidden flex flex-col min-h-0">
       <Virtuoso
