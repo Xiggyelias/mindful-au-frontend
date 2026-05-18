@@ -1204,13 +1204,22 @@ const CounselorMessages = () => {
   const renderMessageContent = useCallback((msg: ChatMessage, isOutgoing: boolean) => {
     if (messageIsAttachmentFirst(msg)) {
       const isThisUpload = msg.id === currentUploadTempIdRef.current;
+      const isDeletingThis = deletingMessageIds.has(msg.id);
       return (
         <ChatAttachmentView
           message={msg}
           isOutgoing={isOutgoing}
           uploadProgress={isThisUpload ? uploadProgress : 0}
+          isDeleting={isDeletingThis}
           onRetry={msg.uploadFailed ? () => void handleRetryVoiceUpload(msg.id) : undefined}
-          onDelete={msg.uploadFailed ? () => handleDeleteOptimistic(msg.id) : undefined}
+          onDelete={
+            msg.uploadFailed
+              ? () => handleDeleteOptimistic(msg.id)
+              // Server-saved attachment: allow deletion for outgoing messages if moderation is allowed
+              : isOutgoing && canModerateChat && msg.id > 0 && !msg.isUploading
+              ? () => void handleDeleteMessage(msg.id)
+              : undefined
+          }
         />
       );
     }
@@ -1221,7 +1230,7 @@ const CounselorMessages = () => {
 
     const content = msg.decryptedContent || msg.content || "";
     return <p>{content}</p>;
-  }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic]);
+  }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic, handleDeleteMessage, deletingMessageIds, canModerateChat]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">

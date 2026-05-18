@@ -17,11 +17,13 @@ type ChatAttachmentViewProps = {
   message: ChatMessage;
   isOutgoing: boolean;
   uploadProgress?: number;
+  /** True while a delete API call for this message is in-flight. */
+  isDeleting?: boolean;
   onRetry?: () => void;
   onDelete?: () => void;
 };
 
-export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 0, onRetry, onDelete }: ChatAttachmentViewProps) {
+export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 0, isDeleting = false, onRetry, onDelete }: ChatAttachmentViewProps) {
   const [downloading, setDownloading] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -252,6 +254,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         isUploading={msg.isUploading}
         uploadProgress={uploadProgress}
         uploadFailed={msg.uploadFailed}
+        isDeleting={isDeleting}
         onRetry={onRetry}
         onDelete={onDelete}
       />

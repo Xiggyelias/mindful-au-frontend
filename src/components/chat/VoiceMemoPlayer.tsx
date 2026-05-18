@@ -50,6 +50,8 @@ export interface VoiceMemoPlayerProps {
   isUploading?: boolean;
   uploadProgress?: number;
   uploadFailed?: boolean;
+  /** True while a delete request is in-flight. */
+  isDeleting?: boolean;
   onRetry?: () => void;
   onDelete?: () => void;
 }
@@ -64,6 +66,7 @@ export function VoiceMemoPlayer({
   isUploading = false,
   uploadProgress = 0,
   uploadFailed = false,
+  isDeleting = false,
   onRetry,
   onDelete,
 }: VoiceMemoPlayerProps) {
@@ -387,7 +390,7 @@ export function VoiceMemoPlayer({
   // ── Normal playback ───────────────────────────────────────────────────────
   return (
     <div className={cn(
-      "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
+      "group flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
       isOutgoing ? "bg-primary text-primary-foreground" : "border border-border/50 bg-muted/30",
       "shadow-sm animate-voice-bubble-in",
       className
@@ -458,24 +461,46 @@ export function VoiceMemoPlayer({
           })}
         </div>
 
-        {/* Time + speed */}
-        <div className="flex items-center justify-between">
+        {/* Time + speed + optional delete */}
+        <div className="flex items-center justify-between gap-1">
           <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
             {playing || current > 0
               ? formatPlayTime(current)
               : duration > 0 ? formatPlayTime(duration) : "—:——"}
           </span>
-          <button
-            type="button"
-            onClick={cycleSpeed}
-            aria-label={`Playback speed ${speed}×, tap to change`}
-            className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums transition-colors duration-150",
-              speedCls
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={cycleSpeed}
+              aria-label={`Playback speed ${speed}×, tap to change`}
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums transition-colors duration-150",
+                speedCls
+              )}
+            >
+              {speed === 1 ? "1×" : `${speed}×`}
+            </button>
+            {onDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-6 w-6 shrink-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+                  isOutgoing
+                    ? "text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground"
+                    : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                )}
+                onClick={onDelete}
+                disabled={isDeleting}
+                aria-label={isDeleting ? "Deleting voice note" : "Delete voice note"}
+              >
+                {isDeleting
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Trash2 className="h-3 w-3" />}
+              </Button>
             )}
-          >
-            {speed === 1 ? "1×" : `${speed}×`}
-          </button>
+          </div>
         </div>
       </div>
     </div>

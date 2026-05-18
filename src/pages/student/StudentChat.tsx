@@ -502,7 +502,16 @@ const StudentChat = () => {
   }, [startSessionWithCounselor]);
 
   const handleDeleteMessageWrapper = useCallback(async (id: number) => {
-    await deleteMessage(id);
+    setDeletingMessageIds((prev) => new Set(prev).add(id));
+    try {
+      await deleteMessage(id);
+    } finally {
+      setDeletingMessageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }, [deleteMessage]);
 
   const handleMessageInputChange = useCallback((nextMessage: string) => {

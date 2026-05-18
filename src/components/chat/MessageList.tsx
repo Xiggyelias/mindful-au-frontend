@@ -64,8 +64,16 @@ const MessageBubble = React.memo(
             message={msg}
             isOutgoing={isMe}
             uploadProgress={isThisUpload ? (currentUploadProgress ?? 0) : 0}
+            isDeleting={isDeleting}
             onRetry={msg.uploadFailed && onRetryUpload ? () => onRetryUpload(msg.id) : undefined}
-            onDelete={msg.uploadFailed && onDeleteOptimistic ? () => onDeleteOptimistic(msg.id) : undefined}
+            onDelete={
+              msg.uploadFailed && onDeleteOptimistic
+                ? () => onDeleteOptimistic(msg.id)
+                // Server-saved attachment owned by me: allow deletion via the normal path
+                : isMe && !msg.isUploading && !msg.uploadFailed && msg.id > 0
+                ? () => onDeleteMessage(msg.id)
+                : undefined
+            }
           />
         );
       }
@@ -93,9 +101,9 @@ const MessageBubble = React.memo(
           </span>
         )}
         <div className="flex items-center gap-2 max-w-[85%] lg:max-w-[70%]">
-          {/* Only show delete for plain text messages — voice/file attachments
-              are handled by ChatAttachmentView (retry/delete on failed upload)
-              and the server typically doesn't allow students to delete attachments. */}
+          {/* Show delete for plain text messages on hover.
+              Attachment messages (voice/file/image) get their own delete button
+              wired through ChatAttachmentView → VoiceMemoPlayer / image overlay. */}
           {isMe && !messageIsAttachmentFirst(msg) && (
             <Button
               variant="ghost"
@@ -104,6 +112,19 @@ const MessageBubble = React.memo(
               onClick={() => onDeleteMessage(msg.id)}
               disabled={isDeleting}
               aria-label={isDeleting ? "Deleting message" : "Delete message"}
+            >
+              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
+          )}
+          {/* For attachment-first messages owned by me, show a delete overlay button */}
+          {isMe && messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+              onClick={() => onDeleteMessage(msg.id)}
+              disabled={isDeleting}
+              aria-label={isDeleting ? "Deleting attachment" : "Delete attachment"}
             >
               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
