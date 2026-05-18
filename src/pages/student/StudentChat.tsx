@@ -112,8 +112,6 @@ const StudentChat = () => {
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [sessionNoteDraft, setSessionNoteDraft] = useState("");
 
   // Voice recording functionality
   const {
@@ -281,39 +279,6 @@ const StudentChat = () => {
   useEffect(() => {
     setDeletingMessageIds(new Set());
   }, [sessionId]);
-
-  useEffect(() => {
-    if (!sessionId) {
-      setSessionNoteDraft("");
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(`student_chat_note_${sessionId}`);
-      setSessionNoteDraft(raw || "");
-    } catch {
-      setSessionNoteDraft("");
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!sessionId) return;
-    try {
-      localStorage.setItem(`student_chat_note_${sessionId}`, sessionNoteDraft);
-    } catch {
-      // Ignore local notes persistence issues.
-    }
-  }, [sessionId, sessionNoteDraft]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        setNotesOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,15 +655,6 @@ const StudentChat = () => {
                       <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="hidden rounded-full border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 lg:inline-flex"
-                        onClick={() => setNotesOpen((prev) => !prev)}
-                      >
-                        {notesOpen ? "Hide notes" : "Quick notes"}
-                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
                         <AlertTriangle className="h-5 w-5" />
                       </Button>
@@ -731,19 +687,6 @@ const StudentChat = () => {
                         onRetryLoad={() => {}}
                       />
                     </div>
-                    {notesOpen && (
-                      <aside className="hidden w-72 shrink-0 border-l border-slate-200/80 bg-slate-50/70 p-3 lg:flex lg:flex-col">
-                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quick Notes</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Private local note for this session.</p>
-                        <textarea
-                          value={sessionNoteDraft}
-                          onChange={(e) => setSessionNoteDraft(e.target.value)}
-                          placeholder="Capture key points, follow-up items, and tone..."
-                          className="mt-3 min-h-[180px] w-full flex-1 resize-none rounded-xl border border-slate-300/80 bg-white/90 p-3 text-sm outline-none ring-0 focus:border-emerald-300"
-                        />
-                        <p className="mt-2 text-[10px] text-muted-foreground">Shortcut: Ctrl/Cmd + Shift + N</p>
-                      </aside>
-                    )}
                   </div>
 
                   {/* Chat Input */}
@@ -817,7 +760,7 @@ const StudentChat = () => {
                     </div>
                     <h2 className="mb-2 text-2xl font-display font-bold tracking-tight xl:text-3xl">Welcome to Your Counseling Space</h2>
                     <p className="mx-auto mb-3 max-w-md leading-relaxed text-muted-foreground">
-                      Select a student conversation from the left panel to begin a supportive real-time session.
+                      Select a conversation from the left panel to begin your support chat session.
                     </p>
                     <p className="mx-auto mb-5 max-w-md text-sm text-muted-foreground">
                       No active sessions yet. Students will appear here once connected.
