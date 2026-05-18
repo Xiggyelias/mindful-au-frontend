@@ -103,9 +103,11 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const holdStartYRef = useRef<number | null>(null);
     const holdStartXRef = useRef<number | null>(null);
     const holdPointerIdRef = useRef<number | null>(null);
+    const holdStartedAtRef = useRef<number>(0);
 
     const LOCK_UP_PX = 60;
     const CANCEL_LEFT_PX = 60;
+    const TAP_TO_LOCK_MS = 220;
 
     // The bars to render: live levels while recording, else idle fallback
     const displayBars: number[] =
@@ -118,6 +120,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       holdPointerIdRef.current = e.pointerId;
       holdStartYRef.current = e.clientY;
       holdStartXRef.current = e.clientX;
+      holdStartedAtRef.current = Date.now();
       e.currentTarget.setPointerCapture(e.pointerId);
       setMicState("recording");
       try {
@@ -143,7 +146,16 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const handleMicPointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
       if (holdPointerIdRef.current !== e.pointerId) return;
       holdPointerIdRef.current = null;
+      const holdDurationMs = Date.now() - holdStartedAtRef.current;
       if (micState === "locked") return;
+      // Quick taps should not create accidental 1KB "sent" voice notes.
+      // Treat tap as "lock and keep recording", like WhatsApp's hands-free flow.
+      if (micState === "recording" && holdDurationMs <= TAP_TO_LOCK_MS) {
+        setMicState("locked");
+        holdStartYRef.current = null;
+        holdStartXRef.current = null;
+        return;
+      }
       if (micState === "cancelling") {
         onVoiceCancel();
         setMicState("idle");

@@ -123,6 +123,8 @@ export const getAttachmentKind = (attachment?: ChatAttachment | null, messageTyp
   // message_type="voice" is canonical — always treat as audio regardless of server MIME
   if (messageType === 'voice') return 'audio';
   const mimeType = String(attachment?.file_type || '').toLowerCase();
+  const fileName = String(attachment?.file_name || '').toLowerCase();
+  const extension = fileName.includes('.') ? fileName.split('.').pop() || '' : '';
   if (mimeType.startsWith('image/')) return 'image';
   // audio/* covers normal cases; video/webm and *matroska* cover PHP finfo variants
   if (
@@ -130,6 +132,7 @@ export const getAttachmentKind = (attachment?: ChatAttachment | null, messageTyp
     mimeType === 'video/webm' ||
     mimeType.includes('matroska')
   ) return 'audio';
+  if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'webm'].includes(extension)) return 'audio';
   if (
     mimeType === 'application/pdf' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
