@@ -1265,8 +1265,8 @@ const CounselorMessages = () => {
         )}
 
         <main className="h-full overflow-hidden p-0 lg:p-4">
-          <div className={`grid min-h-0 gap-0 lg:grid-cols-3 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
-            <Card variant="glass" className={`w-80 shrink-0 hidden lg:flex lg:col-span-1 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
+          <div className={`flex min-h-0 gap-0 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
+            <Card variant="glass" className={`w-96 shrink-0 hidden lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1409,7 +1409,7 @@ const CounselorMessages = () => {
 
             <Card
               variant="glass"
-              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:col-span-2 lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35 ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
+              className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35 ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
               <CardHeader className="shrink-0 space-y-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
