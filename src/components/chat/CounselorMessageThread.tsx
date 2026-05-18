@@ -61,7 +61,7 @@ const getUserColor = (name: string) => {
 type RowProps = {
   msg: ChatMessage;
   prevSenderId: string | null;
-  currentUserId: number;
+  currentUserId: number | string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isDeleting: boolean;
@@ -82,7 +82,7 @@ const CounselorMessageRow = React.memo(
     onDeleteMessage,
     renderMessageContent,
   }: RowProps) {
-    const isMine = currentUserId > 0 && String(msg.sender_id) === String(currentUserId);
+    const isMine = Boolean(currentUserId) && String(msg.sender_id) === String(currentUserId);
     const sameSenderAsPrev = prevSenderId !== null && prevSenderId === String(msg.sender_id);
     const showAvatar = !sameSenderAsPrev;
     const incomingInitials = studentIsAnonymous ? "AU" : getInitials(studentLabel);
@@ -189,7 +189,7 @@ export type CounselorMessageThreadProps = {
   /** Resets prepend scroll tracking when the open conversation changes. */
   conversationKey: string;
   messages: ChatMessage[];
-  currentUserId: number;
+  currentUserId: number | string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isPeerTyping: boolean;

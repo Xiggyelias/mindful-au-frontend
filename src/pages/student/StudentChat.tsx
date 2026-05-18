@@ -345,10 +345,17 @@ const StudentChat = () => {
   const handleVoiceStopAndSend = useCallback(async () => {
     if (!sessionId) return;
     const file = await stopAndGetRecording();
-    if (!file) return;
+    // Guard: require at least 1 second of actual audio before sending.
+    // recordingTime is in whole seconds; also check file.size > 0 for safety.
+    if (!file || file.size === 0 || recordingTime < 1) {
+      cancelRecording();
+      clearRecording();
+      setIsVoiceMode(false);
+      return;
+    }
     setIsVoiceMode(false);
     await sendVoiceInternal(file);
-  }, [sessionId, stopAndGetRecording, sendVoiceInternal]);
+  }, [sessionId, stopAndGetRecording, recordingTime, cancelRecording, clearRecording, sendVoiceInternal]);
 
   /** Retry a failed optimistic voice note. */
   const handleRetryVoiceUpload = useCallback(async (tempId: number) => {

@@ -129,16 +129,22 @@ const MessageBubble = React.memo(
               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           )}
-          <div
-            className={cn(
-              "relative px-4 py-3 min-w-[2.75rem] rounded-2xl shadow-sm",
-              isMe
-                ? "bg-primary text-primary-foreground rounded-tr-sm"
-                : "bg-secondary/50 text-foreground rounded-tl-sm border border-border/50"
-            )}
-          >
-            <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
-          </div>
+          {messageIsAttachmentFirst(msg) ? (
+            <div className="min-w-0">
+              <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "relative px-4 py-3 min-w-[2.75rem] rounded-2xl shadow-sm",
+                isMe
+                  ? "bg-primary text-primary-foreground rounded-tr-sm"
+                  : "bg-secondary/50 text-foreground rounded-tl-sm border border-border/50"
+              )}
+            >
+              <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
+            </div>
+          )}
         </div>
         {isMe && (
           <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">

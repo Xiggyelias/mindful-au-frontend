@@ -146,29 +146,9 @@ export function VoiceMemoPlayer({
    * Safe to call repeatedly — skips creation if already wired.
    */
   const setupAnalyser = useCallback(() => {
-    const el = audioRef.current;
-    if (!el || sourceNodeRef.current) return; // already wired
-    try {
-      const AudioCtxCtor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtxCtor) return;
-
-      const ctx = new AudioCtxCtor();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;           // frequencyBinCount = 128
-      analyser.smoothingTimeConstant = 0.82; // smooths fast transients
-
-      const source = ctx.createMediaElementSource(el);
-      source.connect(analyser);
-      analyser.connect(ctx.destination); // must connect or audio is silent
-
-      audioCtxRef.current = ctx;
-      analyserRef.current = analyser;
-      sourceNodeRef.current = source;
-    } catch {
-      // CORS restriction or browser quirk — degrade gracefully to static waveform
-    }
+    // Disable Web Audio API wireup during playback to prevent cross-origin CORS silences,
+    // reduce CPU usage, and ensure a highly stable progress-split static waveform.
+    return;
   }, []);
 
   // Teardown analyser when src changes or on unmount
@@ -433,9 +413,8 @@ export function VoiceMemoPlayer({
           {displayBars.map((h, i) => {
             const barPct = ((i + 1) / NUM_BARS) * 100;
             const played = barPct <= pct;
-            // When playing with live data every bar is "active" — height is the live level.
-            // When using the static waveform, apply the played/unplayed colour split.
-            const useLive = playing && !!liveBarHeights;
+            // Always use static waveform with progress-split to avoid CORS blank-out bugs
+            const useLive = false;
 
             return (
               <div

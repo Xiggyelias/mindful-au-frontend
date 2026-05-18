@@ -331,7 +331,7 @@ const CounselorMessages = () => {
   }, [chats, selectedChatId]);
 
   const selectedSessionId = selectedChat ? String(selectedChat.id) : "";
-  const currentUserId = Number(user?.id || 0);
+  const currentUserId = user?.id ? (isNaN(Number(user.id)) ? user.id : Number(user.id)) : 0;
 
   useChatPreloader({
     sessions: chats,
@@ -1162,9 +1162,14 @@ const CounselorMessages = () => {
     }
     if (!selectedSessionId) return;
     const file = await stopAndGetRecording();
-    if (!file) return;
+    // Guard: require at least 1 second of actual audio before sending.
+    if (!file || file.size === 0 || recordingTime < 1) {
+      cancelRecording();
+      clearRecording();
+      return;
+    }
     await sendVoiceInternal(file);
-  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, sendVoiceInternal]);
+  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, recordingTime, cancelRecording, clearRecording, sendVoiceInternal]);
 
 
   
