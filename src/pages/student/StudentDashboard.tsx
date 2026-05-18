@@ -152,7 +152,6 @@ const StudentDashboard = () => {
     tip: dailyTip,
     isLoading: tipLoading,
     error: tipError,
-    refresh: refreshDailyTip,
     toggleFavorite,
     isSavingFavorite,
   } = useDailyTip();
@@ -851,7 +850,6 @@ const StudentDashboard = () => {
               tip={dailyTip}
               isLoading={tipLoading}
               error={tipError}
-              onRefresh={() => void refreshDailyTip()}
               onToggleFavorite={() => void toggleFavorite()}
               isSavingFavorite={isSavingFavorite}
             />

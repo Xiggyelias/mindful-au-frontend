@@ -51,7 +51,6 @@ const PeerDashboard = () => {
     tip: dailyTip,
     isLoading: tipLoading,
     error: tipError,
-    refresh: refreshDailyTip,
     toggleFavorite,
     isSavingFavorite,
   } = useDailyTip();
@@ -142,7 +141,6 @@ const PeerDashboard = () => {
             isLoading={tipLoading}
             error={tipError}
             title="Peer Support Tip of the Day"
-            onRefresh={() => void refreshDailyTip()}
             onToggleFavorite={() => void toggleFavorite()}
             isSavingFavorite={isSavingFavorite}
             actionLabel="Open Ethics Guidelines"

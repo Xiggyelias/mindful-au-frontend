@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Activity,
   X,
-  RefreshCw,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -251,20 +250,6 @@ const CounselorAIDashboard = () => {
         <DashboardHeader title="AI Diagnostics Dashboard" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              disabled={isLoading}
-              onClick={() => void loadDashboardData()}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </div>
-
           {loadError && !isLoading ? (
             <Card variant="glass" className="border-destructive/40">
               <CardContent className="pt-6">
