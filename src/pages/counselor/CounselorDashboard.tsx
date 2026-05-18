@@ -527,9 +527,6 @@ const CounselorDashboard = () => {
                 <MessageSquare className="h-5 w-5 text-primary" />
                 Student conversations
               </CardTitle>
-              <Button variant="outline" size="sm" onClick={() => navigate("/counselor/messages")}>
-                Open Messages
-              </Button>
             </CardHeader>
             <CardContent>
               {openConversations.length === 0 ? (
