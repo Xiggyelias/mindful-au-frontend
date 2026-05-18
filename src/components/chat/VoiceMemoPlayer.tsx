@@ -189,17 +189,44 @@ export function VoiceMemoPlayer({
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
-    const onTime = () => { if (!isDragging) setCurrent(el.currentTime); };
+
+    let isProbing = false;
+
+    const onTime = () => {
+      if (!isDragging && !isProbing && el.currentTime < 1e6) {
+        setCurrent(el.currentTime);
+      }
+    };
+
     const onDur = () => {
       const d = el.duration;
-      setDuration(Number.isFinite(d) && d > 0 ? d : 0);
+      if (d === Infinity) {
+        if (isProbing) return;
+        isProbing = true;
+        // WebM duration hack: seek to end of stream to force duration calculation
+        el.currentTime = 1e9;
+        const onSeeked = () => {
+          el.removeEventListener("seeked", onSeeked);
+          const realDuration = el.duration;
+          if (Number.isFinite(realDuration) && realDuration > 0) {
+            setDuration(realDuration);
+          }
+          el.currentTime = 0;
+          isProbing = false;
+        };
+        el.addEventListener("seeked", onSeeked);
+      } else if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+      }
     };
+
     const onEnd = () => {
       setPlaying(false);
       setCurrent(0);
       el.currentTime = 0;
       stopLevelLoop();
     };
+
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onDur);
     el.addEventListener("durationchange", onDur);
@@ -208,6 +235,8 @@ export function VoiceMemoPlayer({
     // If the audio metadata is already loaded (cached/local blob), set duration immediately
     if (Number.isFinite(el.duration) && el.duration > 0) {
       setDuration(el.duration);
+    } else if (el.duration === Infinity) {
+      onDur();
     } else {
       // Force load to override browser lazy-loading optimizations on hidden media elements
       try {
@@ -388,7 +417,20 @@ export function VoiceMemoPlayer({
       "shadow-sm animate-voice-bubble-in",
       className
     )}>
-      <audio ref={audioRef} src={src} preload={preloadMode === "none" ? "none" : "auto"} playsInline className="sr-only" />
+      <audio
+        ref={audioRef}
+        src={src}
+        preload={preloadMode === "none" ? "none" : "auto"}
+        playsInline
+        style={{
+          position: "absolute",
+          opacity: 0,
+          pointerEvents: "none",
+          width: "1px",
+          height: "1px",
+          zIndex: -1,
+        }}
+      />
 
       {/* Play / Pause */}
       <Button
