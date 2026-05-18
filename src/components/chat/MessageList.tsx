@@ -269,7 +269,16 @@ export const MessageList: React.FC<MessageListProps> = ({
     const nearBottom = distanceToBottom <= NEAR_BOTTOM_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     onAtBottomChange?.(nearBottom);
-  }, [messageScrollAreaRef, onAtBottomChange]);
+
+    // ADD THIS: auto-load older messages when near top
+    if (scrollTop < 80 && hasOlderMessages && 
+        !isLoadingOlderMessages && !olderInflightRef.current) {
+      olderInflightRef.current = true;
+      void Promise.resolve(onLoadOlder()).finally(() => {
+        olderInflightRef.current = false;
+      });
+    }
+  }, [hasOlderMessages, isLoadingOlderMessages, onLoadOlder, messageScrollAreaRef, onAtBottomChange]);
 
   // Save scroll anchor before older messages load (fires before paint).
   useLayoutEffect(() => {

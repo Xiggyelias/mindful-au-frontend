@@ -837,7 +837,7 @@ const StudentChat = () => {
                       Select a conversation from the left panel to begin your support chat session.
                     </p>
                     <p className="mx-auto mb-5 max-w-md text-sm text-muted-foreground">
-                      No active sessions yet. Students will appear here once connected.
+                      No active sessions yet. Counselors will appear here once connected.
                     </p>
                     <div className="mb-4 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
                       <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
