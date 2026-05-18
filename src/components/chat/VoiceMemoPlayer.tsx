@@ -22,8 +22,8 @@ function formatPlayTime(seconds: number): string {
 const NUM_BARS = 40;
 
 /**
- * Deterministic waveform profile from a seed string.
- * Combines multiple sine harmonics for a natural-looking voice shape.
+ * Deterministic static waveform used when audio is not playing.
+ * Combines harmonics for a natural voice-like shape.
  */
 function buildWaveformBars(seed: string): number[] {
   let h = 0;
@@ -76,6 +76,14 @@ export function VoiceMemoPlayer({
   const [preloadMode, setPreloadMode] = useState<"metadata" | "none">("metadata");
   const seekBarRef = useRef<HTMLDivElement>(null);
 
+  // Web Audio API for live frequency visualisation during playback
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  // Live bar heights while playing (null → show static waveform)
+  const [liveBarHeights, setLiveBarHeights] = useState<number[] | null>(null);
+
   // Low-bandwidth detection
   useEffect(() => {
     try {
@@ -90,7 +98,94 @@ export function VoiceMemoPlayer({
     }
   }, []);
 
-  // Reset state on src change
+  // ── Level loop ──────────────────────────────────────────────────────────────
+
+  const stopLevelLoop = useCallback(() => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    setLiveBarHeights(null);
+  }, []);
+
+  const startLevelLoop = useCallback(() => {
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const tick = () => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteFrequencyData(dataArray);
+
+      // Focus on the vocal / instrument range: use the first 75% of bins.
+      // This avoids the nearly-silent ultra-high bins drowning out the shape.
+      const usableBins = Math.floor(dataArray.length * 0.75);
+      const step = usableBins / NUM_BARS;
+      const levels: number[] = [];
+      for (let i = 0; i < NUM_BARS; i++) {
+        const lo = Math.floor(i * step);
+        const hi = Math.max(lo + 1, Math.floor((i + 1) * step));
+        let sum = 0;
+        for (let j = lo; j < hi; j++) sum += dataArray[j] ?? 0;
+        // Normalise 0-255 range → 0-1, keep a visible minimum
+        levels.push(Math.max(0.06, Math.min(1, sum / ((hi - lo) * 220))));
+      }
+      setLiveBarHeights(levels);
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animFrameRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  /**
+   * Lazily create the AudioContext + AnalyserNode wired to the <audio> element.
+   * Must be called from a user-gesture handler (click) to satisfy autoplay policy.
+   * Safe to call repeatedly — skips creation if already wired.
+   */
+  const setupAnalyser = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || sourceNodeRef.current) return; // already wired
+    try {
+      const AudioCtxCtor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtxCtor) return;
+
+      const ctx = new AudioCtxCtor();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;           // frequencyBinCount = 128
+      analyser.smoothingTimeConstant = 0.82; // smooths fast transients
+
+      const source = ctx.createMediaElementSource(el);
+      source.connect(analyser);
+      analyser.connect(ctx.destination); // must connect or audio is silent
+
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+      sourceNodeRef.current = source;
+    } catch {
+      // CORS restriction or browser quirk — degrade gracefully to static waveform
+    }
+  }, []);
+
+  // Teardown analyser when src changes or on unmount
+  const teardownAnalyser = useCallback(() => {
+    stopLevelLoop();
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.disconnect(); } catch { /* ignore */ }
+      sourceNodeRef.current = null;
+    }
+    if (analyserRef.current) {
+      try { analyserRef.current.disconnect(); } catch { /* ignore */ }
+      analyserRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      try { void audioCtxRef.current.close(); } catch { /* ignore */ }
+      audioCtxRef.current = null;
+    }
+  }, [stopLevelLoop]);
+
+  // Reset everything when the audio source changes
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -101,7 +196,12 @@ export function VoiceMemoPlayer({
     setCurrent(0);
     setDuration(0);
     setSpeed(1);
-  }, [src]);
+    // Tear down Web Audio so it's re-created on next play (new src = new stream)
+    teardownAnalyser();
+  }, [src, teardownAnalyser]);
+
+  // Unmount cleanup
+  useEffect(() => () => { teardownAnalyser(); }, [teardownAnalyser]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -115,6 +215,7 @@ export function VoiceMemoPlayer({
       setPlaying(false);
       setCurrent(0);
       el.currentTime = 0;
+      stopLevelLoop();
     };
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onDur);
@@ -126,14 +227,32 @@ export function VoiceMemoPlayer({
       el.removeEventListener("durationchange", onDur);
       el.removeEventListener("ended", onEnd);
     };
-  }, [src, isDragging]);
+  }, [src, isDragging, stopLevelLoop]);
 
   const togglePlay = useCallback(async () => {
     const el = audioRef.current;
     if (!el || isUploading || uploadFailed) return;
-    if (playing) { el.pause(); setPlaying(false); return; }
-    try { await el.play(); setPlaying(true); } catch { setPlaying(false); }
-  }, [playing, isUploading, uploadFailed]);
+    if (playing) {
+      el.pause();
+      setPlaying(false);
+      stopLevelLoop();
+      return;
+    }
+    // Wire up analyser on first play (requires user gesture)
+    setupAnalyser();
+    // Resume suspended AudioContext (browser autoplay policy)
+    if (audioCtxRef.current?.state === "suspended") {
+      try { await audioCtxRef.current.resume(); } catch { /* ignore */ }
+    }
+    try {
+      await el.play();
+      setPlaying(true);
+      startLevelLoop();
+    } catch {
+      setPlaying(false);
+      stopLevelLoop();
+    }
+  }, [playing, isUploading, uploadFailed, setupAnalyser, startLevelLoop, stopLevelLoop]);
 
   const seekTo = useCallback((clientX: number) => {
     const el = audioRef.current;
@@ -175,37 +294,33 @@ export function VoiceMemoPlayer({
 
   const pct = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
   const isOutgoing = bubbleRole === "outgoing";
-  const waveformBars = useMemo(() => buildWaveformBars(src), [src]);
+  // Static waveform used when idle or when Web Audio isn't available
+  const staticBars = useMemo(() => buildWaveformBars(src), [src]);
+  // Bars actually rendered: live data while playing, static otherwise
+  const displayBars = (playing && liveBarHeights) ? liveBarHeights : staticBars;
 
-  // ── Colour tokens (WhatsApp-style) ─────────────────────────────────────────
-  // Outgoing: white play button + white waveform on primary bg (handled by parent bubble)
-  // Incoming: primary play button + primary waveform on muted bg
+  // ── Colour tokens ───────────────────────────────────────────────────────────
   const playBtnCls = isOutgoing
     ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/25 hover:bg-primary-foreground/30"
     : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20";
-  const barPlayed = isOutgoing ? "bg-primary-foreground" : "bg-primary";
-  const barUnplayed = isOutgoing ? "bg-primary-foreground/30" : "bg-foreground/20";
-  const timeCls = isOutgoing ? "text-primary-foreground/80" : "text-muted-foreground";
-  const speedCls = isOutgoing
+  const barPlayed  = isOutgoing ? "bg-primary-foreground"      : "bg-primary";
+  const barUnplayed = isOutgoing ? "bg-primary-foreground/30"  : "bg-foreground/20";
+  const timeCls   = isOutgoing ? "text-primary-foreground/80"  : "text-muted-foreground";
+  const speedCls  = isOutgoing
     ? "text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground"
     : "text-muted-foreground hover:bg-muted hover:text-foreground";
 
   // ── Failed state ──────────────────────────────────────────────────────────
   if (uploadFailed) {
     return (
-      <div
-        className={cn(
-          "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
-          isOutgoing
-            ? "border-destructive/25 bg-destructive/8"
-            : "border-destructive/18 bg-destructive/[0.04]",
-          className
-        )}
-      >
-        <div className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
-          "border-destructive/25 bg-destructive/10 text-destructive"
-        )}>
+      <div className={cn(
+        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl border px-3.5 py-3",
+        isOutgoing
+          ? "border-destructive/25 bg-destructive/8"
+          : "border-destructive/18 bg-destructive/[0.04]",
+        className
+      )}>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-destructive/25 bg-destructive/10 text-destructive">
           <AlertTriangle className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -214,22 +329,16 @@ export function VoiceMemoPlayer({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {onRetry && (
-            <Button
-              type="button" variant="outline" size="sm"
+            <Button type="button" variant="outline" size="sm"
               className="h-8 gap-1.5 px-2.5 text-[11px] font-bold text-destructive border-destructive/30 hover:bg-destructive/8 hover:text-destructive"
-              onClick={onRetry}
-            >
-              <RotateCcw className="h-3 w-3" />
-              Retry
+              onClick={onRetry}>
+              <RotateCcw className="h-3 w-3" />Retry
             </Button>
           )}
           {onDelete && (
-            <Button
-              type="button" variant="ghost" size="icon"
+            <Button type="button" variant="ghost" size="icon"
               className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-              aria-label="Delete failed voice note"
-            >
+              onClick={onDelete} aria-label="Delete failed voice note">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           )}
@@ -242,43 +351,24 @@ export function VoiceMemoPlayer({
   if (isUploading) {
     const clampedProgress = Math.min(100, Math.max(0, uploadProgress));
     return (
-      <div
-        className={cn(
-          "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-3",
-          isOutgoing
-            ? "bg-primary text-primary-foreground"
-            : "border border-border/50 bg-muted/30",
-          className
-        )}
-      >
-        <div className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
-          playBtnCls
-        )}>
+      <div className={cn(
+        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-3",
+        isOutgoing ? "bg-primary text-primary-foreground" : "border border-border/50 bg-muted/30",
+        className
+      )}>
+        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full border", playBtnCls)}>
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          {/* Animated waveform bars */}
           <div className="flex h-8 items-end gap-[2.5px]" aria-hidden>
-            {waveformBars.map((h, i) => (
-              <div
-                key={i}
-                className={cn("rounded-full animate-voice-bar", barPlayed)}
-                style={{
-                  width: "2.5px",
-                  height: `${Math.round(h * 100)}%`,
-                  animationDelay: `${(i * 25) % 700}ms`,
-                  opacity: 0.3 + 0.5 * h,
-                }}
-              />
+            {staticBars.map((h, i) => (
+              <div key={i} className={cn("rounded-full animate-voice-bar", barPlayed)}
+                style={{ width: "2.5px", height: `${Math.round(h * 100)}%`, animationDelay: `${(i * 25) % 700}ms`, opacity: 0.3 + 0.5 * h }} />
             ))}
           </div>
-          {/* Upload progress track */}
           <div className={cn("h-[3px] w-full rounded-full overflow-hidden", barUnplayed)}>
-            <div
-              className={cn("h-full rounded-full transition-[width] duration-300", barPlayed)}
-              style={{ width: `${clampedProgress}%` }}
-            />
+            <div className={cn("h-full rounded-full transition-[width] duration-300", barPlayed)}
+              style={{ width: `${clampedProgress}%` }} />
           </div>
         </div>
       </div>
@@ -287,44 +377,32 @@ export function VoiceMemoPlayer({
 
   // ── Normal playback ───────────────────────────────────────────────────────
   return (
-    <div
-      className={cn(
-        "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
-        isOutgoing
-          ? "bg-primary text-primary-foreground"
-          : "border border-border/50 bg-muted/30",
-        "shadow-sm animate-voice-bubble-in",
-        className
-      )}
-    >
+    <div className={cn(
+      "flex min-w-[13rem] max-w-[min(100%,20rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
+      isOutgoing ? "bg-primary text-primary-foreground" : "border border-border/50 bg-muted/30",
+      "shadow-sm animate-voice-bubble-in",
+      className
+    )}>
       <audio ref={audioRef} src={src} preload={preloadMode} playsInline className="sr-only" />
 
-      {/* ── Play / Pause ─────────────────────────────────────────────────── */}
+      {/* Play / Pause */}
       <Button
-        type="button"
-        variant="outline"
-        size="icon"
+        type="button" variant="outline" size="icon"
         aria-pressed={playing}
         aria-label={playing ? "Pause voice note" : "Play voice note"}
-        className={cn(
-          "h-10 w-10 shrink-0 rounded-full border shadow-none transition-transform duration-150 active:scale-95",
-          playBtnCls
-        )}
+        className={cn("h-10 w-10 shrink-0 rounded-full border shadow-none transition-transform duration-150 active:scale-95", playBtnCls)}
         onClick={() => void togglePlay()}
       >
-        {playing
-          ? <Pause className="h-4 w-4" />
-          : <Play className="h-4 w-4 translate-x-[1px]" />}
+        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-[1px]" />}
       </Button>
 
-      {/* ── Waveform + time ──────────────────────────────────────────────── */}
+      {/* Waveform + time */}
       <div className="min-w-0 flex-1 space-y-1">
 
         {/* Seekable waveform */}
         <div
           ref={seekBarRef}
-          role="slider"
-          tabIndex={0}
+          role="slider" tabIndex={0}
           aria-valuemin={0}
           aria-valuemax={Math.round(duration) || 0}
           aria-valuenow={Math.round(current)}
@@ -340,41 +418,44 @@ export function VoiceMemoPlayer({
             else if (ev.key === "ArrowRight") { ev.preventDefault(); el.currentTime = Math.min(duration, el.currentTime + 3); }
           }}
         >
-          {waveformBars.map((h, i) => {
+          {displayBars.map((h, i) => {
             const barPct = ((i + 1) / NUM_BARS) * 100;
             const played = barPct <= pct;
-            const nearCursor = playing && barPct > pct - (2 * 100) / NUM_BARS && barPct <= pct;
+            // When playing with live data every bar is "active" — height is the live level.
+            // When using the static waveform, apply the played/unplayed colour split.
+            const useLive = playing && !!liveBarHeights;
+
             return (
               <div
                 key={i}
                 className={cn(
-                  "rounded-full transition-[height] duration-75",
-                  played ? barPlayed : barUnplayed,
-                  nearCursor && "animate-waveform-breath"
+                  "rounded-full",
+                  useLive
+                    ? barPlayed                          // all bars coloured while live
+                    : played ? barPlayed : barUnplayed   // progress split when static
                 )}
                 style={{
                   width: "2.5px",
-                  height: `${Math.round(h * (nearCursor ? 112 : 100))}%`,
-                  opacity: played ? (nearCursor ? 1 : 0.9) : 0.35,
+                  height: `${Math.round(h * 100)}%`,
+                  // Smooth live updates; instant for seek scrubbing
+                  transition: useLive ? "height 55ms ease-out" : "height 75ms ease-out",
+                  opacity: useLive
+                    ? 0.4 + 0.6 * h                     // louder = more opaque
+                    : played ? 0.9 : 0.35,
                   flexShrink: 0,
-                  animationDuration: nearCursor ? `${380 + (i % 3) * 80}ms` : undefined,
                 }}
               />
             );
           })}
         </div>
 
-        {/* Time + speed row */}
+        {/* Time + speed */}
         <div className="flex items-center justify-between">
           <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
             {playing || current > 0
               ? formatPlayTime(current)
-              : duration > 0
-              ? formatPlayTime(duration)
-              : "0:00"}
+              : duration > 0 ? formatPlayTime(duration) : "0:00"}
           </span>
-
-          {/* Speed toggle — subtle, only visible on hover / tap */}
           <button
             type="button"
             onClick={cycleSpeed}
@@ -396,17 +477,11 @@ export function VoiceMemoPlayer({
 
 interface VoiceRecordingPresenceStripProps {
   className?: string;
-  /** Live bar heights from Web Audio API (0–1). Falls back to animated CSS. */
   audioLevels?: number[];
 }
 
-/** Subtle live-waveform strip shown while the user is actively recording. */
-export function VoiceRecordingPresenceStrip({
-  className,
-  audioLevels,
-}: VoiceRecordingPresenceStripProps) {
+export function VoiceRecordingPresenceStrip({ className, audioLevels }: VoiceRecordingPresenceStripProps) {
   const bars = audioLevels ?? null;
-
   return (
     <div
       className={cn(
@@ -417,25 +492,13 @@ export function VoiceRecordingPresenceStrip({
     >
       {bars
         ? bars.slice(0, 20).map((level, i) => (
-            <span
-              key={i}
-              className="inline-block w-[3px] origin-bottom rounded-full bg-primary/70"
-              style={{
-                height: `${Math.round(Math.max(8, level * 100))}%`,
-                transition: "height 60ms ease-out",
-                opacity: 0.5 + 0.5 * level,
-              }}
-            />
+            <span key={i} className="inline-block w-[3px] origin-bottom rounded-full bg-primary/70"
+              style={{ height: `${Math.round(Math.max(8, level * 100))}%`, transition: "height 60ms ease-out", opacity: 0.5 + 0.5 * level }} />
           ))
         : [0, 120, 240, 120, 0].map((delay, i) => (
-            <span
-              key={i}
-              className={cn(
-                "inline-block w-[3px] origin-bottom animate-voice-bar rounded-full",
-                i === 2 ? "bg-primary/60 h-full" : "bg-primary/50 h-4/5"
-              )}
-              style={{ animationDelay: `${delay}ms` }}
-            />
+            <span key={i}
+              className={cn("inline-block w-[3px] origin-bottom animate-voice-bar rounded-full", i === 2 ? "bg-primary/60 h-full" : "bg-primary/50 h-4/5")}
+              style={{ animationDelay: `${delay}ms` }} />
           ))}
     </div>
   );

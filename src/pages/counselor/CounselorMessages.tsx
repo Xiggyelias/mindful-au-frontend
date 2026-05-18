@@ -10,22 +10,14 @@ import {
   FileText,
   Heart,
   Search,
-  Send,
   Shield,
   ShieldCheck,
   ArrowUpCircle,
   Loader2,
-  Paperclip,
   AlertTriangle,
   X,
-  Image as ImageIcon,
   User,
   UserCircle2,
-  Mic,
-  Smile,
-  Play,
-  Pause,
-  Square,
   Menu,
   MoreHorizontal,
 } from "lucide-react";
@@ -35,7 +27,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
@@ -45,8 +36,6 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import {
-  CHAT_ATTACHMENT_ACCEPT,
-  formatChatFileSize,
   messageIsAttachmentFirst,
   validateChatAttachment,
 } from "@/lib/chatAttachments";
@@ -68,13 +57,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Popover, 
-  PopoverContent, 
-  PopoverTrigger 
-} from "@/components/ui/popover";
-import { VoiceRecordingPresenceStrip } from "@/components/chat/VoiceMemoPlayer";
-import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
+import { ChatInput } from "@/components/chat/ChatInput";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
 import {
@@ -305,14 +288,10 @@ const CounselorMessages = () => {
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIdentityRevealGrantSessionIdRef = useRef<number | null>(null);
-  const voiceHoldStartYRef = useRef<number | null>(null);
-  const voiceHoldPointerIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
   const navItems = isPeerCounselor ? peerCounselorNavItems : counselorNavItems;
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || (isPeerCounselor ? "Peer Counselor" : "Counselor");
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [voiceLocked, setVoiceLocked] = useState(false);
   const [deletingMessageIds, setDeletingMessageIds] = useState<Set<number>>(() => new Set());
   const [identityRevealGrants, setIdentityRevealGrants] = useState<Record<string, string>>(
     () => readIdentityRevealGrants()
@@ -994,10 +973,6 @@ const CounselorMessages = () => {
       toast.error("Peer counselors can only send text messages.");
       return;
     }
-    if (isPeerCounselor && recording) {
-      toast.error("Peer counselors can only send text messages.");
-      return;
-    }
 
     setIsSending(true);
 
@@ -1160,29 +1135,8 @@ const CounselorMessages = () => {
     }
   };
 
-  const formatRecordingTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  /** Toggle voice mode. When recording, stop (via stopAndGetRecording) and queue send. */
-  const handleVoiceToggle = () => {
-    if (isRecording) {
-      // stopAndGetRecording is called inside sendVoiceNow
-      void sendVoiceNow();
-    } else {
-      setIsVoiceMode(!isVoiceMode);
-      if (!isVoiceMode && !recording) {
-        void startRecording();
-      }
-    }
-  };
-
   const handleVoiceCancel = () => {
     cancelRecording();
-    setIsVoiceMode(false);
-    setVoiceLocked(false);
   };
 
   const sendVoiceNow = useCallback(async () => {
@@ -1198,39 +1152,6 @@ const CounselorMessages = () => {
     await sendVoiceInternal(file);
   }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, sendVoiceInternal]);
 
-  const handleVoicePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (isSending || isUploading || !selectedSessionId) return;
-    voiceHoldPointerIdRef.current = e.pointerId;
-    voiceHoldStartYRef.current = e.clientY;
-    setVoiceLocked(false);
-    if (!isVoiceMode) {
-      setIsVoiceMode(true);
-      if (!recording && !isRecording) {
-        startRecording();
-      }
-    }
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-
-  const handleVoicePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (voiceLocked || voiceHoldStartYRef.current == null || !isVoiceMode) return;
-    if (voiceHoldStartYRef.current - e.clientY >= 70) {
-      setVoiceLocked(true);
-    }
-  };
-
-  const handleVoicePointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (voiceHoldPointerIdRef.current !== e.pointerId) return;
-    voiceHoldPointerIdRef.current = null;
-    voiceHoldStartYRef.current = null;
-    if (!voiceLocked && isRecording) {
-      await sendVoiceNow();
-    }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    return formatChatFileSize(bytes);
-  };
 
   
   const canGoToPrevPage = chatPage > 1;
@@ -1619,222 +1540,36 @@ const CounselorMessages = () => {
                   )}
                 </div>
 
-                {selectedFile && (
-                  <div className="px-4 py-2 border-t border-border/50">
-                    <div className="flex items-center gap-3 p-2 rounded-lg bg-secondary/50">
-                      {selectedFile.type.startsWith("image/") ? (
-                        <ImageIcon className="h-5 w-5 text-primary" />
-                      ) : (
-                        <FileText className="h-5 w-5 text-primary" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{selectedFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatFileSize(selectedFile.size)}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={removeSelectedFile}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {isUploading && <Progress value={uploadProgress} className="h-1 mt-2" />}
-                  </div>
-                )}
-
-                {/* Voice recording preview */}
-                {recording && (
-                  <div className="px-4 py-2 border-t border-border/50">
-                    <div className="flex items-center gap-3 p-2 rounded-lg bg-primary/5 border border-primary/10">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary animate-pulse">
-                        <Mic className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold truncate">Voice Message</p>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{formatRecordingTime(recordingTime)} | {formatFileSize(recording.blob.size)}</p>
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={clearRecording}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <form onSubmit={handleSendMessage} className="border-t border-border/60 bg-gradient-to-b from-background/80 to-background p-3 sm:p-4">
-                  <div className="relative flex items-end gap-2 rounded-[1.5rem] border border-slate-200/80 bg-white/90 p-2 shadow-lg shadow-slate-200/35 backdrop-blur-md transition-all focus-within:ring-2 focus-within:ring-primary/10">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                      accept={CHAT_ATTACHMENT_ACCEPT}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 rounded-full hover:bg-secondary transition-all shrink-0 mb-0.5"
-                      onClick={handleAttachClick}
-                      disabled={isUploading || isRecording || !selectedSessionId}
-                    >
-                      <Paperclip className="h-5 w-5 text-muted-foreground" />
-                    </Button>
-                    
-                    <div className="flex-1 relative mb-0.5">
-                      {!isVoiceMode ? (
-                        <div className="relative flex items-center">
-                          <Input
-                            placeholder={selectedSessionId ? "Type your message..." : "Select a conversation"}
-                            value={message}
-                            onChange={(e) => {
-                              const nextMessage = e.target.value;
-                              setMessage(nextMessage);
-                              notifyTyping(nextMessage.trim().length > 0);
-                            }}
-                            onBlur={() => notifyTyping(false)}
-                            className="h-10 pl-1 pr-24 rounded-xl bg-transparent border-none focus-visible:ring-0 text-[15px] shadow-none"
-                            disabled={isSending || isUploading || !selectedSessionId}
-                          />
-                          <div className="absolute right-0 flex items-center gap-1">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button 
-                                  type="button" 
-                                  variant="ghost" 
-                                  size="icon"
-                                  className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
-                                  disabled={isSending || isUploading || !selectedSessionId}
-                                >
-                                  <Smile className="h-5 w-5 text-muted-foreground/60" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-full p-0 border-none shadow-2xl bg-transparent mb-4" align="end" side="top">
-                                <LazyEmojiPicker
-                                  onEmojiClick={(emojiData) => setMessage(prev => prev + emojiData.emoji)}
-                                />
-                              </PopoverContent>
-                            </Popover>
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="icon"
-                              className="h-8 w-8 rounded-full hover:bg-secondary transition-all"
-                              onClick={() => {
-                                if (voiceLocked) {
-                                  handleVoiceToggle();
-                                }
-                              }}
-                              onPointerDown={handleVoicePointerDown}
-                              onPointerMove={handleVoicePointerMove}
-                              onPointerUp={(e) => void handleVoicePointerUp(e)}
-                              disabled={isSending || isUploading || !selectedSessionId}
-                            >
-                              <Mic className="h-5 w-5 text-muted-foreground/60" />
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 h-10 px-1">
-                          {isRecording ? (
-                            <>
-                              <VoiceRecordingPresenceStrip className="h-9 shrink-0" audioLevels={audioLevels} />
-                              <span className="text-xs tabular-nums text-muted-foreground font-medium">{formatRecordingTime(recordingTime)}</span>
-                              {voiceLocked && (
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">Locked</span>
-                              )}
-                              <div className="flex-1 h-1.5 rounded-full bg-muted/70 overflow-hidden">
-                                <div
-                                  className="h-full w-full origin-left animate-pulse bg-primary/40"
-                                  aria-hidden
-                                />
-                              </div>
-                              <div className="flex gap-1 shrink-0">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 rounded-full"
-                                  onClick={isPaused ? resumeRecording : pauseRecording}
-                                >
-                                  {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  onClick={handleVoiceCancel}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7 rounded-lg border-primary/35"
-                                  onClick={handleVoiceToggle}
-                                >
-                                  <Square className="h-3.5 w-3.5" />
-                                </Button>
-                                {voiceLocked && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 rounded-lg border-primary/35 px-2 text-[10px] font-semibold"
-                                    onClick={() => void sendVoiceNow()}
-                                  >
-                                    Send
-                                  </Button>
-                                )}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex-1 flex items-center justify-between">
-                              <span className="text-[13px] font-medium text-muted-foreground">
-                                Voice memo ready to send
-                              </span>
-                              <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-7 text-[11px] font-bold uppercase tracking-tight"
-                                onClick={() => setIsVoiceMode(false)}
-                              >
-                                Switch to Text
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      variant="hero"
-                      size="icon"
-                      className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95 shrink-0 mb-0.5"
-                      disabled={
-                        !selectedSessionId ||
-                        isSending ||
-                        isUploading ||
-                        (!message.trim() && !selectedFile) ||
-                        (Boolean(message.trim()) && !true)
-                      }
-                    >
-                      {isSending || isUploading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <Send className="h-5 w-5" />
-                      )}
-                    </Button>
-                  </div>
-                </form>
+                <ChatInput
+                  message={message}
+                  isSending={isSending}
+                  isUploading={isUploading}
+                  uploadProgress={uploadProgress}
+                  isVoiceMode={false}
+                  recording={recording}
+                  recordingTime={recordingTime}
+                  isPaused={isPaused}
+                  selectedFile={selectedFile}
+                  audioLevels={audioLevels}
+                  onMessageChange={(val) => {
+                    setMessage(val);
+                    notifyTyping(val.trim().length > 0);
+                  }}
+                  onTypingChange={(isTyping) => notifyTyping(isTyping)}
+                  onSubmit={handleSendMessage}
+                  onFileSelect={handleFileSelect}
+                  onAttachClick={handleAttachClick}
+                  onVoiceStart={startRecording}
+                  onVoiceStopAndSend={sendVoiceNow}
+                  onVoiceSendNow={sendVoiceNow}
+                  onVoicePause={pauseRecording}
+                  onVoiceResume={resumeRecording}
+                  onVoiceCancel={handleVoiceCancel}
+                  onVoiceError={(err) => toast.error(err.message)}
+                  onRemoveFile={removeSelectedFile}
+                  onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
+                  fileInputRef={fileInputRef}
+                />
                 </>
               </CardContent>
             </Card>
