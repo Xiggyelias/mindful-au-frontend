@@ -95,7 +95,6 @@ const StudentChat = () => {
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [anonymousStartMode, setAnonymousStartMode] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
-  const [hasVoiceSendFailed, setHasVoiceSendFailed] = useState(false);
   const [isSavingChatAnonymity, setIsSavingChatAnonymity] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -118,8 +117,9 @@ const StudentChat = () => {
     isPaused,
     recording,
     recordingTime,
+    audioLevels,
     startRecording,
-    stopRecording,
+    stopAndGetRecording,
     pauseRecording,
     resumeRecording,
     cancelRecording,
@@ -168,7 +168,6 @@ const StudentChat = () => {
     isLoading: messagesLoading,
     isLoadingOlderMessages,
     hasOlderMessages,
-    
     isPeerTyping,
     error: chatError,
     sessionExpired,
@@ -177,6 +176,10 @@ const StudentChat = () => {
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
+    addOptimisticMessage,
+    resolveOptimisticMessage,
+    failOptimisticMessage,
+    removeOptimisticMessage,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
@@ -200,9 +203,18 @@ const StudentChat = () => {
     sendFileMessage,
     isUploading,
     uploadProgress,
+    error: uploadError,
+    clearError: clearUploadError,
   } = useFileAttachment({
     sessionId: sessionId || "",
   });
+
+  useEffect(() => {
+    if (uploadError) {
+      toast.error(uploadError);
+      clearUploadError();
+    }
+  }, [uploadError, clearUploadError]);
 
   // Cleanup voice recorder on unmount
   useEffect(() => {
@@ -279,9 +291,81 @@ const StudentChat = () => {
     setDeletingMessageIds(new Set());
   }, [sessionId]);
 
+  // Track file references for failed voice-note retries
+  const failedVoiceFilesRef = useRef<Map<number, File>>(new Map());
+  const currentUploadTempIdRef = useRef<number | null>(null);
+
+  /** Core: upload a voice file optimistically — used by both tap-hold-release and locked send. */
+  const sendVoiceInternal = useCallback(async (file: File) => {
+    if (!sessionId) return;
+    const localBlobUrl = URL.createObjectURL(file);
+    const tempId = addOptimisticMessage({
+      sender_id: Number(user?.id ?? 0),
+      message_type: "voice",
+      content: "",
+      created_at: new Date().toISOString(),
+      seen_at: null,
+      is_encrypted: false,
+      has_file: true,
+      isUploading: true,
+      uploadFailed: false,
+      localBlobUrl,
+      attachment: {
+        id: 0,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size,
+        url: localBlobUrl,
+        download_url: localBlobUrl,
+      },
+    });
+    currentUploadTempIdRef.current = tempId;
+    try {
+      const sentVoice = await sendFileMessage(file, { messageType: "voice" });
+      if (sentVoice) {
+        URL.revokeObjectURL(localBlobUrl);
+        resolveOptimisticMessage(tempId, sentVoice);
+        clearRecording();
+        failedVoiceFilesRef.current.delete(tempId);
+      } else {
+        failedVoiceFilesRef.current.set(tempId, file);
+        failOptimisticMessage(tempId);
+      }
+    } catch {
+      failedVoiceFilesRef.current.set(tempId, file);
+      failOptimisticMessage(tempId);
+    } finally {
+      if (currentUploadTempIdRef.current === tempId) currentUploadTempIdRef.current = null;
+    }
+  }, [sessionId, user?.id, addOptimisticMessage, sendFileMessage, resolveOptimisticMessage, failOptimisticMessage, clearRecording]);
+
+  /** Called by ChatInput onVoiceStopAndSend (pointer release) and onVoiceSendNow (locked send). */
+  const handleVoiceStopAndSend = useCallback(async () => {
+    if (!sessionId) return;
+    const file = await stopAndGetRecording();
+    if (!file) return;
+    setIsVoiceMode(false);
+    await sendVoiceInternal(file);
+  }, [sessionId, stopAndGetRecording, sendVoiceInternal]);
+
+  /** Retry a failed optimistic voice note. */
+  const handleRetryVoiceUpload = useCallback(async (tempId: number) => {
+    const file = failedVoiceFilesRef.current.get(tempId);
+    if (!file || !sessionId) return;
+    failedVoiceFilesRef.current.delete(tempId);
+    removeOptimisticMessage(tempId);
+    await sendVoiceInternal(file);
+  }, [sessionId, removeOptimisticMessage, sendVoiceInternal]);
+
+  /** Delete a failed optimistic voice note. */
+  const handleDeleteOptimistic = useCallback((tempId: number) => {
+    failedVoiceFilesRef.current.delete(tempId);
+    removeOptimisticMessage(tempId);
+  }, [removeOptimisticMessage]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!message.trim() && !selectedFile && !recording) || isSending || !sessionId) return;
+    if ((!message.trim() && !selectedFile) || isSending || !sessionId) return;
     if (message.trim() && !true) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
@@ -293,17 +377,6 @@ const StudentChat = () => {
         const sentFile = await sendFileMessage(selectedFile);
         if (sentFile) registerServerMessage(sentFile);
         setSelectedFile(null);
-      }
-      if (recording) {
-        const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
-        if (sentVoice) {
-          registerServerMessage(sentVoice);
-          clearRecording();
-          setHasVoiceSendFailed(false);
-        } else {
-          setHasVoiceSendFailed(true);
-          toast.error("Failed to send voice message");
-        }
       }
       if (message.trim()) {
         const success = await sendMessage(message.trim());
@@ -321,23 +394,6 @@ const StudentChat = () => {
     setIsSending(false);
   };
 
-  const sendVoiceNow = useCallback(async () => {
-    if (!recording || !sessionId || isSending) return;
-    setIsSending(true);
-    try {
-      const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
-      if (sentVoice) {
-        registerServerMessage(sentVoice);
-        clearRecording();
-        setHasVoiceSendFailed(false);
-      } else {
-        setHasVoiceSendFailed(true);
-        toast.error("Failed to send voice message");
-      }
-    } finally {
-      setIsSending(false);
-    }
-  }, [recording, sessionId, isSending, sendFileMessage, registerServerMessage, clearRecording]);
 
   const handleStartVideoCall = async () => {
     if (!activeSession?.counselor_id) return toast.error("No active conversation");
@@ -673,6 +729,10 @@ const StudentChat = () => {
                         messageScrollAreaRef={messageScrollAreaRef as any}
                         scrollRef={scrollRef}
                         onRetryLoad={() => {}}
+                        onRetryUpload={handleRetryVoiceUpload}
+                        onDeleteOptimistic={handleDeleteOptimistic}
+                        uploadingTempId={currentUploadTempIdRef.current ?? undefined}
+                        currentUploadProgress={uploadProgress}
                       />
                     </div>
                   </div>
@@ -682,12 +742,13 @@ const StudentChat = () => {
                     message={message}
                     isSending={isSending}
                     isUploading={isUploading}
-                    uploadProgress={uploadProgress}
+                    uploadProgress={uploadProgress}
                     isVoiceMode={isVoiceMode}
                     recording={recording}
                     recordingTime={recordingTime}
                     isPaused={isPaused}
                     selectedFile={selectedFile}
+                    audioLevels={audioLevels}
                     onMessageChange={handleMessageInputChange}
                     onTypingChange={notifyTyping}
                     onSubmit={handleSendMessage}
@@ -700,14 +761,12 @@ const StudentChat = () => {
                     onAttachClick={() => {
                       fileInputRef.current?.click();
                     }}
-                    onVoiceToggle={() => {
-                      if (isRecording) { stopRecording(); setIsVoiceMode(false); }
-                      else { setIsVoiceMode(true); startRecording(); }
-                    }}
-                    onVoiceSendNow={sendVoiceNow}
+                    onVoiceStart={async () => { setIsVoiceMode(true); await startRecording(); }}
+                    onVoiceStopAndSend={handleVoiceStopAndSend}
+                    onVoiceSendNow={handleVoiceStopAndSend}
                     onVoicePause={pauseRecording}
                     onVoiceResume={resumeRecording}
-                    onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); setHasVoiceSendFailed(false); }}
+                    onVoiceCancel={() => { cancelRecording(); setIsVoiceMode(false); }}
                     onRemoveFile={() => setSelectedFile(null)}
                     onEmojiClick={(data) => setMessage(prev => prev + data.emoji)}
                     fileInputRef={fileInputRef}

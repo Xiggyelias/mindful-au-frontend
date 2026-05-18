@@ -31,6 +31,14 @@ type BubbleRenderProps = {
   onDeleteMessage: (id: number) => Promise<void>;
   onRetryDecrypt?: () => void;
   onResyncDevice?: () => void;
+  /** Retry uploading a failed optimistic voice note (pass its negative tempId). */
+  onRetryUpload?: (tempId: number) => void;
+  /** Remove a failed optimistic message entirely. */
+  onDeleteOptimistic?: (tempId: number) => void;
+  /** The tempId currently being uploaded (for progress bar). */
+  uploadingTempId?: number;
+  /** Upload progress 0-100 for the current upload. */
+  currentUploadProgress?: number;
 };
 
 const MessageBubble = React.memo(
@@ -43,10 +51,23 @@ const MessageBubble = React.memo(
     onDeleteMessage,
     onRetryDecrypt,
     onResyncDevice,
+    onRetryUpload,
+    onDeleteOptimistic,
+    uploadingTempId,
+    currentUploadProgress,
   }: BubbleRenderProps) {
     const renderBody = () => {
       if (messageIsAttachmentFirst(msg)) {
-        return <ChatAttachmentView message={msg} isOutgoing={isMe} />;
+        const isThisUpload = msg.id === uploadingTempId;
+        return (
+          <ChatAttachmentView
+            message={msg}
+            isOutgoing={isMe}
+            uploadProgress={isThisUpload ? (currentUploadProgress ?? 0) : 0}
+            onRetry={msg.uploadFailed && onRetryUpload ? () => onRetryUpload(msg.id) : undefined}
+            onDelete={msg.uploadFailed && onDeleteOptimistic ? () => onDeleteOptimistic(msg.id) : undefined}
+          />
+        );
       }
       if (msg.is_encrypted && !msg.decryptedContent) {
         return (
@@ -123,10 +144,14 @@ const MessageBubble = React.memo(
     prev.msg.has_file === next.msg.has_file &&
     prev.msg.attachment?.id === next.msg.attachment?.id &&
     prev.msg.attachment?.url === next.msg.attachment?.url &&
+    prev.msg.isUploading === next.msg.isUploading &&
+    prev.msg.uploadFailed === next.msg.uploadFailed &&
     prev.isMe === next.isMe &&
     prev.showTime === next.showTime &&
     prev.timeLabel === next.timeLabel &&
-    prev.isDeleting === next.isDeleting
+    prev.isDeleting === next.isDeleting &&
+    prev.uploadingTempId === next.uploadingTempId &&
+    prev.currentUploadProgress === next.currentUploadProgress
 );
 
 interface MessageListProps {
@@ -157,6 +182,14 @@ interface MessageListProps {
   onResyncDevice?: () => void;
   /** Retry loading the conversation */
   onRetryLoad?: () => void;
+  /** Retry uploading a failed optimistic voice note. */
+  onRetryUpload?: (tempId: number) => void;
+  /** Remove a failed optimistic message entirely. */
+  onDeleteOptimistic?: (tempId: number) => void;
+  /** The tempId currently being uploaded (for progress bar). */
+  uploadingTempId?: number;
+  /** Upload progress 0-100 for the current upload. */
+  currentUploadProgress?: number;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -182,6 +215,10 @@ export const MessageList: React.FC<MessageListProps> = ({
   onRetryDecrypt,
   onResyncDevice,
   onRetryLoad,
+  onRetryUpload,
+  onDeleteOptimistic,
+  uploadingTempId,
+  currentUploadProgress,
 }) => {
   const firstItemIndex = useVirtuosoFirstItemIndex(messages, conversationKey);
   const olderInflightRef = useRef(false);
@@ -393,7 +430,15 @@ export const MessageList: React.FC<MessageListProps> = ({
             const showTime = idx === 0 || !prev || formatTimeLabel(prev.created_at) !== timeLabel;
             const isDeleting = deletingMessageIds.has(msg.id);
             return (
-              <div key={msg.id} className="animate-in slide-in-from-bottom-2 pb-6 duration-300 motion-reduce:animate-none">
+              <div
+                key={msg.id}
+                className={cn(
+                  "pb-6 motion-reduce:animate-none",
+                  msg.isUploading || (msg.id < 0 && !msg.uploadFailed)
+                    ? "animate-voice-bubble-in"
+                    : "animate-in slide-in-from-bottom-2 duration-300"
+                )}
+              >
                 <MessageBubble
                   msg={msg}
                   isMe={isMe}
@@ -403,6 +448,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                   onDeleteMessage={onDeleteMessage}
                   onRetryDecrypt={onRetryDecrypt}
                   onResyncDevice={onResyncDevice}
+                  onRetryUpload={onRetryUpload}
+                  onDeleteOptimistic={onDeleteOptimistic}
+                  uploadingTempId={uploadingTempId}
+                  currentUploadProgress={currentUploadProgress}
                 />
               </div>
             );
@@ -510,6 +559,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                 onDeleteMessage={onDeleteMessage}
                 onRetryDecrypt={onRetryDecrypt}
                 onResyncDevice={onResyncDevice}
+                onRetryUpload={onRetryUpload}
+                onDeleteOptimistic={onDeleteOptimistic}
+                uploadingTempId={uploadingTempId}
+                currentUploadProgress={currentUploadProgress}
               />
             </div>
           );

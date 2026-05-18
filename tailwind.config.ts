@@ -96,6 +96,37 @@ export default {
           "0%, 100%": { transform: "scaleY(0.35)" },
           "50%": { transform: "scaleY(1)" },
         },
+        /** Subtle breath for waveform bars near the playhead during active playback. */
+        "waveform-breath": {
+          "0%, 100%": { transform: "scaleY(0.85)", opacity: "0.85" },
+          "50%": { transform: "scaleY(1.15)", opacity: "1" },
+        },
+        /** Expanding ring on the mic button while recording. */
+        "mic-ring": {
+          "0%": { transform: "scale(1)", opacity: "0.55" },
+          "100%": { transform: "scale(2.1)", opacity: "0" },
+        },
+        /** Upward nudge for the "slide up to lock" hint arrow. */
+        "slide-up-hint": {
+          "0%, 100%": { transform: "translateY(0)", opacity: "0.55" },
+          "50%": { transform: "translateY(-5px)", opacity: "1" },
+        },
+        /** Leftward nudge for the "slide left to cancel" hint. */
+        "slide-left-hint": {
+          "0%, 100%": { transform: "translateX(0)", opacity: "0.55" },
+          "50%": { transform: "translateX(-5px)", opacity: "1" },
+        },
+        /** Voice note bubble entrance — slides up from slightly below. */
+        "voice-bubble-in": {
+          "0%": { opacity: "0", transform: "translateY(14px) scale(0.97)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        /** Soft lock-badge pop. */
+        "lock-pop": {
+          "0%": { transform: "scale(0.4)", opacity: "0" },
+          "70%": { transform: "scale(1.15)" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -104,6 +135,12 @@ export default {
         "scale-in": "scale-in 0.3s ease-out forwards",
         shimmer: "shimmer 2s infinite linear",
         "voice-bar": "voice-bar 0.95s ease-in-out infinite",
+        "waveform-breath": "waveform-breath 0.55s ease-in-out infinite",
+        "mic-ring": "mic-ring 1.3s ease-out infinite",
+        "slide-up-hint": "slide-up-hint 1.6s ease-in-out infinite",
+        "slide-left-hint": "slide-left-hint 1.6s ease-in-out infinite 0.4s",
+        "voice-bubble-in": "voice-bubble-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+        "lock-pop": "lock-pop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards",
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

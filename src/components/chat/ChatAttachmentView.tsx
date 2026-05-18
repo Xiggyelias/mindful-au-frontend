@@ -16,9 +16,12 @@ import { cn } from "@/lib/utils";
 type ChatAttachmentViewProps = {
   message: ChatMessage;
   isOutgoing: boolean;
+  uploadProgress?: number;
+  onRetry?: () => void;
+  onDelete?: () => void;
 };
 
-export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentViewProps) {
+export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 0, onRetry, onDelete }: ChatAttachmentViewProps) {
   const [downloading, setDownloading] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -234,17 +237,29 @@ export function ChatAttachmentView({ message: msg, isOutgoing }: ChatAttachmentV
 
   if (kind === "audio") {
     const isVoiceMemo = msg.message_type === "voice";
-    if (hasPreviewUrl) {
+    // Show player if we have a URL, are uploading, or failed (failed shows its own state)
+    if (hasPreviewUrl || msg.isUploading || msg.uploadFailed) {
+      // Use local blob URL for immediate playback while the upload is in-flight
+      const playbackSrc = (msg.localBlobUrl || resolvedUrl).trim();
       return (
         <div className="max-w-[min(100%,20rem)] space-y-2">
           <VoiceMemoPlayer
-            src={resolvedUrl}
+            src={playbackSrc}
             mimeType={att.file_type}
             headline={isVoiceMemo ? "Voice memo" : "Audio attachment"}
             fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
             bubbleRole={isOutgoing ? "outgoing" : "incoming"}
+            isUploading={msg.isUploading}
+            uploadProgress={uploadProgress}
+            uploadFailed={msg.uploadFailed}
+            onRetry={onRetry}
+            onDelete={onDelete}
           />
-          <div className={cn("flex justify-end", isOutgoing && "text-primary-foreground")}>{downloadControl}</div>
+          {!msg.isUploading && !msg.uploadFailed && (
+            <div className={cn("flex justify-end", isOutgoing && "text-primary-foreground")}>
+              {downloadControl}
+            </div>
+          )}
         </div>
       );
     }

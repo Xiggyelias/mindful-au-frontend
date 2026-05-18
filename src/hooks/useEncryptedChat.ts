@@ -23,6 +23,12 @@ export interface ChatMessage {
   decryptedContent?: string;
   sent_as_anonymous?: boolean | null;
   e2eVisual?: E2EVisualState;
+  /** True while an optimistic voice/file message is still uploading. */
+  isUploading?: boolean;
+  /** True if the upload failed — show retry/delete controls. */
+  uploadFailed?: boolean;
+  /** Local object URL for immediate playback before the server URL is ready. */
+  localBlobUrl?: string;
 }
 
 export type RawMessage = ChatMessage & {
@@ -409,6 +415,41 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     lastMessageIdRef.current = Math.max(lastMessageIdRef.current, formatted.id);
   }, []);
 
+  /**
+   * Insert an optimistic (pre-upload) message and return its temporary negative ID.
+   * Use resolveOptimisticMessage / failOptimisticMessage to update it afterwards.
+   */
+  const addOptimisticMessage = useCallback((msg: Omit<ChatMessage, 'id'>): number => {
+    const tempId = -(Date.now() + Math.floor(Math.random() * 1000));
+    setMessages((prev) => [...prev, { ...msg, id: tempId }]);
+    return tempId;
+  }, []);
+
+  /** Replace the temporary optimistic message with the real server response. */
+  const resolveOptimisticMessage = useCallback((tempId: number, real: ChatMessage) => {
+    const resolved: ChatMessage = {
+      ...real,
+      decryptedContent: real.decryptedContent ?? real.content,
+      e2eVisual: 'plain' as const,
+      isUploading: false,
+      uploadFailed: false,
+    };
+    setMessages((prev) => prev.map((m) => (m.id === tempId ? resolved : m)));
+    lastMessageIdRef.current = Math.max(lastMessageIdRef.current, real.id);
+  }, []);
+
+  /** Mark the optimistic message as failed — triggers retry/delete UI in the player. */
+  const failOptimisticMessage = useCallback((tempId: number) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, isUploading: false, uploadFailed: true } : m))
+    );
+  }, []);
+
+  /** Remove an optimistic message entirely (e.g. user deleted a failed upload). */
+  const removeOptimisticMessage = useCallback((tempId: number) => {
+    setMessages((prev) => prev.filter((m) => m.id !== tempId));
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -422,6 +463,10 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
+    addOptimisticMessage,
+    resolveOptimisticMessage,
+    failOptimisticMessage,
+    removeOptimisticMessage,
     getKeyForSharing: async () => null,
     getEncryptionKey: () => null,
     refreshMessages: () => {},

@@ -324,8 +324,9 @@ const CounselorMessages = () => {
     isPaused,
     recording,
     recordingTime,
+    audioLevels,
     startRecording,
-    stopRecording,
+    stopAndGetRecording,
     pauseRecording,
     resumeRecording,
     cancelRecording,
@@ -383,7 +384,6 @@ const CounselorMessages = () => {
     isLoading: messagesLoading,
     isLoadingOlderMessages,
     hasOlderMessages,
-    
     isPeerTyping,
     error: chatError,
     sendMessage,
@@ -391,6 +391,10 @@ const CounselorMessages = () => {
     loadOlderMessages,
     registerServerMessage,
     deleteMessage,
+    addOptimisticMessage,
+    resolveOptimisticMessage,
+    failOptimisticMessage,
+    removeOptimisticMessage,
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
@@ -432,12 +436,10 @@ const CounselorMessages = () => {
 
   const handleRowMouseEnter = useCallback((sessionId: number) => {
     if (!user?.id) return;
-    console.log('[preload] hover start - sessionId:', sessionId);
     const userIdStr = user.id.toString();
     const sidStr = String(sessionId);
-    
+
     hoverTimerRef.current = setTimeout(async () => {
-      console.log('[preload] timer fired - checking cache for:', sidStr);
       // Only preload if not already cached
       const existing = await loadPreloadedSessionMessages(sidStr, {
         expectedOwnerUserId: userIdStr,
@@ -453,13 +455,10 @@ const CounselorMessages = () => {
           return null;
         });
         if (rawMessages?.length) {
-          console.log('[preload] saved to cache:', sidStr, 'messages:', rawMessages.length);
           await savePreloadedSessionMessages(sidStr, rawMessages, {
             ownerUserId: userIdStr,
           });
         }
-      } else {
-        console.log('[preload] cache hit - skipping fetch for:', sidStr, 'messages:', existing.length);
       }
     }, 200);
   }, [user?.id]);
@@ -574,10 +573,6 @@ const CounselorMessages = () => {
             ? pagedPayload.data
             : []
         ) as RawSession[];
-
-        console.log('[sessions] unread counts:', 
-          (normalized || []).map(s => ({ id: s.id, unread: s.unread_count }))
-        );
 
         const receivedPage = Number(pagedPayload?.meta?.page);
         const receivedTotalPages = Number(pagedPayload?.meta?.total_pages);
@@ -883,6 +878,69 @@ const CounselorMessages = () => {
 
   const canModerateChat = role === "counselor" || role === "peer_counselor";
 
+  // Track file references for failed voice-note retries
+  const failedVoiceFilesRef = useRef<Map<number, File>>(new Map());
+  const currentUploadTempIdRef = useRef<number | null>(null);
+
+  /** Core: upload a voice file optimistically. */
+  const sendVoiceInternal = useCallback(async (file: File) => {
+    if (!selectedSessionId) return;
+    const localBlobUrl = URL.createObjectURL(file);
+    const tempId = addOptimisticMessage({
+      sender_id: currentUserId,
+      message_type: "voice",
+      content: "",
+      created_at: new Date().toISOString(),
+      seen_at: null,
+      is_encrypted: false,
+      has_file: true,
+      isUploading: true,
+      uploadFailed: false,
+      localBlobUrl,
+      attachment: {
+        id: 0,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size,
+        url: localBlobUrl,
+        download_url: localBlobUrl,
+      },
+    });
+    currentUploadTempIdRef.current = tempId;
+    try {
+      const sentVoice = await sendFileMessage(file, { messageType: "voice" });
+      if (sentVoice) {
+        URL.revokeObjectURL(localBlobUrl);
+        resolveOptimisticMessage(tempId, sentVoice);
+        clearRecording();
+        failedVoiceFilesRef.current.delete(tempId);
+      } else {
+        failedVoiceFilesRef.current.set(tempId, file);
+        failOptimisticMessage(tempId);
+      }
+    } catch {
+      failedVoiceFilesRef.current.set(tempId, file);
+      failOptimisticMessage(tempId);
+    } finally {
+      if (currentUploadTempIdRef.current === tempId) currentUploadTempIdRef.current = null;
+    }
+  }, [selectedSessionId, currentUserId, addOptimisticMessage, sendFileMessage, resolveOptimisticMessage, failOptimisticMessage, clearRecording]);
+
+  /** Retry a failed optimistic voice note. */
+  const handleRetryVoiceUpload = useCallback(async (tempId: number) => {
+    const file = failedVoiceFilesRef.current.get(tempId);
+    if (!file || !selectedSessionId) return;
+    failedVoiceFilesRef.current.delete(tempId);
+    removeOptimisticMessage(tempId);
+    await sendVoiceInternal(file);
+  }, [selectedSessionId, removeOptimisticMessage, sendVoiceInternal]);
+
+  /** Delete a failed optimistic voice note. */
+  const handleDeleteOptimistic = useCallback((tempId: number) => {
+    failedVoiceFilesRef.current.delete(tempId);
+    removeOptimisticMessage(tempId);
+  }, [removeOptimisticMessage]);
+
   const handleDeleteMessage = useCallback(
     async (messageId: number) => {
       if (!canModerateChat) return;
@@ -926,15 +984,17 @@ const CounselorMessages = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasPayload = isPeerCounselor
-      ? Boolean(message.trim())
-      : Boolean(message.trim() || selectedFile || recording);
+    const hasPayload = Boolean(message.trim() || selectedFile);
     if (!hasPayload || isSending || !selectedSessionId) return;
     if (message.trim() && !true) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");
       return;
     }
     if (isPeerCounselor && selectedFile) {
+      toast.error("Peer counselors can only send text messages.");
+      return;
+    }
+    if (isPeerCounselor && recording) {
       toast.error("Peer counselors can only send text messages.");
       return;
     }
@@ -950,17 +1010,6 @@ const CounselorMessages = () => {
         }
         registerServerMessage(sentFile);
         setSelectedFile(null);
-      }
-
-      if (recording) {
-        const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
-        if (sentVoice) {
-          registerServerMessage(sentVoice);
-          clearRecording();
-          toast.success("Voice message sent successfully");
-        } else {
-          toast.error("Failed to send voice message");
-        }
       }
 
       if (message.trim()) {
@@ -1117,14 +1166,15 @@ const CounselorMessages = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  /** Toggle voice mode. When recording, stop (via stopAndGetRecording) and queue send. */
   const handleVoiceToggle = () => {
     if (isRecording) {
-      stopRecording();
-      setIsVoiceMode(false);
+      // stopAndGetRecording is called inside sendVoiceNow
+      void sendVoiceNow();
     } else {
       setIsVoiceMode(!isVoiceMode);
       if (!isVoiceMode && !recording) {
-        startRecording();
+        void startRecording();
       }
     }
   };
@@ -1136,22 +1186,17 @@ const CounselorMessages = () => {
   };
 
   const sendVoiceNow = useCallback(async () => {
-    if (!recording || isSending || !selectedSessionId) return;
-    setIsSending(true);
-    try {
-      const sentVoice = await sendFileMessage(recording.blob, { messageType: "voice" });
-      if (sentVoice) {
-        registerServerMessage(sentVoice);
-        clearRecording();
-        setIsVoiceMode(false);
-        setVoiceLocked(false);
-      } else {
-        toast.error("Failed to send voice message");
-      }
-    } finally {
-      setIsSending(false);
+    if (isPeerCounselor) {
+      toast.error("Peer counselors can only send text messages.");
+      return;
     }
-  }, [recording, isSending, selectedSessionId, sendFileMessage, registerServerMessage, clearRecording]);
+    if (!selectedSessionId) return;
+    const file = await stopAndGetRecording();
+    if (!file) return;
+    setIsVoiceMode(false);
+    setVoiceLocked(false);
+    await sendVoiceInternal(file);
+  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, sendVoiceInternal]);
 
   const handleVoicePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (isSending || isUploading || !selectedSessionId) return;
@@ -1176,12 +1221,11 @@ const CounselorMessages = () => {
 
   const handleVoicePointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
     if (voiceHoldPointerIdRef.current !== e.pointerId) return;
-    if (!voiceLocked && isRecording) {
-      stopRecording();
-      await sendVoiceNow();
-    }
     voiceHoldPointerIdRef.current = null;
     voiceHoldStartYRef.current = null;
+    if (!voiceLocked && isRecording) {
+      await sendVoiceNow();
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -1224,7 +1268,16 @@ const CounselorMessages = () => {
 
   const renderMessageContent = useCallback((msg: ChatMessage, isOutgoing: boolean) => {
     if (messageIsAttachmentFirst(msg)) {
-      return <ChatAttachmentView message={msg} isOutgoing={isOutgoing} />;
+      const isThisUpload = msg.id === currentUploadTempIdRef.current;
+      return (
+        <ChatAttachmentView
+          message={msg}
+          isOutgoing={isOutgoing}
+          uploadProgress={isThisUpload ? uploadProgress : 0}
+          onRetry={msg.uploadFailed ? () => void handleRetryVoiceUpload(msg.id) : undefined}
+          onDelete={msg.uploadFailed ? () => handleDeleteOptimistic(msg.id) : undefined}
+        />
+      );
     }
 
     if (msg.is_encrypted && !msg.decryptedContent) {
@@ -1233,7 +1286,7 @@ const CounselorMessages = () => {
 
     const content = msg.decryptedContent || msg.content || "";
     return <p>{content}</p>;
-  }, []);
+  }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
@@ -1689,7 +1742,7 @@ const CounselorMessages = () => {
                         <div className="flex items-center gap-2 h-10 px-1">
                           {isRecording ? (
                             <>
-                              <VoiceRecordingPresenceStrip className="h-9 shrink-0" />
+                              <VoiceRecordingPresenceStrip className="h-9 shrink-0" audioLevels={audioLevels} />
                               <span className="text-xs tabular-nums text-muted-foreground font-medium">{formatRecordingTime(recordingTime)}</span>
                               {voiceLocked && (
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">Locked</span>
@@ -1770,7 +1823,7 @@ const CounselorMessages = () => {
                         !selectedSessionId ||
                         isSending ||
                         isUploading ||
-                        (!message.trim() && !selectedFile && !recording) ||
+                        (!message.trim() && !selectedFile) ||
                         (Boolean(message.trim()) && !true)
                       }
                     >
