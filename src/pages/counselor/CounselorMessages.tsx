@@ -1162,14 +1162,15 @@ const CounselorMessages = () => {
     }
     if (!selectedSessionId) return;
     const file = await stopAndGetRecording();
+    const durationMs = file ? (file as any).durationMs ?? 0 : 0;
     // Guard: require at least 1 second of actual audio before sending.
-    if (!file || file.size === 0 || recordingTime < 1) {
+    if (!file || file.size === 0 || durationMs < 1000) {
       cancelRecording();
       clearRecording();
       return;
     }
     await sendVoiceInternal(file);
-  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, recordingTime, cancelRecording, clearRecording, sendVoiceInternal]);
+  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, cancelRecording, clearRecording, sendVoiceInternal]);
 
 
   

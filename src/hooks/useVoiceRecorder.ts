@@ -216,6 +216,12 @@ export const useVoiceRecorder = () => {
       const file = new File([blob], `voice_${Date.now()}.${ext}`, {
         type: usedMime,
       });
+      Object.defineProperty(file, "durationMs", {
+        value: durationMs,
+        writable: false,
+        configurable: true,
+        enumerable: true,
+      });
 
       const rec: VoiceRecording = { blob: file, url, durationMs, timestamp: new Date() };
       setRecording(rec);
