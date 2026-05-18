@@ -463,7 +463,7 @@ export function VoiceMemoPlayer({
           <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
             {playing || current > 0
               ? formatPlayTime(current)
-              : duration > 0 ? formatPlayTime(duration) : "0:00"}
+              : duration > 0 ? formatPlayTime(duration) : "—:——"}
           </span>
           <button
             type="button"

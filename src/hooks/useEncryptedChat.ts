@@ -399,7 +399,14 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
             return [...prev, removed!].sort((a, b) => a.id - b.id);
           });
         }
-        toast.error('Failed to delete message');
+        // Suppress toast for permission-denied / method-not-allowed errors —
+        // e.g. students attempting to delete their own messages when the server
+        // doesn't permit it. The message is silently restored above either way.
+        const status =
+          (err as { response?: { status?: number } })?.response?.status ?? 0;
+        if (status !== 403 && status !== 405 && status !== 401) {
+          toast.error('Failed to delete message');
+        }
       }
     },
     [sessionId]

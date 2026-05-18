@@ -93,7 +93,10 @@ const MessageBubble = React.memo(
           </span>
         )}
         <div className="flex items-center gap-2 max-w-[85%] lg:max-w-[70%]">
-          {isMe && (
+          {/* Only show delete for plain text messages — voice/file attachments
+              are handled by ChatAttachmentView (retry/delete on failed upload)
+              and the server typically doesn't allow students to delete attachments. */}
+          {isMe && !messageIsAttachmentFirst(msg) && (
             <Button
               variant="ghost"
               size="icon"
