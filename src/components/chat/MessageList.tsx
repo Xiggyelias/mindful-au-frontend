@@ -86,10 +86,10 @@ const MessageBubble = React.memo(
           )}
           <div
             className={cn(
-              "relative px-4 py-3 rounded-[2rem] shadow-sm",
+              "relative px-4 py-3 min-w-[2.75rem] rounded-2xl shadow-sm",
               isMe
-                ? "bg-primary text-primary-foreground rounded-tr-none"
-                : "bg-secondary/50 text-foreground rounded-tl-none border border-border/50"
+                ? "bg-primary text-primary-foreground rounded-tr-sm"
+                : "bg-secondary/50 text-foreground rounded-tl-sm border border-border/50"
             )}
           >
             <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>

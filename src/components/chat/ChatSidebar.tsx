@@ -109,14 +109,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   }, [pinnedSessionIds, archivedSessionIds]);
 
   const handleRowMouseEnter = (sessionId: string) => {
-    console.log('[preload] hover start - sessionId:', sessionId);
     // Use the explicit ownerUserId prop (from useAuth) — NOT activeSession?.student_id
     // because activeSession is null on cold start, silently disabling all hover preloads.
     const userId = String(ownerUserId || '').trim() || null;
     if (!userId) return;
 
     hoverTimerRef.current = setTimeout(async () => {
-      console.log('[preload] timer fired - checking cache for:', sessionId);
       const existing = await loadPreloadedSessionMessages(sessionId, {
         expectedOwnerUserId: userId,
       });
@@ -131,13 +129,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           return null;
         });
         if (rawMessages?.length) {
-          console.log('[preload] saved to cache:', sessionId, 'messages:', rawMessages.length);
           await savePreloadedSessionMessages(sessionId, rawMessages, {
             ownerUserId: userId,
           });
         }
-      } else {
-        console.log('[preload] cache hit - skipping fetch for:', sessionId, 'messages:', existing.length);
       }
     }, 200);
   };

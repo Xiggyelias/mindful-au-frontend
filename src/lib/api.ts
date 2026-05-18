@@ -1515,8 +1515,6 @@ class ApiClient {
     }
     
     try {
-      console.log('[VideoCall] Authorizing call for appointment:', appointmentIdNum, 'type:', options?.call_type);
-      
       // Add retry logic for temporary server issues
       let lastError: any;
       const maxRetries = 2;
@@ -1527,7 +1525,6 @@ class ApiClient {
             appointment_id: appointmentIdNum,
             ...(options?.call_type ? { call_type: options.call_type } : {}),
           });
-          console.log('[VideoCall] Authorization successful:', response.data);
           return response.data;
         } catch (error: any) {
           lastError = error;
