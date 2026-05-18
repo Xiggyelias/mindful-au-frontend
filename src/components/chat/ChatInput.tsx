@@ -220,7 +220,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                 isActiveRecording
                   ? [
                       "min-h-[5.5rem] items-stretch py-2.5",
-                      micState === "cancelling"
+                      isCancelling
                         ? "border-destructive/40 bg-red-50/80 dark:bg-red-950/20 ring-2 ring-destructive/20"
                         : isLocked
                         ? "border-primary/30 bg-emerald-50/60 dark:bg-emerald-950/15 ring-2 ring-primary/15"

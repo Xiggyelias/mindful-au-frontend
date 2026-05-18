@@ -238,7 +238,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       if (isArchived) return false;
       if (conversationFilter === "pinned") return isPinned;
       if (conversationFilter === "unread") return unreadCount > 0;
-      if (conversationFilter === "active") return Boolean(session.is_active);
+      if (conversationFilter === "active") return session.status !== "completed" && session.status !== "cancelled";
       return false;
     });
   }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds]);
