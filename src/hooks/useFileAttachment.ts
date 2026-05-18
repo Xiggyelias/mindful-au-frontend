@@ -26,7 +26,14 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
       return null;
     }
 
-    const normalizedFile = ensureAttachmentFile(file);
+    const baseFile = ensureAttachmentFile(file);
+    const normalizedFile =
+      options?.messageType === "voice" &&
+      (!baseFile.type || !baseFile.type.toLowerCase().startsWith("audio/"))
+        ? new File([baseFile], baseFile.name.replace(/\.[^/.]+$/, "") + ".webm", {
+            type: "audio/webm",
+          })
+        : baseFile;
     const validationError = validateChatAttachment(normalizedFile);
     if (validationError) {
       setError(validationError);

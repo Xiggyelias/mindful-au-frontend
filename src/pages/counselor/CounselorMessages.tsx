@@ -923,7 +923,9 @@ const CounselorMessages = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasPayload = isPeerCounselor ? Boolean(message.trim()) : Boolean(message.trim() || selectedFile);
+    const hasPayload = isPeerCounselor
+      ? Boolean(message.trim())
+      : Boolean(message.trim() || selectedFile || recording);
     if (!hasPayload || isSending || !selectedSessionId) return;
     if (message.trim() && !true) {
       toast.error("Secure channel is initializing. Please wait a few seconds.");

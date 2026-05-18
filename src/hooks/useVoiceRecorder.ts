@@ -17,14 +17,38 @@ export const useVoiceRecorder = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
+  const recorderMimeTypeRef = useRef<string>("audio/webm");
+
+  const pickSupportedRecorderMimeType = () => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+    ];
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+      return "";
+    }
+    for (const candidate of candidates) {
+      if (MediaRecorder.isTypeSupported(candidate)) {
+        return candidate;
+      }
+    }
+    return "";
+  };
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
-      const mediaRecorder = new MediaRecorder(stream);
+      const preferredMimeType = pickSupportedRecorderMimeType();
+      const mediaRecorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
+      recorderMimeTypeRef.current = preferredMimeType || mediaRecorder.mimeType || "audio/webm";
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
@@ -34,14 +58,22 @@ export const useVoiceRecorder = () => {
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const selectedMime = recorderMimeTypeRef.current || "audio/webm";
+        const normalizedMime = selectedMime.startsWith("video/") ? "audio/webm" : selectedMime;
+        const audioBlob = new Blob(audioChunksRef.current, { type: normalizedMime });
         const audioUrl = URL.createObjectURL(audioBlob);
         const duration = Date.now() - startTimeRef.current;
         
         // Create a proper File object with name
         const timestamp = Date.now();
-        const fileName = `voice_message_${timestamp}.webm`;
-        const audioFile = new File([audioBlob], fileName, { type: 'audio/webm' });
+        const ext =
+          normalizedMime.includes("mp4") ? "m4a" :
+          normalizedMime.includes("ogg") ? "ogg" :
+          normalizedMime.includes("mpeg") || normalizedMime.includes("mp3") ? "mp3" :
+          normalizedMime.includes("wav") ? "wav" :
+          "webm";
+        const fileName = `voice_message_${timestamp}.${ext}`;
+        const audioFile = new File([audioBlob], fileName, { type: normalizedMime });
         
         setRecording({
           blob: audioFile,
