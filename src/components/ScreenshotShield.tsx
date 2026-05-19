@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { isProfileAnonymousMode } from "@/lib/anonymousMode";
+
 
 const SENSITIVE_PATH_PREFIXES = [
   "/student/chat",
@@ -19,20 +19,11 @@ export const ScreenshotShield = () => {
   const location = useLocation();
   const [showShield, setShowShield] = useState(false);
   const [policyNoticeOpen, setPolicyNoticeOpen] = useState(true);
-  const [timestampLabel, setTimestampLabel] = useState(() =>
-    new Date().toLocaleString()
-  );
 
   const active = useMemo(
     () => Boolean(user?.id) && isSensitivePath(location.pathname),
     [location.pathname, user?.id]
   );
-  const watermarkIdentity = useMemo(() => {
-    const alias = isProfileAnonymousMode(user?.profile?.anonymous_mode)
-      ? `User_${String(Number(user?.id || 0) % 10000).padStart(4, "0")}`
-      : `UID-${String(user?.id || "").padStart(4, "0")}`;
-    return alias;
-  }, [user?.id, user?.profile?.anonymous_mode]);
 
   useEffect(() => {
     if (!active) {
@@ -83,17 +74,7 @@ export const ScreenshotShield = () => {
     };
   }, [active]);
 
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setTimestampLabel(new Date().toLocaleString());
-    }, 1000 * 30);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [active]);
+
 
   if (!active) {
     return null;
@@ -109,14 +90,6 @@ export const ScreenshotShield = () => {
               "repeating-linear-gradient(25deg, rgba(255,255,255,0.25) 0, rgba(255,255,255,0.25) 1px, transparent 1px, transparent 140px)",
           }}
         />
-        <div className="absolute inset-0">
-          <div className="absolute left-4 top-4 rounded bg-black/45 px-2 py-1 text-[10px] font-medium tracking-wide text-white/80">
-            {watermarkIdentity} • {timestampLabel}
-          </div>
-          <div className="absolute bottom-20 right-4 rounded bg-black/45 px-2 py-1 text-[10px] font-medium tracking-wide text-white/80">
-            Confidential CMS session
-          </div>
-        </div>
       </div>
       {policyNoticeOpen && (
         <div className="fixed bottom-4 left-1/2 z-[9992] w-[min(96vw,720px)] -translate-x-1/2 rounded-lg border border-amber-300/30 bg-amber-500/15 px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur-md">

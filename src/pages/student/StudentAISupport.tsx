@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+
 import {
-  LayoutDashboard, MessageSquare, Calendar, Bot, Video, History, Heart,
+  LayoutDashboard, MessageSquare, Calendar, Bot, Video, Heart,
   Send, Sparkles, Loader2, AlertTriangle, Phone, ClipboardCheck,
   Wind, Moon, Brain, Zap, MessageCircle, Mic,
   Activity, Waves, Flame, Lock, ChevronDown,
@@ -24,7 +24,6 @@ const navItems = [
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];
@@ -271,7 +270,7 @@ const StudentAISupport = () => {
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showMoodCheck, setShowMoodCheck] = useState(true);
-  const navigate = useNavigate();
+
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
@@ -319,13 +318,7 @@ const StudentAISupport = () => {
     }
   }, [clearMessages, confirm, messages.length]);
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/student/dashboard");
-  };
+
 
   useEffect(() => {
     if (error) toast.error(error);
@@ -446,17 +439,6 @@ const StudentAISupport = () => {
             <div className="flex-shrink-0 border-b border-border bg-gradient-to-r from-rose-500/5 via-transparent to-violet-500/5 px-5 py-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-full hover:bg-muted/50"
-                    onClick={handleBack}
-                    type="button"
-                    aria-label="Go back"
-                    title="Go back"
-                  >
-                    <History className="h-5 w-5 text-muted-foreground rotate-180" />
-                  </Button>
                   <AICompanion isThinking={isLoading} />
                   <div>
                     <h1 className="text-base font-semibold text-foreground tracking-tight">AI Wellness Assistant</h1>

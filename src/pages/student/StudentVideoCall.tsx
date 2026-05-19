@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   Clock,
   Heart,
-  History,
   LayoutDashboard,
   Loader2,
   MapPin,
@@ -59,7 +58,6 @@ const navItems = [
   { label: "Appointments", icon: Calendar, path: "/student/appointments" },
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Past Sessions", icon: History, path: "/student/history" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ];

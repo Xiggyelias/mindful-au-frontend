@@ -140,7 +140,7 @@ const PeerDashboard = () => {
             tip={dailyTip}
             isLoading={tipLoading}
             error={tipError}
-            title="Peer Support Tip of the Day"
+            title="Your Wellness Corner"
             onToggleFavorite={() => void toggleFavorite()}
             isSavingFavorite={isSavingFavorite}
             actionLabel="Open Ethics Guidelines"

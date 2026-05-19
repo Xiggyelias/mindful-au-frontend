@@ -342,7 +342,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           throw e;
         });
 
-        if (!sessionDetails || controller.signal.aborted) {
+        if (isDisposed || controller.signal.aborted) {
+          return;
+        }
+
+        if (!sessionDetails) {
           setIsLoading(false);
           setSessionExpired(true);
           sessionExpiredRef.current = true;
@@ -353,7 +357,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         const cached = await loadPreloadedSessionMessages(sessionId, {
           expectedOwnerUserId: userId,
         });
-        if (Array.isArray(cached) && cached.length > 0 && !controller.signal.aborted) {
+
+        if (isDisposed || controller.signal.aborted) {
+          return;
+        }
+
+        if (Array.isArray(cached) && cached.length > 0) {
           const visibleMessages = filterVisibleMessages(cached);
           const preloaded = visibleMessages.map((msg: any) => ({
             ...msg,
@@ -372,12 +381,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         setIsLoading(false);
 
         await loadMessages(true, controller.signal);
-        if (isDisposed || sessionExpiredRef.current) return;
+        if (isDisposed || controller.signal.aborted || sessionExpiredRef.current) return;
 
         scheduleNextPoll();
         scheduleTypingPoll();
       } catch (err: any) {
-        if (isDisposed) return;
+        if (isDisposed || controller.signal.aborted) return;
         if (err?.response?.status === 410) {
           sessionExpiredRef.current = true;
           setSessionExpired(true);
