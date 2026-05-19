@@ -311,6 +311,116 @@ const CounselorMessages = () => {
     () => readIdentityRevealGrants()
   );
 
+  // ── Session Prep briefing panel ──────────────────────────────────────────
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefData, setBriefData] = useState<{
+    riskLevel: string | null;
+    riskColor: string;
+    aiRecommendation: string | null;
+    focusAreas: string[];
+    moodScore: number | null;
+    stressLevel: number | null;
+    burnoutIndex: number | null;
+    wellnessUpdatedAt: string | null;
+  } | null>(null);
+
+  const briefStudentIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const studentId = selectedChat?.studentId ?? null;
+
+    // Only counselors (not peer counselors) have access to these endpoints
+    if (isPeerCounselor || !studentId || studentId <= 0) {
+      setBriefData(null);
+      return;
+    }
+
+    // Skip redundant re-fetches for the same student
+    if (briefStudentIdRef.current === studentId && briefData !== null) return;
+    briefStudentIdRef.current = studentId;
+
+    const riskColorMap: Record<string, string> = {
+      critical: "text-destructive",
+      high: "text-orange-600",
+      medium: "text-yellow-600",
+      elevated: "text-yellow-600",
+      low: "text-success",
+      normal: "text-success",
+    };
+
+    let cancelled = false;
+    setBriefLoading(true);
+
+    Promise.allSettled([
+      api.getAIDiagnostics({ student_id: studentId, limit: 1 }),
+      api.getStudentWellnessSummary(studentId),
+    ]).then(([diagResult, wellnessResult]) => {
+      if (cancelled) return;
+
+      // ── AI Diagnostic ──
+      let riskLevel: string | null = null;
+      let aiRecommendation: string | null = null;
+      let focusAreas: string[] = [];
+
+      if (diagResult.status === "fulfilled") {
+        const raw = diagResult.value;
+        const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+        const latest = list[0] ?? null;
+        if (latest) {
+          riskLevel = typeof latest.risk_level === "string" ? latest.risk_level.toLowerCase() : null;
+          aiRecommendation =
+            typeof latest.ai_recommendations?.primary === "string"
+              ? latest.ai_recommendations.primary
+              : null;
+          focusAreas = Array.isArray(latest.ai_recommendations?.focus_areas)
+            ? latest.ai_recommendations.focus_areas.slice(0, 3)
+            : [];
+        }
+      }
+
+      // ── Wellness Summary ──
+      let moodScore: number | null = null;
+      let stressLevel: number | null = null;
+      let burnoutIndex: number | null = null;
+      let wellnessUpdatedAt: string | null = null;
+
+      if (wellnessResult.status === "fulfilled") {
+        const w = wellnessResult.value;
+        const latest = w?.latest_log ?? w?.logs?.[0] ?? w ?? null;
+        if (latest) {
+          moodScore = typeof latest.mood_score === "number" ? latest.mood_score : null;
+          stressLevel = typeof latest.stress_level === "number" ? latest.stress_level : null;
+          burnoutIndex = typeof latest.burnout_index === "number" ? latest.burnout_index : null;
+          wellnessUpdatedAt = typeof latest.created_at === "string" ? latest.created_at : null;
+        }
+      }
+
+      setBriefData({
+        riskLevel,
+        riskColor: riskLevel ? (riskColorMap[riskLevel] ?? "text-muted-foreground") : "text-muted-foreground",
+        aiRecommendation,
+        focusAreas,
+        moodScore,
+        stressLevel,
+        burnoutIndex,
+        wellnessUpdatedAt,
+      });
+      setBriefLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChat?.studentId, isPeerCounselor]);
+
+  // Reset brief when session changes so stale data doesn't flash
+  useEffect(() => {
+    if (!selectedChat?.studentId || selectedChat.studentId !== briefStudentIdRef.current) {
+      setBriefData(null);
+      setBriefOpen(false);
+    }
+  }, [selectedChat?.studentId]);
+
   // Voice recording functionality
   const {
     isRecording,
@@ -1477,6 +1587,22 @@ const CounselorMessages = () => {
                   </div>
                   {selectedSessionId && (
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {!isPeerCounselor && selectedChat?.studentId && (
+                        <Button
+                          variant={briefOpen ? "secondary" : "outline"}
+                          size="sm"
+                          className="h-9 shrink-0 gap-1.5 rounded-xl px-3"
+                          onClick={() => setBriefOpen((v) => !v)}
+                        >
+                          <Brain className="h-3.5 w-3.5 shrink-0" />
+                          <span className="text-xs font-semibold hidden sm:inline">
+                            {briefOpen ? "Hide Brief" : "Session Brief"}
+                          </span>
+                          {briefData?.riskLevel && briefData.riskLevel !== "normal" && briefData.riskLevel !== "low" && (
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${briefData.riskLevel === "critical" || briefData.riskLevel === "high" ? "bg-destructive" : "bg-yellow-500"}`} />
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1526,6 +1652,93 @@ const CounselorMessages = () => {
                   )}
                 </div>
               </CardHeader>
+
+              {/* ── Session Prep Briefing Panel ──────────────────────────── */}
+              {briefOpen && !isPeerCounselor && selectedChat?.studentId && (
+                <div className="shrink-0 border-b border-border/60 bg-gradient-to-r from-sky-50/80 via-background to-emerald-50/50 px-4 py-3 animate-in slide-in-from-top-1 duration-200">
+                  {briefLoading && !briefData ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Loading student brief…</span>
+                    </div>
+                  ) : briefData ? (
+                    <div className="space-y-2.5">
+                      {/* Row 1: Risk + Recommendation */}
+                      <div className="flex flex-wrap items-start gap-3">
+                        {briefData.riskLevel && (
+                          <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${briefData.riskColor}`}>
+                              {briefData.riskLevel} risk
+                            </span>
+                          </div>
+                        )}
+                        {briefData.aiRecommendation && (
+                          <p className="flex-1 text-xs text-muted-foreground leading-relaxed min-w-0">
+                            <span className="font-semibold text-foreground">AI rec: </span>
+                            {briefData.aiRecommendation.length > 160
+                              ? briefData.aiRecommendation.slice(0, 160) + "…"
+                              : briefData.aiRecommendation}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Row 2: Wellness Scores */}
+                      {(briefData.moodScore !== null || briefData.stressLevel !== null || briefData.burnoutIndex !== null) && (
+                        <div className="flex flex-wrap gap-3">
+                          {briefData.moodScore !== null && (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="font-medium text-muted-foreground">Mood</span>
+                              <span className={`font-bold ${briefData.moodScore >= 60 ? "text-success" : briefData.moodScore >= 40 ? "text-yellow-600" : "text-destructive"}`}>
+                                {briefData.moodScore}%
+                              </span>
+                            </div>
+                          )}
+                          {briefData.stressLevel !== null && (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="font-medium text-muted-foreground">Stress</span>
+                              <span className={`font-bold ${briefData.stressLevel <= 40 ? "text-success" : briefData.stressLevel <= 70 ? "text-yellow-600" : "text-destructive"}`}>
+                                {briefData.stressLevel}%
+                              </span>
+                            </div>
+                          )}
+                          {briefData.burnoutIndex !== null && (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="font-medium text-muted-foreground">Burnout</span>
+                              <span className={`font-bold ${briefData.burnoutIndex <= 30 ? "text-success" : briefData.burnoutIndex <= 60 ? "text-yellow-600" : "text-destructive"}`}>
+                                {briefData.burnoutIndex}%
+                              </span>
+                            </div>
+                          )}
+                          {briefData.wellnessUpdatedAt && (
+                            <span className="text-[10px] text-muted-foreground/60 self-center">
+                              checked in {formatChatListTime(briefData.wellnessUpdatedAt)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Row 3: Focus areas */}
+                      {briefData.focusAreas.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 self-center mr-1">Focus:</span>
+                          {briefData.focusAreas.map((area) => (
+                            <span key={area} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary capitalize">
+                              {area.replace(/_/g, " ")}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {!briefData.riskLevel && !briefData.aiRecommendation && briefData.moodScore === null && (
+                        <p className="text-xs text-muted-foreground italic">No recent diagnostic or wellness data on file for this student.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No student data available.</p>
+                  )}
+                </div>
+              )}
+
               <CardContent className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background to-slate-50/70 p-0 pt-0">
                 <>
                 {selectedSessionId && chatError && (

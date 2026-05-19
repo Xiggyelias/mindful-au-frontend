@@ -95,6 +95,43 @@ function extractQuestionList(data: unknown): Question[] {
   return [];
 }
 
+/**
+ * Reduce a full question bank to a concise assessment.
+ * Strategy: take up to MAX_PER_CATEGORY questions from each category,
+ * then cap the total at MAX_TOTAL. This preserves coverage across all
+ * mental-health dimensions while keeping the form manageable.
+ */
+const MAX_TOTAL = 20;
+const MAX_PER_CATEGORY = 3;
+
+function selectRepresentativeQuestions(questions: Question[]): Question[] {
+  const seenPerCategory = new Map<string, number>();
+  const selected: Question[] = [];
+
+  for (const q of questions) {
+    if (selected.length >= MAX_TOTAL) break;
+    const cat = q.category || "general";
+    const count = seenPerCategory.get(cat) ?? 0;
+    if (count < MAX_PER_CATEGORY) {
+      selected.push(q);
+      seenPerCategory.set(cat, count + 1);
+    }
+  }
+
+  // If we're still under the cap, fill remaining slots with any skipped questions
+  if (selected.length < MAX_TOTAL) {
+    const selectedIds = new Set(selected.map((q) => q.id));
+    for (const q of questions) {
+      if (selected.length >= MAX_TOTAL) break;
+      if (!selectedIds.has(q.id)) {
+        selected.push(q);
+      }
+    }
+  }
+
+  return selected;
+}
+
 function isRequired(question: Question): boolean {
   return question.required !== false;
 }
@@ -159,7 +196,7 @@ const StudentDiagnosticAssessment = () => {
     setIsQuestionnaireLoading(true);
     try {
       const data = await api.getDiagnosticQuestionnaire();
-      const questionList = extractQuestionList(data);
+      const questionList = selectRepresentativeQuestions(extractQuestionList(data));
       const id = typeof (data as Record<string, unknown>)?.id === "number" ? (data as { id: number }).id : Number((data as { id?: unknown })?.id ?? 0);
 
       setQuestions(questionList);
@@ -579,8 +616,8 @@ const StudentDiagnosticAssessment = () => {
 
                 <p className="text-muted-foreground">
                   This assessment is designed to help you understand your mental health and well-being. 
-                  It takes approximately 10-15 minutes to complete and covers various aspects of your 
-                  emotional and psychological health.
+                  It takes approximately 5–7 minutes to complete and covers key aspects of your
+                  emotional and psychological health across {MAX_TOTAL} focused questions.
                 </p>
 
                 <div className="space-y-3">
