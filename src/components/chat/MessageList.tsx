@@ -56,12 +56,15 @@ const MessageBubble = React.memo(
     uploadingTempId,
     currentUploadProgress,
   }: BubbleRenderProps) {
+    const content = msg.decryptedContent ?? msg.content;
+    const isDeletedMessage = content === "This message was deleted.";
+
     const renderBody = () => {
-      if (messageIsAttachmentFirst(msg)) {
+      if (messageIsAttachmentFirst(msg) && !isDeletedMessage) {
         const isThisUpload = msg.id === uploadingTempId;
         return (
           <ChatAttachmentView
-            message={msg}
+            message={messageIsAttachmentFirst(msg) ? msg : { ...msg, attachment: null }}
             isOutgoing={isMe}
             uploadProgress={isThisUpload ? (currentUploadProgress ?? 0) : 0}
             isDeleting={isDeleting}
@@ -69,8 +72,8 @@ const MessageBubble = React.memo(
             onDelete={
               msg.uploadFailed && onDeleteOptimistic
                 ? () => onDeleteOptimistic(msg.id)
-                // Server-saved attachment owned by me: allow deletion via the normal path
-                : isMe && !msg.isUploading && !msg.uploadFailed && msg.id > 0
+                // Server-saved attachment: allow deletion via the normal path
+                : !msg.isUploading && !msg.uploadFailed && msg.id > 0
                 ? () => onDeleteMessage(msg.id)
                 : undefined
             }
@@ -84,7 +87,13 @@ const MessageBubble = React.memo(
           </p>
         );
       }
-      const content = msg.decryptedContent ?? msg.content;
+      if (isDeletedMessage) {
+        return (
+          <p className="text-xs italic text-muted-foreground/80 flex items-center gap-1.5 select-none py-0.5">
+            <span className="text-[12px] opacity-75">🚫</span> This message was deleted.
+          </p>
+        );
+      }
       return <p className="whitespace-pre-wrap break-words">{content}</p>;
     };
 
@@ -104,11 +113,14 @@ const MessageBubble = React.memo(
           {/* Show delete for plain text messages on hover.
               Attachment messages (voice/file/image) get their own delete button
               wired through ChatAttachmentView → VoiceMemoPlayer / image overlay. */}
-          {isMe && !messageIsAttachmentFirst(msg) && (
+          {!messageIsAttachmentFirst(msg) && !isDeletedMessage && msg.id > 0 && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+              className={cn(
+                "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0",
+                isMe ? "order-first" : "order-last"
+              )}
               onClick={() => onDeleteMessage(msg.id)}
               disabled={isDeleting}
               aria-label={isDeleting ? "Deleting message" : "Delete message"}
@@ -116,12 +128,15 @@ const MessageBubble = React.memo(
               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           )}
-          {/* For attachment-first messages owned by me, show a delete overlay button */}
-          {isMe && messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && (
+          {/* For attachment-first messages, show a delete overlay button */}
+          {messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && !isDeletedMessage && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+              className={cn(
+                "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0",
+                isMe ? "order-first" : "order-last"
+              )}
               onClick={() => onDeleteMessage(msg.id)}
               disabled={isDeleting}
               aria-label={isDeleting ? "Deleting attachment" : "Delete attachment"}
@@ -129,15 +144,17 @@ const MessageBubble = React.memo(
               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           )}
-          {messageIsAttachmentFirst(msg) ? (
+          {messageIsAttachmentFirst(msg) && !isDeletedMessage ? (
             <div className="min-w-0">
               <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
             </div>
           ) : (
             <div
               className={cn(
-                "relative px-4 py-3 min-w-[2.75rem] rounded-2xl shadow-sm",
-                isMe
+                "relative px-4 py-3 min-w-[2.75rem] rounded-2xl shadow-sm transition-all duration-200",
+                isDeletedMessage
+                  ? "bg-secondary/15 border border-dashed border-border/80 text-muted-foreground/80 rounded-2xl"
+                  : isMe
                   ? "bg-primary text-primary-foreground rounded-tr-sm"
                   : "bg-secondary/50 text-foreground rounded-tl-sm border border-border/50"
               )}

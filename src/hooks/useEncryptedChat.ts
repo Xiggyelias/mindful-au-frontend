@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
 import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
@@ -77,6 +77,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
+  const [temporarilyHiddenMessageIds, setTemporarilyHiddenMessageIds] = useState<number[]>([]);
+  const activeTimeoutsRef = useRef<Map<number, number>>(new Map());
+
   const lastMessageIdRef = useRef<number>(0);
   const oldestMessageIdRef = useRef<number>(Number.MAX_SAFE_INTEGER);
   const pollingTimeoutRef = useRef<number | null>(null);
@@ -96,6 +99,78 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
 
+  const deletedForMeKey = useMemo(() => `deleted_for_me_${userId}_${sessionId}`, [userId, sessionId]);
+
+  const getDeletedForMeList = useCallback((): number[] => {
+    try {
+      const raw = localStorage.getItem(deletedForMeKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }, [deletedForMeKey]);
+
+  const deleteMessageForMe = useCallback((messageId: number) => {
+    setTemporarilyHiddenMessageIds((prev) => [...prev, messageId]);
+    
+    const timeoutId = window.setTimeout(() => {
+      const deletedForMeList = getDeletedForMeList();
+      if (!deletedForMeList.includes(messageId)) {
+        deletedForMeList.push(messageId);
+        localStorage.setItem(deletedForMeKey, JSON.stringify(deletedForMeList));
+      }
+      setTemporarilyHiddenMessageIds((prev) => prev.filter((id) => id !== messageId));
+      activeTimeoutsRef.current.delete(messageId);
+    }, 5000) as unknown as number;
+    
+    activeTimeoutsRef.current.set(messageId, timeoutId);
+  }, [deletedForMeKey, getDeletedForMeList]);
+
+  const undoDeleteMessageForMe = useCallback((messageId: number) => {
+    const timeoutId = activeTimeoutsRef.current.get(messageId);
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+      activeTimeoutsRef.current.delete(messageId);
+    }
+    setTemporarilyHiddenMessageIds((prev) => prev.filter((id) => id !== messageId));
+  }, []);
+
+  const deleteMessageForEveryone = useCallback(async (messageId: number) => {
+    let removed: ChatMessage | undefined;
+    setMessages((prev) => {
+      removed = prev.find((m) => m.id === messageId);
+      return prev.map((msg) =>
+        msg.id === messageId
+          ? {
+              ...msg,
+              content: "This message was deleted.",
+              decryptedContent: "This message was deleted.",
+              is_encrypted: false,
+              message_type: "text",
+              file_url: undefined,
+              attachment: null,
+            }
+          : msg
+      );
+    });
+    try {
+      await api.deleteMessage(sessionId, messageId);
+    } catch {
+      if (removed) {
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === messageId ? removed! : msg))
+        );
+      }
+    }
+  }, [sessionId]);
+
+  const filteredMessages = useMemo(() => {
+    const deletedForMeList = getDeletedForMeList();
+    return messages.filter(
+      (m) => !deletedForMeList.includes(m.id) && !temporarilyHiddenMessageIds.includes(m.id)
+    );
+  }, [messages, temporarilyHiddenMessageIds, getDeletedForMeList]);
+
   useEffect(() => {
     sessionExpiredRef.current = false;
     bootstrapRunningRef.current = false;
@@ -103,6 +178,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     lastMessageIdRef.current = 0;
     oldestMessageIdRef.current = Number.MAX_SAFE_INTEGER;
     setMessages([]);
+    setTemporarilyHiddenMessageIds([]);
     setError(null);
     setIsLoading(true);
   }, [sessionId]);
@@ -545,7 +621,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   }, []);
 
   return {
-    messages,
+    messages: filteredMessages,
     isLoading,
     isLoadingOlderMessages,
     hasOlderMessages,
@@ -554,6 +630,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     sessionExpired,
     sendMessage,
     deleteMessage,
+    deleteMessageForMe,
+    undoDeleteMessageForMe,
+    deleteMessageForEveryone,
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,

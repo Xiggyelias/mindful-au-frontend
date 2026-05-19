@@ -110,6 +110,8 @@ const StudentChat = () => {
 
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<any | null>(null);
 
   // Voice recording functionality
   const {
@@ -172,7 +174,9 @@ const StudentChat = () => {
     error: chatError,
     sessionExpired,
     sendMessage,
-    deleteMessage,
+    deleteMessageForMe,
+    undoDeleteMessageForMe,
+    deleteMessageForEveryone,
     notifyTyping,
     loadOlderMessages,
     registerServerMessage,
@@ -507,18 +511,12 @@ const StudentChat = () => {
     void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true });
   }, [startSessionWithCounselor]);
 
-  const handleDeleteMessageWrapper = useCallback(async (id: number) => {
-    setDeletingMessageIds((prev) => new Set(prev).add(id));
-    try {
-      await deleteMessage(id);
-    } finally {
-      setDeletingMessageIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  }, [deleteMessage]);
+  const handleDeleteMessageWrapper = useCallback((id: number) => {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg) return;
+    setMessageToDelete(msg);
+    setDeleteDialogOpen(true);
+  }, [messages]);
 
   const handleMessageInputChange = useCallback((nextMessage: string) => {
     setMessage(nextMessage);
@@ -872,6 +870,89 @@ const StudentChat = () => {
           </div>
         </ErrorBoundary>
       </div>
+      {/* Delete Message Dialog */}
+      {deleteDialogOpen && messageToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950 animate-in zoom-in-95 duration-200">
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                Delete message?
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {messageToDelete.sender_id === Number(user?.id)
+                  ? "Would you like to delete this message for everyone in the chat, or just for yourself?"
+                  : "This message will be deleted for you. Others in the chat will still be able to see it."}
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2">
+              {messageToDelete.sender_id === Number(user?.id) &&
+                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 * 60 && (
+                  <Button
+                    variant="destructive"
+                    className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"
+                    onClick={async () => {
+                      const id = messageToDelete.id;
+                      setDeleteDialogOpen(false);
+                      setMessageToDelete(null);
+                      setDeletingMessageIds((prev) => new Set(prev).add(id));
+                      try {
+                        await deleteMessageForEveryone(id);
+                        toast.success("Message deleted for everyone.");
+                      } catch {
+                        toast.error("Failed to delete message.");
+                      } finally {
+                        setDeletingMessageIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(id);
+                          return next;
+                        });
+                      }
+                    }}
+                  >
+                    Delete for Everyone
+                  </Button>
+                )}
+
+              <Button
+                variant="secondary"
+                className="w-full rounded-2xl py-5 font-semibold text-sm hover:bg-secondary/80 hover:scale-[1.01] active:scale-95 transition-all"
+                onClick={() => {
+                  const id = messageToDelete.id;
+                  setDeleteDialogOpen(false);
+                  setMessageToDelete(null);
+                  
+                  deleteMessageForMe(id);
+                  
+                  toast("Message deleted for me", {
+                    duration: 5000,
+                    action: {
+                      label: "Undo",
+                      onClick: () => {
+                        undoDeleteMessageForMe(id);
+                        toast.success("Restored message");
+                      },
+                    },
+                  });
+                }}
+              >
+                Delete for Me
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full rounded-2xl py-5 font-medium text-sm text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors"
+                onClick={() => {
+                  setDeleteDialogOpen(false);
+                  setMessageToDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
