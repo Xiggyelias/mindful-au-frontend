@@ -12,6 +12,7 @@ export const exportKey = async () => '';
 export const importKey = async () => null;
 export const logCryptoDebug = () => {};
 export const clearDecryptPlaintextCache = () => {};
+export { clearDeviceKeyPair } from './keyStore';
 
 export interface DeviceKeyPair {
   publicKey: string;

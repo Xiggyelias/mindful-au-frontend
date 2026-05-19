@@ -452,8 +452,8 @@ const UNIVERSITY_QUESTIONS: Question[] = [
   },
 ];
 
-const MAX_TOTAL = 20;
-const MAX_PER_CATEGORY = 2; // 2 per category × up to 10 categories = 20
+const MAX_TOTAL = 25;
+const MAX_PER_CATEGORY = 3; // up to 3 per category × 10 categories, capped at 25
 
 /**
  * Round-robin selection: pick questions one per category per round,
@@ -1001,7 +1001,7 @@ const StudentDiagnosticAssessment = () => {
 
                 <p className="text-muted-foreground">
                   This assessment is designed to help you understand your mental health and well-being. 
-                  It takes approximately 5–7 minutes and covers {MAX_TOTAL} focused questions
+                  It takes approximately 7–10 minutes and covers {MAX_TOTAL} focused questions
                   about your campus life, mood, relationships, sleep, academic stress and general wellbeing.
                 </p>
 
