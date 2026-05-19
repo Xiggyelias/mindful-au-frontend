@@ -102,7 +102,6 @@ const CounselorDashboard = () => {
       }
 
       const appointmentRows = toList<Appointment>(appointmentsPayload);
-      console.log("DEBUG: CounselorDashboard appointments response:", appointmentsPayload);
       setAppointments(appointmentRows);
       setIsLoading(false);
 

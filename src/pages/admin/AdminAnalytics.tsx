@@ -8,8 +8,6 @@ import {
   AlertTriangle,
   FileText,
   Settings,
-  TrendingUp,
-  TrendingDown,
   Activity,
   RefreshCcw,
   Download,
@@ -107,7 +105,7 @@ const AdminAnalytics = () => {
       const response = await api.getAnalytics();
       setData(response || {});
     } catch (error) {
-      console.error("Failed to load analytics:", error);
+      if (import.meta.env.DEV) console.error("Failed to load analytics:", error);
       toast.error("Failed to load analytics");
     } finally {
       setIsLoading(false);
@@ -278,9 +276,9 @@ const AdminAnalytics = () => {
                       {data?.sessions?.total_sessions ?? 0}
                     </p>
                   </div>
-                  <div className="flex items-center text-success">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span className="text-sm">vs week</span>
+                  <div className="flex items-center text-muted-foreground">
+                    <Activity className="h-4 w-4 mr-1" />
+                    <span className="text-sm">total</span>
                   </div>
                 </div>
               </CardContent>
@@ -294,9 +292,9 @@ const AdminAnalytics = () => {
                       {Math.round(data?.sessions?.avg_session_duration ?? 0)} min
                     </p>
                   </div>
-                  <div className="flex items-center text-success">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span className="text-sm">trend</span>
+                  <div className="flex items-center text-muted-foreground">
+                    <Activity className="h-4 w-4 mr-1" />
+                    <span className="text-sm">avg</span>
                   </div>
                 </div>
               </CardContent>
@@ -310,9 +308,11 @@ const AdminAnalytics = () => {
                       {data?.overview?.pending_appointments ?? 0}
                     </p>
                   </div>
-                  <div className="flex items-center text-warning">
-                    <TrendingDown className="h-4 w-4 mr-1" />
-                    <span className="text-sm">action</span>
+                  <div className={`flex items-center ${(data?.overview?.pending_appointments ?? 0) > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                    {(data?.overview?.pending_appointments ?? 0) > 0
+                      ? <AlertTriangle className="h-4 w-4 mr-1" />
+                      : <Activity className="h-4 w-4 mr-1" />}
+                    <span className="text-sm">{(data?.overview?.pending_appointments ?? 0) > 0 ? "needs action" : "clear"}</span>
                   </div>
                 </div>
               </CardContent>
@@ -326,9 +326,9 @@ const AdminAnalytics = () => {
                       {data?.ai_diagnostics?.diagnostics_this_month ?? 0}
                     </p>
                   </div>
-                  <div className="flex items-center text-primary">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span className="text-sm">AI</span>
+                  <div className="flex items-center text-muted-foreground">
+                    <Activity className="h-4 w-4 mr-1" />
+                    <span className="text-sm">this month</span>
                   </div>
                 </div>
               </CardContent>

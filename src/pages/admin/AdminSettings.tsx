@@ -210,6 +210,15 @@ const AdminSettings = () => {
   };
 
   const handleSave = async () => {
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (settings.admin_email && !emailRe.test(settings.admin_email)) {
+      toast.error("Admin Email is not a valid email address.");
+      return;
+    }
+    if (settings.support_email && !emailRe.test(settings.support_email)) {
+      toast.error("Support Email is not a valid email address.");
+      return;
+    }
     await savePartialSettings(settings, "Settings saved");
   };
 
@@ -722,7 +731,9 @@ const AdminSettings = () => {
                         <SelectContent>
                           <SelectItem value="all">All users</SelectItem>
                           <SelectItem value="student">Students</SelectItem>
+                          <SelectItem value="counselor">Counselors</SelectItem>
                           <SelectItem value="peer_counselor">Peer counselors</SelectItem>
+                          <SelectItem value="admin">Admins</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

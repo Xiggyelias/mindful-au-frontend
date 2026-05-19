@@ -18,6 +18,7 @@ type TwoFactorState = typeof DEFAULT_TWO_FACTOR_STATE;
 interface User {
   id: number;
   email: string;
+  needs_assessment?: boolean;
   profile?: {
     full_name?: string;
     id_number?: string;

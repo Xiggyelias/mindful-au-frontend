@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 
@@ -34,6 +34,21 @@ interface MlSignals {
   lowBandwidthMode?: boolean;
 }
 
+/** Max turns (user + AI pairs) to include in the context window sent to the model.
+ *  Keeps the payload size bounded while still giving meaningful continuity. */
+const MAX_HISTORY_TURNS = 20;
+
+/** Profile context forwarded to the backend so it can personalise the system
+ *  prompt (address the student by name, adjust tone for anonymous users, etc.). */
+export interface AIUserContext {
+  /** Display name or null when anonymous. */
+  name?: string | null;
+  /** Whether the student is in anonymous mode. */
+  anonymous?: boolean;
+  /** Broad role label, e.g. "student". */
+  role?: string;
+}
+
 const AI_HISTORY_CACHE_KEY = "ai_chat_history_v1";
 
 const formatTime = (value?: string | number | Date) => {
@@ -44,13 +59,25 @@ const formatTime = (value?: string | number | Date) => {
   return formatInDisplayZone(date, "h:mm a");
 };
 
-export const useAIChat = () => {
+export const useAIChat = (userContext?: AIUserContext | null) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supportSignal, setSupportSignal] = useState<SupportSignal | null>(null);
   const [mlSignals, setMlSignals] = useState<MlSignals | null>(null);
+
+  // Keep a ref to the latest messages so sendMessage always sees the current
+  // thread without needing to add `messages` to its dependency array (which
+  // would recreate the callback on every message and cause double-sends).
+  const messagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Tracks which conversation we last auto-alerted on so we send at most one
+  // background panic log per AI conversation, not one per high-risk reply.
+  const autoAlertedConvIdRef = useRef<number | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -165,6 +192,16 @@ export const useAIChat = () => {
       const trimmed = content.trim();
       if (!trimmed) return;
 
+      // Snapshot the conversation before appending the new user message so
+      // the history we send reflects what the model already responded to.
+      const priorMessages = messagesRef.current;
+      const history = priorMessages
+        .slice(-MAX_HISTORY_TURNS)
+        .map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.content,
+        }));
+
       const optimisticId = `local-${Date.now()}-user`;
       const optimisticMessage: Message = {
         id: optimisticId,
@@ -178,22 +215,45 @@ export const useAIChat = () => {
       setError(null);
 
       try {
-        const data = await api.aiWellnessChat(trimmed, [], conversationId);
+        const data = await api.aiWellnessChat(trimmed, history, conversationId, userContext ?? null);
 
         const nextConversationId = Number(data?.conversation_id);
         if (Number.isFinite(nextConversationId) && nextConversationId > 0) {
           setConversationId(nextConversationId);
         }
 
+        const riskLevel = typeof data?.risk_level === "string" ? data.risk_level : "normal";
+        const requiresImmediateHelp = Boolean(data?.requires_immediate_help);
+
         setSupportSignal({
-          riskLevel: typeof data?.risk_level === "string" ? data.risk_level : "normal",
-          requiresImmediateHelp: Boolean(data?.requires_immediate_help),
+          riskLevel,
+          requiresImmediateHelp,
           showPanicButton: Boolean(data?.show_panic_button),
           crisisHotline:
             typeof data?.crisis_hotline === "string" && data.crisis_hotline.trim() !== ""
               ? data.crisis_hotline.trim()
               : null,
         });
+
+        // When the AI flags high or critical risk, automatically send a background
+        // panic log so counselors/admins are notified without waiting for the student
+        // to tap the "Emergency Alert" button. Guard with a ref so we fire at most
+        // once per conversation (not once per message).
+        const isHighRisk =
+          requiresImmediateHelp ||
+          riskLevel === "high" ||
+          riskLevel === "critical";
+
+        if (isHighRisk) {
+          const effectiveConvId =
+            Number.isFinite(nextConversationId) && nextConversationId > 0
+              ? nextConversationId
+              : conversationId;
+          if (effectiveConvId !== autoAlertedConvIdRef.current) {
+            autoAlertedConvIdRef.current = effectiveConvId;
+            api.createPanicLog({}).catch(() => {});
+          }
+        }
 
         setMlSignals({
           modelVersion: typeof data?.ml_signals?.model_version === "string" ? data.ml_signals.model_version : undefined,
@@ -242,7 +302,7 @@ export const useAIChat = () => {
         setIsLoading(false);
       }
     },
-    [conversationId]
+    [conversationId, userContext]
   );
 
   const clearMessages = useCallback(() => {
@@ -250,6 +310,7 @@ export const useAIChat = () => {
     setConversationId(null);
     setSupportSignal(null);
     setMlSignals(null);
+    autoAlertedConvIdRef.current = null;
     localStorage.removeItem(AI_HISTORY_CACHE_KEY);
   }, []);
 

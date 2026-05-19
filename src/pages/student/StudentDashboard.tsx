@@ -420,7 +420,7 @@ const StudentDashboard = () => {
 
   const handleCallNow = () => {
     // Open phone dialer with crisis hotline number
-    window.location.href = 'tel:988'; // National Suicide Prevention Lifeline
+    window.location.href = 'tel:+263242704209'; // Lifeline Zimbabwe — mental health & suicide prevention
     toast.info("Connecting to crisis hotline...");
   };
 
@@ -694,7 +694,7 @@ const StudentDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {studentBadges.length === 0 ? (
+              {!statsLoading && studentBadges.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-border/60 bg-secondary/20 px-4 py-6 text-center">
                   <p className="text-sm font-medium text-muted-foreground">No badges yet</p>
                   <p className="mt-1 text-xs text-muted-foreground">

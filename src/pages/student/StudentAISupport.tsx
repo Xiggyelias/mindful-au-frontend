@@ -274,7 +274,11 @@ const StudentAISupport = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat();
+  const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat({
+    name: user?.profile?.anonymous_mode ? null : (userName || null),
+    anonymous: Boolean(user?.profile?.anonymous_mode),
+    role: "student",
+  });
   const { scrollRef: scrollContainerRef, handleScroll, scrollToBottom, isNearBottom } = useChatScroll(messages.length, {
     threshold: 150,
     smooth: true

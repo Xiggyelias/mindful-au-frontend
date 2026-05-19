@@ -126,7 +126,7 @@ function isAnswered(question: Question, value: unknown): boolean {
 const StudentDiagnosticAssessment = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
 
   const [step, setStep] = useState<"intro" | "form" | "results">("intro");
@@ -302,6 +302,7 @@ const StudentDiagnosticAssessment = () => {
       const data = await api.submitDiagnosticAssessment(payload, questionnaireId, false);
 
       setResult(data.diagnostic);
+      await refreshUser();
       setStep("results");
       toast.success("Assessment completed successfully!");
     } catch (error: unknown) {
@@ -544,7 +545,7 @@ const StudentDiagnosticAssessment = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={user?.needs_assessment ? navItems.filter((item) => item.path === "/student/diagnostic-assessment") : navItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -554,7 +555,7 @@ const StudentDiagnosticAssessment = () => {
       <div className="lg:pl-72 pl-0">
         <DashboardHeader
           title="Mental Health Assessment"
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuClick={user?.needs_assessment ? undefined : () => setSidebarOpen(true)}
         />
 
         <main className="p-4 lg:p-6">
@@ -567,6 +568,15 @@ const StudentDiagnosticAssessment = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                {user?.needs_assessment && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-400">
+                    <ClipboardCheck className="h-5 w-5 flex-shrink-0 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                    <p className="text-sm font-medium">
+                      As a newly registered student (or because your counselor has requested it), completing this intake assessment is mandatory to access your dashboard, chat, and other features.
+                    </p>
+                  </div>
+                )}
+
                 <p className="text-muted-foreground">
                   This assessment is designed to help you understand your mental health and well-being. 
                   It takes approximately 10-15 minutes to complete and covers various aspects of your 
@@ -614,22 +624,35 @@ const StudentDiagnosticAssessment = () => {
                   </div>
                 )}
 
-                <Button
-                  variant="hero"
-                  size="lg"
-                  onClick={handleStartAssessment}
-                  className="w-full"
-                  disabled={isQuestionnaireLoading || questions.length === 0 || Boolean(questionnaireError)}
-                >
-                  {isQuestionnaireLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading…
-                    </>
-                  ) : (
-                    "Start Assessment"
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="hero"
+                    size="lg"
+                    onClick={handleStartAssessment}
+                    className="w-full"
+                    disabled={isQuestionnaireLoading || questions.length === 0 || Boolean(questionnaireError)}
+                  >
+                    {isQuestionnaireLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading…
+                      </>
+                    ) : (
+                      "Start Assessment"
+                    )}
+                  </Button>
+                  
+                  {!user?.needs_assessment && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => navigate("/student/dashboard")}
+                      className="w-full"
+                    >
+                      Back to Dashboard
+                    </Button>
                   )}
-                </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -747,21 +770,30 @@ const StudentDiagnosticAssessment = () => {
                     </div>
                   )}
 
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate("/student/wellness")}
-                      className="flex-1"
-                    >
-                      View Wellness Dashboard
-                    </Button>
+                  <div className="flex flex-col gap-3 pt-4">
                     <Button
                       variant="hero"
-                      onClick={() => navigate("/student/appointments")}
-                      className="flex-1"
+                      onClick={() => navigate("/student/dashboard")}
+                      className="w-full text-base py-6 font-semibold"
                     >
-                      Book Counseling Session
+                      Proceed to Dashboard
                     </Button>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => navigate("/student/wellness")}
+                        className="flex-1"
+                      >
+                        View Wellness Dashboard
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => navigate("/student/appointments")}
+                        className="flex-1"
+                      >
+                        Book Counseling Session
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -142,7 +142,7 @@ const AdminDashboard = () => {
         setLastSyncedAt(new Date().toISOString());
       });
     } catch (error) {
-      console.error("Failed to load admin dashboard:", error);
+      if (import.meta.env.DEV) console.error("Failed to load admin dashboard:", error);
       if (loadRequestRef.current === requestId) {
         toast.error("Failed to load dashboard data");
       }
@@ -440,7 +440,7 @@ const AdminDashboard = () => {
                             {apt.counselor?.profile?.full_name || `Counselor #${apt.counselor_id}`}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(apt.scheduled_at).toLocaleString()}
+                            {apt.scheduled_at ? new Date(apt.scheduled_at).toLocaleString() : "TBD"}
                           </p>
                         </div>
                         <Button

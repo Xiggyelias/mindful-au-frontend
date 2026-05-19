@@ -58,5 +58,9 @@ export const ProtectedRoute = ({
     return <Navigate to={twoFactorPath} replace />;
   }
 
+  if (role === "student" && user?.needs_assessment && location.pathname !== "/student/diagnostic-assessment") {
+    return <Navigate to="/student/diagnostic-assessment" replace state={{ forced: true }} />;
+  }
+
   return <>{children}</>;
 };

@@ -198,7 +198,7 @@ const CounselorAIDashboard = () => {
       });
       setRiskDistribution(distribution);
     } catch (error) {
-      console.error("Failed to load dashboard data:", error);
+      if (import.meta.env.DEV) console.error("Failed to load dashboard data:", error);
       setLoadError("Could not load AI diagnostics. Check your connection and try again.");
       toast.error("Failed to load AI diagnostics dashboard");
     } finally {

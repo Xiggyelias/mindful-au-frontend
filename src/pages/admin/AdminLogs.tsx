@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -69,6 +69,8 @@ const AdminLogs = () => {
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
 
   const [logs, setLogs] = useState<any[]>([]);
+  const logsRef = useRef<any[]>([]);
+  useEffect(() => { logsRef.current = logs; }, [logs]);
   const [stats, setStats] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -142,7 +144,7 @@ const AdminLogs = () => {
 
     const intervalId = window.setInterval(async () => {
       try {
-        const lastId = logs.reduce((max, log) => {
+        const lastId = logsRef.current.reduce((max, log) => {
           const id = Number(log?.id);
           return Number.isFinite(id) && id > max ? id : max;
         }, 0);
@@ -167,7 +169,7 @@ const AdminLogs = () => {
     }, ACTIVITY_STREAM_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [user, isLiveTail, activeTab, logs]);
+  }, [user, isLiveTail, activeTab]);
 
   const handleSearch = () => {
     const nextQuery = searchInput.trim();

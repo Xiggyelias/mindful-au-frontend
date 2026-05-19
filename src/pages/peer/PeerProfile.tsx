@@ -36,7 +36,7 @@ const PeerProfile = () => {
                 Email: <span className="text-foreground">{user?.email || "Not available"}</span>
               </p>
               <p className="text-muted-foreground">
-                Student/ID Number: <span className="text-foreground">{user?.profile?.id_number || "Not set"}</span>
+                ID Number: <span className="text-foreground">{user?.profile?.id_number || "Not set"}</span>
               </p>
             </CardContent>
           </Card>

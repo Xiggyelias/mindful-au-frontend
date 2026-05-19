@@ -111,8 +111,24 @@ const CounselorWellness = () => {
   const [isSubmittingCheckIn, setIsSubmittingCheckIn] = useState(false);
   const [notes, setNotes] = useState("");
   const [checkInAnswers, setCheckInAnswers] = useState<CheckInAnswers>(createEmptyAnswers());
+  const [showOverrideCheckIn, setShowOverrideCheckIn] = useState(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
+
+  const todayCheckInLog = useMemo(() => {
+    return wellnessLogs.find((log) => {
+      if (log.check_in_version !== "v1") return false;
+      const logDate = new Date(log.created_at);
+      const today = new Date();
+      return (
+        logDate.getDate() === today.getDate() &&
+        logDate.getMonth() === today.getMonth() &&
+        logDate.getFullYear() === today.getFullYear()
+      );
+    });
+  }, [wellnessLogs]);
+
+  const hasCheckedInToday = Boolean(todayCheckInLog);
 
   const loadWellnessData = useCallback(async () => {
     try {
@@ -134,7 +150,7 @@ const CounselorWellness = () => {
         throw logsResult.reason ?? summaryResult.reason;
       }
     } catch (error: any) {
-      console.error("Failed to load wellness logs:", error);
+      if (import.meta.env.DEV) console.error("Failed to load wellness logs:", error);
       toast.error("Failed to load wellness data");
     } finally {
       setIsLoading(false);
@@ -207,6 +223,7 @@ const CounselorWellness = () => {
       await loadWellnessData();
       setCheckInAnswers(createEmptyAnswers());
       setNotes("");
+      setShowOverrideCheckIn(false);
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to save check-in");
     } finally {
@@ -369,72 +386,161 @@ const CounselorWellness = () => {
                 <CardTitle className="text-lg">Validated Self Check-In (2 mins)</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Completion</span>
-                    <span>
-                      {answeredCount}/{checkInQuestions.length}
-                    </span>
+              {hasCheckedInToday && !showOverrideCheckIn ? (
+                <CardContent className="space-y-6 flex flex-col items-center justify-center py-6 text-center">
+                  <div className="relative flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="h-10 w-10 animate-bounce" />
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20 animate-ping animate-duration-1000" />
                   </div>
-                  <Progress value={checkInProgress} className="h-2" />
-                </div>
 
-                <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
-                  {checkInQuestions.map((question) => (
-                    <div key={question.key} className="p-3 rounded-lg border bg-card space-y-3">
-                      <p className="text-sm font-medium">{question.label}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {scaleOptions.map((option) => (
-                          <Button
-                            key={option.value}
-                            size="sm"
-                            variant={checkInAnswers[question.key] === option.value ? "default" : "outline"}
-                            className="text-xs"
-                            onClick={() => handleSelectAnswer(question.key, option.value)}
-                          >
-                            {option.label}
-                          </Button>
-                        ))}
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold tracking-tight text-foreground">
+                      Check-In Recorded
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                      Thank you! Your daily counselor wellness self check-in has been successfully logged.
+                    </p>
+                  </div>
+
+                  <div className="w-full border-t border-border/60 pt-4 space-y-3 text-left">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Today's Scores
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Mood</span>
+                        <span className="text-lg font-bold text-success">
+                          {todayCheckInLog?.mood_score != null ? `${todayCheckInLog.mood_score}%` : "—"}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Stress</span>
+                        <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.stress_level, 40, 70)}`}>
+                          {todayCheckInLog?.stress_level != null ? `${todayCheckInLog.stress_level}%` : "—"}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Burnout</span>
+                        <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.burnout_index, 30, 60)}`}>
+                          {todayCheckInLog?.burnout_index != null ? `${todayCheckInLog.burnout_index}%` : "—"}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                <Textarea
-                  placeholder="Optional note: what made today easier or harder?"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                />
-
-                {checkInPreview && (
-                  <div className="p-3 rounded-lg border bg-secondary/20">
-                    <p className="text-sm font-semibold mb-2">Score preview</p>
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      <span>Mood: {checkInPreview.mood_score}%</span>
-                      <span>Stress: {checkInPreview.stress_level}%</span>
-                      <span>Burnout: {checkInPreview.burnout_index}%</span>
-                    </div>
+                    {todayCheckInLog?.notes && (
+                      <div className="p-3 rounded-lg bg-secondary/15 border border-border/40 text-xs italic text-muted-foreground mt-2">
+                        “{todayCheckInLog.notes}”
+                      </div>
+                    )}
                   </div>
-                )}
 
-                <Button
-                  onClick={handleSubmitCheckIn}
-                  disabled={!isCheckInComplete || isSubmittingCheckIn}
-                  className="w-full"
-                >
-                  {isSubmittingCheckIn ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving check-in...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Save Wellness Check-In
-                    </>
+                  <div className="w-full space-y-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        // Pre-populate existing answers for editing
+                        if (todayCheckInLog?.check_in_answers) {
+                          setCheckInAnswers(todayCheckInLog.check_in_answers);
+                        }
+                        if (todayCheckInLog?.notes) {
+                          setNotes(todayCheckInLog.notes);
+                        }
+                        setShowOverrideCheckIn(true);
+                      }}
+                      className="w-full text-xs font-medium"
+                    >
+                      Update Check-In Answers
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      {todayCheckInLog?.created_at ? `Submitted at ${new Date(todayCheckInLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ""}
+                    </p>
+                  </div>
+                </CardContent>
+              ) : (
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Completion</span>
+                      <span>
+                        {answeredCount}/{checkInQuestions.length}
+                      </span>
+                    </div>
+                    <Progress value={checkInProgress} className="h-2" />
+                  </div>
+
+                  <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
+                    {checkInQuestions.map((question) => (
+                      <div key={question.key} className="p-3 rounded-lg border bg-card space-y-3">
+                        <p className="text-sm font-medium">{question.label}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {scaleOptions.map((option) => (
+                            <Button
+                              key={option.value}
+                              size="sm"
+                              variant={checkInAnswers[question.key] === option.value ? "default" : "outline"}
+                              className="text-xs"
+                              onClick={() => handleSelectAnswer(question.key, option.value)}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Textarea
+                    placeholder="Optional note: what made today easier or harder?"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                  />
+
+                  {checkInPreview && (
+                    <div className="p-3 rounded-lg border bg-secondary/20">
+                      <p className="text-sm font-semibold mb-2">Score preview</p>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <span>Mood: {checkInPreview.mood_score}%</span>
+                        <span>Stress: {checkInPreview.stress_level}%</span>
+                        <span>Burnout: {checkInPreview.burnout_index}%</span>
+                      </div>
+                    </div>
                   )}
-                </Button>
+
+                  <div className="flex gap-2">
+                    {showOverrideCheckIn && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setCheckInAnswers(createEmptyAnswers());
+                          setNotes("");
+                          setShowOverrideCheckIn(false);
+                        }}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleSubmitCheckIn}
+                      disabled={!isCheckInComplete || isSubmittingCheckIn}
+                      className={showOverrideCheckIn ? "flex-1" : "w-full"}
+                    >
+                      {isSubmittingCheckIn ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Save Check-In
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              )}
               </CardContent>
             </Card>
           </div>

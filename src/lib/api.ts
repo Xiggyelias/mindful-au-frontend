@@ -1884,6 +1884,13 @@ class ApiClient {
     return response.data;
   }
 
+  async assignNewAssessment(studentId: number) {
+    const response = await this.client.post('/diagnostics/assign', {
+      student_id: studentId,
+    });
+    return response.data;
+  }
+
   async getStudentWellnessSummary(studentId?: number) {
     const params = studentId ? { student_id: studentId } : {};
     const response = await this.client.get('/student-wellness/summary', { params });
@@ -1980,13 +1987,21 @@ class ApiClient {
   // AI Wellness Chat
   async aiWellnessChat(
     message: string,
-    history: Array<{role: string, content: string}> = [],
-    conversationId?: number | null
+    history: Array<{ role: string; content: string }> = [],
+    conversationId?: number | null,
+    userContext?: {
+      name?: string | null;
+      anonymous?: boolean;
+      role?: string;
+    } | null
   ) {
     const response = await this.client.post('/ai/wellness-chat', {
       message,
       history,
       conversation_id: conversationId ?? undefined,
+      // Structured context lets the backend personalise the system prompt
+      // and calibrate risk assessment without leaking raw PII into the log.
+      ...(userContext ? { user_context: userContext } : {}),
     });
     return response.data;
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -55,21 +55,31 @@ const PeerDashboard = () => {
     isSavingFavorite,
   } = useDailyTip();
 
-  const load = async () => {
-    try {
-      setLoading(true);
-      const next = await api.getPeerDashboard();
-      setData(next);
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, "Failed to load peer dashboard"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        const next = await api.getPeerDashboard();
+        if (!controller.signal.aborted) setData(next);
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) {
+          toast.error(getApiErrorMessage(error, "Failed to load peer dashboard"));
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
     void load();
+    return () => controller.abort();
   }, [user?.id]);
 
   const handleAvailabilityToggle = async (available: boolean) => {
@@ -130,7 +140,7 @@ const PeerDashboard = () => {
                 <Switch
                   checked={Boolean(data?.availability)}
                   onCheckedChange={handleAvailabilityToggle}
-                  disabled={savingAvailability}
+                  disabled={loading || savingAvailability}
                 />
               </div>
             </CardContent>

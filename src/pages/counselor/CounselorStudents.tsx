@@ -66,6 +66,7 @@ const CounselorStudents = () => {
   const [peerCounselors, setPeerCounselors] = useState<any[]>([]);
   const [selectedPeerByStudent, setSelectedPeerByStudent] = useState<Record<number, string>>({});
   const [assigningStudentId, setAssigningStudentId] = useState<number | null>(null);
+  const [assigningAssessmentStudentId, setAssigningAssessmentStudentId] = useState<number | null>(null);
   const [peerAssignmentAction, setPeerAssignmentAction] = useState<"assign" | "unassign" | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -243,7 +244,7 @@ const CounselorStudents = () => {
             : (sessionsData || []).filter((session: any) => session.session_type === "chat")
         );
       } catch (err: any) {
-        console.error("Failed to load students:", err);
+        if (import.meta.env.DEV) console.error("Failed to load students:", err);
         toast.error("Failed to load students");
       } finally {
         setIsLoading(false);
@@ -396,6 +397,18 @@ const CounselorStudents = () => {
     } finally {
       setAssigningStudentId(null);
       setPeerAssignmentAction(null);
+    }
+  };
+
+  const handleAssignAssessment = async (studentId: number, studentName: string) => {
+    try {
+      setAssigningAssessmentStudentId(studentId);
+      await api.assignNewAssessment(studentId);
+      toast.success(`A new wellness assessment has been assigned to ${studentName} successfully.`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to assign new assessment.");
+    } finally {
+      setAssigningAssessmentStudentId(null);
     }
   };
 
@@ -592,10 +605,11 @@ const CounselorStudents = () => {
                           <span className="text-primary font-medium">
                             {student.name
                               .split(" ")
+                              .filter((part: string) => part.length > 0)
                               .map((part: string) => part[0])
                               .join("")
                               .slice(0, 2)
-                              .toUpperCase()}
+                              .toUpperCase() || "?"}
                           </span>
                         </div>
                         <div>
@@ -635,8 +649,17 @@ const CounselorStudents = () => {
                             Assigned
                           </span>
                         )}
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="outline" onClick={() => handleMessage(student.id)}>
                           View Profile
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/45 dark:text-indigo-400"
+                          onClick={() => handleAssignAssessment(student.id, student.profile?.full_name || student.email || `Student #${student.id}`)}
+                          disabled={assigningAssessmentStudentId === student.id}
+                        >
+                          {assigningAssessmentStudentId === student.id ? "Assigning..." : "Assign Assessment"}
                         </Button>
                         <Button
                           size="sm"

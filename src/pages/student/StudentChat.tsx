@@ -37,6 +37,7 @@ import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { useConfirm } from "@/hooks/useConfirm";
+import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -391,8 +392,18 @@ const StudentChat = () => {
         setSelectedFile(null);
       }
       if (message.trim()) {
-        const success = await sendMessage(message.trim());
+        const text = message.trim();
+        const success = await sendMessage(text);
         if (success) {
+          // Scan the outgoing plaintext for crisis keywords and notify staff.
+          // This runs client-side so encrypted sessions (where the server cannot
+          // read the body) still produce a staff alert when trigger words are used.
+          if (sessionId && !isE2EHandshakeEnvelopeContent(text)) {
+            const matches = detectCrisisTermsInText(text);
+            if (matches.length > 0) {
+              api.reportCrisisSignal(sessionId, matches).catch(() => {});
+            }
+          }
           setMessage("");
           notifyTyping(false);
         }

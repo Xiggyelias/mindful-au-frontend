@@ -44,6 +44,7 @@ import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
+import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
 import {
   formatInDisplayZone,
   isThisYearInDisplayZone,
@@ -297,6 +298,7 @@ const CounselorMessages = () => {
   const lastLoadSessionsAtRef = useRef(0);
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadAfterReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIdentityRevealGrantSessionIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
@@ -803,7 +805,8 @@ const CounselorMessages = () => {
 
     // Fix 3: silent reload 3s later so the poll-loop picks up the fresh seen_at
     // count from the DB and doesn't re-inflate the badge on the next tick
-    setTimeout(() => {
+    if (reloadAfterReadTimerRef.current) clearTimeout(reloadAfterReadTimerRef.current);
+    reloadAfterReadTimerRef.current = setTimeout(() => {
       void loadSessions(true);
     }, 3000);
   }, [loadSessions]);
@@ -834,6 +837,10 @@ const CounselorMessages = () => {
       window.removeEventListener("online", onVisibilityOrFocus);
       window.removeEventListener(API_RECOVERED_EVENT, onVisibilityOrFocus as EventListener);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      if (reloadAfterReadTimerRef.current) {
+        clearTimeout(reloadAfterReadTimerRef.current);
+        reloadAfterReadTimerRef.current = null;
+      }
     };
   }, [loadSessions, user?.id]);
 
@@ -969,10 +976,6 @@ const CounselorMessages = () => {
     e.preventDefault();
     const hasPayload = Boolean(message.trim() || selectedFile);
     if (!hasPayload || isSending || !selectedSessionId) return;
-    if (message.trim() && !true) {
-      toast.error("Secure channel is initializing. Please wait a few seconds.");
-      return;
-    }
     if (isPeerCounselor && selectedFile) {
       toast.error("Peer counselors can only send text messages.");
       return;
@@ -992,12 +995,21 @@ const CounselorMessages = () => {
       }
 
       if (message.trim()) {
-        const sentText = await sendMessage(message.trim());
+        const text = message.trim();
+        const sentText = await sendMessage(text);
         if (!sentText) {
           if (!chatError) {
             toast.error("Failed to send message");
           }
           return;
+        }
+        // Scan the counselor's outgoing message for crisis keywords so that
+        // if a student quotes or echoes crisis language the system catches it.
+        if (selectedSessionId && !isE2EHandshakeEnvelopeContent(text)) {
+          const matches = detectCrisisTermsInText(text);
+          if (matches.length > 0) {
+            api.reportCrisisSignal(selectedSessionId, matches).catch(() => {});
+          }
         }
         setMessage("");
         notifyTyping(false);
@@ -1628,7 +1640,7 @@ const CounselorMessages = () => {
 
             <div className="mt-6 flex flex-col gap-2">
               {messageToDelete.sender_id === Number(user?.id) &&
-                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 * 60 && (
+                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"

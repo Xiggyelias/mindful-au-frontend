@@ -4,6 +4,7 @@ import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
@@ -33,19 +34,24 @@ const PeerEscalatedCases = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rows, setRows] = useState<EscalationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const response = await api.getPeerEscalations();
+      setRows(Array.isArray(response) ? response : []);
+    } catch (error: unknown) {
+      const msg = getApiErrorMessage(error, "Failed to load escalated cases");
+      setLoadError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const response = await api.getPeerEscalations();
-        setRows(Array.isArray(response) ? response : []);
-      } catch (error: unknown) {
-        toast.error(getApiErrorMessage(error, "Failed to load escalated cases"));
-      } finally {
-        setLoading(false);
-      }
-    };
     void load();
   }, []);
 
@@ -73,6 +79,13 @@ const PeerEscalatedCases = () => {
             <CardContent className="space-y-3">
               {loading ? (
                 <p className="text-sm text-muted-foreground">Loading escalations...</p>
+              ) : loadError ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <p className="text-sm text-destructive">{loadError}</p>
+                  <Button size="sm" variant="outline" onClick={() => void load()}>
+                    Retry
+                  </Button>
+                </div>
               ) : rows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No escalated cases yet.</p>
               ) : (
