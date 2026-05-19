@@ -109,12 +109,14 @@ export const useDailyTip = () => {
       let nextTip = await api.getWellnessTip();
 
       if (!nextTip) {
-        // /tips is admin-managed in some environments.
-        // Avoid surfacing "Admin access required" to non-admin dashboards.
-        const canReadTipsLibrary = role === "admin";
-        if (canReadTipsLibrary) {
+        // /wellness/tip returned nothing — try the full tip library as a fallback.
+        // Silently swallow errors so non-admin roles degrade gracefully if the
+        // endpoint is restricted on their account.
+        try {
           const tips = await api.getTips();
           nextTip = pickFallbackTipForRole(tips, role);
+        } catch {
+          // Not all roles may have access to /tips — ignore and fall through.
         }
       }
 

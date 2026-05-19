@@ -95,36 +95,392 @@ function extractQuestionList(data: unknown): Question[] {
   return [];
 }
 
-/**
- * Reduce a full question bank to a concise assessment.
- * Strategy: take up to MAX_PER_CATEGORY questions from each category,
- * then cap the total at MAX_TOTAL. This preserves coverage across all
- * mental-health dimensions while keeping the form manageable.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// University-tailored question bank
+// 30 questions across 10 campus-life categories.
+// selectRepresentativeQuestions picks MAX_PER_CATEGORY (3) per category,
+// capped at MAX_TOTAL (20), giving exactly 20 focused questions.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FREQ_OPTIONS: QuestionOption[] = [
+  { value: "1", label: "Never",        score: 0 },
+  { value: "2", label: "Rarely",       score: 1 },
+  { value: "3", label: "Sometimes",    score: 2 },
+  { value: "4", label: "Often",        score: 3 },
+  { value: "5", label: "Almost always",score: 4 },
+];
+
+const AGREE_OPTIONS: QuestionOption[] = [
+  { value: "1", label: "Strongly disagree", score: 0 },
+  { value: "2", label: "Disagree",           score: 1 },
+  { value: "3", label: "Neutral",            score: 2 },
+  { value: "4", label: "Agree",              score: 3 },
+  { value: "5", label: "Strongly agree",     score: 4 },
+];
+
+const QUALITY_OPTIONS: QuestionOption[] = [
+  { value: "1", label: "Very poor",    score: 0 },
+  { value: "2", label: "Poor",         score: 1 },
+  { value: "3", label: "Fair",         score: 2 },
+  { value: "4", label: "Good",         score: 3 },
+  { value: "5", label: "Excellent",    score: 4 },
+];
+
+const UNIVERSITY_QUESTIONS: Question[] = [
+
+  // ── 1. School & Studying ───────────────────────────────────────────────────
+  // Day-to-day classroom and study experience
+  {
+    id: "univ_school_engagement",
+    category: "school",
+    section_title: "School & Studying",
+    type: "scale_1_5",
+    question: "How engaged and interested do you feel in your lectures and coursework?",
+    description: "Think about whether you find your studies meaningful and stimulating.",
+    options: FREQ_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_school_concentration",
+    category: "school",
+    section_title: "School & Studying",
+    type: "scale_1_5",
+    question: "How often do you struggle to concentrate or focus when studying?",
+    description: "Mind wandering, difficulty retaining information or zoning out during lectures.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_school_lecturers",
+    category: "school",
+    section_title: "School & Studying",
+    type: "scale_1_5",
+    question: "How comfortable do you feel approaching your lecturers or tutors when you need help?",
+    description: "Asking questions, seeking clarification or requesting support.",
+    options: FREQ_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+
+  // ── 2. Academic Pressure ───────────────────────────────────────────────────
+  // Stress from workload, deadlines and performance expectations
+  {
+    id: "univ_acad_overload",
+    category: "academic",
+    section_title: "Academic Pressure",
+    type: "scale_1_5",
+    question: "How overwhelmed do you feel by your academic workload right now?",
+    description: "Assignments, readings, group projects and submission deadlines.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_acad_exam_anxiety",
+    category: "academic",
+    section_title: "Academic Pressure",
+    type: "scale_1_5",
+    question: "How anxious do you feel about exams, tests or major assessments?",
+    description: "Fear of failing, blanking out or not performing as expected.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_acad_procrastination",
+    category: "academic",
+    section_title: "Academic Pressure",
+    type: "scale_1_5",
+    question: "How often do you procrastinate or struggle to start your work even when you know you should?",
+    description: "Putting off tasks, spending time on distractions or feeling paralysed.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+
+  // ── 3. Mood & Emotions ─────────────────────────────────────────────────────
+  {
+    id: "univ_mood_lowness",
+    category: "mood",
+    section_title: "Mood & Emotions",
+    type: "scale_1_5",
+    question: "Over the past two weeks, how often have you felt sad, low or hopeless?",
+    description: "This includes feeling down without being able to explain why.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_mood_motivation",
+    category: "mood",
+    section_title: "Mood & Emotions",
+    type: "scale_1_5",
+    question: "How hard is it to find the motivation to get through your day at university?",
+    description: "Attending lectures, completing tasks, or simply getting up in the morning.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_mood_enjoyment",
+    category: "mood",
+    section_title: "Mood & Emotions",
+    type: "scale_1_5",
+    question: "How much have you lost interest or pleasure in things you usually enjoy?",
+    description: "Hobbies, socialising, sport, campus activities — things you used to look forward to.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+
+  // ── 4. Anxiety & Worry ─────────────────────────────────────────────────────
+  {
+    id: "univ_anxiety_tension",
+    category: "anxiety",
+    section_title: "Anxiety & Worry",
+    type: "scale_1_5",
+    question: "How often do you feel nervous, tense or on edge in daily life?",
+    description: "A general sense of unease or dread that is hard to shake.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_anxiety_overwhelm",
+    category: "anxiety",
+    section_title: "Anxiety & Worry",
+    type: "scale_1_5",
+    question: "How often do you feel so overwhelmed that you don't know where to begin?",
+    description: "A flooding or frozen feeling when faced with too many demands at once.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_anxiety_worry",
+    category: "anxiety",
+    section_title: "Anxiety & Worry",
+    type: "scale_1_5",
+    question: "How much does worry take up mental space that should be used for studying or relaxing?",
+    description: "Ruminating, replaying conversations or catastrophising about the future.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+
+  // ── 5. Sleep & Energy ──────────────────────────────────────────────────────
+  {
+    id: "univ_sleep_quality",
+    category: "sleep",
+    section_title: "Sleep & Energy",
+    type: "scale_1_5",
+    question: "How would you rate the quality of your sleep over the past week?",
+    description: "How rested you feel when you wake up.",
+    options: QUALITY_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_sleep_fatigue",
+    category: "sleep",
+    section_title: "Sleep & Energy",
+    type: "scale_1_5",
+    question: "How often does tiredness or low energy hold you back during the day?",
+    description: "Struggling to stay awake in lectures, lacking energy to study or socialise.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_sleep_disruption",
+    category: "sleep",
+    section_title: "Sleep & Energy",
+    type: "scale_1_5",
+    question: "How often do stress or racing thoughts prevent you from sleeping well?",
+    description: "Lying awake worrying about exams, money, the future or relationships.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+
+  // ── 6. Campus & Social Life ────────────────────────────────────────────────
+  {
+    id: "univ_social_belonging",
+    category: "social",
+    section_title: "Campus & Social Life",
+    type: "scale_1_5",
+    question: "How much do you feel a genuine sense of belonging on campus?",
+    description: "Feeling accepted, included and part of your university community.",
+    options: AGREE_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_social_loneliness",
+    category: "social",
+    section_title: "Campus & Social Life",
+    type: "scale_1_5",
+    question: "How often do you feel lonely or isolated — even when surrounded by other students?",
+    description: "A sense of disconnection from the people around you.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_social_relationships",
+    category: "social",
+    section_title: "Campus & Social Life",
+    type: "scale_1_5",
+    question: "How satisfied are you with your friendships and social life at university?",
+    description: "Quality of connection matters more than the number of friends.",
+    options: QUALITY_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+
+  // ── 7. Student Life Pressures ─────────────────────────────────────────────
+  {
+    id: "univ_campus_finances",
+    category: "campus_life",
+    section_title: "Student Life Pressures",
+    type: "scale_1_5",
+    question: "How much are financial pressures affecting your wellbeing or ability to study?",
+    description: "Fees, accommodation, food, transport or general money worries.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_campus_adjustment",
+    category: "campus_life",
+    section_title: "Student Life Pressures",
+    type: "scale_1_5",
+    question: "How well have you adjusted to the demands and lifestyle of university?",
+    description: "Managing your own time, independence, new routines and expectations.",
+    options: QUALITY_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_campus_homesick",
+    category: "campus_life",
+    section_title: "Student Life Pressures",
+    type: "scale_1_5",
+    question: "How much do homesickness or distance from family affect your mood and focus?",
+    description: "Missing home, family support or your familiar environment.",
+    options: FREQ_OPTIONS,
+    required: false,
+  },
+
+  // ── 8. Self-image & Purpose ────────────────────────────────────────────────
+  {
+    id: "univ_identity_confidence",
+    category: "identity",
+    section_title: "Self-image & Purpose",
+    type: "scale_1_5",
+    question: "How confident do you feel in your ability to succeed at university?",
+    description: "Belief in your own intelligence, potential and ability to handle challenges.",
+    options: AGREE_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_identity_pressure",
+    category: "identity",
+    section_title: "Self-image & Purpose",
+    type: "scale_1_5",
+    question: "How much pressure do you feel to live up to expectations from family, peers or society?",
+    description: "Pressure to succeed, choose the right career or be a certain kind of person.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+  {
+    id: "univ_identity_direction",
+    category: "identity",
+    section_title: "Self-image & Purpose",
+    type: "scale_1_5",
+    question: "How clear do you feel about your purpose and direction in life right now?",
+    description: "Knowing why you are here, what you are working towards and what matters to you.",
+    options: AGREE_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+
+  // ── 9. Coping & Support ────────────────────────────────────────────────────
+  {
+    id: "univ_coping_manage",
+    category: "coping",
+    section_title: "Coping & Support",
+    type: "scale_1_5",
+    question: "How well are you managing stress in your day-to-day life as a student?",
+    description: "Ability to bounce back, rest when needed and keep functioning.",
+    options: QUALITY_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_support_network",
+    category: "coping",
+    section_title: "Coping & Support",
+    type: "scale_1_5",
+    question: "How supported do you feel by the people around you — friends, family or university staff?",
+    description: "Having someone to talk to when things get tough.",
+    options: AGREE_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_support_stigma",
+    category: "coping",
+    section_title: "Coping & Support",
+    type: "scale_1_5",
+    question: "How much does fear of judgement stop you from talking about your mental health or seeking help?",
+    description: "Concern about being seen as weak, different or a burden.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+
+  // ── 10. Physical Wellbeing ─────────────────────────────────────────────────
+  {
+    id: "univ_physical_selfcare",
+    category: "physical",
+    section_title: "Physical Wellbeing",
+    type: "scale_1_5",
+    question: "How well are you looking after your physical health — eating, moving and resting?",
+    description: "Regular meals, physical activity, hydration and basic self-care.",
+    options: QUALITY_OPTIONS,
+    required: true,
+    scoring: { polarity: "positive" },
+  },
+  {
+    id: "univ_physical_symptoms",
+    category: "physical",
+    section_title: "Physical Wellbeing",
+    type: "scale_1_5",
+    question: "How often do physical symptoms like headaches, stomach problems or chest tightness affect your daily life?",
+    description: "The body often signals that the mind is carrying too much.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
+];
+
 const MAX_TOTAL = 20;
-const MAX_PER_CATEGORY = 3;
+const MAX_PER_CATEGORY = 2; // 2 per category × up to 10 categories = 20
 
+/**
+ * Round-robin selection: pick questions one per category per round,
+ * cycling through all categories evenly before taking a second from any.
+ * This guarantees every section is represented even when MAX_TOTAL < (categories × MAX_PER_CATEGORY).
+ */
 function selectRepresentativeQuestions(questions: Question[]): Question[] {
-  const seenPerCategory = new Map<string, number>();
-  const selected: Question[] = [];
-
+  // Group questions by category, preserving their order within each group
+  const byCategory = new Map<string, Question[]>();
   for (const q of questions) {
-    if (selected.length >= MAX_TOTAL) break;
     const cat = q.category || "general";
-    const count = seenPerCategory.get(cat) ?? 0;
-    if (count < MAX_PER_CATEGORY) {
-      selected.push(q);
-      seenPerCategory.set(cat, count + 1);
-    }
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(q);
   }
 
-  // If we're still under the cap, fill remaining slots with any skipped questions
-  if (selected.length < MAX_TOTAL) {
-    const selectedIds = new Set(selected.map((q) => q.id));
-    for (const q of questions) {
+  const categories = Array.from(byCategory.keys());
+  const selected: Question[] = [];
+  const cursors = new Map<string, number>(categories.map((c) => [c, 0]));
+
+  for (let round = 0; round < MAX_PER_CATEGORY && selected.length < MAX_TOTAL; round++) {
+    for (const cat of categories) {
       if (selected.length >= MAX_TOTAL) break;
-      if (!selectedIds.has(q.id)) {
-        selected.push(q);
+      const pool = byCategory.get(cat)!;
+      const idx = cursors.get(cat)!;
+      if (idx < pool.length) {
+        selected.push(pool[idx]);
+        cursors.set(cat, idx + 1);
       }
     }
   }
@@ -154,7 +510,10 @@ function isAnswered(question: Question, value: unknown): boolean {
     case "scale":
     case "scale_1_5":
     case "scale_1_10":
-      return typeof value === "number" && Number.isFinite(value);
+      // Accept both numeric values (legacy) and string values from labeled option buttons
+      if (typeof value === "number") return Number.isFinite(value);
+      if (typeof value === "string") return value.trim() !== "" && !Number.isNaN(Number(value));
+      return false;
     default:
       return String(value).trim() !== "";
   }
@@ -196,8 +555,14 @@ const StudentDiagnosticAssessment = () => {
     setIsQuestionnaireLoading(true);
     try {
       const data = await api.getDiagnosticQuestionnaire();
-      const questionList = selectRepresentativeQuestions(extractQuestionList(data));
       const id = typeof (data as Record<string, unknown>)?.id === "number" ? (data as { id: number }).id : Number((data as { id?: unknown })?.id ?? 0);
+
+      // Always use the university-tailored question bank. The API questionnaire ID
+      // is still stored so the backend can track and score the submission.
+      // If the bank is somehow empty, fall back to the API question list.
+      const questionList = UNIVERSITY_QUESTIONS.length > 0
+        ? selectRepresentativeQuestions(UNIVERSITY_QUESTIONS)
+        : selectRepresentativeQuestions(extractQuestionList(data));
 
       setQuestions(questionList);
       setQuestionnaireId(Number.isFinite(id) && id > 0 ? id : null);
@@ -436,18 +801,38 @@ const StudentDiagnosticAssessment = () => {
 
         <div className="space-y-3">
           {(question.type === "scale" || question.type === "scale_1_5") && (
-            <div className="flex gap-2 flex-wrap">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <Button
-                  key={value}
-                  variant={response === value ? "default" : "outline"}
-                  onClick={() => handleResponseChange(value)}
-                  className="min-w-[2.5rem]"
-                >
-                  {value}
-                </Button>
-              ))}
-            </div>
+            question.options?.length ? (
+              // Labeled options (e.g. Never → Almost always)
+              <div className="space-y-2">
+                {question.options.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={response === option.value ? "default" : "outline"}
+                    onClick={() => handleResponseChange(option.value)}
+                    className="w-full justify-start text-left h-auto whitespace-normal py-3"
+                  >
+                    <span className="mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs font-bold">
+                      {option.value}
+                    </span>
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              // Fallback: bare numeric scale
+              <div className="flex gap-2 flex-wrap">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <Button
+                    key={value}
+                    variant={response === value ? "default" : "outline"}
+                    onClick={() => handleResponseChange(value)}
+                    className="min-w-[2.5rem]"
+                  >
+                    {value}
+                  </Button>
+                ))}
+              </div>
+            )
           )}
 
           {question.type === "scale_1_10" && (
@@ -616,8 +1001,8 @@ const StudentDiagnosticAssessment = () => {
 
                 <p className="text-muted-foreground">
                   This assessment is designed to help you understand your mental health and well-being. 
-                  It takes approximately 5–7 minutes to complete and covers key aspects of your
-                  emotional and psychological health across {MAX_TOTAL} focused questions.
+                  It takes approximately 5–7 minutes and covers {MAX_TOTAL} focused questions
+                  about your campus life, mood, relationships, sleep, academic stress and general wellbeing.
                 </p>
 
                 <div className="space-y-3">
@@ -625,7 +1010,7 @@ const StudentDiagnosticAssessment = () => {
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>Structured sections from context and study load through coping, support, safety, and counselling goals</span>
+                      <span>Sections covering academic stress, mood, anxiety, sleep, social life, campus adjustment, coping, identity, support and physical wellbeing</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
