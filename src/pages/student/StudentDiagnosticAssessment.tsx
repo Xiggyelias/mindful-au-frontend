@@ -99,7 +99,7 @@ function extractQuestionList(data: unknown): Question[] {
 // University-tailored question bank
 // 30 questions across 10 campus-life categories.
 // selectRepresentativeQuestions picks MAX_PER_CATEGORY (3) per category,
-// capped at MAX_TOTAL (20), giving exactly 20 focused questions.
+// capped at MAX_TOTAL (25), giving up to 25 focused questions.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FREQ_OPTIONS: QuestionOption[] = [
@@ -519,6 +519,28 @@ function isAnswered(question: Question, value: unknown): boolean {
   }
 }
 
+/**
+ * Normalise response values before sending to the backend.
+ * Labeled option buttons store values as strings ("1"–"5"); the backend
+ * scoring engine expects plain numbers.
+ */
+function normalizeResponses(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+      out[key] = Number(value);
+    } else if (Array.isArray(value)) {
+      // multi_select: convert numeric strings inside arrays too
+      out[key] = value.map((v) =>
+        typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v)) ? Number(v) : v
+      );
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 const StudentDiagnosticAssessment = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -538,10 +560,31 @@ const StudentDiagnosticAssessment = () => {
   const [isQuestionnaireLoading, setIsQuestionnaireLoading] = useState(false);
   const [questionnaireError, setQuestionnaireError] = useState<string | null>(null);
 
+  // ── One-time gate ──────────────────────────────────────────────────────────
+  // Students who have already completed the intake assessment should see their
+  // existing result, not a blank start screen.  Load the latest diagnostic on
+  // mount; if found, jump straight to results.
   useEffect(() => {
     if (!user?.id) return;
+
+    if (user.needs_assessment === false) {
+      // Already completed — try to pre-populate results without blocking the UI.
+      api.getLatestDiagnostic().then((data) => {
+        // API may return { diagnostic: {...} } or the diagnostic object directly.
+        const wrapped = (data as { diagnostic?: DiagnosticResult })?.diagnostic;
+        const direct = (data as DiagnosticResult)?.id ? (data as DiagnosticResult) : null;
+        const diag = wrapped ?? direct ?? null;
+        if (diag) {
+          setResult(diag);
+          setStep("results");
+        }
+      }).catch(() => {
+        // No prior result on the server yet — fall through to intro.
+      });
+    }
+
     loadQuestionnaire();
-  }, [user?.id]);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (step === "results") {
@@ -555,11 +598,12 @@ const StudentDiagnosticAssessment = () => {
     setIsQuestionnaireLoading(true);
     try {
       const data = await api.getDiagnosticQuestionnaire();
-      const id = typeof (data as Record<string, unknown>)?.id === "number" ? (data as { id: number }).id : Number((data as { id?: unknown })?.id ?? 0);
+      const id = typeof (data as Record<string, unknown>)?.id === "number"
+        ? (data as { id: number }).id
+        : Number((data as { id?: unknown })?.id ?? 0);
 
-      // Always use the university-tailored question bank. The API questionnaire ID
-      // is still stored so the backend can track and score the submission.
-      // If the bank is somehow empty, fall back to the API question list.
+      // Always prefer the university-tailored local bank. Fall back to API list
+      // only when the local bank is empty.
       const questionList = UNIVERSITY_QUESTIONS.length > 0
         ? selectRepresentativeQuestions(UNIVERSITY_QUESTIONS)
         : selectRepresentativeQuestions(extractQuestionList(data));
@@ -572,14 +616,28 @@ const StudentDiagnosticAssessment = () => {
       }
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
-        console.error("Failed to load questionnaire:", error);
+        console.error("Failed to load questionnaire metadata:", error);
       }
-      const message = getApiErrorMessage(
-        error,
-        "Could not load the assessment. Try again or contact support if this continues.",
-      );
-      setQuestionnaireError(message);
-      toast.error(message);
+      // The local question bank is self-contained — load it even when the API
+      // fails so the student can still take the assessment.  The questionnaire
+      // ID will be missing, which means the backend will reject the submit, but
+      // that error is surfaced at submit-time rather than blocking the form.
+      if (UNIVERSITY_QUESTIONS.length > 0) {
+        const questionList = selectRepresentativeQuestions(UNIVERSITY_QUESTIONS);
+        setQuestions(questionList);
+        setQuestionnaireId(null);
+        // Soft warning — not a hard blocker
+        setQuestionnaireError(
+          "Could not connect to the server to register your session. Your answers will be saved when you submit — please ensure you are online."
+        );
+      } else {
+        const message = getApiErrorMessage(
+          error,
+          "Could not load the assessment. Try again or contact support if this continues.",
+        );
+        setQuestionnaireError(message);
+        toast.error(message);
+      }
     } finally {
       setIsQuestionnaireLoading(false);
     }
@@ -589,10 +647,10 @@ const StudentDiagnosticAssessment = () => {
     try {
       setIsHistoryLoading(true);
       const data = await api.getDiagnosticHistory();
-      setHistory(data || []);
+      setHistory(Array.isArray(data) ? data : data?.diagnostics ?? data?.history ?? []);
     } catch (error) {
-      console.error("Failed to load diagnostic history:", error);
-      toast.error("Failed to load diagnostic history");
+      if (import.meta.env.DEV) console.error("Failed to load diagnostic history:", error);
+      // History is supplementary — no toast needed, just silently fail.
     } finally {
       setIsHistoryLoading(false);
     }
@@ -603,18 +661,24 @@ const StudentDiagnosticAssessment = () => {
       const data = await api.getDiagnosticTrends(30);
       setTrends(data?.trends || []);
     } catch (error) {
-      console.error("Failed to load diagnostic trends:", error);
-      toast.error("Failed to load diagnostic trends");
+      if (import.meta.env.DEV) console.error("Failed to load diagnostic trends:", error);
+      // Trends are supplementary — silently fail.
     }
   };
+
+  const isHardError = questionnaireError !== null && questions.length === 0;
 
   const handleStartAssessment = () => {
     if (isQuestionnaireLoading) {
       toast.info("Still loading the questionnaire — please wait.");
       return;
     }
-    if (questionnaireError || questions.length === 0) {
+    if (isHardError) {
       toast.error("The assessment is not ready yet. Use Retry or refresh the page.");
+      return;
+    }
+    if (questions.length === 0) {
+      toast.error("No questions loaded yet. Please wait or refresh the page.");
       return;
     }
     setStep("form");
@@ -643,11 +707,12 @@ const StudentDiagnosticAssessment = () => {
   };
 
   const validateResponses = (map: Record<string, unknown>): boolean => {
-    for (const q of questions) {
-      if (!isRequired(q)) {
-        continue;
-      }
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!isRequired(q)) continue;
       if (!isAnswered(q, map[q.id])) {
+        // Jump directly to the unanswered question so the user can see it.
+        setCurrentQuestionIndex(i);
         toast.error(`Please answer: ${q.question.slice(0, 80)}${q.question.length > 80 ? "…" : ""}`);
         return false;
       }
@@ -695,18 +760,24 @@ const StudentDiagnosticAssessment = () => {
 
   const runSubmit = async (payload: Record<string, any>) => {
     if (!questionnaireId) {
-      toast.error("Questionnaire not loaded");
+      toast.error("Could not reach the server to register your assessment. Please check your connection and try again.");
       return;
     }
 
+    // Convert string numeric values ("1"–"5") to numbers so the backend
+    // scoring engine receives the correct types.
+    const normalized = normalizeResponses(payload);
+
     setIsLoading(true);
     try {
-      const data = await api.submitDiagnosticAssessment(payload, questionnaireId, false);
-
+      const data = await api.submitDiagnosticAssessment(normalized, questionnaireId, false);
       setResult(data.diagnostic);
-      await refreshUser();
       setStep("results");
       toast.success("Assessment completed successfully!");
+      // Refresh user after the results page is visible. Fire-and-forget so a
+      // transient network error here can't roll back the results display or
+      // trigger an unexpected sign-out mid-session.
+      void refreshUser();
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error("Failed to submit assessment:", error);
@@ -1038,7 +1109,11 @@ const StudentDiagnosticAssessment = () => {
                 )}
 
                 {questionnaireError && !isQuestionnaireLoading && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  <div className={`rounded-lg border px-4 py-3 text-sm ${
+                    isHardError
+                      ? "border-destructive/30 bg-destructive/10 text-destructive"
+                      : "border-warning/30 bg-warning/10 text-warning-foreground"
+                  }`}>
                     <p className="font-medium mb-2">{questionnaireError}</p>
                     <Button type="button" variant="outline" size="sm" onClick={() => void loadQuestionnaire()}>
                       Retry
@@ -1052,7 +1127,7 @@ const StudentDiagnosticAssessment = () => {
                     size="lg"
                     onClick={handleStartAssessment}
                     className="w-full"
-                    disabled={isQuestionnaireLoading || questions.length === 0 || Boolean(questionnaireError)}
+                    disabled={isQuestionnaireLoading || questions.length === 0 || isHardError}
                   >
                     {isQuestionnaireLoading ? (
                       <>

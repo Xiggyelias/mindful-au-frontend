@@ -138,11 +138,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userRole = resolveRole(userData);
       setRole(userRole);
       setTwoFactor(parseTwoFactorState(userData));
-    } catch {
-      setUser(null);
-      setRole(null);
-      setTwoFactor({ ...DEFAULT_TWO_FACTOR_STATE });
-      api.clearToken();
+    } catch (error) {
+      const status = Number((error as { response?: { status?: unknown } })?.response?.status);
+      // Only sign the user out on genuine auth errors (401/403). Transient network or
+      // timeout errors should not destroy an active session — the user may be offline briefly.
+      if (status === 401 || status === 403) {
+        setUser(null);
+        setRole(null);
+        setTwoFactor({ ...DEFAULT_TWO_FACTOR_STATE });
+        api.clearToken();
+      }
     }
   };
 
