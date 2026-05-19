@@ -211,7 +211,7 @@ const StudentAppointments = () => {
             setAppointmentPage(nextPage);
           }
         } catch (err: unknown) {
-          console.error("Failed to load appointments", err);
+          if (import.meta.env.DEV) console.error("Failed to load appointments", err);
           if (showErrorToast) {
             toast({
               title: "Could not load appointments",
@@ -265,7 +265,7 @@ const StudentAppointments = () => {
               : [];
           setCounselors(normalized);
         } catch (err: any) {
-          console.error("Failed to load counselors", err);
+          if (import.meta.env.DEV) console.error("Failed to load counselors", err);
           if (showErrorToast) {
             toast({
               title: "Could not load counselors",
@@ -397,7 +397,7 @@ const StudentAppointments = () => {
         });
         setCounselorMatches(Array.isArray(data?.matches) ? data.matches : []);
       } catch (err: any) {
-        console.error("Failed to load counselor matches", err);
+        if (import.meta.env.DEV) console.error("Failed to load counselor matches", err);
         setCounselorMatches([]);
         if (showErrorToast) {
           toast({

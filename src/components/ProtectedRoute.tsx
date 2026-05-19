@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
 type AppRole = "admin" | "counselor" | "peer_counselor" | "student";
 
@@ -62,5 +63,5 @@ export const ProtectedRoute = ({
     return <Navigate to="/student/diagnostic-assessment" replace state={{ forced: true }} />;
   }
 
-  return <>{children}</>;
+  return <ErrorBoundary inline>{children}</ErrorBoundary>;
 };

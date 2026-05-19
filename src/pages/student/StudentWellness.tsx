@@ -64,7 +64,7 @@ const StudentWellness = () => {
         setDailyMood(null);
       }
     } catch (error: any) {
-      console.error("Failed to load student wellness summary:", error);
+      if (import.meta.env.DEV) console.error("Failed to load student wellness summary:", error);
       toast.error("Unable to load live wellness insights. Please try again.");
     } finally {
       setIsLoading(false);
