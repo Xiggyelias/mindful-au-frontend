@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CHAT_ATTACHMENT_ACCEPT } from "@/lib/chatAttachments";
 import { LazyEmojiPicker } from "@/components/chat/LazyEmojiPicker";
@@ -189,19 +188,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       <div className="border-t border-border/40 bg-background px-2 py-2 sm:px-3 sm:py-2.5">
         <form onSubmit={onSubmit} className="flex flex-col gap-1.5">
 
-          {/* ── File upload progress ─────────────────────────────────────── */}
-          {isUploading && !isActiveRecording && (
-            <div className="space-y-1 px-1 animate-in slide-in-from-bottom-2 duration-200">
-              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Uploading…
-                </span>
-                <span className="tabular-nums">{uploadProgress}%</span>
-              </div>
-              <Progress value={uploadProgress} className="h-[3px]" />
-            </div>
-          )}
+
 
           {/* ── File attachment preview ──────────────────────────────────── */}
           {selectedFile && !isActiveRecording && (

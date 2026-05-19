@@ -528,11 +528,12 @@ export const MessageList: React.FC<MessageListProps> = ({
   return (
     <div ref={messageScrollAreaRef} className="h-full flex-1 relative overflow-hidden flex flex-col min-h-0">
       <Virtuoso
+        key={conversationKey}
         style={{ height: "100%" }}
         data={messages}
         firstItemIndex={firstItemIndex}
+        initialTopMostItemIndex={Math.max(0, messages.length - 1)}
         atBottomStateChange={onAtBottomChange}
-        alignToBottom
         followOutput="smooth"
         increaseViewportBy={{ top: 320, bottom: 480 }}
         defaultItemHeight={88}

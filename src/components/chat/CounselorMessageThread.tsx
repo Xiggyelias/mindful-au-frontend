@@ -285,11 +285,12 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
         </div>
       ) : null}
       <Virtuoso
+        key={conversationKey}
         style={{ height: "100%" }}
         data={messages}
         firstItemIndex={firstItemIndex}
+        initialTopMostItemIndex={Math.max(0, messages.length - 1)}
         atBottomStateChange={onAtBottomChange}
-        alignToBottom
         followOutput="smooth"
         defaultItemHeight={96}
         increaseViewportBy={{ top: 280, bottom: 400 }}

@@ -33,8 +33,6 @@ import {
 import { CounselorIncomingCallBanner } from "@/components/counselor/CounselorIncomingCallBanner";
 import { CounselorSessionReminderBanner } from "@/components/counselor/CounselorSessionReminderBanner";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
-import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
-import { dedupeCounselorChatListRows, isValidChatListRow } from "@/lib/counselorChatListDedupe";
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
@@ -57,17 +55,6 @@ const DASHBOARD_SESSION_PAGE_SIZE = 200;
 const DASHBOARD_SESSION_RETRY_PAGE_SIZE = 100;
 const DASHBOARD_SESSION_TIMEOUT_MS = 20000;
 const DASHBOARD_SESSION_RETRY_TIMEOUT_MS = 15000;
-const DASHBOARD_CONVERSATIONS_PAGE_SIZE = 8;
-/** Fetch more raw sessions before dedupe so the strip still fills after merging duplicates. */
-const DASHBOARD_CONVERSATIONS_FETCH_SIZE = 48;
-
-type DashboardOpenConversation = {
-  sessionId: number;
-  label: string;
-  isAnonymous: boolean;
-  unreadCount: number;
-};
-
 const toList = <T,>(payload: unknown): T[] => {
   if (Array.isArray(payload)) {
     return payload as T[];
@@ -78,43 +65,6 @@ const toList = <T,>(payload: unknown): T[] => {
   return [];
 };
 
-function mapChatListRowsToOpenConversations(
-  rows: Record<string, unknown>[],
-  maxItems: number
-): DashboardOpenConversation[] {
-  return rows
-    .filter(isValidChatListRow)
-    .slice(0, maxItems)
-    .map((row) => {
-    const isAnon = isAnonymousSessionFlag(row.is_anonymous);
-    const isMasked = isAnonymousIdentityMaskedFromViewer(row as any);
-    const student = row.student as Record<string, unknown> | undefined;
-    const profile = student?.profile as Record<string, unknown> | undefined;
-    const fromApiName = String(profile?.full_name ?? "").trim();
-    const email = typeof student?.email === "string" ? student.email : "";
-    const sid = Number(row.student_id ?? 0);
-    const peerSid = Number(row.chat_peer_student_id ?? 0);
-    const idFallback =
-      Number.isInteger(sid) && sid > 0
-        ? sid
-        : Number.isInteger(peerSid) && peerSid > 0
-          ? peerSid
-          : row.id;
-    const label = isMasked
-      ? anonymousLabelForCounselor()
-      : fromApiName ||
-        (email ? email.split("@")[0] : "") ||
-        (isAnon ? anonymousLabelForCounselor() : `Student #${idFallback}`);
-
-    return {
-      sessionId: Number(row.id),
-      label,
-      isAnonymous: Boolean(isAnon),
-      unreadCount: Math.max(0, Math.floor(Number(row.unread_count ?? 0))),
-    };
-  });
-}
-
 const CounselorDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -122,7 +72,6 @@ const CounselorDashboard = () => {
   const [counselorWellness, setCounselorWellness] = useState<any>(null);
   const [diagnosticsSummary, setDiagnosticsSummary] = useState<any>(null);
   const [activeSessionStudentIds, setActiveSessionStudentIds] = useState<number[]>([]);
-  const [openConversations, setOpenConversations] = useState<DashboardOpenConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const loadRequestRef = useRef(0);
   const { user } = useAuth();
@@ -184,17 +133,10 @@ const CounselorDashboard = () => {
           }
         };
 
-        const [wellnessResult, summaryResult, sessionsResult, chatListResult] = await Promise.allSettled([
+        const [wellnessResult, summaryResult, sessionsResult] = await Promise.allSettled([
           api.getCounselorWellnessSummary(),
           api.getAIDiagnosticsSummary({ days: 30 }),
           loadSessionSnapshot(),
-          api.getChatSessions({
-            open_only: true,
-            page: 1,
-            per_page: DASHBOARD_CONVERSATIONS_FETCH_SIZE,
-            as_role: "counselor",
-            timeout_ms: 15000,
-          }),
         ]);
 
         if (loadRequestRef.current !== requestId) {
@@ -207,34 +149,6 @@ const CounselorDashboard = () => {
 
         if (summaryResult.status === "fulfilled") {
           setDiagnosticsSummary(summaryResult.value || null);
-        }
-
-        if (chatListResult.status === "fulfilled") {
-          try {
-            console.log("DEBUG: CounselorDashboard chat list response:", chatListResult.value);
-            const rawList = toList<Record<string, unknown>>(chatListResult.value);
-            const chatRows = dedupeCounselorChatListRows(rawList, "dashboard");
-            setOpenConversations(
-              mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
-            );
-          } catch (chatMapErr) {
-            if (import.meta.env.DEV) {
-              console.warn("Counselor dashboard: chat list dedupe/map failed, using raw list", chatMapErr);
-            }
-            try {
-              const rawList = toList<Record<string, unknown>>(chatListResult.value).filter(isValidChatListRow);
-              setOpenConversations(
-                mapChatListRowsToOpenConversations(rawList, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
-              );
-            } catch {
-              setOpenConversations([]);
-            }
-          }
-        } else {
-          setOpenConversations([]);
-          if (import.meta.env.DEV) {
-            console.warn("Counselor dashboard: chat list failed", chatListResult.reason);
-          }
         }
 
         const sessionRows =
@@ -277,58 +191,7 @@ const CounselorDashboard = () => {
     void loadDashboardData();
   }, [loadDashboardData, user?.id]);
 
-  useEffect(() => {
-    if (!user?.id || !isApprovedCounselor) {
-      return;
-    }
-    const syncStrip = async () => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-      try {
-        const chatListResult = await api.getChatSessions({
-          open_only: true,
-          page: 1,
-          per_page: DASHBOARD_CONVERSATIONS_FETCH_SIZE,
-          as_role: "counselor",
-          timeout_ms: 15000,
-        });
-        try {
-          const rawList = toList<Record<string, unknown>>(chatListResult);
-          const chatRows = dedupeCounselorChatListRows(rawList, "dashboard");
-          setOpenConversations(
-            mapChatListRowsToOpenConversations(chatRows, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
-          );
-        } catch (chatMapErr) {
-          if (import.meta.env.DEV) {
-            console.warn("Counselor dashboard: strip refresh dedupe failed", chatMapErr);
-          }
-          try {
-            const rawList = toList<Record<string, unknown>>(chatListResult).filter(isValidChatListRow);
-            setOpenConversations(
-              mapChatListRowsToOpenConversations(rawList, DASHBOARD_CONVERSATIONS_PAGE_SIZE)
-            );
-          } catch {
-            // keep previous strip
-          }
-        }
-      } catch {
-        // Background refresh
-      }
-    };
 
-    const intervalId = window.setInterval(syncStrip, 15_000);
-    const kick = () => void syncStrip();
-    window.addEventListener("focus", kick);
-    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, kick);
-    document.addEventListener("visibilitychange", kick);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", kick);
-      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, kick);
-      document.removeEventListener("visibilitychange", kick);
-    };
-  }, [isApprovedCounselor, user?.id]);
 
   /** Keeps "today's schedule" correct across midnight and long-lived tabs. */
   const [nowTicker, setNowTicker] = useState(() => Date.now());
@@ -521,72 +384,7 @@ const CounselorDashboard = () => {
             ))}
           </div>
 
-          <Card variant="glass">
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MessageSquare className="h-5 w-5 text-primary" />
-                Student conversations
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {openConversations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No open chat conversations.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {openConversations.map((c) => {
-                    const initials = c.isAnonymous
-                      ? "??"
-                      : (() => {
-                          const parts = c.label.trim().split(/\s+/).filter(Boolean);
-                          if (parts.length === 0) return "??";
-                          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-                          return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-                        })();
-                    return (
-                      <li key={c.sessionId}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/counselor/messages?session=${c.sessionId}`)}
-                          className={cn(
-                            "flex w-full items-center gap-3 rounded-xl border border-transparent p-3 text-left transition-colors",
-                            "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 dark:hover:bg-muted/25"
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-inner ring-2 ring-background",
-                              c.isAnonymous ? "bg-muted-foreground/55" : "bg-info"
-                            )}
-                          >
-                            {initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <p className="truncate font-medium text-foreground">{c.label}</p>
-                              {c.isAnonymous && (
-                                <span className="shrink-0 rounded-md bg-muted px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                  Anon
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">Tap to open chat</p>
-                          </div>
-                          {c.unreadCount > 0 && (
-                            <span
-                              className="flex h-[1.35rem] min-w-[1.35rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm ring-2 ring-background"
-                              aria-label={`${c.unreadCount} unread message${c.unreadCount === 1 ? "" : "s"}`}
-                            >
-                              {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+
 
 
           <div className="grid gap-6 lg:grid-cols-3">
