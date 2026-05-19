@@ -450,10 +450,20 @@ const UNIVERSITY_QUESTIONS: Question[] = [
     options: FREQ_OPTIONS,
     required: true,
   },
+  {
+    id: "univ_physical_restlessness",
+    category: "physical",
+    section_title: "Physical Wellbeing",
+    type: "scale_1_5",
+    question: "How often do you feel physically restless, tense or unable to unwind — even when you have time to rest?",
+    description: "Muscle tension, fidgeting, or a body that won't settle even when your mind wants to.",
+    options: FREQ_OPTIONS,
+    required: true,
+  },
 ];
 
 const MAX_TOTAL = 25;
-const MAX_PER_CATEGORY = 3; // up to 3 per category × 10 categories, capped at 25
+const MAX_PER_CATEGORY = 3; // 3 per category × 10 categories = 30 in bank, shown 25 via round-robin
 
 /**
  * Round-robin selection: pick questions one per category per round,
@@ -514,6 +524,11 @@ function isAnswered(question: Question, value: unknown): boolean {
       if (typeof value === "number") return Number.isFinite(value);
       if (typeof value === "string") return value.trim() !== "" && !Number.isNaN(Number(value));
       return false;
+    case "frequency_5":
+    case "single_choice":
+    case "multiple_choice":
+    case "yes_no":
+      return String(value).trim() !== "";
     default:
       return String(value).trim() !== "";
   }
@@ -592,6 +607,14 @@ const StudentDiagnosticAssessment = () => {
       loadTrends();
     }
   }, [step]);
+
+  // If questions become unavailable while the form is open, fall back to intro
+  // so the user sees the error banner rather than a blank card.
+  useEffect(() => {
+    if (step === "form" && questions.length === 0 && !isQuestionnaireLoading) {
+      setStep("intro");
+    }
+  }, [step, questions.length, isQuestionnaireLoading]);
 
   const loadQuestionnaire = async () => {
     setQuestionnaireError(null);
@@ -742,6 +765,7 @@ const StudentDiagnosticAssessment = () => {
 
   const handleNextQuestion = () => {
     const q = questions[currentQuestionIndex];
+    if (!q) return;
     const v = responses[q.id];
     if (!isAnswered(q, v)) {
       toast.error("Please answer this question before continuing.");
@@ -771,7 +795,16 @@ const StudentDiagnosticAssessment = () => {
     setIsLoading(true);
     try {
       const data = await api.submitDiagnosticAssessment(normalized, questionnaireId, false);
-      setResult(data.diagnostic);
+      // API may return { diagnostic: {...} } or the diagnostic object directly.
+      const diag: DiagnosticResult | null =
+        (data as { diagnostic?: DiagnosticResult })?.diagnostic ??
+        ((data as DiagnosticResult)?.id ? (data as DiagnosticResult) : null);
+      if (!diag) {
+        toast.error("Assessment submitted but your results could not be loaded. Please reload.");
+        void refreshUser();
+        return;
+      }
+      setResult(diag);
       setStep("results");
       toast.success("Assessment completed successfully!");
       // Refresh user after the results page is visible. Fire-and-forget so a
