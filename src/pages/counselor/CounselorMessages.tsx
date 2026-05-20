@@ -375,7 +375,11 @@ const CounselorMessages = () => {
 
       if (diagResult.status === "fulfilled") {
         const raw = diagResult.value;
-        const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+        const list: any[] =
+          Array.isArray(raw) ? raw :
+          Array.isArray(raw?.data) ? raw.data :
+          Array.isArray(raw?.diagnostics) ? raw.diagnostics :
+          Array.isArray(raw?.results) ? raw.results : [];
         const latest = list[0] ?? null;
         if (latest) {
           riskLevel = typeof latest.risk_level === "string" ? latest.risk_level.toLowerCase() : null;
@@ -390,6 +394,8 @@ const CounselorMessages = () => {
       }
 
       // ── Wellness Summary ──
+      // The /student-wellness/summary endpoint returns:
+      //   { scores: { wellness_score, stress_level, burnout_risk }, labels: { risk }, ... }
       let moodScore: number | null = null;
       let stressLevel: number | null = null;
       let burnoutIndex: number | null = null;
@@ -397,13 +403,35 @@ const CounselorMessages = () => {
 
       if (wellnessResult.status === "fulfilled") {
         const w = wellnessResult.value;
-        const latest = w?.latest_log ?? w?.logs?.[0] ?? w ?? null;
-        if (latest) {
-          moodScore = typeof latest.mood_score === "number" ? latest.mood_score : null;
-          stressLevel = typeof latest.stress_level === "number" ? latest.stress_level : null;
-          burnoutIndex = typeof latest.burnout_index === "number" ? latest.burnout_index : null;
-          wellnessUpdatedAt = typeof latest.created_at === "string" ? latest.created_at : null;
+        // Primary shape: { scores: {...} }
+        // Fallback shapes: flat object or legacy log-based { latest_log / logs[] }
+        const scores = w?.scores ?? w?.latest_log?.scores ?? w?.logs?.[0]?.scores ?? null;
+        const flat = w?.latest_log ?? w?.logs?.[0] ?? w ?? null;
+
+        if (scores) {
+          moodScore =
+            typeof scores.wellness_score === "number" ? scores.wellness_score :
+            typeof scores.mood_score === "number" ? scores.mood_score : null;
+          stressLevel =
+            typeof scores.stress_level === "number" ? scores.stress_level : null;
+          burnoutIndex =
+            typeof scores.burnout_risk === "number" ? scores.burnout_risk :
+            typeof scores.burnout_index === "number" ? scores.burnout_index : null;
+        } else if (flat) {
+          // Older/different API shape — field names directly on the object
+          moodScore =
+            typeof flat.wellness_score === "number" ? flat.wellness_score :
+            typeof flat.mood_score === "number" ? flat.mood_score : null;
+          stressLevel = typeof flat.stress_level === "number" ? flat.stress_level : null;
+          burnoutIndex =
+            typeof flat.burnout_risk === "number" ? flat.burnout_risk :
+            typeof flat.burnout_index === "number" ? flat.burnout_index : null;
         }
+
+        wellnessUpdatedAt =
+          typeof w?.updated_at === "string" ? w.updated_at :
+          typeof w?.created_at === "string" ? w.created_at :
+          typeof flat?.created_at === "string" ? flat.created_at : null;
       }
 
       setBriefData({
@@ -1691,7 +1719,7 @@ const CounselorMessages = () => {
                         <div className="flex flex-wrap gap-3">
                           {briefData.moodScore !== null && (
                             <div className="flex items-center gap-1.5 text-xs">
-                              <span className="font-medium text-muted-foreground">Mood</span>
+                              <span className="font-medium text-muted-foreground">Wellness</span>
                               <span className={`font-bold ${briefData.moodScore >= 60 ? "text-success" : briefData.moodScore >= 40 ? "text-yellow-600" : "text-destructive"}`}>
                                 {briefData.moodScore}%
                               </span>
