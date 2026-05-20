@@ -311,6 +311,16 @@ const CounselorMessages = () => {
     () => readIdentityRevealGrants()
   );
 
+  // ── selectedChat must be derived BEFORE the useEffects below that reference
+  // it in their dependency arrays.  Declaring it after those useEffect calls
+  // puts it in the temporal dead zone (TDZ) and throws a ReferenceError on
+  // every render, which the ErrorBoundary catches as "Something went wrong".
+  const selectedChat = useMemo(() => {
+    if (!chats.length) return null;
+    if (!selectedChatId) return chats[0];
+    return chats.find((chat) => chat.id === selectedChatId) || chats[0];
+  }, [chats, selectedChatId]);
+
   // ── Session Prep briefing panel ──────────────────────────────────────────
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -445,12 +455,6 @@ const CounselorMessages = () => {
   const [searchParams] = useSearchParams();
   const targetSessionParam = searchParams.get("session");
   const targetStudentParam = searchParams.get("student");
-
-  const selectedChat = useMemo(() => {
-    if (!chats.length) return null;
-    if (!selectedChatId) return chats[0];
-    return chats.find((chat) => chat.id === selectedChatId) || chats[0];
-  }, [chats, selectedChatId]);
 
   const selectedSessionId = selectedChat ? String(selectedChat.id) : "";
   const currentUserId = user?.id ? (isNaN(Number(user.id)) ? user.id : Number(user.id)) : 0;
