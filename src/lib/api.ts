@@ -1516,6 +1516,18 @@ class ApiClient {
     return response.data;
   }
 
+  /**
+   * Fetch voice note audio as a Blob via the auth-gated stream endpoint.
+   * Use this instead of loading file_url directly so the file is never
+   * served without authentication.
+   */
+  async streamVoiceNoteBlob(messageId: number | string): Promise<Blob> {
+    const response = await this.client.get(`/messages/${messageId}/voice-note/stream`, {
+      responseType: "blob",
+    });
+    return response.data as Blob;
+  }
+
   // Video Calls
   async authorizeVideoCall(
     appointmentId: number | string,

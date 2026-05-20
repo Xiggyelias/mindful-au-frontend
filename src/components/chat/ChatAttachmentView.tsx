@@ -27,6 +27,8 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [downloading, setDownloading] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  // Authenticated blob URL used in place of the raw public file_url for voice memos.
+  const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
   const resolved = resolveMessageAttachment(msg);
@@ -55,6 +57,43 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const kind = getAttachmentKind(att, msg.message_type);
   const hasSize = Number(att.file_size) > 0;
   const messageId = Number(msg.id);
+
+  // For persisted voice memos (not in-flight uploads), fetch audio through the
+  // authenticated stream endpoint and create an object URL. This prevents direct
+  // access to public-storage URLs that bypass authentication.
+  useEffect(() => {
+    const isVoice = msg.message_type === "voice";
+    const isUploading = Boolean(msg.isUploading || msg.localBlobUrl);
+    if (!isVoice || isUploading || !Number.isInteger(messageId) || messageId <= 0) {
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    const fetchBlob = async () => {
+      try {
+        const blob = await api.streamVoiceNoteBlob(messageId);
+        if (!cancelled) {
+          objectUrl = URL.createObjectURL(blob);
+          setVoiceAuthBlobUrl(objectUrl);
+        }
+      } catch {
+        // Fall back to resolvedUrl (public URL) if the stream endpoint fails
+        // (e.g. legacy file that has already been removed from private storage).
+      }
+    };
+
+    void fetchBlob();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      setVoiceAuthBlobUrl(null);
+    };
+  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl]);
 
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
@@ -241,9 +280,11 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
 
   if (kind === "audio") {
     const isVoiceMemo = msg.message_type === "voice";
-    // Use local blob URL for immediate playback while the upload is in-flight,
-    // then fall back to the server URL once the upload resolves.
-    const playbackSrc = (msg.localBlobUrl || resolvedUrl).trim();
+    // Priority order for playback src:
+    // 1. Local blob URL (in-flight upload — immediate feedback, no round-trip needed)
+    // 2. Authenticated object URL fetched via the stream endpoint (persisted voice memos)
+    // 3. Raw resolvedUrl as last-resort fallback (legacy files / stream endpoint unavailable)
+    const playbackSrc = (msg.localBlobUrl || voiceAuthBlobUrl || resolvedUrl).trim();
     return (
       <VoiceMemoPlayer
         src={playbackSrc}

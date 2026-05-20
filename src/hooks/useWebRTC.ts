@@ -1488,6 +1488,34 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
   }, []);
 
+  // Broadcast call-ended when the user closes or navigates away from the tab mid-call.
+  // pagehide is more reliable than beforeunload (handles bfcache, mobile browsers).
+  // Both are registered for maximum coverage. The channel.send() is fire-and-forget —
+  // the WebSocket frame will be dispatched even though we cannot await the Promise.
+  useEffect(() => {
+    const handlePageHide = () => {
+      const { isConnected, isConnecting } = engine.state;
+      if (!isConnected && !isConnecting) return;
+
+      if (engine.channel) {
+        void engine.channel.send({
+          type: "broadcast",
+          event: "call-ended",
+          payload: { senderId: String(engine.userId || "") },
+        });
+      }
+      clearPersistedActiveCall();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+    };
+  }, []);
+
   const startCall = useCallback(
     async (options: StartCallOptions = {}) => {
       const currentState = engine.state;
