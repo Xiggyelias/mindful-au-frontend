@@ -147,7 +147,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               decryptedContent: "This message was deleted.",
               is_encrypted: false,
               message_type: "text",
+              // Clear all attachment-related fields so messageIsAttachmentFirst
+              // returns false and the message renders as plain text, not a
+              // voice/file bubble.
+              has_file: false,
               file_url: undefined,
+              localBlobUrl: undefined,
               attachment: null,
             }
           : msg
