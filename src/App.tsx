@@ -46,6 +46,7 @@ const CounselorAIInsights = lazyWithRetry(() => import("./pages/counselor/Counse
 const CounselorVideo = lazyWithRetry(() => import("./pages/counselor/CounselorVideo"));
 const CounselorNotes = lazyWithRetry(() => import("./pages/counselor/CounselorNotes"));
 const CounselorWellness = lazyWithRetry(() => import("./pages/counselor/CounselorWellness"));
+const CounselorAlerts = lazyWithRetry(() => import("./pages/counselor/CounselorAlerts"));
 const CounselorTwoFactor = lazyWithRetry(() => import("./pages/counselor/CounselorTwoFactor"));
 const PeerLogin = lazyWithRetry(() => import("./pages/peer/PeerLogin"));
 const PeerDashboard = lazyWithRetry(() => import("./pages/peer/PeerDashboard"));
@@ -295,6 +296,14 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={["counselor"]} redirectTo="/counselor/login">
                       <CounselorWellness />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/counselor/alerts"
+                  element={
+                    <ProtectedRoute allowedRoles={["counselor"]} redirectTo="/counselor/login">
+                      <CounselorAlerts />
                     </ProtectedRoute>
                   }
                 />

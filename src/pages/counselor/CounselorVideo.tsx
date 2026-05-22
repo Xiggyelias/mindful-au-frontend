@@ -61,6 +61,7 @@ const navItems = [
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
   { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
+  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
 ];
 
 const getParticipantName = (participant: any, fallback: string) =>

@@ -14,6 +14,7 @@ import {
   Search,
   Mic,
   SlidersHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -44,6 +45,7 @@ const navItems = [
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
   { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
+  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
 ];
 
 type ApiStudent = {
