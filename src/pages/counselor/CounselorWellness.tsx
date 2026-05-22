@@ -12,6 +12,7 @@ import {
   Sun,
   Loader2,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -20,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
 const navItems = [
@@ -32,6 +33,7 @@ const navItems = [
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
   { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
+  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
 ];
 
 const scaleOptions = [
@@ -190,30 +192,41 @@ const CounselorWellness = () => {
       toast.success("Live health check completed");
       await loadWellnessData();
     } catch (error: any) {
-      const status = error?.response?.status;
+      try {
+        // Fallback path for unstable health-check endpoint responses:
+        // derive a snapshot and persist it as a normal wellness entry.
+        const summary = await api.getCounselorWellnessSummary();
+        const summaryScores = summary?.scores ?? {};
+        const currentScores = {
+          mood_score:
+            typeof summaryScores.mood_score === "number"
+              ? summaryScores.mood_score
+              : typeof moodScore === "number"
+              ? moodScore
+              : undefined,
+          stress_level:
+            typeof summaryScores.stress_level === "number"
+              ? summaryScores.stress_level
+              : typeof stressLevel === "number"
+              ? stressLevel
+              : undefined,
+          burnout_index:
+            typeof summaryScores.burnout_index === "number"
+              ? summaryScores.burnout_index
+              : typeof burnoutIndex === "number"
+              ? burnoutIndex
+              : undefined,
+        };
 
-      // Fallback path for unstable health-check endpoint responses:
-      // compute from summary and persist a standard wellness log.
-      if (status >= 500) {
-        try {
-          const summary = await api.getCounselorWellnessSummary();
-          const scores = summary?.scores ?? {};
-          await api.createCounselorWellness({
-            mood_score: typeof scores.mood_score === "number" ? scores.mood_score : undefined,
-            stress_level: typeof scores.stress_level === "number" ? scores.stress_level : undefined,
-            burnout_index: typeof scores.burnout_index === "number" ? scores.burnout_index : undefined,
-            notes: "Live health check (frontend fallback)",
-          });
-          toast.success("Live health check completed");
-          await loadWellnessData();
-          return;
-        } catch (fallbackError: any) {
-          toast.error(fallbackError?.response?.data?.message || "Failed to run health check");
-          return;
-        }
+        await api.createCounselorWellness({
+          ...currentScores,
+          notes: "Live health check (frontend fallback)",
+        });
+        toast.success("Live health check completed");
+        await loadWellnessData();
+      } catch (fallbackError: any) {
+        toast.error(getApiErrorMessage(fallbackError, "Failed to run health check"));
       }
-
-      toast.error(error.response?.data?.message || "Failed to run health check");
     } finally {
       setIsRunningCheck(false);
     }
@@ -248,7 +261,7 @@ const CounselorWellness = () => {
       setNotes("");
       setShowOverrideCheckIn(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to save check-in");
+      toast.error(getApiErrorMessage(error, "Failed to save check-in"));
     } finally {
       setIsSubmittingCheckIn(false);
     }

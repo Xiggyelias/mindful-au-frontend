@@ -39,6 +39,7 @@ const navItems = [
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
   { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
+  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
 ];
 
 interface DiagnosticData {
@@ -448,24 +449,29 @@ const CounselorAIDashboard = () => {
                       return (
                         <div
                           key={diagnostic.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+                          className="grid grid-cols-1 gap-3 rounded-xl border border-border/50 bg-secondary/20 p-4 transition-colors hover:bg-secondary/40 md:grid-cols-[minmax(0,1fr)_220px] md:items-center cursor-pointer"
                           onClick={() => setSelectedDiagnostic(diagnostic)}
                         >
-                          <div className="flex-1">
+                          <div className="min-w-0 space-y-1">
                             <div className="flex items-center gap-2">
-                              <p className="font-medium text-foreground">{name}</p>
+                              <p className="truncate font-medium text-foreground">{name}</p>
                               {isMasked && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground tabular-nums">
                               {format(new Date(diagnostic.created_at), "MMM d, yyyy h:mm a")}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Progress value={clampPercent(diagnostic.total_score)} className="w-24 h-2" />
+                          <div className="flex flex-col gap-2 md:items-end">
                             <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${getRiskColor(normalizeRiskLevel(diagnostic.risk_level))}`}
+                              className={`w-fit rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${getRiskColor(normalizeRiskLevel(diagnostic.risk_level))}`}
                             >
                               {normalizeRiskLevel(diagnostic.risk_level)}
+                            </span>
+                            <Progress value={clampPercent(diagnostic.total_score)} className="h-2 w-full md:w-44" />
+                            <span
+                              className="text-[11px] font-medium tabular-nums text-muted-foreground"
+                            >
+                              Score {clampPercent(diagnostic.total_score)}%
                             </span>
                           </div>
                         </div>
