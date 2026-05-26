@@ -4,6 +4,7 @@ import { resolveApiBaseUrl } from "@/lib/runtimeConfig";
 const API_BASE_URL = resolveApiBaseUrl();
 const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
 const MAX_RETRIES = 2;
+export const DEFAULT_OPENROUTER_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -135,7 +136,7 @@ export class OpenRouterService {
 
   async streamChat(
     messages: ChatMessage[],
-    model: string = "nvidia/nemotron-nano-9b-v2:free",
+    model: string = DEFAULT_OPENROUTER_CHAT_MODEL,
     conversationId?: number,
     onChunk?: (chunk: StreamChunk) => void
   ): Promise<{ content: string; conversationId?: number }> {
@@ -224,7 +225,7 @@ export class OpenRouterService {
 
   async sendMessage(
     messages: ChatMessage[],
-    model: string = "nvidia/nemotron-nano-9b-v2:free",
+    model: string = DEFAULT_OPENROUTER_CHAT_MODEL,
     conversationId?: number
   ): Promise<{ content: string; conversationId?: number }> {
     const data = await this.requestJson<{ success: boolean; error?: string; content: string; conversation_id: number }>(
@@ -252,7 +253,7 @@ export class OpenRouterService {
 
   async simpleChat(
     message: string,
-    model: string = "nvidia/nemotron-nano-9b-v2:free"
+    model: string = DEFAULT_OPENROUTER_CHAT_MODEL
   ): Promise<{ message: string; response: string; model: string }> {
     const data = await this.requestJson<{ success: boolean; error?: string; message: string; response: string; model: string }>(
       "/openrouter/simple-chat",

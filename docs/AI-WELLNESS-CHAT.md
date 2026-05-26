@@ -32,11 +32,9 @@ The AI Wellness Chat is a mental health support system designed for university s
 │         ├──► MentalHealthMlService (ML Insights)                │
 │         │                                                        │
 │         ├──► AI Provider Cascade:                               │
-│         │    1. Kwaipilot (GPT-4o-mini)                          │
-│         │    2. OpenRouter (GPT-4o)                              │
-│         │    3. Gemini (1.5/2.5 Flash)                           │
-│         │    4. OpenAI Direct (GPT-4o-mini)                      │
-│         │    5. Local Fallback (Deterministic)                   │
+│         │    1. OpenRouter Llama 3.3 (chat)                      │
+│         │    2. Gemini (1.5/2.5 Flash)                           │
+│         │    3. Local Fallback (Deterministic)                   │
 │         │                                                        │
 │         └──► Database (chat_conversations, chat_messages)        │
 └─────────────────────────────────────────────────────────────────┘
@@ -149,8 +147,8 @@ The system tries providers in order, falling back if one fails:
 
 ```
 ┌────────────────┐     ┌────────────────┐     ┌────────────────┐
-│   Kwaipilot    │ ──► │  OpenRouter    │ ──► │     Gemini     │
-│  (GPT-4o-mini) │     │   (GPT-4o)     │     │ (1.5/2.5 Flash)│
+│  OpenRouter    │ ──► │     Gemini     │ ──► │ Local Fallback │
+│  (Llama 3.3)   │     │ (1.5/2.5 Flash)│     │   (Offline)    │
 └───────┬────────┘     └───────┬────────┘     └───────┬────────┘
         │                      │                      │
         │ Success              │ Success              │ Success
@@ -160,17 +158,20 @@ The system tries providers in order, falling back if one fails:
         │ Fail                 │ Fail                 │ Fail
         ▼                      ▼                      ▼
 ┌────────────────┐     ┌────────────────┐     ┌────────────────┐
-│    OpenAI      │ ──► │ Local Fallback │ ──► │  Deterministic │
-│  (GPT-4o-mini) │     │   (Offline)    │     │   Responses    │
+│     Qwen3      │ ──► │    DeepSeek    │ ──► │    Liquid     │
+│  (core brain)  │     │ (heavy docs)   │     │  (speed layer)│
 └────────────────┘     └────────────────┘     └────────────────┘
 ```
 
 **Provider Priority:**
-1. **Kwaipilot** - Primary external provider
-2. **OpenRouter** - Secondary OpenAI proxy
-3. **Gemini** - Google's model with multi-model fallback
-4. **OpenAI Direct** - Direct OpenAI API
-5. **Local Fallback** - Deterministic responses (always available)
+1. **OpenRouter Llama 3.3** - Primary human chat interface
+2. **Gemini** - Optional secondary provider if configured
+3. **Local Fallback** - Deterministic responses (always available)
+
+Diagnostic and large-analysis tasks use OpenRouter roles:
+- **Qwen3 Next 80B Thinking** - core reasoning model
+- **DeepSeek V4 Pro** - heavy analysis / large document fallback
+- **LFM2.5 1.2B Thinking** - fast fallback layer
 
 ---
 
@@ -675,20 +676,17 @@ When all external providers fail, the system uses deterministic responses:
 ### Environment Variables
 
 ```env
-# Kwaipilot
-KWAIPILOT_API_KEY=your_key
-KWAIPILOT_BASE_URL=https://api.kwaipilot.com/v1
-
 # OpenRouter
 OPENROUTER_API_KEY=your_key
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_CHAT_MODEL=meta-llama/llama-3.3-70b-instruct:free
+OPENROUTER_CORE_MODEL=qwen/qwen3-next-80b-a3b-thinking
+OPENROUTER_HEAVY_ANALYSIS_MODEL=deepseek/deepseek-v4-pro
+OPENROUTER_SPEED_MODEL=liquid/lfm-2.5-1.2b-thinking:free
 
 # Gemini
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-1.5-flash
-
-# OpenAI Direct
-OPENAI_API_KEY=your_key
 ```
 
 ---

@@ -4,7 +4,7 @@ import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Loader2, Send, Bot, User, MessageSquare, Plus, Trash2 } from 'lucide-react';
-import { createOpenRouterService, ChatMessage, StreamChunk, Conversation } from '../services/openrouter';
+import { createOpenRouterService, ChatMessage, StreamChunk, Conversation, DEFAULT_OPENROUTER_CHAT_MODEL } from '../services/openrouter';
 import { API_RECOVERED_EVENT, getApiErrorMessage } from '@/lib/api';
 import { toast } from "sonner";
 
@@ -14,7 +14,7 @@ interface OpenRouterChatProps {
 }
 
 export const OpenRouterChat: React.FC<OpenRouterChatProps> = ({
-  model = 'nvidia/nemotron-nano-9b-v2:free',
+  model = DEFAULT_OPENROUTER_CHAT_MODEL,
   className
 }) => {
   const conversationsCacheKey = "openrouter_conversations_cache_v1";

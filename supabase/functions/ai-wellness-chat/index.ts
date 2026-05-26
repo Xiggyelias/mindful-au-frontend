@@ -16,6 +16,10 @@ interface RequestBody {
   history?: ChatMessage[];
 }
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -69,27 +73,27 @@ Important guidelines:
       { role: "user", content: message.trim() }
     ];
 
-    // Try Gemini first, then OpenAI, then fallback
+    // Try OpenRouter Llama first, then Gemini, then fallback
+    const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 
     let aiResponse: string | null = null;
 
+    // Try OpenRouter API
+    if (openRouterApiKey) {
+      try {
+        aiResponse = await tryOpenRouter(openRouterApiKey, messages);
+      } catch (error) {
+        console.error("OpenRouter API error:", error);
+      }
+    }
+
     // Try Gemini API
-    if (geminiApiKey) {
+    if (!aiResponse && geminiApiKey) {
       try {
         aiResponse = await tryGemini(geminiApiKey, messages);
       } catch (error) {
         console.error("Gemini API error:", error);
-      }
-    }
-
-    // Try OpenAI API if Gemini failed
-    if (!aiResponse && openaiApiKey) {
-      try {
-        aiResponse = await tryOpenAI(openaiApiKey, messages);
-      } catch (error) {
-        console.error("OpenAI API error:", error);
       }
     }
 
@@ -118,6 +122,53 @@ Important guidelines:
     );
   }
 });
+
+// Try OpenRouter API
+async function tryOpenRouter(apiKey: string, messages: ChatMessage[]): Promise<string | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, 30000);
+
+  const baseUrl = Deno.env.get("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1";
+  const model = Deno.env.get("OPENROUTER_CHAT_MODEL") || "meta-llama/llama-3.3-70b-instruct:free";
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": Deno.env.get("OPENROUTER_SITE_URL") || "https://mindful-au.local",
+        "X-Title": Deno.env.get("OPENROUTER_SITE_NAME") || "Mindful AU",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 500,
+        temperature: 0.7,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+
+    return content || null;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (isAbortError(error)) {
+      console.error("OpenRouter API request timed out");
+    }
+    return null;
+  }
+}
 
 // Try Gemini API
 async function tryGemini(apiKey: string, messages: ChatMessage[]): Promise<string | null> {
@@ -174,50 +225,8 @@ async function tryGemini(apiKey: string, messages: ChatMessage[]): Promise<strin
     return text || null;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
+    if (isAbortError(error)) {
       console.error("Gemini API request timed out");
-    }
-    return null;
-  }
-}
-
-// Try OpenAI API
-async function tryOpenAI(apiKey: string, messages: ChatMessage[]): Promise<string | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, 30000); // 30 second timeout
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: messages,
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    
-    return content || null;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
-      console.error("OpenAI API request timed out");
     }
     return null;
   }
