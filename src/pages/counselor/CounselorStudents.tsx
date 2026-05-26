@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -72,7 +72,9 @@ const CounselorStudents = () => {
   const [reloadToken, setReloadToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [highlightedStudentId, setHighlightedStudentId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const buildStudentRows = ({
     studentData,
@@ -193,7 +195,7 @@ const CounselorStudents = () => {
         setIsLoading(true);
         // Stage 1: fetch only critical datasets required for first paint.
         const [studentsResult, chatSessionsResult, peerCounselorsResult] = await Promise.allSettled([
-          api.getStudents(),
+          api.getStudents({ limit: 500 }),
           api.getChatSessions({ open_only: true, limit: 200, as_role: "counselor", timeout_ms: 25000 }),
           api.getPeerCounselors(),
         ]);
@@ -259,6 +261,37 @@ const CounselorStudents = () => {
 
     loadStudents();
   }, [user, reloadToken]);
+
+  useEffect(() => {
+    if (!user || isLoading || students.length === 0) {
+      return;
+    }
+
+    const rawOpen = searchParams.get("open");
+    const openId = rawOpen ? Number(rawOpen) : NaN;
+    if (!Number.isFinite(openId) || openId <= 0) {
+      return;
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+
+    const match = students.find((student) => Number(student.id) === openId);
+    if (!match) {
+      setSearchQuery(String(openId));
+      setRiskFilter("all");
+      toast.error("That student is not visible in your current roster.");
+      return;
+    }
+
+    setSearchQuery(String(openId));
+    setRiskFilter("all");
+    setHighlightedStudentId(openId);
+    toast.info("Showing the student from the emergency alert.");
+
+    window.setTimeout(() => setHighlightedStudentId(null), 6000);
+  }, [isLoading, searchParams, setSearchParams, students, user]);
 
   const handleMessage = (studentId: number) => {
     const preferredCounselorSession = sessions.find(
@@ -599,7 +632,11 @@ const CounselorStudents = () => {
                     return (
                       <div
                         key={student.id}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-secondary/30"
+                        className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-secondary/30 transition-shadow ${
+                          highlightedStudentId === Number(student.id)
+                            ? "ring-2 ring-destructive/70 shadow-lg shadow-destructive/10"
+                            : ""
+                        }`}
                       >
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">

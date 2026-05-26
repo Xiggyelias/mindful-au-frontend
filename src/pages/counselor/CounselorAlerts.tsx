@@ -67,6 +67,19 @@ interface AppNotification {
   created_at: string;
 }
 
+type PanicAlert = {
+  id: number;
+  title: string;
+  message: string;
+  created_at: string;
+  resolved_at?: string | null;
+  status: "active" | "resolved";
+  raw_location?: string | null;
+  map_query?: string | null;
+  student_id?: number;
+  student_detail_line?: string;
+};
+
 function normalizeRiskLevel(level: unknown): RiskLevel {
   const s = String(level ?? "").toLowerCase();
   if (s === "high" || s === "critical" || s === "medium" || s === "low") return s;
@@ -87,6 +100,60 @@ function formatTimeAgo(dateString?: string): string {
   const hours = Math.floor(diffMins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function extractLatLngFromLocation(raw: string | null | undefined): string | null {
+  if (raw == null || typeof raw !== "string") return null;
+  const match = raw.match(/-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?/);
+  if (!match?.[0]) return null;
+  return match[0].replace(/\s*,\s*/, ", ");
+}
+
+function buildPanicStudentSummary(log: {
+  student_id?: unknown;
+  student?: {
+    email?: string | null;
+    profile?: { full_name?: string | null; id_number?: string | null } | null;
+  } | null;
+}): {
+  studentId: number;
+  displayName: string;
+  detailLine: string;
+} {
+  const studentId = Number(log.student_id);
+  const profile = log.student?.profile;
+  const fullName = typeof profile?.full_name === "string" ? profile.full_name.trim() : "";
+  const email =
+    typeof log.student?.email === "string" && log.student.email.trim() !== ""
+      ? log.student.email.trim()
+      : undefined;
+  const idNumber =
+    profile?.id_number != null && String(profile.id_number).trim() !== ""
+      ? String(profile.id_number).trim()
+      : undefined;
+
+  const displayName =
+    fullName ||
+    (email ? email.split("@")[0] : "") ||
+    email ||
+    (Number.isFinite(studentId) && studentId > 0 ? `Student #${studentId}` : "Unknown student");
+
+  const parts: string[] = [];
+  if (Number.isFinite(studentId) && studentId > 0) {
+    parts.push(`User ID ${studentId}`);
+  }
+  if (email) {
+    parts.push(email);
+  }
+  if (idNumber) {
+    parts.push(`Institution ID ${idNumber}`);
+  }
+
+  return {
+    studentId: Number.isFinite(studentId) ? studentId : 0,
+    displayName,
+    detailLine: parts.join(" - "),
+  };
 }
 
 const RISK_BADGE_CLASS: Record<RiskLevel, string> = {
@@ -139,11 +206,13 @@ const CounselorAlerts = () => {
   const [riskStudents, setRiskStudents] = useState<RiskStudent[]>([]);
   const [worseningStudents, setWorseningStudents] = useState<RiskStudent[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [panicAlerts, setPanicAlerts] = useState<PanicAlert[]>([]);
   const [summary, setSummary] = useState({ high_or_critical: 0, worsening_trend: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [markingId, setMarkingId] = useState<number | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [resolvingPanicId, setResolvingPanicId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadAlerts = useCallback(async (showRefreshSpinner = false) => {
@@ -151,9 +220,10 @@ const CounselorAlerts = () => {
       if (showRefreshSpinner) setIsRefreshing(true);
       setLoadError(null);
 
-      const [dashData, notifData] = await Promise.all([
+      const [dashData, notifData, panicData] = await Promise.all([
         api.getCounselorDiagnosticDashboard().catch(() => null),
         api.getNotifications({ limit: 60 }).catch(() => []),
+        api.getPanicLogs().catch(() => []),
       ]);
 
       // ── Risk students from diagnostic dashboard ────────────────────────────
@@ -219,6 +289,32 @@ const CounselorAlerts = () => {
         created_at: String(n.created_at || ""),
       }));
       setNotifications(rawNotifs);
+
+      const panicLogs: any[] = Array.isArray(panicData)
+        ? panicData
+        : Array.isArray((panicData as any)?.data)
+        ? (panicData as any).data
+        : [];
+
+      const mappedPanic: PanicAlert[] = panicLogs.map((log: any) => {
+        const student = buildPanicStudentSummary(log);
+        const mapCoords = extractLatLngFromLocation(log.location);
+        const locationSuffix = log.location ? ` (at ${mapCoords ?? log.location})` : "";
+
+        return {
+          id: Number(log.id),
+          title: "Student Needs Help",
+          message: `${student.displayName} clicked I Need Help Now${locationSuffix}`,
+          created_at: String(log.created_at || ""),
+          resolved_at: log.resolved_at ? String(log.resolved_at) : null,
+          status: log.resolved ? "resolved" : "active",
+          raw_location: typeof log.location === "string" ? log.location : null,
+          map_query: mapCoords,
+          student_id: student.studentId > 0 ? student.studentId : undefined,
+          student_detail_line: student.detailLine || undefined,
+        };
+      });
+      setPanicAlerts(mappedPanic);
     } catch (err: any) {
       const msg = err?.response?.data?.message || "Failed to load alerts.";
       setLoadError(msg);
@@ -254,6 +350,18 @@ const CounselorAlerts = () => {
     [notifications]
   );
 
+  const activePanicAlerts = useMemo(
+    () => panicAlerts.filter((alert) => alert.status === "active"),
+    [panicAlerts]
+  );
+
+  const resolvedTodayPanicAlerts = useMemo(() => {
+    const today = new Date().toDateString();
+    return panicAlerts.filter(
+      (alert) => alert.resolved_at && new Date(alert.resolved_at).toDateString() === today
+    );
+  }, [panicAlerts]);
+
   const allAlertNotifs = useMemo(
     () =>
       notifications
@@ -286,6 +394,19 @@ const CounselorAlerts = () => {
       toast.error("Could not mark all as read.");
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleResolvePanic = async (alertId: number) => {
+    try {
+      setResolvingPanicId(alertId);
+      await api.updatePanicLog(alertId, { resolved: true });
+      toast.success("Emergency alert marked as resolved.");
+      await loadAlerts();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Could not resolve emergency alert.");
+    } finally {
+      setResolvingPanicId(null);
     }
   };
 
@@ -347,7 +468,17 @@ const CounselorAlerts = () => {
           )}
 
           {/* Summary cards */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card variant="glass" className="border-destructive/30">
+              <CardContent className="pt-6 text-center">
+                <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
+                <p className="text-3xl font-bold text-destructive">
+                  {isLoading ? "..." : activePanicAlerts.length}
+                </p>
+                <p className="text-muted-foreground text-sm">Active Emergencies</p>
+              </CardContent>
+            </Card>
+
             <Card variant="glass" className="border-destructive/30">
               <CardContent className="pt-6 text-center">
                 <ShieldAlert className="h-8 w-8 text-destructive mx-auto mb-2" />
@@ -378,6 +509,123 @@ const CounselorAlerts = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Emergency help requests */}
+          <Card variant="glass">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Emergency Help Requests
+                {!isLoading && activePanicAlerts.length > 0 && (
+                  <Badge variant="outline" className="ml-1 bg-destructive/20 text-destructive border-destructive/30 text-xs">
+                    {activePanicAlerts.length} active
+                  </Badge>
+                )}
+              </CardTitle>
+              {!isLoading && resolvedTodayPanicAlerts.length > 0 && (
+                <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-xs">
+                  {resolvedTodayPanicAlerts.length} resolved today
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </div>
+              )}
+              {!isLoading && panicAlerts.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No student help requests have been logged yet.
+                </p>
+              )}
+              <div className="space-y-3">
+                {!isLoading &&
+                  panicAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={`rounded-xl border-l-4 p-4 ${
+                        alert.status === "active"
+                          ? "border-l-destructive bg-destructive/10"
+                          : "border-l-muted bg-secondary/20 opacity-70"
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-foreground text-sm">{alert.title}</p>
+                            <Badge
+                              variant="outline"
+                              className={
+                                alert.status === "active"
+                                  ? "bg-destructive/20 text-destructive border-destructive/30 text-xs"
+                                  : "bg-success/20 text-success border-success/30 text-xs"
+                              }
+                            >
+                              {alert.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{alert.message}</p>
+                          {alert.student_detail_line && (
+                            <p className="text-xs text-foreground/90 mt-1 font-mono bg-secondary/40 rounded-md px-2 py-1 inline-block max-w-full break-all">
+                              {alert.student_detail_line}
+                            </p>
+                          )}
+                          <p className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <Clock className="h-3 w-3" />
+                            {formatTimeAgo(alert.created_at)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                          {alert.student_id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7"
+                              onClick={() => handleViewStudent(alert.student_id!)}
+                            >
+                              Student profile
+                            </Button>
+                          ) : null}
+                          {(alert.map_query || extractLatLngFromLocation(alert.raw_location)) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7"
+                              onClick={() => {
+                                const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
+                                  "_blank",
+                                );
+                              }}
+                            >
+                              View on Maps
+                            </Button>
+                          )}
+                          {alert.status === "active" && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="text-xs h-7"
+                              onClick={() => void handleResolvePanic(alert.id)}
+                              disabled={resolvingPanicId === alert.id}
+                            >
+                              {resolvingPanicId === alert.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Mark resolved"
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* High-risk students */}
           <Card variant="glass">

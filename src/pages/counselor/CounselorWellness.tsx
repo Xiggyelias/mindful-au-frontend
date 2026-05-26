@@ -188,45 +188,15 @@ const CounselorWellness = () => {
   const handleHealthCheck = async () => {
     try {
       setIsRunningCheck(true);
-      await api.runCounselorHealthCheck();
-      toast.success("Live health check completed");
+      const result = await api.runCounselorHealthCheck();
+      if (result?.persisted === false) {
+        toast.info(result?.message || "No live activity is available for a health check yet.");
+      } else {
+        toast.success("Live health check completed");
+      }
       await loadWellnessData();
     } catch (error: any) {
-      try {
-        // Fallback path for unstable health-check endpoint responses:
-        // derive a snapshot and persist it as a normal wellness entry.
-        const summary = await api.getCounselorWellnessSummary();
-        const summaryScores = summary?.scores ?? {};
-        const currentScores = {
-          mood_score:
-            typeof summaryScores.mood_score === "number"
-              ? summaryScores.mood_score
-              : typeof moodScore === "number"
-              ? moodScore
-              : undefined,
-          stress_level:
-            typeof summaryScores.stress_level === "number"
-              ? summaryScores.stress_level
-              : typeof stressLevel === "number"
-              ? stressLevel
-              : undefined,
-          burnout_index:
-            typeof summaryScores.burnout_index === "number"
-              ? summaryScores.burnout_index
-              : typeof burnoutIndex === "number"
-              ? burnoutIndex
-              : undefined,
-        };
-
-        await api.createCounselorWellness({
-          ...currentScores,
-          notes: "Live health check (frontend fallback)",
-        });
-        toast.success("Live health check completed");
-        await loadWellnessData();
-      } catch (fallbackError: any) {
-        toast.error(getApiErrorMessage(fallbackError, "Failed to run health check"));
-      }
+      toast.error(getApiErrorMessage(error, "Failed to run health check"));
     } finally {
       setIsRunningCheck(false);
     }
@@ -268,10 +238,25 @@ const CounselorWellness = () => {
   };
 
   const latestLog = wellnessLogs[0];
-  const moodScore = wellnessSummary?.scores?.mood_score ?? latestLog?.mood_score ?? null;
-  const stressLevel = wellnessSummary?.scores?.stress_level ?? latestLog?.stress_level ?? null;
-  const burnoutIndex = wellnessSummary?.scores?.burnout_index ?? latestLog?.burnout_index ?? null;
-  const recommendationText = wellnessSummary?.recommendations ?? latestLog?.recommendations ?? null;
+  const summaryScores = wellnessSummary?.scores ?? null;
+  const moodScore = wellnessSummary
+    ? typeof summaryScores?.mood_score === "number"
+      ? summaryScores.mood_score
+      : null
+    : latestLog?.mood_score ?? null;
+  const stressLevel = wellnessSummary
+    ? typeof summaryScores?.stress_level === "number"
+      ? summaryScores.stress_level
+      : null
+    : latestLog?.stress_level ?? null;
+  const burnoutIndex = wellnessSummary
+    ? typeof summaryScores?.burnout_index === "number"
+      ? summaryScores.burnout_index
+      : null
+    : latestLog?.burnout_index ?? null;
+  const recommendationText = wellnessSummary
+    ? wellnessSummary.recommendations ?? null
+    : latestLog?.recommendations ?? null;
 
   const getWellnessStatus = (score: number | null) => {
     if (typeof score !== "number") {
@@ -308,6 +293,15 @@ const CounselorWellness = () => {
       : "High";
 
   const checkInProgress = Math.round((answeredCount / checkInQuestions.length) * 100);
+  const liveSummarySource = String(wellnessSummary?.source || "");
+  const liveSummaryCaption =
+    liveSummarySource === "live-insufficient-data"
+      ? "No live activity data is available yet."
+      : liveSummarySource === "self-check-in-only"
+      ? "Showing your latest validated self check-in until live workload data is available."
+      : liveSummarySource === "live-computed+self-check-in"
+      ? "Computed from live activity data and blended with your recent self check-in."
+      : "Computed from live activity data.";
 
   return (
     <div className="min-h-screen bg-background">
@@ -401,11 +395,12 @@ const CounselorWellness = () => {
                 </p>
                 {wellnessSummary?.metrics && (
                   <div className="p-3 rounded-lg bg-secondary/40 border border-border/60 text-xs text-muted-foreground">
-                    {wellnessSummary.source === "live-computed+self-check-in"
-                      ? "Blended with your recent self check-in."
-                      : "Computed from live activity data."}{" "}
+                    {liveSummaryCaption}{" "}
                     Last 7 days: {wellnessSummary.metrics.sessions_7d} sessions,{" "}
                     {wellnessSummary.metrics.upcoming_appointments_7d} upcoming appointments.
+                    {wellnessSummary.metrics.live_data_points != null && (
+                      <> Live data points: {wellnessSummary.metrics.live_data_points}.</>
+                    )}
                   </div>
                 )}
                 {recommendationText && (
@@ -598,7 +593,7 @@ const CounselorWellness = () => {
                         ? "Self check-in"
                         : log.check_in_version === "ai-v1"
                         ? "AI health check"
-                        : log.check_in_version === "auto-v2"
+                        : log.check_in_version === "auto-v2" || log.check_in_version === "auto-v3"
                         ? "Live health check"
                         : "Manual entry";
 
