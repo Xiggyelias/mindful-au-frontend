@@ -16,7 +16,6 @@ import {
   Loader2,
   CheckCheck,
   Clock,
-  ChevronRight,
   ShieldAlert,
   Activity,
 } from "lucide-react";
@@ -28,10 +27,6 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import {
-  anonymousLabelForCounselor,
-  isAnonymousIdentityMaskedFromViewer,
-} from "@/lib/anonymousMode";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
@@ -44,19 +39,6 @@ const navItems = [
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
   { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
 ];
-
-type RiskLevel = "low" | "medium" | "high" | "critical";
-
-interface RiskStudent {
-  student_id: number;
-  student: { id: number; name: string; email: string };
-  risk_level: RiskLevel;
-  risk_score: number;
-  confidence: number;
-  trend: { label: string; delta: number };
-  reasons: string[];
-  recommended_action: string;
-}
 
 interface AppNotification {
   id: number;
@@ -79,17 +61,6 @@ type PanicAlert = {
   student_id?: number;
   student_detail_line?: string;
 };
-
-function normalizeRiskLevel(level: unknown): RiskLevel {
-  const s = String(level ?? "").toLowerCase();
-  if (s === "high" || s === "critical" || s === "medium" || s === "low") return s;
-  return "low";
-}
-
-function clamp(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0;
-}
 
 function formatTimeAgo(dateString?: string): string {
   if (!dateString) return "unknown time";
@@ -156,55 +127,12 @@ function buildPanicStudentSummary(log: {
   };
 }
 
-const RISK_BADGE_CLASS: Record<RiskLevel, string> = {
-  critical: "bg-destructive/20 text-destructive border-destructive/30",
-  high: "bg-orange-500/20 text-orange-600 border-orange-500/30",
-  medium: "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
-  low: "bg-green-500/20 text-green-600 border-green-500/30",
-};
-
-const RISK_BORDER_CLASS: Record<RiskLevel, string> = {
-  critical: "border-l-destructive bg-destructive/5",
-  high: "border-l-orange-500 bg-orange-500/5",
-  medium: "border-l-yellow-500 bg-yellow-500/5",
-  low: "border-l-green-500 bg-green-500/5",
-};
-
-function TrendBadge({ trend }: { trend: { label: string; delta: number } }) {
-  if (trend.label === "worsening") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
-        <TrendingDown className="h-3 w-3" />
-        Worsening{trend.delta !== 0 ? ` (${trend.delta > 0 ? "+" : ""}${trend.delta})` : ""}
-      </span>
-    );
-  }
-  if (trend.label === "improving") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
-        <Activity className="h-3 w-3" />
-        Improving
-      </span>
-    );
-  }
-  if (trend.label === "stable") {
-    return (
-      <span className="text-xs font-medium text-muted-foreground">Stable</span>
-    );
-  }
-  return (
-    <span className="text-xs text-muted-foreground">Insufficient data</span>
-  );
-}
-
 const CounselorAlerts = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
 
-  const [riskStudents, setRiskStudents] = useState<RiskStudent[]>([]);
-  const [worseningStudents, setWorseningStudents] = useState<RiskStudent[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [panicAlerts, setPanicAlerts] = useState<PanicAlert[]>([]);
   const [summary, setSummary] = useState({ high_or_critical: 0, worsening_trend: 0 });
@@ -226,51 +154,7 @@ const CounselorAlerts = () => {
         api.getPanicLogs().catch(() => []),
       ]);
 
-      // ── Risk students from diagnostic dashboard ────────────────────────────
-      const mapObservation = (raw: Record<string, unknown>): RiskStudent => {
-        const studentRaw = (raw.student as RiskStudent["student"]) || { id: 0, name: "Student", email: "" };
-        const isMasked = isAnonymousIdentityMaskedFromViewer(raw as any);
-        const trendRaw = raw.trend as { label?: string; delta?: unknown } | undefined;
-        return {
-          student_id: Number(raw.student_id) || 0,
-          student: {
-            id: Number(studentRaw.id) || 0,
-            name: isMasked ? anonymousLabelForCounselor() : String(studentRaw.name || "Student"),
-            email: isMasked ? "" : String(studentRaw.email || ""),
-          },
-          risk_level: normalizeRiskLevel(raw.risk_level),
-          risk_score: clamp(raw.risk_score),
-          confidence: clamp(raw.confidence),
-          trend: {
-            label:
-              trendRaw?.label === "improving" ||
-              trendRaw?.label === "stable" ||
-              trendRaw?.label === "worsening" ||
-              trendRaw?.label === "insufficient_data"
-                ? trendRaw.label
-                : "insufficient_data",
-            delta: Number.isFinite(Number(trendRaw?.delta)) ? Number(trendRaw?.delta) : 0,
-          },
-          reasons: Array.isArray(raw.reasons)
-            ? (raw.reasons as unknown[]).filter((r): r is string => typeof r === "string")
-            : [],
-          recommended_action: String(raw.recommended_action || "Continue routine monitoring."),
-        };
-      };
-
       if (dashData) {
-        const highRaw: Record<string, unknown>[] = Array.isArray(dashData.high_risk_students)
-          ? dashData.high_risk_students
-          : [];
-        setRiskStudents(highRaw.map(mapObservation));
-
-        const allObs: Record<string, unknown>[] = Array.isArray(dashData.student_observations)
-          ? dashData.student_observations
-          : [];
-        setWorseningStudents(
-          allObs.map(mapObservation).filter((o) => o.trend.label === "worsening")
-        );
-
         setSummary({
           high_or_critical: Number(dashData.summary?.high_or_critical) || 0,
           worsening_trend: Number(dashData.summary?.worsening_trend) || 0,
@@ -585,7 +469,7 @@ const CounselorAlerts = () => {
                               className="text-xs h-7"
                               onClick={() => handleViewStudent(alert.student_id!)}
                             >
-                              Student profile
+                              Student Profile
                             </Button>
                           ) : null}
                           {(alert.map_query || extractLatLngFromLocation(alert.raw_location)) && (
@@ -615,7 +499,7 @@ const CounselorAlerts = () => {
                               {resolvingPanicId === alert.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                "Mark resolved"
+                                "Mark Resolved"
                               )}
                             </Button>
                           )}
@@ -627,258 +511,6 @@ const CounselorAlerts = () => {
             </CardContent>
           </Card>
 
-          {/* High-risk students */}
-          <Card variant="glass">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-destructive" />
-                High &amp; Critical Risk Students
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs gap-1"
-                onClick={() => navigate("/counselor/ai-insights")}
-              >
-                AI Insights
-                <ChevronRight className="h-3 w-3" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {isLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading…
-                </div>
-              )}
-              {!isLoading && riskStudents.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No high or critical risk students at this time.
-                </p>
-              )}
-              <div className="space-y-3">
-                {!isLoading &&
-                  riskStudents.map((s) => (
-                    <div
-                      key={s.student_id}
-                      className={`rounded-xl border-l-4 p-4 ${RISK_BORDER_CLASS[s.risk_level]}`}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-foreground truncate">{s.student.name}</p>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs capitalize ${RISK_BADGE_CLASS[s.risk_level]}`}
-                            >
-                              {s.risk_level}
-                            </Badge>
-                            <TrendBadge trend={s.trend} />
-                          </div>
-                          {s.student.email && (
-                            <p className="text-xs text-muted-foreground">{s.student.email}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {s.recommended_action}
-                          </p>
-                          {s.reasons.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {s.reasons.slice(0, 3).map((r) => (
-                                <span
-                                  key={r}
-                                  className="inline-block rounded-full bg-secondary/60 px-2 py-0.5 text-xs text-foreground/70"
-                                >
-                                  {r}
-                                </span>
-                              ))}
-                              {s.reasons.length > 3 && (
-                                <span className="text-xs text-muted-foreground">
-                                  +{s.reasons.length - 3} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {s.student_id > 0 && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7"
-                              onClick={() => handleViewStudent(s.student_id)}
-                            >
-                              Profile
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="text-xs h-7"
-                            onClick={() => navigate("/counselor/ai-insights")}
-                          >
-                            View Insights
-                          </Button>
-                        </div>
-                      </div>
-                      {/* Risk score bar */}
-                      <div className="mt-3 flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              s.risk_level === "critical"
-                                ? "bg-destructive"
-                                : s.risk_level === "high"
-                                ? "bg-orange-500"
-                                : s.risk_level === "medium"
-                                ? "bg-yellow-500"
-                                : "bg-green-500"
-                            }`}
-                            style={{ width: `${s.risk_score}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground w-14 text-right shrink-0">
-                          Score {s.risk_score}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Worsening trend students (excluding those already shown above) */}
-          {!isLoading && worseningStudents.length > 0 && (
-            <Card variant="glass">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingDown className="h-5 w-5 text-orange-500" />
-                  Worsening Trend Students
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {worseningStudents.map((s) => (
-                    <div
-                      key={s.student_id}
-                      className="rounded-xl border-l-4 border-l-orange-500 bg-orange-500/5 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-foreground truncate">{s.student.name}</p>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs capitalize ${RISK_BADGE_CLASS[s.risk_level]}`}
-                            >
-                              {s.risk_level}
-                            </Badge>
-                            <TrendBadge trend={s.trend} />
-                          </div>
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {s.recommended_action}
-                          </p>
-                        </div>
-                        {s.student_id > 0 && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-7 shrink-0"
-                            onClick={() => handleViewStudent(s.student_id)}
-                          >
-                            Profile
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* System notifications */}
-          <Card variant="glass">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Bell className="h-5 w-5 text-warning" />
-                System Notifications
-                {unreadAlertNotifs.length > 0 && (
-                  <Badge variant="outline" className="ml-1 bg-warning/20 text-warning border-warning/30 text-xs">
-                    {unreadAlertNotifs.length} unread
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading…
-                </div>
-              )}
-              {!isLoading && allAlertNotifs.length === 0 && (
-                <p className="text-sm text-muted-foreground">No notifications.</p>
-              )}
-              <div className="space-y-3">
-                {!isLoading &&
-                  allAlertNotifs.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`rounded-xl border-l-4 p-4 transition-opacity ${
-                        notif.type === "warning" || notif.type === "panic"
-                          ? "border-l-warning bg-warning/5"
-                          : "border-l-muted bg-secondary/20"
-                      } ${notif.read ? "opacity-60" : ""}`}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-foreground text-sm">{notif.title}</p>
-                            {!notif.read && (
-                              <span className="inline-block h-2 w-2 rounded-full bg-warning shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{notif.message}</p>
-                          <p className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <Clock className="h-3 w-3" />
-                            {formatTimeAgo(notif.created_at)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!notif.read && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7"
-                              disabled={markingId === notif.id}
-                              onClick={() => void handleMarkRead(notif.id)}
-                            >
-                              {markingId === notif.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                "Mark read"
-                              )}
-                            </Button>
-                          )}
-                          {(notif.type === "warning" ||
-                            notif.title.toLowerCase().includes("risk")) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs h-7"
-                              onClick={() => navigate("/counselor/ai-insights")}
-                            >
-                              AI Insights
-                              <ChevronRight className="h-3 w-3 ml-1" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
         </main>
       </div>
     </div>

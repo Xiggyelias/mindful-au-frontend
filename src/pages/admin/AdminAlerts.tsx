@@ -447,7 +447,7 @@ const AdminAlerts = () => {
                                 navigate(`/admin/students?open=${encodeURIComponent(String(alert.student_id))}`)
                               }
                             >
-                              Student profile
+                              Student Profile
                             </Button>
                           ) : null}
 

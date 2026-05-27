@@ -147,7 +147,7 @@ async function tryOpenRouter(apiKey: string, messages: ChatMessage[]): Promise<s
         model,
         messages,
         max_tokens: 500,
-        temperature: 0.7,
+        temperature: 0.85,
       }),
       signal: controller.signal,
     });
@@ -173,17 +173,11 @@ async function tryOpenRouter(apiKey: string, messages: ChatMessage[]): Promise<s
 
 // Try Gemini API
 async function tryGemini(apiKey: string, messages: ChatMessage[]): Promise<string | null> {
+  const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
+
   // Convert messages format for Gemini
   const geminiMessages: any[] = [];
-  
-  // Add system prompt as first user message
   const systemMsg = messages.find(m => m.role === "system");
-  if (systemMsg) {
-    geminiMessages.push({
-      role: "user",
-      parts: [{ text: systemMsg.content }]
-    });
-  }
 
   // Add conversation history
   for (const msg of messages) {
@@ -194,6 +188,19 @@ async function tryGemini(apiKey: string, messages: ChatMessage[]): Promise<strin
     });
   }
 
+  const payload: any = {
+    contents: geminiMessages,
+    generationConfig: {
+      temperature: 0.85,
+    }
+  };
+
+  if (systemMsg) {
+    payload.systemInstruction = {
+      parts: [{ text: systemMsg.content }]
+    };
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -201,15 +208,13 @@ async function tryGemini(apiKey: string, messages: ChatMessage[]): Promise<strin
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          contents: geminiMessages
-        }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       }
     );
