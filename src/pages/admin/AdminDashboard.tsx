@@ -6,6 +6,10 @@ import {
   Activity,
   RefreshCcw,
   Loader2,
+  Users,
+  UserCheck,
+  AlertTriangle,
+  Brain,
 } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
