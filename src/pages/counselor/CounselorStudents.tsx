@@ -335,7 +335,7 @@ const CounselorStudents = () => {
   };
 
   const handleMessage = (studentId: number) => {
-    const preferredCounselorSession = sessions.find(
+    const counselorSession = sessions.find(
       (s: any) =>
         Number(s.student_id) === Number(studentId) &&
         s.session_type === "chat" &&
@@ -343,16 +343,8 @@ const CounselorStudents = () => {
         s.status !== "completed" &&
         s.status !== "cancelled"
     );
-    const fallbackSession = sessions.find(
-      (s: any) =>
-        Number(s.student_id) === Number(studentId) &&
-        s.session_type === "chat" &&
-        s.status !== "completed" &&
-        s.status !== "cancelled"
-    );
-    const session = preferredCounselorSession || fallbackSession;
-    if (session) {
-      navigate(`/counselor/messages?session=${session.id}`);
+    if (counselorSession) {
+      navigate(`/counselor/messages?session=${counselorSession.id}`);
       return;
     }
 
@@ -1005,86 +997,115 @@ const CounselorStudents = () => {
                   </p>
                 </div>
               ) : profileWellnessSummary ? (
-                <div className="space-y-4">
-                  {profileWellnessSummary.current_status && (
-                    <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Heart className="h-4 w-4 text-primary" />
-                        Current Status
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {typeof profileWellnessSummary.current_status === "string"
-                          ? profileWellnessSummary.current_status
-                          : JSON.stringify(profileWellnessSummary.current_status)}
-                      </p>
-                    </div>
-                  )}
+                (() => {
+                  const riskFactors = Array.isArray(profileWellnessSummary.risk_factors)
+                    ? profileWellnessSummary.risk_factors
+                    : typeof profileWellnessSummary.risk_factors === "string" && profileWellnessSummary.risk_factors.trim()
+                    ? [profileWellnessSummary.risk_factors]
+                    : [];
 
-                  {profileWellnessSummary.wellness_score != null && (
-                    <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-primary" />
-                        Wellness Score
-                      </h4>
-                      <div className="flex items-center gap-3">
-                        <div className="text-3xl font-bold text-primary">
-                          {profileWellnessSummary.wellness_score}
+                  let recommendations: string[] = [];
+                  if (Array.isArray(profileWellnessSummary.recommendations)) {
+                    recommendations = profileWellnessSummary.recommendations;
+                  } else if (typeof profileWellnessSummary.recommendations === "string" && profileWellnessSummary.recommendations.trim()) {
+                    recommendations = [profileWellnessSummary.recommendations];
+                  } else if (
+                    profileWellnessSummary.recommendations &&
+                    typeof profileWellnessSummary.recommendations === "object"
+                  ) {
+                    // Handle recommendations as object (e.g., {primary: "...", actions: [...]})
+                    const rec = profileWellnessSummary.recommendations as any;
+                    if (typeof rec.primary === "string" && rec.primary.trim()) {
+                      recommendations = [rec.primary];
+                    } else if (Array.isArray(rec.actions)) {
+                      recommendations = rec.actions.filter((a: any) => typeof a === "string" && a.trim());
+                    }
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {profileWellnessSummary.current_status && (
+                        <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
+                          <h4 className="font-medium flex items-center gap-2">
+                            <Heart className="h-4 w-4 text-primary" />
+                            Current Status
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            {typeof profileWellnessSummary.current_status === "string"
+                              ? profileWellnessSummary.current_status
+                              : JSON.stringify(profileWellnessSummary.current_status)}
+                          </p>
                         </div>
-                        <div className="flex-1">
-                          <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, Math.max(0, Number(profileWellnessSummary.wellness_score)))}%` }}
-                            />
+                      )}
+
+                      {profileWellnessSummary.wellness_score != null && (
+                        <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
+                          <h4 className="font-medium flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-primary" />
+                            Wellness Score
+                          </h4>
+                          <div className="flex items-center gap-3">
+                            <div className="text-3xl font-bold text-primary">
+                              {profileWellnessSummary.wellness_score}
+                            </div>
+                            <div className="flex-1">
+                              <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-primary rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(0, Number(profileWellnessSummary.wellness_score)))}%` }}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
+                      )}
 
-                  {profileWellnessSummary.risk_factors && profileWellnessSummary.risk_factors.length > 0 && (
-                    <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-2">
-                      <h4 className="font-medium flex items-center gap-2 text-destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        Risk Factors
-                      </h4>
-                      <ul className="space-y-1">
-                        {profileWellnessSummary.risk_factors.map((factor: string, idx: number) => (
-                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-destructive/60 shrink-0" />
-                            {factor}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      {riskFactors.length > 0 && (
+                        <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-2">
+                          <h4 className="font-medium flex items-center gap-2 text-destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                            Risk Factors
+                          </h4>
+                          <ul className="space-y-1">
+                            {riskFactors.map((factor: string, idx: number) => (
+                              <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-destructive/60 shrink-0" />
+                                {factor}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
-                  {profileWellnessSummary.recommendations && profileWellnessSummary.recommendations.length > 0 && (
-                    <div className="rounded-xl bg-success/5 border border-success/20 p-4 space-y-2">
-                      <h4 className="font-medium flex items-center gap-2 text-success">
-                        <Check className="h-4 w-4" />
-                        Recommendations
-                      </h4>
-                      <ul className="space-y-1">
-                        {profileWellnessSummary.recommendations.map((rec: string, idx: number) => (
-                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-success/60 shrink-0" />
-                            {rec}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      {recommendations.length > 0 && (
+                        <div className="rounded-xl bg-success/5 border border-success/20 p-4 space-y-2">
+                          <h4 className="font-medium flex items-center gap-2 text-success">
+                            <Check className="h-4 w-4" />
+                            Recommendations
+                          </h4>
+                          <ul className="space-y-1">
+                            {recommendations.map((rec: string, idx: number) => (
+                              <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-success/60 shrink-0" />
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
-                  {!profileWellnessSummary.current_status &&
-                    profileWellnessSummary.wellness_score == null &&
-                    (!profileWellnessSummary.risk_factors || profileWellnessSummary.risk_factors.length === 0) && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Heart className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                      <p className="text-sm">No wellness data available yet for this student.</p>
+                      {!profileWellnessSummary.current_status &&
+                        profileWellnessSummary.wellness_score == null &&
+                        riskFactors.length === 0 &&
+                        recommendations.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Heart className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">No wellness data available yet for this student.</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Heart className="h-8 w-8 mx-auto mb-2 opacity-40" />

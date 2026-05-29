@@ -703,10 +703,14 @@ const StudentChat = () => {
                       </div>
                       <div className="min-w-0">
                         <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
-                          {activeSession.counselor?.profile?.full_name || "Support Session"}
+                          {activeSession.assigned_role === 'peer_counselor'
+                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
+                            : activeSession.counselor?.profile?.full_name || "Support Session"}
                         </h2>
                         <p className="truncate text-[11px] text-muted-foreground sm:text-xs">
-                          Confidential support conversation
+                          {activeSession.assigned_role === 'peer_counselor'
+                            ? "Supervised Peer Support Chat"
+                            : "Confidential support conversation"}
                         </p>
                         <div className="mt-0.5 flex items-center gap-2">
                           <span className={cn("h-2 w-2 shrink-0 rounded-full", chatError ? "bg-destructive" : "bg-emerald-500")} />

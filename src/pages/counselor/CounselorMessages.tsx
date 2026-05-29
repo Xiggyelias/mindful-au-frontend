@@ -289,6 +289,7 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
+  const [isSwitchingChat, setIsSwitchingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -767,7 +768,7 @@ const CounselorMessages = () => {
         const nextChatsRaw = Array.from(dedupedByConversation.values())
           .map(({ session }): ChatListItem => {
             const isAnonymous = isAnonymousSessionFlag(session.is_anonymous);
-            const numericStudentId = Number(session.student_id);
+            const numericStudentId = Number(session.student_id || session.chat_peer_student_id || 0);
             const visibleStudentId =
               Number.isInteger(numericStudentId) && numericStudentId > 0
                 ? numericStudentId
@@ -1280,6 +1281,41 @@ const CounselorMessages = () => {
       toast.error(getApiErrorMessage(error, "Failed to reveal identity."));
     } finally {
       setIsRevealingIdentity(false);
+    }
+  };
+
+  const handleSwitchToDirectChat = async () => {
+    if (!selectedChat?.studentId) {
+      toast.error("Cannot resolve student details for this chat.");
+      return;
+    }
+    const studentId = selectedChat.studentId;
+    setIsSwitchingChat(true);
+    try {
+      const existingDirect = chats.find(
+        (c) =>
+          c.studentId === studentId &&
+          !c.isPeerAssigned &&
+          c.status !== "completed" &&
+          c.status !== "cancelled"
+      );
+
+      if (existingDirect) {
+        selectConversationById(existingDirect.id);
+        toast.info("Switched to your direct counselor chat.");
+      } else {
+        const newSession = await api.createSessionAsCounselor({
+          student_id: studentId,
+          session_type: "chat",
+        });
+        toast.success("Created a new direct counselor conversation.");
+        await loadSessions(false);
+        selectConversationById(newSession.id);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to switch to direct chat.");
+    } finally {
+      setIsSwitchingChat(false);
     }
   };
 
@@ -1833,36 +1869,74 @@ const CounselorMessages = () => {
                   )}
                 </div>
 
-                <ChatInput
-                  message={message}
-                  isSending={isSending}
-                  isUploading={isUploading}
-                  uploadProgress={uploadProgress}
-                  isVoiceMode={false}
-                  recording={recording}
-                  recordingTime={recordingTime}
-                  isPaused={isPaused}
-                  selectedFile={selectedFile}
-                  audioLevels={audioLevels}
-                  onMessageChange={(val) => {
-                    setMessage(val);
-                    notifyTyping(val.trim().length > 0);
-                  }}
-                  onTypingChange={(isTyping) => notifyTyping(isTyping)}
-                  onSubmit={handleSendMessage}
-                  onFileSelect={handleFileSelect}
-                  onAttachClick={handleAttachClick}
-                  onVoiceStart={startRecording}
-                  onVoiceStopAndSend={sendVoiceNow}
-                  onVoiceSendNow={sendVoiceNow}
-                  onVoicePause={pauseRecording}
-                  onVoiceResume={resumeRecording}
-                  onVoiceCancel={handleVoiceCancel}
-                  onVoiceError={(err) => toast.error(err.message)}
-                  onRemoveFile={removeSelectedFile}
-                  onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
-                  fileInputRef={fileInputRef}
-                />
+                {role === "counselor" && selectedChat?.isPeerAssigned ? (
+                  <div className="border-t border-slate-200/80 bg-slate-50/50 p-4 sm:p-5 dark:border-slate-800/40 dark:bg-slate-900/30">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 max-w-3xl mx-auto rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/80 via-white to-blue-50/30 p-4 shadow-sm dark:border-blue-900/30 dark:from-blue-950/20 dark:via-background dark:to-blue-950/10">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 rounded-xl bg-blue-500/10 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                          <Shield className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            Supervisory View
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                            You are viewing a peer support conversation in read-only mode. You cannot send messages directly in this channel.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto shrink-0 gap-1.5 rounded-xl bg-primary text-primary-foreground shadow hover:bg-primary/90 font-medium text-xs py-2 px-4 h-9"
+                        onClick={handleSwitchToDirectChat}
+                        disabled={isSwitchingChat}
+                      >
+                        {isSwitchingChat ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Switching...
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            Switch to Direct Chat
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <ChatInput
+                    message={message}
+                    isSending={isSending}
+                    isUploading={isUploading}
+                    uploadProgress={uploadProgress}
+                    isVoiceMode={false}
+                    recording={recording}
+                    recordingTime={recordingTime}
+                    isPaused={isPaused}
+                    selectedFile={selectedFile}
+                    audioLevels={audioLevels}
+                    onMessageChange={(val) => {
+                      setMessage(val);
+                      notifyTyping(val.trim().length > 0);
+                    }}
+                    onTypingChange={(isTyping) => notifyTyping(isTyping)}
+                    onSubmit={handleSendMessage}
+                    onFileSelect={handleFileSelect}
+                    onAttachClick={handleAttachClick}
+                    onVoiceStart={startRecording}
+                    onVoiceStopAndSend={sendVoiceNow}
+                    onVoiceSendNow={sendVoiceNow}
+                    onVoicePause={pauseRecording}
+                    onVoiceResume={resumeRecording}
+                    onVoiceCancel={handleVoiceCancel}
+                    onVoiceError={(err) => toast.error(err.message)}
+                    onRemoveFile={removeSelectedFile}
+                    onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
+                    fileInputRef={fileInputRef}
+                  />
+                )}
                 </>
               </CardContent>
             </Card>

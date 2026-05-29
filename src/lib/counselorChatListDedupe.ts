@@ -89,15 +89,13 @@ export function counselorChatListDedupeKey(
   if (isAnon) {
     const rid = realStudentId(row);
     if (rid > 0) {
-      // Anonymous + real peer id: never split by delegation lane — otherwise the same student
-      // appears as several "Anonymous User" rows (direct vs peer-counselor sessions).
-      return `anon:stu:${rid}`;
+      return `anon${peerSuffix}:stu:${rid}`;
     }
     const handle = String(row.anonymous_id ?? "").trim();
     if (handle) {
-      return `anon:h:${handle}`;
+      return `anon${peerSuffix}:h:${handle}`;
     }
-    return `anon:sid:${row.id}`;
+    return `anon${peerSuffix}:sid:${row.id}`;
   }
 
   const sid = realStudentId(row);
