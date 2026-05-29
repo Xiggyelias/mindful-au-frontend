@@ -1,145 +1,73 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
-  Bot,
-  Calendar,
-  Heart,
+  LayoutDashboard,
   MessageSquare,
+  Calendar,
+  Bot,
+  Video,
+  History,
+  Heart,
+  AlertTriangle,
   Phone,
   Clock,
-  Users,
-  Shield,
 } from "lucide-react";
-import { studentNavItems } from "@/config/studentNavItems";
-import { studentMoodOptions, type StudentMood } from "@/config/studentMoodOptions";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
 import { DailyTipCard } from "@/components/DailyTipCard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
-import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
-import { api, getApiErrorMessage } from "@/lib/api";
-import { isVideoEnabledAppointment, prefersAudioOnlyOnlineCall } from "@/lib/videoCall";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { format, isValid, parseISO } from "date-fns";
-import { cn } from "@/lib/utils";
-import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag } from "@/lib/anonymousMode";
-import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
-import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
+import { format } from "date-fns";
 
-const moodOptions = studentMoodOptions;
+const navItems = [
+  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
+  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
+  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
+  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
+  { label: "Video Call", icon: Video, path: "/student/video-call" },
+  { label: "Past Sessions", icon: History, path: "/student/history" },
+  { label: "Wellness", icon: Heart, path: "/student/wellness" },
+];
 
-type LiteSession = {
-  id: number | string;
-  status?: string;
-  is_anonymous?: boolean;
-  anonymous_id?: string | null;
-  assigned_role?: string | null;
-  unread_count?: number;
-  counselor?: { profile?: { full_name?: string | null } | null } | null;
-  peer_counselor?: { profile?: { full_name?: string | null } | null } | null;
-};
+const moodOptions = [
+  { value: "great", label: "Great", display: "\u{1F60A} Great" },
+  { value: "okay", label: "Okay", display: "\u{1F610} Okay" },
+  { value: "low", label: "Low", display: "\u{1F614} Low" },
+  { value: "stressed", label: "Stressed", display: "\u{1F62B} Stressed" },
+  { value: "tired", label: "Tired", display: "\u{1F634} Tired" },
+] as const;
 
-type AppointmentRecord = {
-  id: number | string;
-  scheduled_at?: string | null;
-  status?: string;
-  counselor_id?: number | string | null;
-  notes?: string | null;
-  counselor?: { profile?: { full_name?: string | null } | null } | null;
-};
-
-const UPCOMING_APPOINTMENT_STATUSES = ["scheduled", "confirmed", "pending"] as const;
-
-function parseSessionItems(raw: unknown): LiteSession[] {
-  if (Array.isArray(raw)) {
-    return raw as LiteSession[];
-  }
-  if (raw && typeof raw === "object" && Array.isArray((raw as { data?: unknown }).data)) {
-    return (raw as { data: LiteSession[] }).data;
-  }
-  return [];
-}
-
-function parseAppointmentItems(raw: unknown): AppointmentRecord[] {
-  if (Array.isArray(raw)) {
-    return raw as AppointmentRecord[];
-  }
-  if (raw && typeof raw === "object" && Array.isArray((raw as { data?: unknown }).data)) {
-    return (raw as { data: AppointmentRecord[] }).data;
-  }
-  return [];
-}
-
-function isAppointmentUpcoming(a: AppointmentRecord, now: Date): boolean {
-  if (!a.scheduled_at) return false;
-  if (
-    !a.status ||
-    !UPCOMING_APPOINTMENT_STATUSES.includes(a.status as (typeof UPCOMING_APPOINTMENT_STATUSES)[number])
-  ) {
-    return false;
-  }
-  try {
-    const t = new Date(a.scheduled_at).getTime();
-    return Number.isFinite(t) && t > now.getTime();
-  } catch {
-    return false;
-  }
-}
-
-function resolveRecentConversationTitle(session: LiteSession): string {
-  if (isAnonymousSessionFlag(session.is_anonymous)) {
-    return formatStudentAnonymousSessionTitle(session.anonymous_id);
-  }
-  const counselorName = session.counselor?.profile?.full_name?.trim();
-  const peerName = session.peer_counselor?.profile?.full_name?.trim();
-  const name = counselorName || peerName;
-  return name && name !== "" ? name : "Support";
-}
-
-function parseWellnessScore(value: unknown): number | null {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.min(100, Math.round(parsed)));
-}
+type StudentMood = (typeof moodOptions)[number]["value"];
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isPanicLoading, setIsPanicLoading] = useState(false);
-  const [stats, setStats] = useState({ 
-    sessions: 0, 
-    appointments: 0, 
-    wellness: null as number | null, 
-    wellnessLabel: null as string | null,
-    chats: null as number | null,
-  });
-  const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentRecord[]>([]);
-  const [recentSessions, setRecentSessions] = useState<LiteSession[]>([]);
+  const [stats, setStats] = useState({ sessions: 0, appointments: 0, wellness: null as number | null, chats: 0 });
+  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [diagnostics, setDiagnostics] = useState<any>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const { user } = useAuth();
-  const { profileAnonymousMode, isSaving: isSavingAnonymousMode, toggleProfileAnonymousMode } = useProfileAnonymousMode();
   const {
     tip: dailyTip,
     isLoading: tipLoading,
     error: tipError,
+    refresh: refreshDailyTip,
     toggleFavorite,
     isSavingFavorite,
   } = useDailyTip();
 
-  const hasInitiallyLoadedRef = useRef(false);
-  const lastDashboardStatsRefreshAtMs = useRef(0);
-
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const openVideoCallRoom = (appointment: AppointmentRecord) => {
+  const openVideoCallRoom = (appointment: any) => {
     if (!appointment?.id) {
       navigate("/student/video-call");
       return;
@@ -154,149 +82,81 @@ const StudentDashboard = () => {
       params.set("counselor_id", String(appointment.counselor_id));
     }
 
-    if (isVideoEnabledAppointment(appointment.notes)) {
-      params.set("mode", prefersAudioOnlyOnlineCall(appointment.notes) ? "audio" : "video");
-    }
-
     navigate(`/student/video-call?${params.toString()}`);
   };
 
-  const loadStats = useCallback(async (forceLoading = false) => {
-    if (!user?.id) return;
+  useEffect(() => {
+    let isMounted = true;
 
-    const silentRefresh = !forceLoading && lastDashboardStatsRefreshAtMs.current > 0;
-
-    try {
-      setStatsError(null);
-      if (!silentRefresh) {
-        setStatsLoading(true);
-      }
-
-      const [sessionsOutcome, appointmentsOutcome, summaryOutcome, moodOutcome] = await Promise.allSettled([
-        api.getSessions({ lightweight: true }),
-        api.getAppointments(),
-        api.getStudentWellnessSummary(),
-        api.getStudentMoodToday(),
-      ]);
-
-      const loadErrors: string[] = [];
-
-      let sessionItems: LiteSession[] = [];
-      if (sessionsOutcome.status === "fulfilled") {
-        sessionItems = parseSessionItems(sessionsOutcome.value);
-      } else {
-        loadErrors.push(getApiErrorMessage(sessionsOutcome.reason, "Could not load chat sessions."));
-        if (import.meta.env.DEV) {
-          console.error("Dashboard: sessions fetch failed:", sessionsOutcome.reason);
-        }
-      }
-
-      let appointmentItems: AppointmentRecord[] = [];
-      if (appointmentsOutcome.status === "fulfilled") {
-        appointmentItems = parseAppointmentItems(appointmentsOutcome.value);
-      } else {
-        loadErrors.push(getApiErrorMessage(appointmentsOutcome.reason, "Could not load appointments."));
-        if (import.meta.env.DEV) {
-          console.error("Dashboard: appointments fetch failed:", appointmentsOutcome.reason);
-        }
-      }
-
-      let summary: Awaited<ReturnType<typeof api.getStudentWellnessSummary>> | null = null;
-      if (summaryOutcome.status === "fulfilled") {
-        summary = summaryOutcome.value;
-      } else if (import.meta.env.DEV) {
-        console.info("Dashboard: wellness summary unavailable:", summaryOutcome.reason);
-      }
-
-      let moodData: Awaited<ReturnType<typeof api.getStudentMoodToday>> | null = null;
-      if (moodOutcome.status === "fulfilled") {
-        moodData = moodOutcome.value;
-      }
-
-      const now = new Date();
-      const upcomingApts = appointmentItems.filter((a) => isAppointmentUpcoming(a, now)).slice(0, 3);
-
-      setRecentSessions(sessionItems.slice(0, 3));
-
-      const aiChatMessages30dRaw = summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d;
-      const aiParsed = Number(aiChatMessages30dRaw);
-      const aiChatCount =
-        aiChatMessages30dRaw !== undefined &&
-        aiChatMessages30dRaw !== null &&
-        Number.isFinite(aiParsed) &&
-        aiParsed >= 0
-          ? Math.round(aiParsed)
-          : null;
-
-      const upcomingAppointmentCount = appointmentItems.filter((a) => isAppointmentUpcoming(a, now)).length;
-
-      setStats({
-        sessions: sessionItems.filter((s) => s.status !== "completed" && s.status !== "cancelled").length,
-        appointments: upcomingAppointmentCount,
-        wellness: parseWellnessScore(summary?.scores?.wellness_score),
-        wellnessLabel: summary?.labels?.wellness ?? null,
-        chats: aiChatCount,
-      });
-
-      setStatsError(loadErrors.length ? loadErrors.slice(0, 2).join(" ") : null);
-      setUpcomingAppointments(upcomingApts);
+    const loadStats = async () => {
+      if (!isMounted) return;
       
-      const currentMood = summary?.mood || moodData?.log?.mood;
-      if (currentMood) {
-        setDailyMood(currentMood as StudentMood);
-      } else {
-        setDailyMood(null);
+      try {
+        setStatsLoading(true);
+        setStatsError(null);
+        
+        const [sessions, appointments, summary, moodData] = await Promise.all([
+          api.getSessions({ lightweight: true }),
+          api.getAppointments(),
+          api.getStudentWellnessSummary().catch(() => null),
+          api.getStudentMoodToday().catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        const sessionItems = Array.isArray(sessions)
+          ? sessions
+          : Array.isArray((sessions as any)?.data)
+          ? (sessions as any).data
+          : [];
+        const appointmentItems = Array.isArray(appointments)
+          ? appointments
+          : Array.isArray((appointments as any)?.data)
+          ? (appointments as any).data
+          : [];
+        
+        // Fix: Validate scheduled_at before creating Date objects
+        const upcomingApts = appointmentItems
+          .filter((a: any) => a.scheduled_at && new Date(a.scheduled_at) > new Date())
+          .slice(0, 3);
+        
+        const wellnessScore =
+          typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
+
+        setStats({
+          sessions: sessionItems.length,
+          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
+          wellness: wellnessScore,
+          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+        });
+        setUpcomingAppointments(upcomingApts);
+        setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+        if (moodData?.log?.mood) {
+          setDailyMood(moodData.log.mood as StudentMood);
+        } else {
+          setDailyMood(null);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        const errorMessage = error instanceof Error ? error.message : "Failed to load dashboard statistics";
+        setStatsError(errorMessage);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to load stats:', error);
+        }
+      } finally {
+        if (isMounted) {
+          setStatsLoading(false);
+        }
       }
-      lastDashboardStatsRefreshAtMs.current = Date.now();
-    } catch (error: unknown) {
-      const errorMessage = getApiErrorMessage(error, "Failed to load dashboard statistics");
-      setStatsError(errorMessage);
-      if (import.meta.env.DEV) {
-        console.error("Failed to load stats:", error);
-      }
-    } finally {
-      setStatsLoading(false);
-    }
-  }, [user?.id]);
-
-  // Reset state when user changes
-  useEffect(() => {
-    hasInitiallyLoadedRef.current = false;
-    lastDashboardStatsRefreshAtMs.current = 0;
-    setStats({ sessions: 0, appointments: 0, wellness: null, wellnessLabel: null, chats: null });
-    setUpcomingAppointments([]);
-    setDailyMood(null);
-    setStatsError(null);
-    setStatsLoading(Boolean(user?.id));
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || hasInitiallyLoadedRef.current) return;
-    hasInitiallyLoadedRef.current = true;
-
-    void loadStats();
-  }, [loadStats, user?.id]);
-
-  useEffect(() => {
-    const minIntervalMs = 45_000;
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || !user?.id) return;
-      const lastAt = lastDashboardStatsRefreshAtMs.current;
-      if (lastAt === 0 || Date.now() - lastAt < minIntervalMs) return;
-      void loadStats();
     };
-    // Force-reload when anonymous mode is toggled so labels update immediately.
-    const onAnonymityChanged = () => {
-      if (!user?.id) return;
-      void loadStats();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
+    
+    if (user) loadStats();
+    
+    // Cleanup function to prevent state updates on unmounted component
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
+      isMounted = false;
     };
-  }, [loadStats, user?.id]);
+  }, [user]);
 
   const handlePanicButton = async () => {
     if (!user?.id) {
@@ -312,7 +172,7 @@ const StudentDashboard = () => {
     setIsPanicLoading(true);
     try {
       let location: string | undefined;
-
+      
       // Try to get location
       if (navigator.geolocation) {
         try {
@@ -321,41 +181,20 @@ const StudentDashboard = () => {
           });
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
         } catch (err) {
-          if (import.meta.env.DEV) {
-            console.info('Could not get location:', err);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Could not get location:', err);
           }
           toast.warning("Location unavailable - we'll send your alert without location data.");
         }
       }
 
-      const response = await api.createPanicLog({ location });
-      const recipientsNotified = Number(
-        (response as { recipients_notified?: unknown })?.recipients_notified
-      );
-      const alertsEnabled = Boolean(
-        (response as { alerts_enabled?: unknown })?.alerts_enabled ?? true
-      );
-
-      if (!alertsEnabled) {
-        toast.warning(
-          "Your emergency alert was logged, but server-side panic alerts are currently disabled. Please call the 24/7 hotline now."
-        );
-      } else if (Number.isFinite(recipientsNotified) && recipientsNotified === 0) {
-        toast.warning(
-          "Alert logged, but no on-call professional staff were reachable. Please call the 24/7 hotline immediately."
-        );
-      } else if (Number.isFinite(recipientsNotified) && recipientsNotified > 0) {
-        toast.success(
-          `Emergency alert sent to ${recipientsNotified} responder${recipientsNotified === 1 ? "" : "s"}. They will contact you shortly.`
-        );
-      } else {
-        toast.success("Emergency alert sent. Professional support staff will follow up.");
-      }
-    } catch (error: unknown) {
-      if (import.meta.env.DEV) {
+      await api.createPanicLog({ location });
+      toast.success("Emergency alert sent! A counselor will contact you shortly.");
+    } catch (error: any) {
+      if (process.env.NODE_ENV === 'development') {
         console.error('Panic button error:', error);
       }
-      toast.error(getApiErrorMessage(error, "Failed to send emergency alert. Please call the hotline directly."));
+      toast.error(error.response?.data?.message || "Failed to send emergency alert. Please try again.");
     } finally {
       setIsPanicLoading(false);
     }
@@ -363,7 +202,7 @@ const StudentDashboard = () => {
 
   const handleCallNow = () => {
     // Open phone dialer with crisis hotline number
-    window.location.href = 'tel:+263242704209'; // Lifeline Zimbabwe — mental health & suicide prevention
+    window.location.href = 'tel:988'; // National Suicide Prevention Lifeline
     toast.info("Connecting to crisis hotline...");
   };
 
@@ -386,8 +225,8 @@ const StudentDashboard = () => {
       setDailyMood(recorded);
       const recordedLabel = moodOptions.find((item) => item.value === recorded)?.label.toLowerCase() ?? recorded;
       toast.success(`Mood saved: ${recordedLabel}.`);
-    } catch (error: unknown) {
-      const message = getApiErrorMessage(error, "Failed to record mood");
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
         // Always sync state from server to maintain single source of truth
         try {
@@ -396,7 +235,7 @@ const StudentDashboard = () => {
             setDailyMood(today.log.mood as StudentMood);
           }
         } catch (syncError) {
-          if (import.meta.env.DEV) {
+          if (process.env.NODE_ENV === 'development') {
             console.error('Failed to sync mood state:', syncError);
           }
         }
@@ -409,23 +248,17 @@ const StudentDashboard = () => {
     }
   };
 
-  const handleAnonymousModeToggle = async (checked: boolean) => {
-    await toggleProfileAnonymousMode(checked);
-    // Refresh dashboard stats after toggle so session labels update
-    await loadStats();
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={navItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 pl-0">
+      <div className="lg:pl-72">
         <DashboardHeader
           title="Dashboard"
           onMenuClick={() => setSidebarOpen(true)}
@@ -454,9 +287,6 @@ const StudentDashboard = () => {
                       key={moodOption.value}
                       variant="glass"
                       size="sm"
-                      type="button"
-                      aria-pressed={dailyMood === moodOption.value}
-                      aria-label={`Record mood as ${moodOption.label}`}
                       className={`rounded-full transition-all duration-300 ${
                         dailyMood === moodOption.value
                           ? "bg-primary/20 border border-primary/30"
@@ -495,7 +325,7 @@ const StudentDashboard = () => {
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-                  <MessageSquare className="h-8 w-8 text-primary" />
+              <MessageSquare className="h-8 w-8 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-bold text-lg mb-1">Talk to Someone</h3>
@@ -540,7 +370,7 @@ const StudentDashboard = () => {
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-warning/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-                  <Calendar className="h-8 w-8 text-warning" />
+              <Calendar className="h-8 w-8 text-warning" />
                 </div>
                 <div>
                   <h3 className="font-bold text-lg mb-1">Schedule</h3>
@@ -551,188 +381,105 @@ const StudentDashboard = () => {
           </div>
 
           {/* Stats - with error display and loading indicator */}
-          {statsLoading && (
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground" aria-live="polite">
-              Updating dashboard…
-            </p>
-          )}
           {statsError && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <AlertTriangle className="h-5 w-5 text-destructive shrink-0" aria-hidden />
+            <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
                 <p className="text-destructive text-sm font-medium">{statsError}</p>
               </div>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-destructive hover:text-destructive/80 shrink-0"
-                onClick={() => void loadStats(true)}
-                disabled={statsLoading}
+                className="text-destructive hover:text-destructive/80"
+                onClick={() => {
+                  setStatsError(null);
+                  // Trigger stats reload by simulating user change
+                  if (user) {
+                    const loadStats = async () => {
+                      try {
+                        setStatsLoading(true);
+                        setStatsError(null);
+                        
+                        const [sessions, appointments, summary, moodData] = await Promise.all([
+                          api.getSessions({ lightweight: true }),
+                          api.getAppointments(),
+                          api.getStudentWellnessSummary().catch(() => null),
+                          api.getStudentMoodToday().catch(() => null),
+                        ]);
+
+                        const sessionItems = Array.isArray(sessions)
+                          ? sessions
+                          : Array.isArray((sessions as any)?.data)
+                          ? (sessions as any).data
+                          : [];
+                        const appointmentItems = Array.isArray(appointments)
+                          ? appointments
+                          : Array.isArray((appointments as any)?.data)
+                          ? (appointments as any).data
+                          : [];
+                        
+                        const upcomingApts = appointmentItems
+                          .filter((a: any) => a.scheduled_at && new Date(a.scheduled_at) > new Date())
+                          .slice(0, 3);
+                        
+                        const wellnessScore =
+                          typeof summary?.scores?.wellness_score === "number" ? summary.scores.wellness_score : null;
+
+                        setStats({
+                          sessions: sessionItems.length,
+                          appointments: appointmentItems.filter((a: any) => a.status === 'scheduled').length,
+                          wellness: wellnessScore,
+                          chats: Number(summary?.ml_insights?.feature_snapshot?.ai_chat_messages_30d ?? sessionItems.length),
+                        });
+                        setUpcomingAppointments(upcomingApts);
+                        setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+                      } catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : "Failed to reload statistics";
+                        setStatsError(errorMessage);
+                      } finally {
+                        setStatsLoading(false);
+                      }
+                    };
+                    loadStats();
+                  }
+                }}
               >
                 Retry
               </Button>
             </div>
           )}
-          <div
-            className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-            aria-busy={statsLoading}
-          >
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
-              title="Open chats"
-              value={statsLoading ? "—" : stats.sessions}
-              change={statsLoading ? "Loading…" : "Threads not ended yet"}
+              title="Sessions This Month"
+              value={stats.sessions}
+              change={`${stats.appointments} upcoming`}
               trend="neutral"
               icon={MessageSquare}
             />
             <StatsCard
               title="Wellness Score"
-              value={statsLoading ? "—" : stats.wellness !== null ? `${stats.wellness}%` : "—"}
-              change={
-                statsLoading
-                  ? "Loading…"
-                  : stats.wellnessLabel || (stats.wellness !== null ? "Check in today" : "No data yet")
-              }
-              trend={statsLoading || stats.wellness === null ? "neutral" : stats.wellness >= 70 ? "up" : "neutral"}
+              value={stats.wellness !== null ? `${stats.wellness}%` : "--"}
+              change={diagnostics?.mood || (stats.wellness !== null ? "Check in today" : "No data yet")}
+              trend={stats.wellness !== null && stats.wellness >= 70 ? "up" : "neutral"}
               icon={Heart}
             />
             <StatsCard
               title="Upcoming Sessions"
-              value={statsLoading ? "—" : stats.appointments}
-              change={statsLoading ? "Loading…" : "Confirmed & upcoming"}
+              value={stats.appointments}
+              change="Scheduled"
               trend="neutral"
               icon={Calendar}
             />
             <StatsCard
-              title="AI assistant (30 days)"
-              value={statsLoading ? "—" : stats.chats !== null ? stats.chats : "—"}
-              change={
-                statsLoading
-                  ? "Loading…"
-                  : stats.chats !== null
-                    ? "Messages from AI support"
-                    : "No usage data yet"
-              }
+              title="AI Chats"
+              value={stats.chats}
+              change="Total sessions"
               trend="neutral"
               icon={Bot}
             />
           </div>
 
-          <Card className="border border-border/60 shadow-sm mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-primary" />
-                Chat anonymity
-              </CardTitle>
-              <CardDescription>
-                When on, counselors see you as &quot;Anonymous&quot; until you turn it off.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <AnonymousModeToggle
-                id="student-anonymous-mode"
-                checked={profileAnonymousMode}
-                onCheckedChange={handleAnonymousModeToggle}
-                disabled={isSavingAnonymousMode}
-              />
-              <p className="text-xs text-muted-foreground max-w-md">
-                This applies to active chat sessions. You can also change this from an open chat.
-              </p>
-            </CardContent>
-          </Card>
-
           <div className="grid gap-8 lg:grid-cols-2">
-            {/* Recent Conversations */}
-            <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
-              <CardHeader className="bg-secondary/10 border-b border-border/50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl font-bold flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5 text-primary" />
-                    Recent Conversations
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80" onClick={() => navigate("/student/chat")}>
-                    View all
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  {recentSessions.length === 0 ? (
-                    <div className="text-center py-8 bg-secondary/20 rounded-2xl border-2 border-dashed border-border/50">
-                      <p className="text-muted-foreground mb-4">No active conversations yet</p>
-                      <Button variant="outline" size="sm" onClick={() => navigate("/student/chat")}>
-                        Find a counselor
-                      </Button>
-                    </div>
-                  ) : (
-                    recentSessions.map((session) => {
-                      const displayName = resolveRecentConversationTitle(session);
-                      const isPeer = session.assigned_role === "peer_counselor";
-                      const sessionStatus = session.status ?? "";
-                      const appearsLive =
-                        sessionStatus === "active" ||
-                        sessionStatus === "pending" ||
-                        sessionStatus === "open";
-                      const goResumeChat = () => navigate(`/student/chat?session=${session.id}`);
-
-                      return (
-                        <div
-                          key={session.id}
-                          role="button"
-                          tabIndex={0}
-                          className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          onClick={goResumeChat}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              goResumeChat();
-                            }
-                          }}
-                          aria-label={`Resume conversation: ${displayName}`}
-                        >
-                          <div
-                            className={`h-14 w-14 shrink-0 rounded-2xl flex items-center justify-center border ${
-                              isPeer ? "bg-info/10 text-info border-info/20" : "bg-primary/10 text-primary border-primary/20"
-                            }`}
-                          >
-                            {isPeer ? (
-                              <Users className="h-6 w-6" aria-hidden />
-                            ) : (
-                              <MessageSquare className="h-6 w-6" aria-hidden />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                              {displayName}
-                            </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <span
-                                className={`h-2 w-2 rounded-full shrink-0 ${
-                                  appearsLive ? "bg-success animate-pulse" : "bg-muted"
-                                }`}
-                              />
-                              {isAnonymousSessionFlag(session.is_anonymous)
-                                ? "Anonymous session"
-                                : isPeer
-                                  ? "Peer support"
-                                  : "Professional support"}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1 shrink-0">
-                            {session.unread_count != null && session.unread_count > 0 && (
-                              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow-sm">
-                                {session.unread_count > 99 ? "99+" : session.unread_count}
-                              </span>
-                            )}
-                            <span className="text-sm font-semibold text-primary whitespace-nowrap">Resume</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Upcoming Sessions */}
             <Card className="border-none shadow-xl shadow-primary/5 rounded-3xl overflow-hidden bg-background">
               <CardHeader className="bg-secondary/10 border-b border-border/50">
@@ -756,59 +503,65 @@ const StudentDashboard = () => {
                       </Button>
                     </div>
                   ) : (
-                    upcomingAppointments.map((apt) => {
-                      const aptDate =
-                        apt.scheduled_at != null &&
-                        apt.scheduled_at !== "" &&
-                        isValid(parseISO(apt.scheduled_at))
-                          ? parseISO(apt.scheduled_at)
-                          : null;
-
-                      return (
-                        <div
-                          key={apt.id}
-                          className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300"
-                        >
-                          <div className="h-14 w-14 shrink-0 rounded-2xl bg-primary/10 flex flex-col items-center justify-center text-primary border border-primary/20">
-                            {aptDate ? (
-                              <>
-                                <span className="text-xs font-bold uppercase">{format(aptDate, "MMM")}</span>
-                                <span className="text-lg font-bold">{format(aptDate, "d")}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-xs font-bold uppercase">—</span>
-                                <span className="text-lg font-bold">—</span>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                              Session with {apt.counselor?.profile?.full_name || "Counselor"}
-                            </p>
-                            <p className="text-sm text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3 shrink-0" aria-hidden />
-                              {aptDate ? format(aptDate, "h:mm a") : "Time TBD"}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            className="rounded-full px-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 shrink-0"
-                            size="sm"
-                            onClick={() => openVideoCallRoom(apt)}
-                          >
-                            Join
-                          </Button>
+                    upcomingAppointments.map((apt) => (
+                      <div key={apt.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300">
+                        <div className="h-14 w-14 rounded-2xl bg-primary/10 flex flex-col items-center justify-center text-primary border border-primary/20">
+                          {apt.scheduled_at ? (() => {
+                            try {
+                              const date = new Date(apt.scheduled_at);
+                              if (isNaN(date.getTime())) throw new Error('Invalid date');
+                              return (
+                                <>
+                                  <span className="text-xs font-bold uppercase">{format(date, "MMM")}</span>
+                                  <span className="text-lg font-bold">{format(date, "d")}</span>
+                                </>
+                              );
+                            } catch {
+                              return (
+                                <>
+                                  <span className="text-xs font-bold uppercase">---</span>
+                                  <span className="text-lg font-bold">--</span>
+                                </>
+                              );
+                            }
+                          })() : (
+                            <>
+                              <span className="text-xs font-bold uppercase">---</span>
+                              <span className="text-lg font-bold">--</span>
+                            </>
+                          )}
                         </div>
-                      );
-                    })
+                        <div className="flex-1">
+                          <p className="font-bold text-foreground group-hover:text-primary transition-colors">
+                            Session with {apt.counselor?.profile?.full_name || "Counselor"}
+                          </p>
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> 
+                            {apt.scheduled_at ? (() => {
+                              try {
+                                const date = new Date(apt.scheduled_at);
+                                if (isNaN(date.getTime())) throw new Error('Invalid date');
+                                return format(date, "h:mm a");
+                              } catch {
+                                return "Time TBD";
+                              }
+                            })() : "Time TBD"}
+                          </p>
+                        </div>
+                        <Button 
+                          className="rounded-full px-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20" 
+                          size="sm" 
+                          onClick={() => openVideoCallRoom(apt)}
+                        >
+                          Join
+                        </Button>
+                      </div>
+                    ))
                   )}
                 </div>
               </CardContent>
             </Card>
-          </div>
 
-          <div className="mt-8">
             {/* Wellness Tips & Mood Analytics */}
             <DailyTipCard
               className="rounded-3xl shadow-xl shadow-primary/5"
@@ -816,6 +569,7 @@ const StudentDashboard = () => {
               tip={dailyTip}
               isLoading={tipLoading}
               error={tipError}
+              onRefresh={() => void refreshDailyTip()}
               onToggleFavorite={() => void toggleFavorite()}
               isSavingFavorite={isSavingFavorite}
             />
