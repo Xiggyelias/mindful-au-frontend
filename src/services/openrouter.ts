@@ -4,7 +4,7 @@ import { resolveApiBaseUrl } from "@/lib/runtimeConfig";
 const API_BASE_URL = resolveApiBaseUrl();
 const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
 const MAX_RETRIES = 2;
-export const DEFAULT_OPENROUTER_CHAT_MODEL = "deepseek/deepseek-r1-0528:free";
+export const DEFAULT_OPENROUTER_CHAT_MODEL = "google/gemma-4-31b-it:free";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
