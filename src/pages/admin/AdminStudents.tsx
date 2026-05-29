@@ -381,39 +381,39 @@ const AdminStudents = () => {
           </div>
 
           <div className="grid gap-4 md:grid-cols-5">
-            <Card variant="glass" className="text-center">
+            <Card variant="glass" className="bg-gradient-to-br from-red-50 to-transparent dark:from-red-950/20">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-primary">{stats.total}</p>
-                <p className="text-muted-foreground text-sm">Total Students</p>
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.total}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">Total Students</p>
               </CardContent>
             </Card>
-            <Card variant="glass" className="text-center">
+            <Card variant="glass" className="bg-gradient-to-br from-green-50 to-transparent dark:from-green-950/20">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-success">{stats.active}</p>
-                <p className="text-muted-foreground text-sm">Active</p>
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.active}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">Active</p>
               </CardContent>
             </Card>
-            <Card variant="glass" className="text-center">
+            <Card variant="glass" className="bg-gradient-to-br from-orange-50 to-transparent dark:from-orange-950/20">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-warning">{stats.atRisk}</p>
-                <p className="text-muted-foreground text-sm">High Risk</p>
+                <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">{stats.atRisk}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">High Risk</p>
               </CardContent>
             </Card>
-            <Card variant="glass" className="text-center">
+            <Card variant="glass" className="bg-gradient-to-br from-blue-50 to-transparent dark:from-blue-950/20">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-info">{stats.peerAssigned}</p>
-                <p className="text-muted-foreground text-sm">Peer Supervised</p>
+                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.peerAssigned}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">Peer Supervised</p>
               </CardContent>
             </Card>
-            <Card variant="glass" className="text-center">
+            <Card variant="glass" className="bg-gradient-to-br from-gray-50 to-transparent dark:from-gray-950/20">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-muted-foreground">{stats.pending}</p>
-                <p className="text-muted-foreground text-sm">Pending Approval</p>
+                <p className="text-3xl font-bold text-muted-foreground">{stats.pending}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">Pending Approval</p>
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <div className="relative max-w-xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -423,99 +423,135 @@ const AdminStudents = () => {
                 className="pl-9"
               />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={statusFilter === "all" ? "default" : "outline"}
-                onClick={() => setStatusFilter("all")}
-              >
-                <Filter className="h-3.5 w-3.5 mr-1" />
-                All accounts
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "active" ? "default" : "outline"}
-                onClick={() => setStatusFilter("active")}
-              >
-                Active
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "pending" ? "default" : "outline"}
-                onClick={() => setStatusFilter("pending")}
-              >
-                Pending
-              </Button>
-              <Button
-                size="sm"
-                variant={riskFilter === "all" ? "default" : "outline"}
-                onClick={() => setRiskFilter("all")}
-              >
-                All risk
-              </Button>
-              <Button
-                size="sm"
-                variant={riskFilter === "high" ? "default" : "outline"}
-                onClick={() => setRiskFilter("high")}
-              >
-                High
-              </Button>
-              <Button
-                size="sm"
-                variant={riskFilter === "medium" ? "default" : "outline"}
-                onClick={() => setRiskFilter("medium")}
-              >
-                Medium
-              </Button>
-              <Button
-                size="sm"
-                variant={riskFilter === "low" ? "default" : "outline"}
-                onClick={() => setRiskFilter("low")}
-              >
-                Low
-              </Button>
-              <Button
-                size="sm"
-                variant={peerFilter === "assigned" ? "default" : "outline"}
-                onClick={() => setPeerFilter(peerFilter === "assigned" ? "all" : "assigned")}
-              >
-                Peer assigned
-              </Button>
-              <Button
-                size="sm"
-                variant={peerFilter === "unassigned" ? "default" : "outline"}
-                onClick={() => setPeerFilter(peerFilter === "unassigned" ? "all" : "unassigned")}
-              >
-                No peer
-              </Button>
+
+            <div className="flex flex-col gap-4 md:gap-3">
+              {/* Status Filter Group */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase min-w-[60px]">Status:</span>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={statusFilter === "all" ? "default" : "outline"}
+                    onClick={() => setStatusFilter("all")}
+                    className="text-xs"
+                  >
+                    <Filter className="h-3.5 w-3.5 mr-1" />
+                    All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={statusFilter === "active" ? "default" : "outline"}
+                    onClick={() => setStatusFilter("active")}
+                    className="text-xs"
+                  >
+                    Active
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={statusFilter === "pending" ? "default" : "outline"}
+                    onClick={() => setStatusFilter("pending")}
+                    className="text-xs"
+                  >
+                    Pending
+                  </Button>
+                </div>
+              </div>
+
+              {/* Risk Filter Group */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase min-w-[60px]">Risk:</span>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={riskFilter === "all" ? "default" : "outline"}
+                    onClick={() => setRiskFilter("all")}
+                    className="text-xs"
+                  >
+                    All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={riskFilter === "high" ? "default" : "outline"}
+                    onClick={() => setRiskFilter("high")}
+                    className="text-xs"
+                  >
+                    High
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={riskFilter === "medium" ? "default" : "outline"}
+                    onClick={() => setRiskFilter("medium")}
+                    className="text-xs"
+                  >
+                    Medium
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={riskFilter === "low" ? "default" : "outline"}
+                    onClick={() => setRiskFilter("low")}
+                    className="text-xs"
+                  >
+                    Low
+                  </Button>
+                </div>
+              </div>
+
+              {/* Peer Assignment Filter Group */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase min-w-[60px]">Peer:</span>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={peerFilter === "assigned" ? "default" : "outline"}
+                    onClick={() => setPeerFilter(peerFilter === "assigned" ? "all" : "assigned")}
+                    className="text-xs"
+                  >
+                    Assigned
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={peerFilter === "unassigned" ? "default" : "outline"}
+                    onClick={() => setPeerFilter(peerFilter === "unassigned" ? "all" : "unassigned")}
+                    className="text-xs"
+                  >
+                    Unassigned
+                  </Button>
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
               {(statusFilter !== "all" ||
                 riskFilter !== "all" ||
                 peerFilter !== "all" ||
                 searchQuery.trim().length > 0) && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setStatusFilter("all");
-                    setRiskFilter("all");
-                    setPeerFilter("all");
-                  }}
-                >
-                  <FilterX className="h-3.5 w-3.5 mr-1" />
-                  Clear
-                </Button>
+                <div className="pt-2 border-t border-border">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                      setRiskFilter("all");
+                      setPeerFilter("all");
+                    }}
+                  >
+                    <FilterX className="h-3.5 w-3.5 mr-1" />
+                    Clear all filters
+                  </Button>
+                </div>
               )}
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            Showing {filteredStudents.length} of {students.length} students
-          </p>
-
           <Card variant="glass">
-            <CardHeader>
-              <CardTitle className="text-lg">Student roster</CardTitle>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Student roster</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {filteredStudents.length} of {students.length}
+                </p>
+              </div>
             </CardHeader>
             <CardContent className="p-0 sm:p-6 sm:pt-0">
               {isLoading ? (
@@ -677,11 +713,11 @@ const AdminStudents = () => {
                               {student.lastSession}
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex flex-col items-end gap-1">
+                              <div className="flex flex-col items-end gap-1.5">
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  className="h-8 text-xs"
+                                  variant="default"
+                                  className="h-8 text-xs w-full sm:w-auto"
                                   onClick={() => void openStudentDetails(student)}
                                 >
                                   <UserIcon className="h-3.5 w-3.5 mr-1" />
@@ -690,7 +726,7 @@ const AdminStudents = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 text-xs"
+                                  className="h-8 text-xs w-full sm:w-auto"
                                   disabled={assigningAssessmentStudentId === student.id}
                                   onClick={() =>
                                     void handleAssignAssessment(
@@ -701,8 +737,8 @@ const AdminStudents = () => {
                                 >
                                   <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
                                   {assigningAssessmentStudentId === student.id
-                                    ? "Assigning…"
-                                    : "Assign check-in"}
+                                    ? "…"
+                                    : "Check-in"}
                                 </Button>
                               </div>
                             </TableCell>
