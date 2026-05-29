@@ -56,6 +56,8 @@ interface AuthContextType {
   completeOAuthLogin: (token: string) => Promise<AuthResult>;
   completeOAuthLoginWithTicket: (ticket: string) => Promise<AuthResult>;
   refreshUser: () => Promise<void>;
+  /** Clears needs_assessment locally after a successful check-in submit (server sync via refreshUser). */
+  markAssessmentComplete: () => void;
   refreshTwoFactorStatus: () => Promise<TwoFactorState>;
   setupTwoFactor: () => Promise<{
     secret: string;
@@ -149,6 +151,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         api.clearToken();
       }
     }
+  };
+
+  const markAssessmentComplete = () => {
+    setUser((prev) => (prev ? { ...prev, needs_assessment: false } : prev));
   };
 
   useEffect(() => {
@@ -550,6 +556,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       completeOAuthLogin,
       completeOAuthLoginWithTicket,
       refreshUser,
+      markAssessmentComplete,
       refreshTwoFactorStatus,
       setupTwoFactor,
       verifyTwoFactor,

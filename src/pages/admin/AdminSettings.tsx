@@ -1,13 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  BarChart3,
-  Brain,
-  AlertTriangle,
-  FileText,
-  Settings,
   Bell,
   Shield,
   Mail,
@@ -16,6 +8,7 @@ import {
   ShieldCheck,
   RefreshCcw,
 } from "lucide-react";
+import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,17 +29,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { DailyTip, api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { CardDescription } from "@/components/ui/card";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { label: "Students", icon: Users, path: "/admin/students" },
-  { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
-  { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
-  { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
-  { label: "Logs", icon: FileText, path: "/admin/logs" },
-  { label: "Settings", icon: Settings, path: "/admin/settings" },
-];
 
 const defaultSettings: Record<string, any> = {
   panic_alerts: true,
@@ -342,7 +324,7 @@ const AdminSettings = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...adminNavItems]}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

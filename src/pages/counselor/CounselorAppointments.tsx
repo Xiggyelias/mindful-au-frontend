@@ -18,6 +18,7 @@ import {
   FilterX,
   AlertTriangle,
 } from "lucide-react";
+import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,18 +45,6 @@ import {
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { toast } from "sonner";
 import { format } from "date-fns";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
-  { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
-  { label: "Video Sessions", icon: Video, path: "/counselor/video" },
-  { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
-  { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
-  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
-];
 
 type AppointmentFilter = "all" | "action_needed" | "upcoming" | "completed" | "cancelled";
 type PagedMeta = {
@@ -403,7 +392,7 @@ const CounselorAppointments = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...counselorNavItems]}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}

@@ -3,7 +3,7 @@ import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { peerNavItems } from "./navItems";
+import { peerCounselorNavItems } from "@/config/counselorNavItems";
 
 const PeerProfile = () => {
   const { user } = useAuth();
@@ -13,7 +13,7 @@ const PeerProfile = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={peerNavItems}
+        items={[...peerCounselorNavItems]}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

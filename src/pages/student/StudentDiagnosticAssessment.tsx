@@ -536,7 +536,7 @@ function normalizeResponses(raw: Record<string, unknown>): Record<string, unknow
 const StudentDiagnosticAssessment = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, markAssessmentComplete } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
 
   const [step, setStep] = useState<"intro" | "form" | "results">("intro");
@@ -576,7 +576,7 @@ const StudentDiagnosticAssessment = () => {
     }
 
     loadQuestionnaire();
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.needs_assessment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (step === "results") {
@@ -626,9 +626,8 @@ const StudentDiagnosticAssessment = () => {
         const questionList = selectRepresentativeQuestions(UNIVERSITY_QUESTIONS);
         setQuestions(questionList);
         setQuestionnaireId(null);
-        // Soft warning — not a hard blocker
         setQuestionnaireError(
-          "Could not connect to the server to register your session. Your answers will be saved when you submit — please ensure you are online."
+          "We could not connect to register your check-in. Tap Retry when you are back online — you cannot submit until then."
         );
       } else {
         const message = getApiErrorMessage(
@@ -667,14 +666,20 @@ const StudentDiagnosticAssessment = () => {
   };
 
   const isHardError = questionnaireError !== null && questions.length === 0;
+  const isOfflineBlocked =
+    !isQuestionnaireLoading && questions.length > 0 && questionnaireId === null;
 
   const handleStartAssessment = () => {
     if (isQuestionnaireLoading) {
       toast.info("Still loading the questionnaire — please wait.");
       return;
     }
-    if (isHardError) {
-      toast.error("The assessment is not ready yet. Use Retry or refresh the page.");
+    if (isHardError || isOfflineBlocked) {
+      toast.error(
+        isOfflineBlocked
+          ? "Connect to the internet and tap Retry before starting your check-in."
+          : "The assessment is not ready yet. Use Retry or refresh the page."
+      );
       return;
     }
     if (questions.length === 0) {
@@ -788,16 +793,15 @@ const StudentDiagnosticAssessment = () => {
         ((data as DiagnosticResult)?.id ? (data as DiagnosticResult) : null);
       if (!diag) {
         toast.error("Assessment submitted but your results could not be loaded. Please reload.");
-        void refreshUser();
+        markAssessmentComplete();
+        await refreshUser();
         return;
       }
+      markAssessmentComplete();
       setResult(diag);
       setStep("results");
       toast.success("Check-in complete — here are your insights.");
-      // Refresh user after the results page is visible. Fire-and-forget so a
-      // transient network error here can't roll back the results display or
-      // trigger an unexpected sign-out mid-session.
-      void refreshUser();
+      await refreshUser();
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error("Failed to submit assessment:", error);
@@ -854,7 +858,7 @@ const StudentDiagnosticAssessment = () => {
               isLoading={isQuestionnaireLoading}
               questionCount={questions.length}
               error={questionnaireError}
-              isHardError={isHardError}
+              isHardError={isHardError || isOfflineBlocked}
               onStart={handleStartAssessment}
               onRetry={() => void loadQuestionnaire()}
               canGoBack={!user?.needs_assessment}

@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  BarChart3,
-  Brain,
-  AlertTriangle,
-  FileText,
-  Settings,
   Activity,
   RefreshCcw,
   Download,
   Loader2,
   Calendar,
 } from "lucide-react";
+import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,17 +16,6 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { label: "Students", icon: Users, path: "/admin/students" },
-  { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
-  { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
-  { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
-  { label: "Logs", icon: FileText, path: "/admin/logs" },
-  { label: "Settings", icon: Settings, path: "/admin/settings" },
-];
 
 type AnalyticsData = {
   overview?: {
@@ -171,7 +153,7 @@ const AdminAnalytics = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...adminNavItems]}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

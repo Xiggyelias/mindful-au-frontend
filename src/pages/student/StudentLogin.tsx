@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { getStudentHomePath } from "@/lib/studentRoutes";
 
 const StudentLogin = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ const StudentLogin = () => {
       return;
     }
 
-    navigate("/student/dashboard", { replace: true });
+    navigate(getStudentHomePath(user), { replace: true });
   }, [navigate, role, user]);
 
   const handleGoogleSignIn = async () => {

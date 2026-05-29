@@ -3,15 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  Bot,
-  Calendar,
-  ClipboardCheck,
   Clock,
-  Heart,
-  LayoutDashboard,
   Loader2,
   MapPin,
-  MessageSquare,
   Mic,
   MicOff,
   Phone,
@@ -53,16 +47,7 @@ import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
 import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
+import { studentNavItems } from "@/config/studentNavItems";
 
 type CallMode = "video" | "audio";
 
@@ -773,7 +758,7 @@ const StudentVideoCall = () => {
   return (
     <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

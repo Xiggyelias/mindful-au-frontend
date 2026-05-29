@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  BarChart3,
-  Brain,
-  AlertTriangle,
-  FileText,
-  Settings,
   Search,
   Filter,
   FilterX,
   RefreshCcw,
   Loader2,
+  AlertTriangle,
+  FileSpreadsheet,
+  User as UserIcon,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,23 +22,37 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { adminNavItems } from "@/config/adminNavItems";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import { buildStudentRosterRows, type StudentRosterRow } from "@/lib/studentRoster";
 import { toast } from "sonner";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { label: "Students", icon: Users, path: "/admin/students" },
-  { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
-  { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
-  { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
-  { label: "Logs", icon: FileText, path: "/admin/logs" },
-  { label: "Settings", icon: Settings, path: "/admin/settings" },
-];
-
 type StatusFilter = "all" | "active" | "pending";
+type RiskFilter = "all" | "high" | "medium" | "low";
+type PeerFilter = "all" | "assigned" | "unassigned";
+
+const readArrayResult = (result: PromiseSettledResult<unknown>) =>
+  result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
+
+const readChatListResult = (result: PromiseSettledResult<unknown>) => {
+  if (result.status !== "fulfilled") return [];
+  const value = result.value as { data?: unknown[] } | unknown[];
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  return [];
+};
 
 const AdminStudents = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -50,39 +60,72 @@ const AdminStudents = () => {
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [students, setStudents] = useState<any[]>([]);
-  const [diagnostics, setDiagnostics] = useState<any[]>([]);
+  const [students, setStudents] = useState<StudentRosterRow[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [peerCounselors, setPeerCounselors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
+  const [peerFilter, setPeerFilter] = useState<PeerFilter>("all");
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [selectedPeerByStudent, setSelectedPeerByStudent] = useState<Record<number, string>>({});
+  const [assigningStudentId, setAssigningStudentId] = useState<number | null>(null);
+  const [assigningAssessmentStudentId, setAssigningAssessmentStudentId] = useState<number | null>(null);
+  const [peerAssignmentAction, setPeerAssignmentAction] = useState<"assign" | "unassign" | null>(null);
+
+  const [selectedStudent, setSelectedStudent] = useState<StudentRosterRow | null>(null);
   const [studentSummary, setStudentSummary] = useState<any | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [highlightedStudentId, setHighlightedStudentId] = useState<number | null>(null);
 
   const loadStudents = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [studentData, diagnosticData] = await Promise.all([
-        api.getStudents(),
-        api.getAIDiagnostics().catch(() => []),
+      const [studentsResult, sessionsResult, peerCounselorsResult] = await Promise.allSettled([
+        api.getStudents({ limit: 500 }),
+        api.getSessions({ lightweight: true, limit: 400, open_only: true }),
+        api.getPeerCounselors(),
       ]);
 
-      const studentList = Array.isArray(studentData)
-        ? studentData
-        : Array.isArray((studentData as any)?.data)
-        ? (studentData as any).data
-        : [];
+      if (studentsResult.status === "rejected") {
+        throw studentsResult.reason;
+      }
 
-      const diagnosticList = Array.isArray(diagnosticData)
-        ? diagnosticData
-        : Array.isArray((diagnosticData as any)?.data)
-        ? (diagnosticData as any).data
-        : [];
+      const studentData = readArrayResult(studentsResult);
+      const sessionsData = readArrayResult(sessionsResult);
+      const peerCounselorsData = readArrayResult(peerCounselorsResult);
 
-      setStudents(studentList);
-      setDiagnostics(diagnosticList);
+      const stageOneRows = buildStudentRosterRows({
+        studentData,
+        appointmentData: [],
+        diagnosticsData: [],
+        sessionsData,
+        chatSessionsData: sessionsData,
+        maskAnonymous: false,
+      });
+
+      setStudents(stageOneRows);
+      setSessions(sessionsData);
+      setPeerCounselors(peerCounselorsData);
+
+      const [appointmentsResult, diagnosticsResult] = await Promise.allSettled([
+        api.getAppointments({ limit: 300 }),
+        api.getAIDiagnostics(),
+      ]);
+
+      const enrichedRows = buildStudentRosterRows({
+        studentData,
+        appointmentData: readArrayResult(appointmentsResult),
+        diagnosticsData: readArrayResult(diagnosticsResult),
+        sessionsData,
+        chatSessionsData: sessionsData,
+        maskAnonymous: false,
+      });
+
+      setStudents(enrichedRows);
     } catch (error: any) {
       const message = error?.response?.data?.message || "Failed to load students";
       toast.error(message);
@@ -95,119 +138,62 @@ const AdminStudents = () => {
     if (user) {
       void loadStudents();
     }
-  }, [user, loadStudents]);
+  }, [user, loadStudents, reloadToken]);
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-    const rawOpen = searchParams.get("open");
-    const openId = rawOpen ? Number(rawOpen) : NaN;
-    if (!Number.isFinite(openId) || openId <= 0 || students.length === 0 || isLoading) {
-      return;
-    }
-
-    const match = students.find((s) => Number(s.id) === openId);
-
-    const next = new URLSearchParams(searchParams);
-    if (!match) {
-      next.delete("open");
-      setSearchParams(next, { replace: true });
-      return;
-    }
-
-    next.delete("open");
-    setSearchParams(next, { replace: true });
-
-    setSelectedStudent(match);
-    setStudentSummary(null);
-    setIsDetailsOpen(true);
-
-    void (async () => {
-      try {
-        setIsSummaryLoading(true);
-        const summary = await api.getStudentWellnessSummary(openId);
-        setStudentSummary(summary || null);
-      } catch (error: any) {
-        const message = error?.response?.data?.message || "Failed to load student details";
-        toast.error(message);
-      } finally {
-        setIsSummaryLoading(false);
-      }
-    })();
-  }, [students, isLoading, searchParams, setSearchParams, user]);
-
-  const latestDiagnosticByStudent = useMemo(() => {
-    const map = new Map<number, any>();
-
-    for (const diagnostic of diagnostics) {
-      const studentId = Number(diagnostic?.student_id);
-      if (!studentId) continue;
-
-      const existing = map.get(studentId);
-      if (!existing) {
-        map.set(studentId, diagnostic);
-        continue;
-      }
-
-      const existingTime = new Date(existing.created_at || 0).getTime();
-      const nextTime = new Date(diagnostic.created_at || 0).getTime();
-      if (nextTime > existingTime) {
-        map.set(studentId, diagnostic);
-      }
-    }
-
+  const peerCounselorNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    peerCounselors.forEach((peer: any) => {
+      const label = peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`;
+      map.set(Number(peer.id), label);
+    });
     return map;
-  }, [diagnostics]);
+  }, [peerCounselors]);
 
   const stats = useMemo(() => {
     const total = students.length;
-    const active = students.filter((s) => s.roles?.some((r: any) => r.role === "student" && r.approved)).length;
+    const active = students.filter((s) => s.accountStatus === "active").length;
     const pending = total - active;
-    const atRisk = students.filter((student) => {
-      const diagnostic = latestDiagnosticByStudent.get(Number(student.id));
-      const level = String(diagnostic?.risk_level || "").toLowerCase();
-      return level === "high" || level === "critical";
-    }).length;
-
-    return {
-      total,
-      active,
-      pending,
-      atRisk,
-    };
-  }, [students, latestDiagnosticByStudent]);
+    const atRisk = students.filter((s) => s.riskLevel === "high").length;
+    const peerAssigned = students.filter((s) => Number(s.assignedPeerCounselorId) > 0).length;
+    return { total, active, pending, atRisk, peerAssigned };
+  }, [students]);
 
   const filteredStudents = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
 
     return students.filter((student) => {
-      const name = String(student.profile?.full_name || student.name || "").toLowerCase();
-      const email = String(student.email || "").toLowerCase();
-      const idText = String(student.id || "");
-      const isActive = student.roles?.some((r: any) => r.role === "student" && r.approved);
-      const status = isActive ? "active" : "pending";
+      const peerName =
+        student.assignedPeerCounselorId != null
+          ? (peerCounselorNameById.get(student.assignedPeerCounselorId) || "").toLowerCase()
+          : "";
 
       const matchesSearch =
         search.length === 0 ||
-        name.includes(search) ||
-        email.includes(search) ||
-        idText.includes(search);
+        student.name.toLowerCase().includes(search) ||
+        student.email.toLowerCase().includes(search) ||
+        String(student.id).includes(search) ||
+        peerName.includes(search);
 
-      const matchesStatus = statusFilter === "all" || statusFilter === status;
+      const matchesStatus = statusFilter === "all" || statusFilter === student.accountStatus;
+      const matchesRisk = riskFilter === "all" || riskFilter === student.riskLevel;
+      const hasPeer = Number(student.assignedPeerCounselorId) > 0;
+      const matchesPeer =
+        peerFilter === "all" ||
+        (peerFilter === "assigned" && hasPeer) ||
+        (peerFilter === "unassigned" && !hasPeer);
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesRisk && matchesPeer;
     });
-  }, [students, searchQuery, statusFilter]);
+  }, [students, searchQuery, statusFilter, riskFilter, peerFilter, peerCounselorNameById]);
 
-  const handleViewStudent = async (student: any) => {
+  const openStudentDetails = useCallback(async (student: StudentRosterRow) => {
     setSelectedStudent(student);
     setStudentSummary(null);
     setIsDetailsOpen(true);
 
     try {
       setIsSummaryLoading(true);
-      const summary = await api.getStudentWellnessSummary(Number(student.id));
+      const summary = await api.getStudentWellnessSummary(student.id);
       setStudentSummary(summary || null);
     } catch (error: any) {
       const message = error?.response?.data?.message || "Failed to load student details";
@@ -215,16 +201,159 @@ const AdminStudents = () => {
     } finally {
       setIsSummaryLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!user || isLoading || students.length === 0) {
+      return;
+    }
+    const rawOpen = searchParams.get("open");
+    const openId = rawOpen ? Number(rawOpen) : NaN;
+    if (!Number.isFinite(openId) || openId <= 0) {
+      return;
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+
+    const match = students.find((s) => Number(s.id) === openId);
+    if (!match) {
+      setSearchQuery(String(openId));
+      toast.error("Student not found in the current roster.");
+      return;
+    }
+
+    setHighlightedStudentId(openId);
+    void openStudentDetails(match);
+    window.setTimeout(() => setHighlightedStudentId(null), 6000);
+  }, [isLoading, openStudentDetails, searchParams, setSearchParams, students, user]);
+
+  const resolveSessionForPeerAction = (student: StudentRosterRow) => {
+    const peerSession = sessions.find(
+      (session: any) =>
+        Number(session.student_id) === Number(student.id) &&
+        session.session_type === "chat" &&
+        session.assigned_role === "peer_counselor" &&
+        Number(session.peer_counselor_id) > 0 &&
+        session.status !== "completed" &&
+        session.status !== "cancelled"
+    );
+    if (peerSession) return peerSession;
+
+    const counselorSession = sessions.find(
+      (session: any) =>
+        Number(session.student_id) === Number(student.id) &&
+        session.session_type === "chat" &&
+        session.assigned_role !== "peer_counselor" &&
+        session.status !== "completed" &&
+        session.status !== "cancelled"
+    );
+    if (counselorSession) return counselorSession;
+
+    if (student.activeChatSessionId) {
+      return sessions.find((s: any) => Number(s.id) === Number(student.activeChatSessionId)) || null;
+    }
+
+    return null;
   };
 
-  const selectedStudentRisk = selectedStudent
-    ? String(latestDiagnosticByStudent.get(Number(selectedStudent.id))?.risk_level || "unknown").toLowerCase()
-    : "unknown";
+  const handleAssignPeerCounselor = async (student: StudentRosterRow) => {
+    const selectedPeerId = Number(selectedPeerByStudent[student.id] || 0);
+    if (!selectedPeerId) {
+      toast.error("Select a peer counselor first.");
+      return;
+    }
+    if (student.riskLevel !== "low") {
+      toast.error("Only low-risk students can be assigned to peer counselors.");
+      return;
+    }
+    if (selectedPeerId === Number(student.assignedPeerCounselorId)) {
+      toast.info("This student is already assigned to that peer counselor.");
+      return;
+    }
+
+    const session = resolveSessionForPeerAction(student);
+    const sessionId = Number(session?.id || 0);
+    if (!sessionId) {
+      toast.error("No active chat case found. A counselor must open a chat with this student first.");
+      return;
+    }
+
+    try {
+      setAssigningStudentId(student.id);
+      setPeerAssignmentAction("assign");
+      const assignedSession = await api.assignPeerCounselor(sessionId, selectedPeerId);
+      const label = peerCounselorNameById.get(selectedPeerId) || `Peer #${selectedPeerId}`;
+      toast.success(`Assigned to ${label}.`);
+
+      setStudents((prev) =>
+        prev.map((row) =>
+          Number(row.id) === Number(student.id)
+            ? {
+                ...row,
+                activeChatSessionId: Number(assignedSession?.id || sessionId),
+                assignedPeerCounselorId: selectedPeerId,
+              }
+            : row
+        )
+      );
+      setReloadToken((t) => t + 1);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to assign peer counselor.");
+    } finally {
+      setAssigningStudentId(null);
+      setPeerAssignmentAction(null);
+    }
+  };
+
+  const handleUnassignPeerCounselor = async (student: StudentRosterRow) => {
+    const session = resolveSessionForPeerAction(student);
+    const sessionId = Number(session?.id || 0);
+    if (!sessionId || Number(student.assignedPeerCounselorId) <= 0) {
+      toast.error("No active peer assignment found for this student.");
+      return;
+    }
+
+    try {
+      setAssigningStudentId(student.id);
+      setPeerAssignmentAction("unassign");
+      await api.unassignPeerCounselor(sessionId);
+      toast.success("Peer counselor assignment removed.");
+      setReloadToken((t) => t + 1);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to remove peer assignment.");
+    } finally {
+      setAssigningStudentId(null);
+      setPeerAssignmentAction(null);
+    }
+  };
+
+  const handleAssignAssessment = async (studentId: number, studentName: string) => {
+    try {
+      setAssigningAssessmentStudentId(studentId);
+      await api.assignNewAssessment(studentId);
+      toast.success(`Wellness check-in assigned to ${studentName}.`);
+      setStudents((prev) =>
+        prev.map((row) => (Number(row.id) === studentId ? { ...row, needsAssessment: true } : row))
+      );
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to assign assessment.");
+    } finally {
+      setAssigningAssessmentStudentId(null);
+    }
+  };
+
+  const riskBadgeClass = (risk: string) => {
+    if (risk === "high") return "border-destructive/40 bg-destructive/15 text-destructive";
+    if (risk === "medium") return "border-warning/40 bg-warning/15 text-warning";
+    return "border-success/40 bg-success/15 text-success";
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...adminNavItems]}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}
@@ -232,10 +361,7 @@ const AdminStudents = () => {
       />
 
       <div className="lg:pl-72 pl-0">
-        <DashboardHeader
-          title="Students Management"
-          onMenuClick={() => setSidebarOpen(true)}
-        />
+        <DashboardHeader title="Students Management" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
           <div className="flex justify-end">
@@ -254,78 +380,133 @@ const AdminStudents = () => {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-primary">{stats.total}</p>
-                <p className="text-muted-foreground">Total Students</p>
+                <p className="text-muted-foreground text-sm">Total Students</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-success">{stats.active}</p>
-                <p className="text-muted-foreground">Active</p>
+                <p className="text-muted-foreground text-sm">Active</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
                 <p className="text-4xl font-bold text-warning">{stats.atRisk}</p>
-                <p className="text-muted-foreground">At Risk</p>
+                <p className="text-muted-foreground text-sm">High Risk</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="text-center">
               <CardContent className="pt-6">
-                <p className="text-4xl font-bold text-info">{stats.pending}</p>
-                <p className="text-muted-foreground">Pending Approval</p>
+                <p className="text-4xl font-bold text-info">{stats.peerAssigned}</p>
+                <p className="text-muted-foreground text-sm">Peer Supervised</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass" className="text-center">
+              <CardContent className="pt-6">
+                <p className="text-4xl font-bold text-muted-foreground">{stats.pending}</p>
+                <p className="text-muted-foreground text-sm">Pending Approval</p>
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex flex-col md:flex-row md:flex-wrap gap-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-3">
+            <div className="relative max-w-xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search students by name, email, or ID..."
+                placeholder="Search by name, email, ID, or peer counselor..."
                 className="pl-9"
               />
             </div>
-            <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
-              className="gap-2"
-              onClick={() => setStatusFilter("all")}
-            >
-              <Filter className="h-4 w-4" />
-              All
-            </Button>
-            <Button
-              variant={statusFilter === "active" ? "default" : "outline"}
-              className="gap-2"
-              onClick={() => setStatusFilter("active")}
-            >
-              Active
-            </Button>
-            <Button
-              variant={statusFilter === "pending" ? "default" : "outline"}
-              className="gap-2"
-              onClick={() => setStatusFilter("pending")}
-            >
-              Pending
-            </Button>
-            {(statusFilter !== "all" || searchQuery.trim().length > 0) && (
+            <div className="flex flex-wrap gap-2">
               <Button
-                variant="ghost"
-                className="gap-2"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                }}
+                size="sm"
+                variant={statusFilter === "all" ? "default" : "outline"}
+                onClick={() => setStatusFilter("all")}
               >
-                <FilterX className="h-4 w-4" />
-                Clear
+                <Filter className="h-3.5 w-3.5 mr-1" />
+                All accounts
               </Button>
-            )}
+              <Button
+                size="sm"
+                variant={statusFilter === "active" ? "default" : "outline"}
+                onClick={() => setStatusFilter("active")}
+              >
+                Active
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === "pending" ? "default" : "outline"}
+                onClick={() => setStatusFilter("pending")}
+              >
+                Pending
+              </Button>
+              <Button
+                size="sm"
+                variant={riskFilter === "all" ? "default" : "outline"}
+                onClick={() => setRiskFilter("all")}
+              >
+                All risk
+              </Button>
+              <Button
+                size="sm"
+                variant={riskFilter === "high" ? "default" : "outline"}
+                onClick={() => setRiskFilter("high")}
+              >
+                High
+              </Button>
+              <Button
+                size="sm"
+                variant={riskFilter === "medium" ? "default" : "outline"}
+                onClick={() => setRiskFilter("medium")}
+              >
+                Medium
+              </Button>
+              <Button
+                size="sm"
+                variant={riskFilter === "low" ? "default" : "outline"}
+                onClick={() => setRiskFilter("low")}
+              >
+                Low
+              </Button>
+              <Button
+                size="sm"
+                variant={peerFilter === "assigned" ? "default" : "outline"}
+                onClick={() => setPeerFilter(peerFilter === "assigned" ? "all" : "assigned")}
+              >
+                Peer assigned
+              </Button>
+              <Button
+                size="sm"
+                variant={peerFilter === "unassigned" ? "default" : "outline"}
+                onClick={() => setPeerFilter(peerFilter === "unassigned" ? "all" : "unassigned")}
+              >
+                No peer
+              </Button>
+              {(statusFilter !== "all" ||
+                riskFilter !== "all" ||
+                peerFilter !== "all" ||
+                searchQuery.trim().length > 0) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("all");
+                    setRiskFilter("all");
+                    setPeerFilter("all");
+                  }}
+                >
+                  <FilterX className="h-3.5 w-3.5 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
 
           <p className="text-sm text-muted-foreground">
@@ -334,71 +515,202 @@ const AdminStudents = () => {
 
           <Card variant="glass">
             <CardHeader>
-              <CardTitle className="text-lg">All Students</CardTitle>
+              <CardTitle className="text-lg">Student roster</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0 sm:p-6 sm:pt-0">
               {isLoading ? (
-                <p className="text-muted-foreground text-sm">Loading students...</p>
+                <p className="p-6 text-sm text-muted-foreground">Loading students...</p>
+              ) : filteredStudents.length === 0 ? (
+                <p className="p-6 text-sm text-muted-foreground">No students match the current filters.</p>
               ) : (
-                <div className="space-y-4">
-                  {filteredStudents.map((student) => {
-                    const name = student.profile?.full_name || student.name || "Anonymous";
-                    const email = student.email || "N/A";
-                    const status = student.roles?.some((r: any) => r.role === "student" && r.approved) ? "active" : "pending";
-                    const risk = String(latestDiagnosticByStudent.get(Number(student.id))?.risk_level || "unknown").toLowerCase();
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[180px]">Student</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Risk</TableHead>
+                        <TableHead className="min-w-[220px]">Peer counselor</TableHead>
+                        <TableHead className="hidden lg:table-cell">Sessions</TableHead>
+                        <TableHead className="hidden md:table-cell">Last active</TableHead>
+                        <TableHead className="text-right min-w-[200px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredStudents.map((student) => {
+                        const hasPeer = Number(student.assignedPeerCounselorId) > 0;
+                        const selectedPeerId = Number(
+                          selectedPeerByStudent[student.id] ??
+                            (student.assignedPeerCounselorId
+                              ? String(student.assignedPeerCounselorId)
+                              : "")
+                        );
+                        const showPeerControls =
+                          student.riskLevel === "low" || hasPeer;
+                        const isHighlighted = highlightedStudentId === student.id;
 
-                    return (
-                      <div
-                        key={student.id}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-secondary/30"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-primary font-medium">
-                              {String(student.id).slice(-2)}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-foreground">{name}</p>
-                            <p className="text-sm text-muted-foreground">{email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm text-muted-foreground">ID: {student.id}</span>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              status === "active"
-                                ? "capitalize border-success/40 bg-success/15 text-success"
-                                : "capitalize border-warning/40 bg-warning/15 text-warning"
-                            }
+                        return (
+                          <TableRow
+                            key={student.id}
+                            className={isHighlighted ? "bg-primary/5" : undefined}
                           >
-                            {status}
-                          </Badge>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              risk === "critical"
-                                ? "capitalize border-destructive/40 bg-destructive/15 text-destructive"
-                                : risk === "high"
-                                ? "capitalize border-warning/40 bg-warning/15 text-warning"
-                                : "capitalize border-muted bg-muted/60 text-muted-foreground"
-                            }
-                          >
-                            {risk}
-                          </Badge>
-                          <Button size="sm" variant="outline" onClick={() => void handleViewStudent(student)}>
-                            View
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filteredStudents.length === 0 && (
-                    <p className="text-muted-foreground text-sm">
-                      No students match the current search or filter.
-                    </p>
-                  )}
+                            <TableCell>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-medium truncate">{student.name}</p>
+                                  {student.isAnonymous && (
+                                    <AnonymousModeIndicator variant="inline" audience="counselor" />
+                                  )}
+                                  {student.needsAssessment && (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      Check-in due
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">{student.email}</p>
+                                <p className="text-[10px] text-muted-foreground">ID {student.id}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <Badge
+                                  variant="secondary"
+                                  className={
+                                    student.accountStatus === "active"
+                                      ? "border-success/40 bg-success/15 text-success"
+                                      : "border-warning/40 bg-warning/15 text-warning"
+                                  }
+                                >
+                                  {student.accountStatus}
+                                </Badge>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {student.isOnline ? "Online" : "Offline"}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className={`capitalize ${riskBadgeClass(student.riskLevel)}`}>
+                                {student.riskLevel === "high" && (
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                )}
+                                {student.riskLevel}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {showPeerControls && peerCounselors.length > 0 ? (
+                                <div className="space-y-2">
+                                  {hasPeer && (
+                                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 truncate">
+                                      {peerCounselorNameById.get(Number(student.assignedPeerCounselorId)) ||
+                                        `#${student.assignedPeerCounselorId}`}
+                                    </p>
+                                  )}
+                                  <select
+                                    className="h-8 w-full max-w-[200px] rounded-md border border-input bg-background px-2 text-xs"
+                                    value={String(selectedPeerId || "")}
+                                    onChange={(e) =>
+                                      setSelectedPeerByStudent((prev) => ({
+                                        ...prev,
+                                        [student.id]: e.target.value,
+                                      }))
+                                    }
+                                    disabled={assigningStudentId !== null}
+                                  >
+                                    <option value="">Select peer</option>
+                                    {peerCounselors.map((peer: any) => (
+                                      <option key={peer.id} value={String(peer.id)}>
+                                        {peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div className="flex flex-wrap gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-7 text-[10px] px-2"
+                                      disabled={
+                                        assigningStudentId !== null ||
+                                        student.riskLevel !== "low" ||
+                                        !selectedPeerId ||
+                                        selectedPeerId === Number(student.assignedPeerCounselorId)
+                                      }
+                                      onClick={() => void handleAssignPeerCounselor(student)}
+                                    >
+                                      {assigningStudentId === student.id &&
+                                      peerAssignmentAction === "assign"
+                                        ? "…"
+                                        : hasPeer
+                                        ? "Reassign"
+                                        : "Assign"}
+                                    </Button>
+                                    {hasPeer && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-[10px] px-2 text-destructive"
+                                        disabled={assigningStudentId !== null}
+                                        onClick={() => void handleUnassignPeerCounselor(student)}
+                                      >
+                                        {assigningStudentId === student.id &&
+                                        peerAssignmentAction === "unassign"
+                                          ? "…"
+                                          : "Remove"}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  {student.riskLevel !== "low" && hasPeer && (
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                      Risk changed — consider professional follow-up.
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  {student.riskLevel === "low" ? "No peers available" : "Counselor only"}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                              {student.sessions}
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">
+                              {student.lastSession}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-col items-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs"
+                                  onClick={() => void openStudentDetails(student)}
+                                >
+                                  <UserIcon className="h-3.5 w-3.5 mr-1" />
+                                  View
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs"
+                                  disabled={assigningAssessmentStudentId === student.id}
+                                  onClick={() =>
+                                    void handleAssignAssessment(
+                                      student.id,
+                                      student.name || `Student #${student.id}`
+                                    )
+                                  }
+                                >
+                                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                                  {assigningAssessmentStudentId === student.id
+                                    ? "Assigning…"
+                                    : "Assign check-in"}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -409,7 +721,10 @@ const AdminStudents = () => {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Student Details</DialogTitle>
+            <DialogTitle>Student details</DialogTitle>
+            <DialogDescription>
+              Wellness summary and account overview for supervision.
+            </DialogDescription>
           </DialogHeader>
 
           {selectedStudent && (
@@ -417,49 +732,70 @@ const AdminStudents = () => {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="p-3 rounded-lg bg-secondary/30">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Name</p>
-                  <p className="text-sm font-medium text-foreground mt-1">
-                    {selectedStudent.profile?.full_name || selectedStudent.name || "N/A"}
-                  </p>
+                  <p className="text-sm font-medium mt-1">{selectedStudent.name}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/30">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium text-foreground mt-1">{selectedStudent.email || "N/A"}</p>
+                  <p className="text-sm font-medium mt-1">{selectedStudent.email}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/30">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Student ID</p>
-                  <p className="text-sm font-medium text-foreground mt-1">{selectedStudent.id}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Risk</p>
+                  <p className="text-sm font-medium mt-1 capitalize">{selectedStudent.riskLevel}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/30">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Latest Risk</p>
-                  <p className="text-sm font-medium text-foreground mt-1 capitalize">{selectedStudentRisk}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Peer counselor</p>
+                  <p className="text-sm font-medium mt-1">
+                    {selectedStudent.assignedPeerCounselorId
+                      ? peerCounselorNameById.get(Number(selectedStudent.assignedPeerCounselorId)) ||
+                        `#${selectedStudent.assignedPeerCounselorId}`
+                      : "Not assigned"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-secondary/30">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Last active</p>
+                  <p className="text-sm font-medium mt-1">{selectedStudent.lastSession}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-secondary/30">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Wellness check-in</p>
+                  <p className="text-sm font-medium mt-1">
+                    {selectedStudent.needsAssessment ? "Due" : "Up to date"}
+                  </p>
                 </div>
               </div>
 
               {isSummaryLoading ? (
-                <p className="text-sm text-muted-foreground">Loading live wellness summary...</p>
+                <p className="text-sm text-muted-foreground">Loading wellness summary…</p>
               ) : studentSummary ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Wellness</p>
-                    <p className="text-xl font-semibold text-foreground mt-1">
-                      {studentSummary?.scores?.wellness_score ?? "--"}
+                    <p className="text-xl font-semibold mt-1">
+                      {studentSummary?.scores?.wellness_score ?? "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Stress</p>
-                    <p className="text-xl font-semibold text-foreground mt-1">
-                      {studentSummary?.scores?.stress_level ?? "--"}
+                    <p className="text-xl font-semibold mt-1">
+                      {studentSummary?.scores?.stress_level ?? "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Burnout</p>
-                    <p className="text-xl font-semibold text-foreground mt-1">
-                      {studentSummary?.scores?.burnout_risk ?? "--"}
+                    <p className="text-xl font-semibold mt-1">
+                      {studentSummary?.scores?.burnout_risk ?? "—"}
                     </p>
                   </div>
+                  {studentSummary?.mood?.recorded_at && (
+                    <div className="md:col-span-3 p-3 rounded-lg bg-secondary/30 text-xs text-muted-foreground">
+                      Last mood logged{" "}
+                      {formatDistanceToNow(new Date(studentSummary.mood.recorded_at), {
+                        addSuffix: true,
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No live summary available for this student yet.</p>
+                <p className="text-sm text-muted-foreground">No live summary available yet.</p>
               )}
             </div>
           )}

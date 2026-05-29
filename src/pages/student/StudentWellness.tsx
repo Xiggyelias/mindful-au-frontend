@@ -1,19 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  Heart,
-  TrendingUp,
-  Smile,
-  Frown,
-  Meh,
-  Loader2,
-  Sparkles,
-  ClipboardCheck,
-} from "lucide-react";
+import { TrendingUp, Loader2, Sparkles } from "lucide-react";
+import { studentNavItems } from "@/config/studentNavItems";
+import { studentMoodOptions, type StudentMood, studentMoodLabel } from "@/config/studentMoodOptions";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,23 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
-
-const moodOptions = [
-  { icon: Smile, label: "Radiant", value: "great", iconClass: "text-success", bgClass: "bg-success/10" },
-  { icon: Meh, label: "Balanced", value: "okay", iconClass: "text-warning", bgClass: "bg-warning/10" },
-  { icon: Frown, label: "Heaviness", value: "low", iconClass: "text-destructive", bgClass: "bg-destructive/10" },
-] as const;
-
-type StudentMood = (typeof moodOptions)[number]["value"];
+const moodOptions = studentMoodOptions;
 
 const StudentWellness = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -72,12 +44,27 @@ const StudentWellness = () => {
   }, []);
 
   useEffect(() => {
-    loadSummary();
-    const interval = window.setInterval(() => {
-      loadSummary();
+    void loadSummary();
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadSummary();
     }, 60000);
 
-    return () => window.clearInterval(interval);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void loadSummary();
+      }
+    };
+
+    window.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+    };
   }, [loadSummary]);
 
   const handleMoodCheck = async (selectedMood: StudentMood) => {
@@ -87,7 +74,7 @@ const StudentWellness = () => {
     }
 
     if (dailyMood) {
-      const existing = moodOptions.find((item) => item.value === dailyMood)?.label ?? dailyMood;
+      const existing = studentMoodLabel(dailyMood);
       toast.info(`Today's mood is already locked: ${existing}.`);
       return;
     }
@@ -134,7 +121,7 @@ const StudentWellness = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -169,12 +156,12 @@ const StudentWellness = () => {
               <p className="text-muted-foreground">Check in and keep your wellness trends current.</p>
             </CardHeader>
             <CardContent className="pb-8">
-              <div className="flex flex-wrap justify-center gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl mx-auto">
                 {moodOptions.map((option) => (
                   <Button
                     key={option.value}
                     variant="ghost"
-                    className={`flex-col h-auto py-6 px-8 gap-4 rounded-3xl transition-all duration-300 ${
+                    className={`flex-col h-auto py-5 px-4 gap-3 rounded-3xl transition-all duration-300 ${
                       dailyMood === option.value
                         ? "scale-105 shadow-lg border-2 border-primary/20 bg-secondary/40"
                         : "hover:bg-secondary/50"

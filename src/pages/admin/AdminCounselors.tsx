@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  BarChart3,
-  Brain,
-  AlertTriangle,
-  FileText,
-  Settings,
-  Search,
-  FilterX,
-} from "lucide-react";
+import { Search, FilterX } from "lucide-react";
+import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,17 +12,6 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { label: "Students", icon: Users, path: "/admin/students" },
-  { label: "Counselors", icon: UserCheck, path: "/admin/counselors" },
-  { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
-  { label: "AI Reports", icon: Brain, path: "/admin/ai-reports" },
-  { label: "Alerts", icon: AlertTriangle, path: "/admin/alerts" },
-  { label: "Logs", icon: FileText, path: "/admin/logs" },
-  { label: "Settings", icon: Settings, path: "/admin/settings" },
-];
 
 const getStaffRoles = (user: any) =>
   (user?.roles ?? []).filter((role: any) =>
@@ -67,6 +46,7 @@ const AdminCounselors = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending" | "online">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "counselor" | "peer_counselor">("all");
 
   useEffect(() => {
     const loadCounselors = async () => {
@@ -215,9 +195,11 @@ const AdminCounselors = () => {
         (statusFilter === "pending" && !approved) ||
         (statusFilter === "online" && isOnline);
 
-      return matchesSearch && matchesStatus;
+      const matchesRole = roleFilter === "all" || staffRole === roleFilter;
+
+      return matchesSearch && matchesStatus && matchesRole;
     });
-  }, [counselors, searchQuery, statusFilter]);
+  }, [counselors, searchQuery, statusFilter, roleFilter]);
 
   const allVisibleCounselorIds = useMemo(
     () => filteredCounselors.map((c) => c.id),
@@ -241,7 +223,7 @@ const AdminCounselors = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...adminNavItems]}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}
@@ -321,12 +303,27 @@ const AdminCounselors = () => {
               >
                 Online
               </Button>
-              {(statusFilter !== "all" || searchQuery.trim().length > 0) && (
+              <Button
+                size="sm"
+                variant={roleFilter === "counselor" ? "default" : "outline"}
+                onClick={() => setRoleFilter(roleFilter === "counselor" ? "all" : "counselor")}
+              >
+                Counselors
+              </Button>
+              <Button
+                size="sm"
+                variant={roleFilter === "peer_counselor" ? "default" : "outline"}
+                onClick={() => setRoleFilter(roleFilter === "peer_counselor" ? "all" : "peer_counselor")}
+              >
+                Peer counselors
+              </Button>
+              {(statusFilter !== "all" || roleFilter !== "all" || searchQuery.trim().length > 0) && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => {
                     setStatusFilter("all");
+                    setRoleFilter("all");
                     setSearchQuery("");
                   }}
                 >

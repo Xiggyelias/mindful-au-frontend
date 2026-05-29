@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
-import { peerNavItems } from "./navItems";
+import { peerCounselorNavItems } from "@/config/counselorNavItems";
 
 type PeerDashboardResponse = {
   availability: boolean;
@@ -108,7 +108,7 @@ const PeerDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={peerNavItems}
+        items={[...peerCounselorNavItems]}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

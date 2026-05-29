@@ -15,6 +15,7 @@ import {
   Activity,
   X,
 } from "lucide-react";
+import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,18 +30,6 @@ import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndica
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { format } from "date-fns";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
-  { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
-  { label: "Video Sessions", icon: Video, path: "/counselor/video" },
-  { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
-  { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
-  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
-];
 
 interface DiagnosticData {
   id: number;
@@ -240,7 +229,7 @@ const CounselorAIDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...counselorNavItems]}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}

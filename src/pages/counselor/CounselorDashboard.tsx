@@ -14,6 +14,7 @@ import {
   TrendingUp,
   AlertTriangle,
 } from "lucide-react";
+import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
@@ -37,18 +38,6 @@ import {
   isAnonymousIdentityMaskedFromViewer,
   resolveCounselorStudentDisplayName,
 } from "@/lib/anonymousMode";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
-  { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
-  { label: "Video Sessions", icon: Video, path: "/counselor/video" },
-  { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
-  { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
-  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
-];
 
 const DASHBOARD_APPOINTMENT_PAGE_SIZE = 120;
 const DASHBOARD_SESSION_PAGE_SIZE = 200;
@@ -194,7 +183,10 @@ const CounselorDashboard = () => {
   /** Keeps "today's schedule" correct across midnight and long-lived tabs. */
   const [nowTicker, setNowTicker] = useState(() => Date.now());
   useEffect(() => {
-    const tick = () => setNowTicker(Date.now());
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      setNowTicker(Date.now());
+    };
     const id = window.setInterval(tick, 60_000);
     const onFocus = () => tick();
     window.addEventListener("focus", onFocus);
@@ -315,7 +307,7 @@ const CounselorDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...counselorNavItems]}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}

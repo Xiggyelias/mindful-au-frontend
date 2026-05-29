@@ -1,20 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  History,
-  Heart,
-  Clock,
-  FileText,
-  ClipboardCheck,
-} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Calendar, Clock, FileText, History, MessageSquare, Video } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { studentNavItems } from "@/config/studentNavItems";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage, API_RECOVERED_EVENT } from "@/lib/api";
 import { toast } from "sonner";
@@ -46,24 +45,24 @@ type SessionItem = {
 
 type SessionListResponse = SessionItem[] | { data?: SessionItem[]; meta?: PagedMeta };
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
+const formatSessionType = (type?: string | null) => {
+  const raw = String(type || "session").toLowerCase();
+  if (raw === "chat") return "Chat";
+  if (raw === "video") return "Video";
+  if (raw === "voice") return "Voice";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
 
 const StudentHistory = () => {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [sessionPage, setSessionPage] = useState(1);
   const [sessionTotalPages, setSessionTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedSession, setSelectedSession] = useState<SessionItem | null>(null);
   const { user } = useAuth();
-  const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+  const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Student";
 
   const requestInFlightRef = useRef<Promise<void> | null>(null);
   const lastLoadAtRef = useRef(0);
@@ -145,7 +144,7 @@ const StudentHistory = () => {
         requestInFlightRef.current = null;
       }
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -156,7 +155,6 @@ const StudentHistory = () => {
     void loadSessions(true, { force: true });
   }, [loadSessions, user?.id]);
 
-  // Reload when user navigates to a different page via pagination
   useEffect(() => {
     if (!user?.id || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
@@ -176,17 +174,25 @@ const StudentHistory = () => {
       retryLoad();
     }, 30000);
 
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        retryLoad();
+      }
+    };
+
     window.addEventListener("focus", retryLoad);
     window.addEventListener("online", retryLoad);
+    window.addEventListener("visibilitychange", onVisibility);
     window.addEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", retryLoad);
       window.removeEventListener("online", retryLoad);
+      window.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
     };
-  }, [loadSessions, user]);
+  }, [loadSessions, user?.id]);
 
   const canGoToPrevPage = sessionPage > 1;
   const canGoToNextPage = sessionPage < sessionTotalPages;
@@ -205,10 +211,23 @@ const StudentHistory = () => {
     setSessionPage(next);
   };
 
+  const openSessionFollowUp = (session: SessionItem) => {
+    const type = String(session.session_type || "").toLowerCase();
+    if (type === "chat") {
+      navigate(`/student/chat?session=${session.id}`);
+      return;
+    }
+    if (type === "video" || type === "voice") {
+      navigate("/student/video-call");
+      return;
+    }
+    navigate("/student/appointments");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -216,10 +235,7 @@ const StudentHistory = () => {
       />
 
       <div className="lg:pl-72 pl-0">
-        <DashboardHeader
-          title="Past Sessions"
-          onMenuClick={() => setSidebarOpen(true)}
-        />
+        <DashboardHeader title="Past Sessions" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
           <Card variant="glass">
@@ -234,7 +250,7 @@ const StudentHistory = () => {
               ) : sessions.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">No past sessions yet</p>
-                  <Button variant="outline" onClick={() => window.location.href = "/student/appointments"}>
+                  <Button variant="outline" onClick={() => navigate("/student/appointments")}>
                     Book your first session
                   </Button>
                 </div>
@@ -251,28 +267,62 @@ const StudentHistory = () => {
                             <History className="h-5 w-5 text-info" />
                           </div>
                           <div>
-                            <p className="font-medium text-foreground">{session.counselor?.profile?.full_name || session.counselor?.email || "Counselor"}</p>
-                            <p className="text-sm text-muted-foreground">{session.session_type || "Session"}</p>
+                            <p className="font-medium text-foreground">
+                              {session.counselor?.profile?.full_name ||
+                                session.counselor?.email ||
+                                "Counselor"}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatSessionType(session.session_type)}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                          {session.status && (
+                            <Badge variant="secondary" className="capitalize">
+                              {session.status}
+                            </Badge>
+                          )}
                           <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {session.created_at ? new Date(session.created_at).toLocaleDateString() : "Date TBD"}
+                            {session.created_at
+                              ? new Date(session.created_at).toLocaleDateString()
+                              : "Date TBD"}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {session.duration_minutes ? `${session.duration_minutes} min` : "Duration TBD"}
+                            {session.duration_minutes
+                              ? `${session.duration_minutes} min`
+                              : "Duration TBD"}
                           </span>
                         </div>
                       </div>
                       {session.notes && (
-                        <p className="text-sm text-muted-foreground pl-13">{session.notes}</p>
+                        <p className="text-sm text-muted-foreground pl-13 line-clamp-2">
+                          {session.notes}
+                        </p>
                       )}
-                      <div className="flex gap-2 pl-13">
-                        <Button variant="outline" size="sm" className="gap-1">
+                      <div className="flex gap-2 pl-13 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => setSelectedSession(session)}
+                        >
                           <FileText className="h-4 w-4" />
                           View Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => openSessionFollowUp(session)}
+                        >
+                          {String(session.session_type || "").toLowerCase() === "chat" ? (
+                            <MessageSquare className="h-4 w-4" />
+                          ) : (
+                            <Video className="h-4 w-4" />
+                          )}
+                          Open session
                         </Button>
                       </div>
                     </div>
@@ -311,6 +361,56 @@ const StudentHistory = () => {
           </Card>
         </main>
       </div>
+
+      <Dialog open={selectedSession !== null} onOpenChange={(open) => !open && setSelectedSession(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Session details</DialogTitle>
+            <DialogDescription>
+              {selectedSession
+                ? `${formatSessionType(selectedSession.session_type)} with ${
+                    selectedSession.counselor?.profile?.full_name ||
+                    selectedSession.counselor?.email ||
+                    "your counselor"
+                  }`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSession && (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Status</span>
+                <span className="font-medium capitalize">{selectedSession.status || "—"}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Date</span>
+                <span className="font-medium">
+                  {selectedSession.created_at
+                    ? new Date(selectedSession.created_at).toLocaleString()
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Duration</span>
+                <span className="font-medium">
+                  {selectedSession.duration_minutes
+                    ? `${selectedSession.duration_minutes} minutes`
+                    : "—"}
+                </span>
+              </div>
+              {selectedSession.notes && (
+                <div className="rounded-lg bg-secondary/40 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Notes</p>
+                  <p className="text-foreground">{selectedSession.notes}</p>
+                </div>
+              )}
+              <Button className="w-full mt-2" onClick={() => openSessionFollowUp(selectedSession)}>
+                Go to {formatSessionType(selectedSession.session_type)}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

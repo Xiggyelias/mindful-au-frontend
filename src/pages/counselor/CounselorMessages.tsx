@@ -21,6 +21,7 @@ import {
   Menu,
   MoreHorizontal,
 } from "lucide-react";
+import { counselorNavItems, peerCounselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -73,26 +74,6 @@ const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
   const t = s.trim();
   return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
 };
-
-const counselorNavItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
-  { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
-  { label: "Video Sessions", icon: Video, path: "/counselor/video" },
-  { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
-  { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
-  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
-];
-
-const peerCounselorNavItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/peer/dashboard" },
-  { label: "Active Chats", icon: MessageSquare, path: "/peer/chats" },
-  { label: "Escalated Cases", icon: AlertTriangle, path: "/peer/escalations" },
-  { label: "Ethics Guidelines", icon: ShieldCheck, path: "/peer/ethics" },
-  { label: "Profile", icon: UserCircle2, path: "/peer/profile" },
-];
 
 const SESSION_POLL_INTERVAL_MS = 12_000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
@@ -280,7 +261,7 @@ const CounselorMessages = () => {
   const [isSending, setIsSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mobileListLane, setMobileListLane] = useState<"direct" | "supervision">("direct");
+  const [sidebarLane, setSidebarLane] = useState<"direct" | "supervision">("direct");
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -1434,7 +1415,7 @@ const CounselorMessages = () => {
 
   useEffect(() => {
     if (!showSupervisionColumn || !selectedChat) return;
-    setMobileListLane(selectedChat.isPeerAssigned ? "supervision" : "direct");
+    setSidebarLane(selectedChat.isPeerAssigned ? "supervision" : "direct");
   }, [selectedChat?.id, selectedChat?.isPeerAssigned, showSupervisionColumn]);
 
   const handleLoadOlderMessages = useCallback(async () => {
@@ -1592,7 +1573,7 @@ const CounselorMessages = () => {
               variant="glass"
               className={cn(
                 "shrink-0 hidden lg:flex lg:flex-col lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40",
-                showSupervisionColumn ? "lg:w-[42rem]" : "lg:w-96",
+                "lg:w-96",
                 selectedSessionId ? "hidden lg:flex" : "flex flex-col"
               )}
             >
@@ -1602,7 +1583,7 @@ const CounselorMessages = () => {
                   <Input
                     placeholder={
                       showSupervisionColumn
-                        ? "Search direct or supervised chats..."
+                        ? "Search chats..."
                         : "Search conversations..."
                     }
                     className="pl-9 rounded-xl border-slate-200/80 bg-white/90 shadow-sm"
@@ -1610,12 +1591,48 @@ const CounselorMessages = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+                {showSupervisionColumn && (
+                  <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 p-1 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarLane("direct")}
+                      className={cn(
+                        "flex-1 rounded-lg px-3 py-2 text-left transition-all",
+                        sidebarLane === "direct"
+                          ? "bg-emerald-500 text-white shadow"
+                          : "text-muted-foreground hover:bg-slate-50"
+                      )}
+                    >
+                      <p className="text-[11px] font-bold">Direct Chats</p>
+                      <p className={cn("text-[10px]", sidebarLane === "direct" ? "text-white/85" : "text-muted-foreground")}>
+                        You message students here
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarLane("supervision")}
+                      className={cn(
+                        "flex-1 rounded-lg px-3 py-2 text-left transition-all",
+                        sidebarLane === "supervision"
+                          ? "bg-blue-600 text-white shadow"
+                          : "text-muted-foreground hover:bg-slate-50"
+                      )}
+                    >
+                      <p className="text-[11px] font-bold">Supervision</p>
+                      <p className={cn("text-[10px]", sidebarLane === "supervision" ? "text-white/85" : "text-muted-foreground")}>
+                        Peer support (read-only)
+                      </p>
+                    </button>
+                  </div>
+                )}
                 <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     {showSupervisionColumn ? (
                       filteredChats.length > 0 ? (
                         <>
-                          {directChats.length} direct · {supervisoryChats.length} supervising
+                          {sidebarLane === "direct"
+                            ? `${directChats.length} direct`
+                            : `${supervisoryChats.length} supervising`}
                         </>
                       ) : (
                         "No conversations"
@@ -1656,95 +1673,28 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                {showSupervisionColumn && (
-                  <div className="flex border-b border-slate-200/80 lg:hidden dark:border-slate-800/50">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex-1 px-3 py-2.5 text-xs font-semibold transition-colors",
-                        mobileListLane === "direct"
-                          ? "border-b-2 border-emerald-500 text-emerald-700"
-                          : "text-muted-foreground"
-                      )}
-                      onClick={() => setMobileListLane("direct")}
-                    >
-                      Direct ({directChats.length})
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex-1 px-3 py-2.5 text-xs font-semibold transition-colors",
-                        mobileListLane === "supervision"
-                          ? "border-b-2 border-blue-500 text-blue-700"
-                          : "text-muted-foreground"
-                      )}
-                      onClick={() => setMobileListLane("supervision")}
-                    >
-                      Supervision ({supervisoryChats.length})
-                    </button>
-                  </div>
-                )}
-
-                {showSupervisionColumn ? (
-                  <div className="flex min-h-0 flex-1 divide-x divide-slate-200/80 dark:divide-slate-800/50">
-                    <div
-                      className={cn(
-                        "flex min-h-0 min-w-0 flex-1 flex-col",
-                        mobileListLane !== "direct" && "hidden lg:flex"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2 dark:border-slate-800/40 dark:bg-slate-900/20">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                            Direct chats
-                          </p>
-                          <p className="truncate text-[10px] text-muted-foreground">You message students here</p>
-                        </div>
-                        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-emerald-600/80" />
-                      </div>
-                      <ScrollArea className="h-[calc(100vh-260px)]">
-                        {isLoadingChats && directChats.length === 0 ? (
+                <ScrollArea className="h-[calc(100vh-220px)]">
+                  <div
+                    key={showSupervisionColumn ? sidebarLane : "all"}
+                    className="animate-fade-in"
+                  >
+                    {showSupervisionColumn ? (
+                      sidebarLane === "direct" ? (
+                        isLoadingChats && directChats.length === 0 ? (
                           <div className="flex justify-center py-8">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                           </div>
                         ) : (
                           renderConversationColumn(directChats, "No direct chats yet")
-                        )}
-                      </ScrollArea>
-                    </div>
-
-                    <div
-                      className={cn(
-                        "flex min-h-0 min-w-0 flex-1 flex-col",
-                        mobileListLane !== "supervision" && "hidden lg:flex"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-blue-50/70 px-3 py-2 dark:border-slate-800/40 dark:bg-blue-950/20">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
-                            Supervision
-                          </p>
-                          <p className="truncate text-[10px] text-muted-foreground">Peer support (read-only)</p>
+                        )
+                      ) : isLoadingChats && supervisoryChats.length === 0 ? (
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                         </div>
-                        <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600/80" />
-                      </div>
-                      <ScrollArea className="h-[calc(100vh-260px)]">
-                        {isLoadingChats && supervisoryChats.length === 0 ? (
-                          <div className="flex justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : (
-                          renderConversationColumn(
-                            supervisoryChats,
-                            "No peer sessions to supervise"
-                          )
-                        )}
-                      </ScrollArea>
-                    </div>
-                  </div>
-                ) : (
-                  <ScrollArea className="h-[calc(100vh-220px)] pr-3">
-                    {!isLoadingChats && filteredChats.length === 0 ? (
+                      ) : (
+                        renderConversationColumn(supervisoryChats, "No peer sessions to supervise")
+                      )
+                    ) : !isLoadingChats && filteredChats.length === 0 ? (
                       <div className="p-6 text-center text-sm text-muted-foreground">
                         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
                           <MessageSquare className="h-6 w-6" />
@@ -1754,8 +1704,8 @@ const CounselorMessages = () => {
                     ) : (
                       renderConversationColumn(filteredChats, "No conversations found")
                     )}
-                  </ScrollArea>
-                )}
+                  </div>
+                </ScrollArea>
               </CardContent>
             </Card>
 

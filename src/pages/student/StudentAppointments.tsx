@@ -1,19 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  Heart,
-  Mic,
-  Plus,
-  Clock,
-  Shield,
-  ClipboardCheck,
-} from "lucide-react";
+import { Mic, Plus, Clock, Shield } from "lucide-react";
+import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,16 +27,6 @@ import {
 } from "@/lib/videoCall";
 import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
 
 type PagedMeta = {
   page?: number;
@@ -630,7 +609,7 @@ const StudentAppointments = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

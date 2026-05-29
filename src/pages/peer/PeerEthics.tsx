@@ -4,7 +4,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
-import { peerNavItems } from "./navItems";
+import { peerCounselorNavItems } from "@/config/counselorNavItems";
 
 const PeerEthics = () => {
   const { user } = useAuth();
@@ -14,7 +14,7 @@ const PeerEthics = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={peerNavItems}
+        items={[...peerCounselorNavItems]}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

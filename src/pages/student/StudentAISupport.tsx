@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
 
 import {
-  LayoutDashboard, MessageSquare, Calendar, Bot, Video, Heart,
-  Send, Sparkles, Loader2, AlertTriangle, Phone, ClipboardCheck,
+  Send, Sparkles, Loader2, AlertTriangle, Phone,
   Wind, Moon, Brain, Zap, MessageCircle, Mic,
   Activity, Waves, Flame, Lock, ChevronDown,
 } from "lucide-react";
+import { studentNavItems } from "@/config/studentNavItems";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -18,19 +18,7 @@ import { useChatScroll } from "@/hooks/useChatScroll";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// WELLNESS CAPSULES â€” Interactive wellness action triggers
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Wellness quick-action capsules shown above the chat input.
 const wellnessCapsules = [
   { icon: Wind, label: "Breathe", prompt: "Guide me through a breathing exercise", color: "from-cyan-500/30 to-blue-600/30", glow: "shadow-cyan-500/20" },
   { icon: Moon, label: "Sleep", prompt: "Help me relax before sleep", color: "from-violet-500/30 to-indigo-600/30", glow: "shadow-violet-500/20" },
@@ -424,7 +412,7 @@ const StudentAISupport = () => {
     <div className="min-h-screen bg-background relative overflow-hidden">
       <AmbientCanvas />
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

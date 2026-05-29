@@ -3,6 +3,7 @@ import {
   Calendar,
   ClipboardCheck,
   Heart,
+  History,
   LayoutDashboard,
   MessageSquare,
   Video,
@@ -16,5 +17,6 @@ export const studentNavItems = [
   { label: "AI Support", icon: Bot, path: "/student/ai-support" },
   { label: "Video Call", icon: Video, path: "/student/video-call" },
   { label: "Wellness", icon: Heart, path: "/student/wellness" },
+  { label: "History", icon: History, path: "/student/history" },
   { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
 ] as const;

@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  Heart,
   AlertTriangle,
+  Bot,
+  Calendar,
+  Heart,
+  MessageSquare,
   Phone,
   Clock,
   Users,
-  ClipboardCheck,
   Shield,
 } from "lucide-react";
+import { studentNavItems } from "@/config/studentNavItems";
+import { studentMoodOptions, type StudentMood } from "@/config/studentMoodOptions";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
@@ -32,25 +31,7 @@ import { formatStudentAnonymousSessionTitle, isAnonymousSessionFlag } from "@/li
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
-
-const moodOptions = [
-  { value: "great", label: "Great", display: "\u{1F60A} Great" },
-  { value: "okay", label: "Okay", display: "\u{1F610} Okay" },
-  { value: "low", label: "Low", display: "\u{1F614} Low" },
-  { value: "stressed", label: "Stressed", display: "\u{1F62B} Stressed" },
-  { value: "tired", label: "Tired", display: "\u{1F634} Tired" },
-] as const;
-
-type StudentMood = (typeof moodOptions)[number]["value"];
+const moodOptions = studentMoodOptions;
 
 type LiteSession = {
   id: number | string;
@@ -437,7 +418,7 @@ const StudentDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

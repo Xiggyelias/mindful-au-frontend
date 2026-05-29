@@ -21,6 +21,7 @@ import {
   Loader2,
   WifiOff,
 } from "lucide-react";
+import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,18 +53,6 @@ import { format } from "date-fns";
 import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
 import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
 import { CHAT_INCOMING_DIGEST_EVENT, CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/counselor/dashboard" },
-  { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
-  { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
-  { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
-  { label: "Video Sessions", icon: Video, path: "/counselor/video" },
-  { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
-  { label: "Wellness", icon: Heart, path: "/counselor/wellness" },
-  { label: "Alerts", icon: AlertTriangle, path: "/counselor/alerts" },
-];
 
 const getParticipantName = (participant: any, fallback: string) =>
   (participant as { profile?: { full_name?: string }, full_name?: string, email?: string })?.profile?.full_name ||
@@ -706,7 +695,7 @@ const CounselorVideo = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={navItems}
+        items={[...counselorNavItems]}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}

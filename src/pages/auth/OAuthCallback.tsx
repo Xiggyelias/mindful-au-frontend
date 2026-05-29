@@ -4,30 +4,34 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveApiBaseUrl } from "@/lib/runtimeConfig";
+import { getStudentHomePath } from "@/lib/studentRoutes";
 
 const OAuthCallback = () => {
   const navigate = useNavigate();
   const { completeOAuthLoginWithTicket } = useAuth();
   const hasProcessedRef = useRef(false);
 
-  const redirectByRole = useCallback((resolvedRole: string | null | undefined) => {
-    if (resolvedRole === "admin") {
-      navigate("/admin/dashboard", { replace: true });
-      return;
-    }
+  const redirectByRole = useCallback(
+    (resolvedRole: string | null | undefined, authUser?: { needs_assessment?: boolean } | null) => {
+      if (resolvedRole === "admin") {
+        navigate("/admin/dashboard", { replace: true });
+        return;
+      }
 
-    if (resolvedRole === "counselor") {
-      navigate("/counselor/dashboard", { replace: true });
-      return;
-    }
+      if (resolvedRole === "counselor") {
+        navigate("/counselor/dashboard", { replace: true });
+        return;
+      }
 
-    if (resolvedRole === "peer_counselor") {
-      navigate("/peer/dashboard", { replace: true });
-      return;
-    }
+      if (resolvedRole === "peer_counselor") {
+        navigate("/peer/dashboard", { replace: true });
+        return;
+      }
 
-    navigate("/student/dashboard", { replace: true });
-  }, [navigate]);
+      navigate(getStudentHomePath(authUser), { replace: true });
+    },
+    [navigate]
+  );
 
   useEffect(() => {
     if (hasProcessedRef.current) {
@@ -104,7 +108,7 @@ const OAuthCallback = () => {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
-      redirectByRole(result.role);
+      redirectByRole(result.role, result.user);
     };
 
     void finalize();

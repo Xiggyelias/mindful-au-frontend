@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
-import { peerNavItems } from "./navItems";
+import { peerCounselorNavItems } from "@/config/counselorNavItems";
 
 type EscalationRow = {
   id: number;
@@ -58,7 +58,7 @@ const PeerEscalatedCases = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={peerNavItems}
+        items={[...peerCounselorNavItems]}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

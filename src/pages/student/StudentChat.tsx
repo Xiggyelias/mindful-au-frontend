@@ -6,15 +6,10 @@ import {
   X,
   Video,
   AlertTriangle,
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Heart,
   Menu,
-  ClipboardCheck,
   Lock,
 } from "lucide-react";
+import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
@@ -39,16 +34,6 @@ import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { useConfirm } from "@/hooks/useConfirm";
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
 
 type Counselor = {
   id: number;
@@ -379,11 +364,6 @@ const StudentChat = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!message.trim() && !selectedFile) || isSending || !sessionId) return;
-    if (message.trim() && !true) {
-      toast.error("Secure channel is initializing. Please wait a few seconds.");
-      return;
-    }
-
     setIsSending(true);
     try {
       if (selectedFile) {
@@ -615,7 +595,7 @@ const StudentChat = () => {
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
       <DashboardSidebar
-        items={navItems}
+        items={[...studentNavItems]}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -902,7 +882,7 @@ const StudentChat = () => {
 
             <div className="mt-6 flex flex-col gap-2">
               {messageToDelete.sender_id === Number(user?.id) &&
-                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 * 60 && (
+                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"
