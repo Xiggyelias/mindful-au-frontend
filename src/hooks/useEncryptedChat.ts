@@ -95,6 +95,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   /** Always reflects the current sessionId so event-listener closures can read
    *  it without becoming stale. */
   const sessionIdRef = useRef(sessionId);
+  const messageBackoffMsRef = useRef<number>(0);
+  const typingBackoffMsRef = useRef<number>(0);
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
@@ -303,13 +305,28 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           }
         }
         setError(null);
+        messageBackoffMsRef.current = 0; // Reset backoff on success!
       } catch (err: any) {
         if (signal?.aborted) return;
-        if (err?.response?.status === 410) {
+        const status = err?.response?.status ?? err?.status;
+        if (status === 410) {
           sessionExpiredRef.current = true;
           setSessionExpired(true);
           stopRealtimeAndTimers();
           return;
+        }
+        if (status === 429) {
+          // Exponential backoff: start at 8s, up to 60s
+          messageBackoffMsRef.current = Math.min(
+            60000,
+            Math.max(8000, messageBackoffMsRef.current * 2 || 8000)
+          );
+        } else {
+          // For network errors, also back off slightly to be safe
+          messageBackoffMsRef.current = Math.min(
+            30000,
+            Math.max(6000, messageBackoffMsRef.current + 3000)
+          );
         }
         if (!isApiNetworkError(err)) {
           setError(getApiErrorMessage(err, 'Failed to fetch messages.'));
@@ -370,10 +387,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const baseInterval = document.visibilityState === 'visible'
       ? MESSAGE_POLL_INTERVAL_ACTIVE_MS
       : MESSAGE_POLL_INTERVAL_HIDDEN_MS;
+    const delay = Math.max(baseInterval, messageBackoffMsRef.current);
     pollingTimeoutRef.current = window.setTimeout(async () => {
       await loadMessages(false);
       scheduleNextPoll();
-    }, baseInterval + getJitter()) as unknown as number;
+    }, delay + getJitter()) as unknown as number;
   }, [loadMessages]);
 
   const refreshPeerTypingStatus = useCallback(async () => {
@@ -383,10 +401,29 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       if (data?.is_typing !== undefined) {
         setIsPeerTyping(data.is_typing === true);
       }
-    } catch (e) {
-      // ignore
+      typingBackoffMsRef.current = 0; // Reset backoff on success!
+    } catch (e: any) {
+      const status = e?.response?.status ?? e?.status;
+      if (status === 410) {
+        sessionExpiredRef.current = true;
+        setSessionExpired(true);
+        stopRealtimeAndTimers();
+        return;
+      }
+      if (status === 429) {
+        // Exponential backoff: start at 10s, up to 60s
+        typingBackoffMsRef.current = Math.min(
+          60000,
+          Math.max(10000, typingBackoffMsRef.current * 2 || 10000)
+        );
+      } else {
+        typingBackoffMsRef.current = Math.min(
+          30000,
+          Math.max(8000, typingBackoffMsRef.current + 4000)
+        );
+      }
     }
-  }, [sessionId, hasValidUserId]);
+  }, [sessionId, hasValidUserId, stopRealtimeAndTimers]);
 
   const scheduleTypingPoll = useCallback(() => {
     if (!sessionId) return;
@@ -397,6 +434,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const baseInterval = document.visibilityState === 'visible'
       ? TYPING_POLL_INTERVAL_ACTIVE_MS
       : TYPING_POLL_INTERVAL_HIDDEN_MS;
+    const delay = Math.max(baseInterval, typingBackoffMsRef.current);
     typingPollTimeoutRef.current = window.setTimeout(async () => {
       if (!sessionId) {
         if (typingPollTimeoutRef.current !== null) {
@@ -407,7 +445,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       }
       await refreshPeerTypingStatus();
       scheduleTypingPoll();
-    }, baseInterval + getJitter()) as unknown as number;
+    }, delay + getJitter()) as unknown as number;
   }, [sessionId, refreshPeerTypingStatus]);
 
   useEffect(() => {
