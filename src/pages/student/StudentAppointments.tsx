@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
-import { Mic, Plus, Clock, Shield } from "lucide-react";
+import { Mic, Plus, Clock, Shield, Video } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
