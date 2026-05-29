@@ -9,8 +9,12 @@
  * persisted across browser restarts and cannot leak across user sessions.
  */
 
+import { isStorageQuotaError, trimSessionStorageByPrefix } from '@/lib/browserStorage';
+
 const KEY_PREFIX = 'chat:preload:';
 const MAX_TTL_MS = 5 * 60 * 1_000; // 5 minutes
+const MAX_CACHED_SESSIONS = 10;
+const MAX_CACHED_MESSAGES = 24;
 
 type PreloadEntry = {
   messages: unknown[];
@@ -40,16 +44,27 @@ export async function savePreloadedSessionMessages(
   options: SaveOptions,
 ): Promise<void> {
   if (!sessionId || !messages?.length) return;
+  const trimmedMessages = Array.isArray(messages)
+    ? messages.slice(-MAX_CACHED_MESSAGES)
+    : messages;
+  const entry: PreloadEntry = {
+    messages: trimmedMessages,
+    savedAt: Date.now(),
+    ownerUserId: String(options.ownerUserId ?? ''),
+    keyScope: options.keyScope ?? null,
+  };
+  const payload = JSON.stringify(entry);
   try {
-    const entry: PreloadEntry = {
-      messages,
-      savedAt: Date.now(),
-      ownerUserId: String(options.ownerUserId ?? ''),
-      keyScope: options.keyScope ?? null,
-    };
-    sessionStorage.setItem(storageKey(sessionId), JSON.stringify(entry));
-  } catch {
-    // Storage quota exceeded or unavailable — silently ignore.
+    trimSessionStorageByPrefix(KEY_PREFIX, MAX_CACHED_SESSIONS - 1);
+    sessionStorage.setItem(storageKey(sessionId), payload);
+  } catch (error) {
+    if (!isStorageQuotaError(error)) return;
+    try {
+      trimSessionStorageByPrefix(KEY_PREFIX, 4);
+      sessionStorage.setItem(storageKey(sessionId), payload);
+    } catch {
+      // Storage quota exceeded or unavailable — silently ignore.
+    }
   }
 }
 

@@ -84,10 +84,22 @@ function readCounters(): ChatPerfCounters {
 
 function writeCounters(next: ChatPerfCounters): void {
   if (typeof localStorage === "undefined") return;
+  const capped: ChatPerfCounters = {
+    ...next,
+    perSessionOpen: Object.fromEntries(
+      Object.entries(next.perSessionOpen).slice(-20)
+    ),
+    recentOpenLatencies: next.recentOpenLatencies.slice(-RECENT_WINDOW_SIZE),
+  };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(capped));
   } catch {
-    // best effort only
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyCounters()));
+    } catch {
+      // best effort only
+    }
   }
 }
 

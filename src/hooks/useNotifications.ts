@@ -14,6 +14,8 @@ export type ChatNotificationMeta = {
   is_encrypted?: boolean;
   message_type?: string;
   appointment_id?: number;
+  assessment_assigned?: boolean;
+  path?: string;
 };
 
 export interface AppNotification {
@@ -47,12 +49,15 @@ const normalizeMeta = (value: unknown): ChatNotificationMeta | undefined => {
   const chatSessionId = Number(r.chat_session_id);
   const chatMessageId = Number(r.chat_message_id);
   const appointmentId = Number(r.appointment_id);
+  const metaPath = typeof r.path === "string" ? r.path.trim() : undefined;
   return {
     chat_session_id: Number.isFinite(chatSessionId) ? chatSessionId : undefined,
     chat_message_id: Number.isFinite(chatMessageId) ? chatMessageId : undefined,
     is_encrypted: r.is_encrypted === true,
     message_type: typeof r.message_type === "string" ? r.message_type : undefined,
     appointment_id: Number.isFinite(appointmentId) ? appointmentId : undefined,
+    assessment_assigned: r.assessment_assigned === true,
+    path: metaPath && metaPath.startsWith("/") ? metaPath : undefined,
   };
 };
 

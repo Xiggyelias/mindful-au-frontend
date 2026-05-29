@@ -10,9 +10,14 @@ import { playChatNotificationSound } from "@/lib/chatNotificationSound";
 
 import { tryDecryptChatNotificationPreview } from "@/lib/notificationChatDecrypt";
 
-const POLL_MS = 5_000;
+const POLL_MS = 15_000;
+const POLL_BACKOFF_INITIAL_MS = 45_000;
+const POLL_BACKOFF_MAX_MS = 5 * 60_000;
 const AUTO_DISMISS_MS = 6_500;
 const PREVIEW_MAX = 52;
+const DIGEST_LEADER_KEY = "mindful:chat-digest-leader";
+const DIGEST_LEADER_HEARTBEAT_MS = 4_000;
+const DIGEST_LEADER_STALE_MS = 12_000;
 
 type DigestRow = {
   id: number;
@@ -116,16 +121,60 @@ async function enhanceToastItemsWithDecrypt(uid: number, items: ToastItem[]): Pr
       if (!plain) {
         return item;
       }
-      const firstSep = item.previewLine.indexOf(" · ");
-      const colon = item.previewLine.indexOf(": ");
-      const name = colon >= 0 ? item.previewLine.slice(0, colon) : item.headline;
+      const previewLine = String(item.previewLine || "");
+      const firstSep = previewLine.indexOf(" · ");
+      const colon = previewLine.indexOf(": ");
+      const name = colon >= 0 ? previewLine.slice(0, colon) : item.headline;
       if (firstSep === -1) {
         return { ...item, previewLine: `${name}: ${plain}` };
       }
-      const tail = item.previewLine.slice(firstSep);
+      const tail = previewLine.slice(firstSep);
       return { ...item, previewLine: `${name}: ${plain}${tail}` };
     })
   );
+}
+
+type DigestLeaderState = { id: string; ts: number };
+
+function readDigestLeader(): DigestLeaderState | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DIGEST_LEADER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DigestLeaderState;
+    const id = String(parsed?.id || "").trim();
+    const ts = Number(parsed?.ts || 0);
+    if (!id || !Number.isFinite(ts) || ts <= 0) return null;
+    return { id, ts };
+  } catch {
+    return null;
+  }
+}
+
+function writeDigestLeader(state: DigestLeaderState): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(DIGEST_LEADER_KEY, JSON.stringify(state));
+  } catch {
+    // best effort
+  }
+}
+
+function clearDigestLeaderIfOwned(tabId: string): void {
+  const leader = readDigestLeader();
+  if (!leader || leader.id !== tabId) return;
+  try {
+    localStorage.removeItem(DIGEST_LEADER_KEY);
+  } catch {
+    // best effort
+  }
+}
+
+function isDigestRateLimited(error: unknown): boolean {
+  const status =
+    (error as { response?: { status?: number } })?.response?.status ??
+    (error as { status?: number })?.status;
+  return status === 429;
 }
 
 /**
@@ -138,6 +187,10 @@ export function ChatIncomingNotificationHost() {
   const afterIdRef = useRef(0);
   const bootstrappedRef = useRef(false);
   const inFlightRef = useRef(false);
+  const backoffUntilRef = useRef(0);
+  const backoffMsRef = useRef(POLL_BACKOFF_INITIAL_MS);
+  const tabIdRef = useRef(`digest-tab-${Math.random().toString(36).slice(2)}-${Date.now()}`);
+  const isLeaderTabRef = useRef(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const timersRef = useRef<Map<string, number>>(new Map());
 
@@ -177,11 +230,40 @@ export function ChatIncomingNotificationHost() {
     }
 
     const timersForCleanup = timersRef.current;
+    const tabId = tabIdRef.current;
 
     let cancelled = false;
 
+    const evaluateDigestLeadership = () => {
+      const now = Date.now();
+      const leader = readDigestLeader();
+      const leaderIsStale = !leader || now - leader.ts > DIGEST_LEADER_STALE_MS;
+      if (document.visibilityState !== "visible") {
+        clearDigestLeaderIfOwned(tabId);
+        isLeaderTabRef.current = false;
+        return;
+      }
+      if (leaderIsStale || leader.id === tabId) {
+        writeDigestLeader({ id: tabId, ts: now });
+        isLeaderTabRef.current = true;
+        return;
+      }
+      isLeaderTabRef.current = false;
+    };
+
+    evaluateDigestLeadership();
+    const leaderTimer = window.setInterval(evaluateDigestLeadership, DIGEST_LEADER_HEARTBEAT_MS);
+
     const tick = async () => {
-      if (cancelled || document.visibilityState !== "visible" || inFlightRef.current) {
+      if (
+        cancelled ||
+        document.visibilityState !== "visible" ||
+        inFlightRef.current ||
+        !isLeaderTabRef.current
+      ) {
+        return;
+      }
+      if (Date.now() < backoffUntilRef.current) {
         return;
       }
       inFlightRef.current = true;
@@ -246,8 +328,17 @@ export function ChatIncomingNotificationHost() {
           const timerId = window.setTimeout(() => dismiss(g.key), AUTO_DISMISS_MS);
           timersRef.current.set(g.key, timerId);
         });
-      } catch {
-        // Polling should stay quiet; chat page surfaces hard failures.
+
+        backoffMsRef.current = POLL_BACKOFF_INITIAL_MS;
+      } catch (error) {
+        if (isDigestRateLimited(error)) {
+          const nextBackoff = Math.min(
+            POLL_BACKOFF_MAX_MS,
+            Math.max(POLL_BACKOFF_INITIAL_MS, backoffMsRef.current * 2)
+          );
+          backoffMsRef.current = nextBackoff;
+          backoffUntilRef.current = Date.now() + nextBackoff;
+        }
       } finally {
         inFlightRef.current = false;
       }
@@ -257,7 +348,8 @@ export function ChatIncomingNotificationHost() {
     const interval = window.setInterval(() => void tick(), POLL_MS);
 
     const onVis = () => {
-      if (document.visibilityState === "visible") {
+      evaluateDigestLeadership();
+      if (document.visibilityState === "visible" && Date.now() >= backoffUntilRef.current) {
         void tick();
       }
     };
@@ -266,7 +358,9 @@ export function ChatIncomingNotificationHost() {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.clearInterval(leaderTimer);
       document.removeEventListener("visibilitychange", onVis);
+      clearDigestLeaderIfOwned(tabId);
       timersForCleanup.forEach((id) => window.clearTimeout(id));
       timersForCleanup.clear();
     };

@@ -62,6 +62,7 @@ import {
 import { ChatInput } from "@/components/chat/ChatInput";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
+import { isStorageQuotaError, trimLocalStorageByPrefix } from "@/lib/browserStorage";
 import {
   anonymousLabelForCounselor,
   isAnonymousSessionFlag,
@@ -93,15 +94,15 @@ const peerCounselorNavItems = [
   { label: "Profile", icon: UserCircle2, path: "/peer/profile" },
 ];
 
-const SESSION_POLL_INTERVAL_MS = 5000;
+const SESSION_POLL_INTERVAL_MS = 12_000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 6;
+const CHAT_LIST_CACHE_VERSION = 7;
 const IDENTITY_REVEAL_GRANTS_KEY = "counselor_identity_reveal_grants_v1";
 const ONLINE_WINDOW_SECONDS = 10 * 60;
-const CHAT_LIST_MIN_REFRESH_GAP_MS = 4000;
+const CHAT_LIST_MIN_REFRESH_GAP_MS = 8000;
 
 type RawSession = {
   id: number;
@@ -279,6 +280,7 @@ const CounselorMessages = () => {
   const [isSending, setIsSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mobileListLane, setMobileListLane] = useState<"direct" | "supervision">("direct");
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -301,6 +303,7 @@ const CounselorMessages = () => {
   const activeSessionIdRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadAfterReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const digestReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIdentityRevealGrantSessionIdRef = useRef<number | null>(null);
   const { user, role } = useAuth();
   const isPeerCounselor = role === "peer_counselor";
@@ -506,10 +509,29 @@ const CounselorMessages = () => {
       return (
         chat.studentName.toLowerCase().includes(needle) ||
         (chat.studentEmail || "").toLowerCase().includes(needle) ||
-        String(chat.id).includes(needle)
+        String(chat.id).includes(needle) ||
+        chat.peerCounselorName.toLowerCase().includes(needle)
       );
     });
   }, [chats, deferredSearchQuery]);
+
+  const showSupervisionColumn = !isPeerCounselor;
+
+  const { directChats, supervisoryChats } = useMemo(() => {
+    if (!showSupervisionColumn) {
+      return { directChats: filteredChats, supervisoryChats: [] as ChatListItem[] };
+    }
+    const direct: ChatListItem[] = [];
+    const supervisory: ChatListItem[] = [];
+    for (const chat of filteredChats) {
+      if (chat.isPeerAssigned) {
+        supervisory.push(chat);
+      } else {
+        direct.push(chat);
+      }
+    }
+    return { directChats: direct, supervisoryChats: supervisory };
+  }, [filteredChats, showSupervisionColumn]);
   useChatRoomPrejoin({
     sessions: chats,
     activeSessionId: selectedSessionId,
@@ -892,15 +914,25 @@ const CounselorMessages = () => {
           return nextChats[0]?.id ?? null;
         });
 
-        localStorage.setItem(
-          cacheKey,
-          JSON.stringify({
-            saved_at: Date.now(),
-            chats: nextChats,
-            total_pages: nextTotalPages,
-            total_items: nextTotal,
-          })
-        );
+        const cachePayload = JSON.stringify({
+          saved_at: Date.now(),
+          chats: nextChats,
+          total_pages: nextTotalPages,
+          total_items: nextTotal,
+        });
+        try {
+          trimLocalStorageByPrefix("counselor_chat_list_v", 3);
+          localStorage.setItem(cacheKey, cachePayload);
+        } catch (error) {
+          if (isStorageQuotaError(error)) {
+            try {
+              trimLocalStorageByPrefix("counselor_chat_list_v", 1);
+              localStorage.setItem(cacheKey, cachePayload);
+            } catch {
+              // ignore cache write failures
+            }
+          }
+        }
 
         hasShownLoadErrorRef.current = false;
       } catch (err) {
@@ -991,10 +1023,21 @@ const CounselorMessages = () => {
   useEffect(() => {
     if (!user?.id) return;
     const onDigest = () => {
-      void loadSessions(true);
+      if (digestReloadTimerRef.current) {
+        clearTimeout(digestReloadTimerRef.current);
+      }
+      digestReloadTimerRef.current = setTimeout(() => {
+        void loadSessions(true);
+      }, 1500);
     };
     window.addEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
-    return () => window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+    return () => {
+      window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+      if (digestReloadTimerRef.current) {
+        clearTimeout(digestReloadTimerRef.current);
+        digestReloadTimerRef.current = null;
+      }
+    };
   }, [loadSessions, user?.id]);
 
   useEffect(() => {
@@ -1389,6 +1432,11 @@ const CounselorMessages = () => {
     setShowThreadScrollToBottom(false);
   }, [selectedSessionId]);
 
+  useEffect(() => {
+    if (!showSupervisionColumn || !selectedChat) return;
+    setMobileListLane(selectedChat.isPeerAssigned ? "supervision" : "direct");
+  }, [selectedChat?.id, selectedChat?.isPeerAssigned, showSupervisionColumn]);
+
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedSessionId) return;
     if (!hasOlderMessages || isLoadingOlderMessages) return;
@@ -1398,6 +1446,95 @@ const CounselorMessages = () => {
   const threadStudentLabel = useMemo(
     () => selectedChat?.studentName ?? "Student",
     [selectedChat]
+  );
+
+  const renderConversationRow = useCallback(
+    (chat: ChatListItem) => {
+      const isActive = selectedChat?.id === chat.id;
+      return (
+        <div
+          key={chat.id}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectConversationById(chat.id);
+            }
+          }}
+          className={cn(
+            "flex cursor-pointer items-center gap-2.5 border-b border-slate-100 px-3 py-3 transition-colors outline-none dark:border-slate-800/40",
+            isActive
+              ? "bg-slate-100/90 dark:bg-slate-800/60"
+              : "hover:bg-slate-50/70 dark:hover:bg-slate-800/25"
+          )}
+          onClick={() => selectConversationById(chat.id)}
+          onMouseEnter={() => handleRowMouseEnter(chat.id)}
+          onMouseLeave={handleRowMouseLeave}
+        >
+          <div
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm ring-2 ring-background",
+              chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
+                ? "bg-black ring-red-600/70"
+                : getUserColor(chat.studentName)
+            )}
+          >
+            <span className="text-[10px] font-bold tracking-tight text-white">
+              {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
+                ? "AU"
+                : getInitials(chat.studentName)}
+            </span>
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex min-w-0 items-center gap-1">
+                <p
+                  className={cn(
+                    "truncate text-[13px] font-semibold tracking-tight",
+                    isActive ? "font-bold text-foreground" : "text-foreground/90"
+                  )}
+                >
+                  {chat.studentName}
+                </p>
+                {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
+              </div>
+              <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground/80">
+                {formatChatListTime(chat.lastActivity)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-1.5">
+              <p className="flex-1 truncate pr-1 text-[12px] text-muted-foreground/85">{chat.preview}</p>
+              {chat.unreadCount > 0 && (
+                <span
+                  className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm"
+                  aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
+                >
+                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    },
+    [handleRowMouseEnter, handleRowMouseLeave, selectConversationById, selectedChat?.id]
+  );
+
+  const renderConversationColumn = useCallback(
+    (laneChats: ChatListItem[], emptyLabel: string) => {
+      if (!isLoadingChats && laneChats.length === 0) {
+        return (
+          <div className="p-4 text-center text-xs text-muted-foreground">
+            {emptyLabel}
+          </div>
+        );
+      }
+      return laneChats.map((chat) => renderConversationRow(chat));
+    },
+    [isLoadingChats, renderConversationRow]
   );
 
   const renderMessageContent = useCallback((msg: ChatMessage, isOutgoing: boolean) => {
@@ -1451,12 +1588,23 @@ const CounselorMessages = () => {
 
         <main className="h-full overflow-hidden p-0 lg:p-4">
           <div className={`flex min-h-0 gap-0 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
-            <Card variant="glass" className={`w-96 shrink-0 hidden lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 ${selectedSessionId ? "hidden lg:block" : "flex flex-col"}`}>
+            <Card
+              variant="glass"
+              className={cn(
+                "shrink-0 hidden lg:flex lg:flex-col lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40",
+                showSupervisionColumn ? "lg:w-[42rem]" : "lg:w-96",
+                selectedSessionId ? "hidden lg:flex" : "flex flex-col"
+              )}
+            >
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search conversations..."
+                    placeholder={
+                      showSupervisionColumn
+                        ? "Search direct or supervised chats..."
+                        : "Search conversations..."
+                    }
                     className="pl-9 rounded-xl border-slate-200/80 bg-white/90 shadow-sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1464,9 +1612,19 @@ const CounselorMessages = () => {
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {filteredChats.length > 0
-                      ? `${filteredChats.length} conversation${filteredChats.length === 1 ? "" : "s"}`
-                      : "No conversations"}
+                    {showSupervisionColumn ? (
+                      filteredChats.length > 0 ? (
+                        <>
+                          {directChats.length} direct · {supervisoryChats.length} supervising
+                        </>
+                      ) : (
+                        "No conversations"
+                      )
+                    ) : filteredChats.length > 0 ? (
+                      `${filteredChats.length} conversation${filteredChats.length === 1 ? "" : "s"}`
+                    ) : (
+                      "No conversations"
+                    )}
                   </span>
                   {chatTotalPages > 1 && (
                     <div className="flex items-center gap-2">
@@ -1497,98 +1655,107 @@ const CounselorMessages = () => {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-220px)] pr-3">
-                  {!isLoadingChats && filteredChats.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">
-                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
-                        <MessageSquare className="h-6 w-6" />
-                      </div>
-                      No conversations found
-                    </div>
-                  ) : (
-                    filteredChats.map((chat) => {
-                      const isActive = selectedChat?.id === chat.id;
-                      return (
-                        <div
-                          key={chat.id}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              selectConversationById(chat.id);
-                            }
-                          }}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-3 border-b border-slate-100 dark:border-slate-800/40 pl-4 pr-6 py-3.5 transition-colors outline-none",
-                            isActive
-                              ? "bg-slate-100/90 dark:bg-slate-800/60"
-                              : "hover:bg-slate-50/70 dark:hover:bg-slate-800/25"
-                          )}
-                          onClick={() => selectConversationById(chat.id)}
-                          onMouseEnter={() => handleRowMouseEnter(chat.id)}
-                          onMouseLeave={handleRowMouseLeave}
-                        >
-                          {/* Avatar */}
-                          <div
-                            className={cn(
-                              "h-12 w-12 shrink-0 rounded-full flex items-center justify-center shadow-sm ring-2 ring-background",
-                              chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
-                                ? "bg-black ring-red-600/70"
-                                : getUserColor(chat.studentName)
-                            )}
-                          >
-                            <span className="text-white text-xs font-bold tracking-tight">
-                              {chat.isAnonymous && chat.studentName === anonymousLabelForCounselor()
-                                ? "AU"
-                                : getInitials(chat.studentName)}
-                            </span>
-                          </div>
+              <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+                {showSupervisionColumn && (
+                  <div className="flex border-b border-slate-200/80 lg:hidden dark:border-slate-800/50">
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex-1 px-3 py-2.5 text-xs font-semibold transition-colors",
+                        mobileListLane === "direct"
+                          ? "border-b-2 border-emerald-500 text-emerald-700"
+                          : "text-muted-foreground"
+                      )}
+                      onClick={() => setMobileListLane("direct")}
+                    >
+                      Direct ({directChats.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex-1 px-3 py-2.5 text-xs font-semibold transition-colors",
+                        mobileListLane === "supervision"
+                          ? "border-b-2 border-blue-500 text-blue-700"
+                          : "text-muted-foreground"
+                      )}
+                      onClick={() => setMobileListLane("supervision")}
+                    >
+                      Supervision ({supervisoryChats.length})
+                    </button>
+                  </div>
+                )}
 
-                          {/* Info Column */}
-                          <div className="min-w-0 flex-1 space-y-1">
-                            {/* Top Row: Name + Badges on Left, Time on Right */}
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-1.5">
-                                <p className={cn(
-                                  "truncate text-sm font-semibold tracking-tight",
-                                  isActive ? "text-foreground font-bold" : "text-foreground/90"
-                                )}>
-                                  {chat.studentName}
-                                </p>
-                                {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
-                                {chat.isPeerAssigned && (
-                                  <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary shrink-0">
-                                    Peer
-                                  </span>
-                                )}
-                              </div>
-                              <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground/80">
-                                {formatChatListTime(chat.lastActivity)}
-                              </span>
-                            </div>
-
-                            {/* Bottom Row: Message Preview on Left, Unread Badge on Right */}
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-[13px] text-muted-foreground/85 flex-1 pr-1.5">
-                                {chat.preview}
-                              </p>
-                              {chat.unreadCount > 0 && (
-                                <span
-                                  className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm"
-                                  aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
-                                >
-                                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                {showSupervisionColumn ? (
+                  <div className="flex min-h-0 flex-1 divide-x divide-slate-200/80 dark:divide-slate-800/50">
+                    <div
+                      className={cn(
+                        "flex min-h-0 min-w-0 flex-1 flex-col",
+                        mobileListLane !== "direct" && "hidden lg:flex"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2 dark:border-slate-800/40 dark:bg-slate-900/20">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                            Direct chats
+                          </p>
+                          <p className="truncate text-[10px] text-muted-foreground">You message students here</p>
                         </div>
-                      );
-                    })
-                  )}
-                </ScrollArea>
+                        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-emerald-600/80" />
+                      </div>
+                      <ScrollArea className="h-[calc(100vh-260px)]">
+                        {isLoadingChats && directChats.length === 0 ? (
+                          <div className="flex justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (
+                          renderConversationColumn(directChats, "No direct chats yet")
+                        )}
+                      </ScrollArea>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "flex min-h-0 min-w-0 flex-1 flex-col",
+                        mobileListLane !== "supervision" && "hidden lg:flex"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-blue-50/70 px-3 py-2 dark:border-slate-800/40 dark:bg-blue-950/20">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
+                            Supervision
+                          </p>
+                          <p className="truncate text-[10px] text-muted-foreground">Peer support (read-only)</p>
+                        </div>
+                        <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600/80" />
+                      </div>
+                      <ScrollArea className="h-[calc(100vh-260px)]">
+                        {isLoadingChats && supervisoryChats.length === 0 ? (
+                          <div className="flex justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (
+                          renderConversationColumn(
+                            supervisoryChats,
+                            "No peer sessions to supervise"
+                          )
+                        )}
+                      </ScrollArea>
+                    </div>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[calc(100vh-220px)] pr-3">
+                    {!isLoadingChats && filteredChats.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/80 text-emerald-700">
+                          <MessageSquare className="h-6 w-6" />
+                        </div>
+                        No conversations found
+                      </div>
+                    ) : (
+                      renderConversationColumn(filteredChats, "No conversations found")
+                    )}
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
 

@@ -97,6 +97,11 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       return "/student/chat";
     };
 
+    const metaPath = String((meta as { path?: unknown }).path || "").trim();
+    if (metaPath.startsWith("/")) {
+      return metaPath;
+    }
+
     const chatSessionId = Number((meta as { chat_session_id?: unknown }).chat_session_id);
     if (Number.isFinite(chatSessionId) && chatSessionId > 0) {
       return `${getChatPath()}?session=${chatSessionId}`;
@@ -127,6 +132,19 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     if (title.includes("appointment")) {
       if (basePath === "/admin") return "/admin/alerts";
       return `${basePath}/appointments`;
+    }
+
+    const assessmentAssigned =
+      (meta as { assessment_assigned?: unknown }).assessment_assigned === true ||
+      title.includes("assessment") ||
+      message.includes("assessment assigned") ||
+      message.includes("wellness assessment");
+
+    if (assessmentAssigned) {
+      if (basePath === "/counselor") return "/counselor/students";
+      if (basePath === "/peer") return "/peer/dashboard";
+      if (basePath === "/admin") return "/admin/dashboard";
+      return "/student/diagnostic-assessment";
     }
 
     if (title.includes("session") || title.includes("message")) {

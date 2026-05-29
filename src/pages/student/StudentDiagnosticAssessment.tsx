@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, MessageSquare, Calendar, Bot, Video, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Calendar, Bot, Video, ClipboardCheck, Heart } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
