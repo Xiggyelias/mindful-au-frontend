@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "
 import {
   Send, Sparkles, Loader2, AlertTriangle, Phone,
   Wind, Moon, Brain, Zap, MessageCircle, Mic,
-  Activity, Waves, Flame, Lock, ChevronDown,
+  Activity, Waves, Flame, Lock, ChevronDown, Heart,
 } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { motion, AnimatePresence } from "framer-motion";
