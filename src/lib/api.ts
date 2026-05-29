@@ -1121,6 +1121,11 @@ class ApiClient {
     return response.data;
   }
 
+  async touchSession(sessionId: string | number) {
+    const response = await this.client.post(`/sessions/${sessionId}/touch`);
+    return response.data as { ok: boolean; session_id: number; updated_at: string; throttled?: boolean };
+  }
+
   // Messages
   async getMessages(
     sessionId: string,

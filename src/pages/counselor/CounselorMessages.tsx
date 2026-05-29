@@ -33,6 +33,7 @@ import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
+import { useSessionKeepAlive } from "@/hooks/useSessionKeepAlive";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
@@ -551,6 +552,20 @@ const CounselorMessages = () => {
     clearError: clearUploadError,
   } = useFileAttachment({
     sessionId: selectedSessionId,
+  });
+
+  // Keep active session alive while user is in chat
+  useSessionKeepAlive({
+    sessionId: selectedSessionId,
+    intervalMs: 30 * 60 * 1000, // 30 minutes
+    enabled: Boolean(selectedSessionId && !messagesLoading),
+    onError: (error) => {
+      // Session has truly expired (410 error)
+      if (error.message.includes('410')) {
+        toast.error('Chat session has expired.');
+        setSelectedSessionId(null);
+      }
+    },
   });
 
   const withIdentityMaskedForViewer = useCallback(

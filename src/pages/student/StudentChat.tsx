@@ -18,6 +18,7 @@ import { useEncryptedChat } from "@/hooks/useEncryptedChat";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
+import { useSessionKeepAlive } from "@/hooks/useSessionKeepAlive";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -210,6 +211,21 @@ const StudentChat = () => {
   useEffect(() => {
     return cleanup;
   }, [cleanup]);
+
+  // Keep active session alive while user is in chat
+  useSessionKeepAlive({
+    sessionId: sessionId,
+    intervalMs: 30 * 60 * 1000, // 30 minutes
+    enabled: Boolean(sessionId && !messagesLoading),
+    onError: (error) => {
+      // Session has truly expired (410 error)
+      if (error.message.includes('410')) {
+        toast.error('Chat session has expired. Please start a new session.');
+        selectSession(null);
+        setSessions(prev => prev.filter(s => s.id !== Number(sessionId)));
+      }
+    },
+  });
 
   // Load counselors
   useEffect(() => {
