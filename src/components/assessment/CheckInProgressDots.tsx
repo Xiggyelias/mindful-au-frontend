@@ -19,10 +19,10 @@ export function CheckInProgressDots({
   if (showSegmented) {
     const progress = Math.min(100, Math.round(((currentIndex + 1) / total) * 100));
     return (
-      <div className={cn("w-full max-w-xs mx-auto", className)} aria-hidden>
-        <div className="h-2.5 w-full rounded-full bg-white/60 overflow-hidden shadow-inner">
+      <div className={cn("mx-auto w-full max-w-xs", className)} aria-hidden>
+        <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted shadow-inner">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-400 transition-all duration-500 ease-out"
+            className="h-full rounded-full bg-primary transition-all duration-200 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -43,10 +43,10 @@ export function CheckInProgressDots({
         <span
           key={i}
           className={cn(
-            "rounded-full transition-all duration-300 ease-out",
-            i < currentIndex && "h-2.5 w-2.5 bg-emerald-400/90 scale-100",
-            i === currentIndex && "h-3 w-8 bg-gradient-to-r from-sky-500 to-violet-500 shadow-sm scale-105",
-            i > currentIndex && "h-2.5 w-2.5 bg-white/70 border border-slate-200/80"
+            "rounded-full transition-all duration-200 ease-out",
+            i < currentIndex && "h-2.5 w-2.5 bg-primary/70",
+            i === currentIndex && "h-3 w-8 scale-105 bg-primary shadow-sm",
+            i > currentIndex && "h-2.5 w-2.5 border border-border bg-muted"
           )}
         />
       ))}

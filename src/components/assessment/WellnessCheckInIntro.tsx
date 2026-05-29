@@ -27,19 +27,19 @@ export function WellnessCheckInIntro({
     <div
       className={cn(
         "relative mx-auto flex min-h-[min(720px,calc(100dvh-8rem))] w-full max-w-lg flex-col justify-center",
-        "rounded-[2rem] border border-white/60 bg-gradient-to-b from-sky-50/95 via-white to-emerald-50/90",
+        "rounded-[2rem] border border-border/80 bg-gradient-to-b from-accent/40 via-card to-background",
         "px-6 py-10 shadow-[0_24px_60px_-24px_rgba(56,89,120,0.35)] animate-fade-in"
       )}
     >
-      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-violet-200/40 blur-2xl" />
-      <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-emerald-200/35 blur-2xl" />
+      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-primary/10 blur-2xl" />
 
       <div className="relative z-10 flex flex-col items-center text-center">
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-sky-400 to-violet-500 text-4xl shadow-lg shadow-sky-200/50 animate-scale-in">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary text-4xl shadow-lg shadow-primary/25 animate-scale-in">
           🌿
         </div>
 
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700/80">Wellness check-in</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Wellness check-in</p>
         <h1 className="mt-3 font-sans text-2xl font-bold leading-tight text-slate-800 sm:text-3xl">
           Let&apos;s see how you&apos;re doing
         </h1>
@@ -48,9 +48,9 @@ export function WellnessCheckInIntro({
         </p>
 
         {needsAssessment && (
-          <div className="mt-6 flex w-full items-start gap-3 rounded-2xl border border-violet-200/80 bg-violet-50/90 px-4 py-3 text-left">
-            <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
-            <p className="text-sm leading-snug text-violet-900/90">
+          <div className="mt-6 flex w-full items-start gap-3 rounded-2xl border border-primary/30 bg-accent px-4 py-3 text-left">
+            <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <p className="text-sm leading-snug text-foreground">
               Your counselor asked for a quick check-in before you use chat and appointments. You&apos;re almost there.
             </p>
           </div>
@@ -103,7 +103,7 @@ export function WellnessCheckInIntro({
             size="lg"
             disabled={isLoading || questionCount === 0 || isHardError}
             onClick={onStart}
-            className="h-14 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-violet-500 text-base font-semibold shadow-lg shadow-violet-200/40 hover:opacity-95"
+            className="h-14 w-full rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
           >
             {isLoading ? (
               <>

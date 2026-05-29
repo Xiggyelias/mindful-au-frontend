@@ -1,5 +1,5 @@
 /* global self, caches, fetch */
-const CACHE_NAME = "cms-cache-v6";
+const CACHE_NAME = "cms-cache-v8";
 
 /** System notification artwork — black / crimson / white (matches counseling UI). */
 const NOTIFY_ICON = "/assets/icons/notify-192.png";

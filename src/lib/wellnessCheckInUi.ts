@@ -45,18 +45,18 @@ export function optionEmoji(label: string, value?: string): string {
 }
 
 const CATEGORY_META: Record<string, { emoji: string; icon: LucideIcon; tint: string }> = {
-  school: { emoji: "🎓", icon: BookOpen, tint: "from-sky-100/90 to-blue-50/80" },
-  academic: { emoji: "📚", icon: BookOpen, tint: "from-violet-100/90 to-purple-50/80" },
-  mood: { emoji: "💭", icon: Cloud, tint: "from-indigo-100/90 to-blue-50/80" },
-  anxiety: { emoji: "🌊", icon: Waves, tint: "from-cyan-100/90 to-teal-50/80" },
-  sleep: { emoji: "😴", icon: Moon, tint: "from-slate-100/90 to-indigo-50/80" },
-  social: { emoji: "🤝", icon: Users, tint: "from-emerald-100/90 to-green-50/80" },
-  campus_life: { emoji: "🏠", icon: Home, tint: "from-amber-100/90 to-orange-50/80" },
-  identity: { emoji: "✨", icon: Sparkles, tint: "from-fuchsia-100/90 to-purple-50/80" },
-  coping: { emoji: "🛡️", icon: Shield, tint: "from-teal-100/90 to-emerald-50/80" },
-  physical: { emoji: "💪", icon: Sun, tint: "from-lime-100/90 to-green-50/80" },
-  safety: { emoji: "💙", icon: Heart, tint: "from-rose-100/90 to-red-50/80" },
-  general: { emoji: "🌿", icon: Brain, tint: "from-sky-100/90 to-emerald-50/80" },
+  school: { emoji: "🎓", icon: BookOpen, tint: "from-accent/80 to-accent/40" },
+  academic: { emoji: "📚", icon: BookOpen, tint: "from-accent/80 to-accent/40" },
+  mood: { emoji: "💭", icon: Cloud, tint: "from-accent/80 to-accent/40" },
+  anxiety: { emoji: "🌊", icon: Waves, tint: "from-accent/80 to-accent/40" },
+  sleep: { emoji: "😴", icon: Moon, tint: "from-accent/80 to-accent/40" },
+  social: { emoji: "🤝", icon: Users, tint: "from-accent/80 to-accent/40" },
+  campus_life: { emoji: "🏠", icon: Home, tint: "from-accent/80 to-accent/40" },
+  identity: { emoji: "✨", icon: Sparkles, tint: "from-accent/80 to-accent/40" },
+  coping: { emoji: "🛡️", icon: Shield, tint: "from-accent/80 to-accent/40" },
+  physical: { emoji: "💪", icon: Sun, tint: "from-accent/80 to-accent/40" },
+  safety: { emoji: "💙", icon: Heart, tint: "from-destructive/15 to-accent/40" },
+  general: { emoji: "🌿", icon: Brain, tint: "from-accent/80 to-accent/40" },
 };
 
 export function categoryMeta(category: string) {

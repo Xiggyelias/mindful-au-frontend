@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, MessageSquare, Calendar, Bot, Video, ClipboardCheck, Heart } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
+import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,16 +10,6 @@ import { WellnessCheckInQuestion } from "@/components/assessment/WellnessCheckIn
 import { WellnessCheckInResults } from "@/components/assessment/WellnessCheckInResults";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-  { label: "Assessment", icon: ClipboardCheck, path: "/student/diagnostic-assessment" },
-];
 
 interface QuestionOption {
   value: string;
@@ -750,6 +740,16 @@ const StudentDiagnosticAssessment = () => {
     }
   };
 
+  /** Scale / choice taps: save answer and advance in one update (avoids stale state vs delayed onNext). */
+  const handleAnswerAndAdvance = (value: unknown) => {
+    const q = questions[currentQuestionIndex];
+    if (!q) return;
+    setResponses((prev) => ({ ...prev, [q.id]: value }));
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex((i) => i + 1);
+    }
+  };
+
   const handleNextQuestion = () => {
     const q = questions[currentQuestionIndex];
     if (!q) return;
@@ -759,7 +759,7 @@ const StudentDiagnosticAssessment = () => {
       return;
     }
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      setCurrentQuestionIndex((i) => i + 1);
     }
   };
 
@@ -824,7 +824,11 @@ const StudentDiagnosticAssessment = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={user?.needs_assessment ? navItems.filter((item) => item.path === "/student/diagnostic-assessment") : navItems}
+        items={
+          user?.needs_assessment
+            ? studentNavItems.filter((item) => item.path === "/student/diagnostic-assessment")
+            : studentNavItems
+        }
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -840,7 +844,7 @@ const StudentDiagnosticAssessment = () => {
         <main
           className={
             step === "intro" || step === "form"
-              ? "min-h-[calc(100dvh-4rem)] bg-gradient-to-b from-sky-50/50 via-background to-violet-50/40 p-4 pb-10 lg:p-8"
+              ? "min-h-[calc(100dvh-4rem)] bg-gradient-to-b from-accent/40 via-background to-muted/30 p-4 pb-10 lg:p-8"
               : "p-4 lg:p-6"
           }
         >
@@ -869,6 +873,7 @@ const StudentDiagnosticAssessment = () => {
               onResponse={handleResponseChange}
               onToggleMulti={toggleMultiSelect}
               onBack={handlePreviousQuestion}
+              onAnswerAndAdvance={handleAnswerAndAdvance}
               onSkip={currentQuestion.required === false ? handleSkipOptional : undefined}
               onNext={handleNextQuestion}
               onSubmit={() => void handleSubmitAssessment()}
