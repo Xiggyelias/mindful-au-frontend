@@ -183,7 +183,7 @@ const WellnessCapsule = ({ capsule, onClick, disabled }: {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // WELLNESS TYPING â€” Breathing AI presence
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const WellnessTyping = () => (
+const WellnessTyping = ({ isThinking }: { isThinking?: boolean }) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -191,16 +191,32 @@ const WellnessTyping = () => (
   >
     <AICompanion isThinking />
     <div className="rounded-2xl border border-border bg-muted backdrop-blur-sm px-6 py-4 shadow-xl">
-      <div className="flex items-center gap-1">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            className="h-1.5 w-1.5 rounded-full bg-rose-400/60"
-            animate={{ y: [-3, 3, -3], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-          />
-        ))}
-        <span className="ml-3 text-xs text-muted-foreground">Thinking...</span>
+      <div className="flex items-center gap-2">
+        {isThinking ? (
+          <>
+            <motion.div
+              animate={{ rotate: [0, 360] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            >
+              <Brain className="h-4 w-4 text-rose-400" />
+            </motion.div>
+            <span className="text-xs text-muted-foreground font-medium">Reasoning deeply...</span>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-rose-400/60"
+                  animate={{ y: [-3, 3, -3], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                />
+              ))}
+            </div>
+            <span className="ml-1 text-xs text-muted-foreground">Thinking...</span>
+          </>
+        )}
       </div>
     </div>
   </motion.div>
@@ -262,7 +278,7 @@ const StudentAISupport = () => {
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
-  const { messages, isLoading, error, supportSignal, sendMessage, clearMessages } = useAIChat({
+  const { messages, isLoading, isThinking, error, supportSignal, sendMessage, clearMessages } = useAIChat({
     name: user?.profile?.anonymous_mode ? null : (userName || null),
     anonymous: Boolean(user?.profile?.anonymous_mode),
     role: "student",
@@ -534,7 +550,7 @@ const StudentAISupport = () => {
                     </div>
                   ))}
 
-                  {isLoading && <WellnessTyping key="typing" />}
+                  {isLoading && <WellnessTyping key="typing" isThinking={isThinking} />}
                 </AnimatePresence>
               </div>
             </div>

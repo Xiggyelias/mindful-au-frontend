@@ -7,6 +7,8 @@ interface Message {
   sender: "user" | "ai";
   content: string;
   time: string;
+  /** Provider mode returned by backend (e.g. 'external', 'local_fallback'). */
+  providerMode?: string;
 }
 
 interface SupportSignal {
@@ -63,6 +65,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supportSignal, setSupportSignal] = useState<SupportSignal | null>(null);
   const [mlSignals, setMlSignals] = useState<MlSignals | null>(null);
@@ -212,6 +215,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
 
       setMessages((prev) => [...prev, optimisticMessage]);
       setIsLoading(true);
+      setIsThinking(true);
       setError(null);
 
       try {
@@ -282,6 +286,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
           throw new Error("Empty AI response");
         }
         const assistantMessageId = Number(data?.assistant_message_id);
+        const providerMode = typeof data?.provider_mode === "string" ? data.provider_mode : undefined;
         const aiMessage: Message = {
           id:
             Number.isFinite(assistantMessageId) && assistantMessageId > 0
@@ -290,6 +295,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
           sender: "ai",
           content: aiContent,
           time: formatTime(),
+          providerMode,
         };
 
         setMessages((prev) => [...prev, aiMessage]);
@@ -300,6 +306,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
         setError("Failed to get response. Please try again.");
       } finally {
         setIsLoading(false);
+        setIsThinking(false);
       }
     },
     [conversationId, userContext]
@@ -317,6 +324,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
   return {
     messages,
     isLoading,
+    isThinking,
     error,
     supportSignal,
     mlSignals,
