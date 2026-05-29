@@ -97,27 +97,32 @@ const isSecureChatPath = (path: string) =>
           </div>
 
           {/* User info */}
-          <div className="mb-6 p-4 rounded-xl bg-sidebar-accent">
-            <p className="text-sm text-sidebar-foreground font-medium truncate">
-              {userName}
-            </p>
-            <span
-              className={cn(
-                "inline-block mt-1 text-xs px-2 py-0.5 rounded-full capitalize",
-                roleColors[userType]
+          <div className="mb-6 p-3.5 rounded-2xl bg-sidebar-accent/50 border border-sidebar-border/30 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm select-none shrink-0 shadow-inner">
+              {userName.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-sidebar-foreground font-semibold truncate leading-tight">
+                {userName}
+              </p>
+              <span
+                className={cn(
+                  "inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider",
+                  roleColors[userType]
+                )}
+              >
+                {roleLabels[userType]}
+              </span>
+              {studentPrivacyAnonymous && (
+                <div className="mt-2">
+                  <AnonymousModeIndicator variant="badge" className="w-full justify-center" />
+                </div>
               )}
-            >
-              {roleLabels[userType]}
-            </span>
-            {studentPrivacyAnonymous && (
-              <div className="mt-3">
-                <AnonymousModeIndicator variant="badge" className="w-full justify-center" />
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1">
+          <nav className="flex-1 space-y-1.5">
             {items.map((item) => {
               const isActive =
                 location.pathname === item.path ||
@@ -134,13 +139,13 @@ const isSecureChatPath = (path: string) =>
                     onClose?.();
                   }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                    "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 transform",
                     isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20 ring-1 ring-primary/30"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent"
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20 font-semibold"
+                      : "text-sidebar-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 hover:translate-x-1"
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-5 w-5 shrink-0" />
                   {item.label}
                 </button>
               );
