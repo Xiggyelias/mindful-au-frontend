@@ -30,13 +30,12 @@ import {
   isAppointmentAudioOnly,
   isVideoEnabledAppointment,
 } from "@/lib/videoCall";
-import { CounselorIncomingCallBanner } from "@/components/counselor/CounselorIncomingCallBanner";
 import { CounselorSessionReminderBanner } from "@/components/counselor/CounselorSessionReminderBanner";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
-  anonymousLabelForCounselor,
   isAnonymousSessionFlag,
   isAnonymousIdentityMaskedFromViewer,
+  resolveCounselorStudentDisplayName,
 } from "@/lib/anonymousMode";
 
 const navItems = [
@@ -78,7 +77,6 @@ const CounselorDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
-  const [incomingCallBannerActive, setIncomingCallBannerActive] = useState(false);
   const [sessionReminderBannerActive, setSessionReminderBannerActive] = useState(false);
   const isApprovedCounselor = user?.roles?.some((r: { role: string; approved: boolean }) => r.role === "counselor" && r.approved);
 
@@ -325,13 +323,9 @@ const CounselorDashboard = () => {
       />
 
       <div className="lg:pl-72 pl-0">
-        <CounselorIncomingCallBanner
-          enabled={Boolean(isApprovedCounselor)}
-          onActiveChange={setIncomingCallBannerActive}
-        />
         <CounselorSessionReminderBanner
           enabled={Boolean(isApprovedCounselor)}
-          incomingCallBannerActive={incomingCallBannerActive}
+          incomingCallBannerActive={false}
           onActiveChange={setSessionReminderBannerActive}
         />
         <DashboardHeader
@@ -342,15 +336,7 @@ const CounselorDashboard = () => {
         <main
           className={cn(
             "space-y-6 p-4 transition-[padding-top] duration-300 lg:p-6",
-            incomingCallBannerActive &&
-              sessionReminderBannerActive &&
-              "pt-44 lg:pt-52",
-            incomingCallBannerActive &&
-              !sessionReminderBannerActive &&
-              "pt-28 lg:pt-32",
-            !incomingCallBannerActive &&
-              sessionReminderBannerActive &&
-              "pt-24 lg:pt-28"
+            sessionReminderBannerActive && "pt-24 lg:pt-28"
           )}
         >
           {/* Welcome Section */}
@@ -427,11 +413,7 @@ const CounselorDashboard = () => {
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
-                            {isAnonymousIdentityMaskedFromViewer(apt)
-                              ? anonymousLabelForCounselor()
-                              : apt.student?.profile?.full_name ||
-                                apt.student?.email ||
-                                (isAnonymousSessionFlag(apt.is_anonymous) ? anonymousLabelForCounselor() : "Student")}
+                            {resolveCounselorStudentDisplayName(apt)}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <p className="text-sm text-muted-foreground">

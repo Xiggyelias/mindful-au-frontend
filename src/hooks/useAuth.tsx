@@ -152,23 +152,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadUser = async () => {
-      if (!api.hasToken()) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        await api.ensureFreshToken();
-      } catch {
-        // Let refreshUser handle invalid or expired tokens consistently.
-      }
+        if (!api.hasToken()) {
+          return;
+        }
 
-      await refreshUser();
-      setIsLoading(false);
+        try {
+          await Promise.race([
+            api.ensureFreshToken(),
+            new Promise<never>((_, reject) => {
+              window.setTimeout(() => reject(new Error("token_refresh_timeout")), 15_000);
+            }),
+          ]);
+        } catch {
+          // Let refreshUser handle invalid or expired tokens consistently.
+        }
+
+        if (!cancelled) {
+          await refreshUser();
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
     };
 
     void loadUser();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

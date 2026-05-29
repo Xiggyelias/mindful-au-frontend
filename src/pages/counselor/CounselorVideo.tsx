@@ -34,8 +34,8 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
-  anonymousLabelForCounselor,
   isAnonymousIdentityMaskedFromViewer,
+  resolveCounselorStudentDisplayName,
 } from "@/lib/anonymousMode";
 import { cn } from "@/lib/utils";
 import {
@@ -49,7 +49,8 @@ import {
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
 import { CHAT_INCOMING_DIGEST_EVENT, CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 
 const navItems = [
@@ -139,6 +140,10 @@ const CounselorVideo = () => {
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
   const incomingRingVibratedRef = useRef(false);
+
+  useEffect(() => {
+    warmCallRingtone();
+  }, []);
 
   useEffect(() => {
     if (!isIncomingCall) {
@@ -451,40 +456,55 @@ const CounselorVideo = () => {
     let cancelled = false;
 
     const beginSession = async () => {
+      const callType = pendingCallMode === "audio" ? "audio" : "video";
+      const activeRow = videoAppointments.find((item) => String(item.id) === activeSessionId);
+      const studentId = Number(activeRow?.student_id);
+
       try {
-        const authorization = await api.authorizeVideoCall(activeSessionId, {
-          call_type: pendingCallMode === "audio" ? "audio" : "video",
-        });
+        const [authorization, started] = await Promise.all([
+          api.authorizeVideoCall(activeSessionId, { call_type: callType }),
+          pendingCallMode === "audio" ? startAudioCall() : startCall(),
+        ]);
         const serverDuration = Number(authorization?.max_duration_minutes);
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null
         );
+
+        if (!cancelled && Number.isFinite(studentId) && studentId > 0) {
+          signalIncomingCallWake(studentId, {
+            appointment_id: Number(activeSessionId),
+            call_type: callType,
+            caller_role: "counselor",
+          });
+        }
+
+        if (cancelled) return;
+
+        if (started) {
+          toast.success(
+            pendingCallMode === "audio"
+              ? "Audio session started - waiting for student to connect"
+              : "Session started - waiting for student to connect"
+          );
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           const errMsg = getApiErrorMessage(err, "Failed to start session");
           toast.error(errMsg);
-          
-          // If it's a server error, provide a helpful fallback
-          if (errMsg.toLowerCase().includes("unavailable") || errMsg.toLowerCase().includes("500") || errMsg.toLowerCase().includes("internal server error")) {
+
+          if (
+            errMsg.toLowerCase().includes("unavailable") ||
+            errMsg.toLowerCase().includes("500") ||
+            errMsg.toLowerCase().includes("internal server error")
+          ) {
             toast.info("You can try refreshing the page or contact support if the issue persists.");
           }
-          
+
           setPendingSessionStartId(null);
         }
         return;
       }
 
-      const started =
-        pendingCallMode === "audio" ? await startAudioCall() : await startCall();
-      if (cancelled) return;
-
-      if (started) {
-        toast.success(
-          pendingCallMode === "audio"
-            ? "Audio session started - waiting for student to connect"
-            : "Session started - waiting for student to connect"
-        );
-      }
       setPendingSessionStartId(null);
       setPendingCallMode("video");
     };
@@ -494,7 +514,16 @@ const CounselorVideo = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, isOnline, isSignalingReady, pendingCallMode, pendingSessionStartId, startAudioCall, startCall]);
+  }, [
+    activeSessionId,
+    isOnline,
+    isSignalingReady,
+    pendingCallMode,
+    pendingSessionStartId,
+    startAudioCall,
+    startCall,
+    videoAppointments,
+  ]);
 
   const isStartingActiveSession = Boolean(
     activeSessionId && pendingSessionStartId === activeSessionId
@@ -586,12 +615,14 @@ const CounselorVideo = () => {
     return () => window.clearInterval(timer);
   }, [activeSession, authorizedDurationMinutes, endCall, finalizeEndedSession, isConnected, localStream]);
 
-  const remoteParticipantName = useMemo(() => {
-    if (activeSession && isAnonymousIdentityMaskedFromViewer(activeSession)) {
-      return anonymousLabelForCounselor();
-    }
-    return getParticipantName(activeSession?.student, "Student");
-  }, [activeSession]);
+  const remoteParticipantName = useMemo(
+    () =>
+      resolveCounselorStudentDisplayName(
+        activeSession,
+        getParticipantName(activeSession?.student, "Student")
+      ),
+    [activeSession]
+  );
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo);
 
@@ -1111,12 +1142,13 @@ const CounselorVideo = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">
-                                {isAnonymousIdentityMaskedFromViewer(session)
-                                  ? anonymousLabelForCounselor()
-                                  : getParticipantName(
-                                      session.student,
-                                      `Student #${String(session.id).slice(-4)}`
-                                    )}
+                                {resolveCounselorStudentDisplayName(
+                                  session,
+                                  getParticipantName(
+                                    session.student,
+                                    `Student #${String(session.id).slice(-4)}`
+                                  )
+                                )}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {formatScheduleLabel(session.scheduled_at)}

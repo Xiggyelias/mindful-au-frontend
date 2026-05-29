@@ -75,3 +75,48 @@ export function formatStudentAnonymousSessionTitle(anonymousId: unknown): string
   const label = typeof anonymousId === "string" ? anonymousId.trim() : "";
   return label !== "" ? `Anonymous (${label})` : "Anonymous session";
 }
+
+/** Row shape shared by appointments and video sessions in counselor UI. */
+export type CounselorStudentIdentityRow = {
+  is_anonymous?: unknown;
+  identity_visible_to_viewer?: unknown;
+  student?: {
+    profile?: { full_name?: string | null } | null;
+    full_name?: string | null;
+    name?: string | null;
+  } | null;
+  counselor_student_name?: string | null;
+  student_name?: string | null;
+};
+
+/**
+ * Unified counselor-facing student label: masked only when the API says identity is hidden.
+ */
+export function resolveCounselorStudentDisplayName(
+  row: CounselorStudentIdentityRow | null | undefined,
+  fallback = "Student"
+): string {
+  if (!row) {
+    return fallback;
+  }
+  if (isAnonymousIdentityMaskedFromViewer(row)) {
+    return anonymousLabelForCounselor();
+  }
+  const fromProfile = row.student?.profile?.full_name?.trim();
+  if (fromProfile) {
+    return fromProfile;
+  }
+  const alt =
+    row.student?.full_name?.trim() ||
+    row.student?.name?.trim() ||
+    row.counselor_student_name?.trim() ||
+    row.student_name?.trim();
+  return alt || fallback;
+}
+
+/** Whether this booking runs as anonymous (appointment/session flag is the source of truth). */
+export function isAnonymousBookingForParticipant(
+  row: { is_anonymous?: unknown } | null | undefined
+): boolean {
+  return isAnonymousSessionFlag(row?.is_anonymous);
+}

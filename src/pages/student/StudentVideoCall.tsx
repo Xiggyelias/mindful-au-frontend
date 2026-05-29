@@ -46,11 +46,13 @@ import {
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
   isAnonymousIdentityMaskedFromViewer,
-  isAnonymousSessionFlag,
+  isAnonymousBookingForParticipant,
+  isProfileAnonymousMode,
 } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
-import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
+import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -153,6 +155,10 @@ const StudentVideoCall = () => {
   } = useWebRTC(sessionId, user?.id?.toString() || "");
 
   const incomingRingVibratedRef = useRef(false);
+
+  useEffect(() => {
+    warmCallRingtone();
+  }, []);
 
   useEffect(() => {
     if (!isIncomingCall) {
@@ -279,9 +285,9 @@ const StudentVideoCall = () => {
     [activeAppointment]
   );
 
-  /** PIP / session chrome: only the *appointment* is authoritative, not profile default (fixes stale "Anonymous" after turning profile off). */
+  /** Anonymous chrome follows the appointment flag (kept in sync with profile toggle on the server). */
   const activeAppointmentAnonymousBooking = useMemo(
-    () => isAnonymousSessionFlag(activeAppointment?.is_anonymous),
+    () => isAnonymousBookingForParticipant(activeAppointment),
     [activeAppointment]
   );
 
@@ -543,15 +549,37 @@ const StudentVideoCall = () => {
 
       const effectiveMode: CallMode = isAppointmentAudioOnly(activeAppointment) ? "audio" : mode;
       setIsStartingMode(effectiveMode);
+
+      if (
+        isAnonymousBookingForParticipant(activeAppointment) &&
+        !isProfileAnonymousMode(user?.profile?.anonymous_mode)
+      ) {
+        try {
+          await api.revealAppointmentIdentity(activeAppointmentId);
+          await loadUpcomingVideoAppointments();
+        } catch {
+          /* authorize will still enforce server rules */
+        }
+      }
+
       try {
-        const authorization = await api.authorizeVideoCall(activeAppointmentId, { call_type: effectiveMode });
+        const counselorId = Number(activeAppointment.counselor_id);
+        const [authorization, started] = await Promise.all([
+          api.authorizeVideoCall(activeAppointmentId, { call_type: effectiveMode }),
+          effectiveMode === "audio" ? startAudioCall() : startCall(),
+        ]);
         const serverDuration = Number(authorization?.max_duration_minutes);
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null
         );
 
-        const started =
-          effectiveMode === "audio" ? await startAudioCall() : await startCall();
+        if (Number.isFinite(counselorId) && counselorId > 0) {
+          signalIncomingCallWake(counselorId, {
+            appointment_id: Number(activeAppointmentId),
+            call_type: effectiveMode,
+            caller_role: "student",
+          });
+        }
 
         if (started) {
           toast.success(

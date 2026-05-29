@@ -1624,7 +1624,7 @@ class ApiClient {
 
   async getCounselorIncomingCalls() {
     const response = await this.client.get("/counselor/incoming-calls", {
-      timeout: 12_000,
+      timeout: 5_000,
     });
     return response.data;
   }
@@ -1639,7 +1639,7 @@ class ApiClient {
 
   async getStudentIncomingCalls() {
     const response = await this.client.get("/student/incoming-calls", {
-      timeout: 12_000,
+      timeout: 5_000,
     });
     return response.data;
   }
@@ -1663,6 +1663,11 @@ class ApiClient {
     const response = await this.client.post('/video-calls/end', {
       appointment_id: Number(appointmentId),
     });
+    return response.data;
+  }
+
+  async revealAppointmentIdentity(appointmentId: number | string) {
+    const response = await this.client.post(`/appointments/${appointmentId}/reveal-identity`);
     return response.data;
   }
 

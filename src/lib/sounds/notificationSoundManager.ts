@@ -8,7 +8,7 @@
 
 const STORAGE_KEY = "mindful_au_notification_sounds_v1";
 
-const RING_FADE_IN_SEC = 0.2;
+const RING_FADE_IN_SEC = 0.06;
 const RING_FADE_OUT_SEC = 0.16;
 /** When tab is hidden, message & reminder playback is scaled by this (calls & emergency stay full). */
 const BACKGROUND_DUCK = 0.68;
@@ -299,6 +299,27 @@ function playCallPulseFallback(kind: "audio" | "video") {
 
 const audioCallPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
 const videoCallPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
+
+let ringtoneWarmed = false;
+
+/** Preload call assets + resume AudioContext so the first ring is not delayed. */
+export function warmCallRingtone(): void {
+  if (ringtoneWarmed || typeof window === "undefined") {
+    return;
+  }
+  ringtoneWarmed = true;
+  void getAudioContext()?.resume().catch(() => undefined);
+  audioCallPlayer.preload = "auto";
+  videoCallPlayer.preload = "auto";
+  if (!audioCallPlayer.src) {
+    audioCallPlayer.src = SOUND_URLS.audioCall;
+  }
+  if (!videoCallPlayer.src) {
+    videoCallPlayer.src = SOUND_URLS.videoCall;
+  }
+  void audioCallPlayer.load();
+  void videoCallPlayer.load();
+}
 
 const ringGainByEl = new WeakMap<HTMLAudioElement, GainNode>();
 let ringStopTimer: number | null = null;

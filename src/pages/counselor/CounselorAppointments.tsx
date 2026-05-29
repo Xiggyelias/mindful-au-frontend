@@ -38,8 +38,8 @@ import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { getVideoCallWindowStatus, isVideoEnabledAppointment, isAppointmentAudioOnly } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
-  anonymousLabelForCounselor,
-  isAnonymousIdentityMaskedFromViewer
+  isAnonymousIdentityMaskedFromViewer,
+  resolveCounselorStudentDisplayName,
 } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { toast } from "sonner";
@@ -611,17 +611,8 @@ const CounselorAppointments = () => {
                   </p>
                 ) : (
                   filteredAppointments.map((apt) => {
-                    const isAnonymousApt = isAnonymousIdentityMaskedFromViewer(apt as any);
-                    const studentName = isAnonymousApt
-                      ? anonymousLabelForCounselor()
-                      : (
-                          (apt as any).student?.profile?.full_name ??
-                          (apt as any).student?.full_name ??
-                          (apt as any).student?.name ??
-                          (apt as any).counselor_student_name ??
-                          (apt as any).student_name ??
-                          'Student'
-                        );
+                    const isAnonymousApt = isAnonymousIdentityMaskedFromViewer(apt);
+                    const studentName = resolveCounselorStudentDisplayName(apt);
 
                     const isPhysical =
                       (apt as any).session_type === 'physical' ||

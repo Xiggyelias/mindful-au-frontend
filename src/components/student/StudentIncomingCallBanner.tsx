@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, PhoneOff, Video, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,10 @@ import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndica
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { effectiveWebRtcCallMode } from "@/lib/videoCall";
 import { toast } from "sonner";
-import { startCallRingtone, stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 import type { IncomingCallOverlayCall } from "@/components/call/IncomingCallOverlay";
-
-const POLL_MS = 1500;
-const AUTO_DISMISS_MS = 30_000;
-const TAB_FLASH_MS = 1000;
+import { useAuth } from "@/hooks/useAuth";
+import { useIncomingCalls, useIncomingCallWakeSubscription } from "@/hooks/useIncomingCalls";
 
 export type StudentIncomingCallItem = {
   id: number;
@@ -39,168 +36,34 @@ export function StudentIncomingCallBanner({
   onActiveChange?: (active: boolean) => void;
 }) {
   const navigate = useNavigate();
-  const [calls, setCalls] = useState<StudentIncomingCallItem[]>([]);
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const seenIdsRef = useRef<Set<number>>(new Set());
-  const baseTitleRef = useRef<string | null>(null);
-  const flashIntervalRef = useRef<number | null>(null);
-  const autoDismissTimersRef = useRef<Map<number, number>>(new Map());
+  const { user } = useAuth();
 
-  const clearAutoDismiss = useCallback((callId: number) => {
-    const t = autoDismissTimersRef.current.get(callId);
-    if (t !== undefined) {
-      window.clearTimeout(t);
-      autoDismissTimersRef.current.delete(callId);
-    }
+  const fetchCalls = useCallback(async () => {
+    const res = await api.getStudentIncomingCalls();
+    const rows = Array.isArray(res?.data) ? (res.data as StudentIncomingCallItem[]) : [];
+    return rows.filter((r) => r && typeof r.id === "number");
   }, []);
 
-  const removeCallLocal = useCallback(
-    (callId: number) => {
-      clearAutoDismiss(callId);
-      setCalls((prev) => prev.filter((c) => c.id !== callId));
+  const { calls, busyId, setBusyId, removeCallLocal, fetchIncoming } = useIncomingCalls({
+    enabled,
+    fetchCalls,
+    onActiveChange,
+    buildNotification: (call) => ({
+      title: effectiveWebRtcCallMode(call) === "video" ? "Incoming video call" : "Incoming audio call",
+      body: `${call.counselor_name} is calling you`,
+    }),
+    onAutoDismissCall: async (call) => {
+      try {
+        await api.updateStudentIncomingCall(call.id, "declined");
+      } catch {
+        /* ignore */
+      }
     },
-    [clearAutoDismiss]
-  );
+  });
 
-  useEffect(() => {
-    if (!enabled) {
-      onActiveChange?.(false);
-      return;
-    }
-    onActiveChange?.(calls.length > 0);
-  }, [enabled, calls.length, onActiveChange]);
-
-  useEffect(() => {
-    if (!enabled || calls.length === 0) {
-      stopCallRingtone();
-      return;
-    }
-    const wantsVideo = calls.some((c) => effectiveWebRtcCallMode(c) === "video");
-    startCallRingtone(wantsVideo ? "video" : "audio");
-  }, [enabled, calls]);
-
-  useEffect(() => {
-    return () => {
-      stopCallRingtone();
-    };
-  }, []);
-
-  const fetchIncoming = useCallback(async () => {
-    if (!enabled) return;
-    try {
-      const res = await api.getStudentIncomingCalls();
-      const rows = Array.isArray(res?.data) ? (res.data as StudentIncomingCallItem[]) : [];
-      const normalized = rows.filter((r) => r && typeof r.id === "number");
-      setCalls(normalized);
-
-      for (const c of normalized) {
-        if (!seenIdsRef.current.has(c.id)) {
-          seenIdsRef.current.add(c.id);
-          try {
-            if (typeof navigator !== "undefined" && navigator.vibrate) {
-              navigator.vibrate([300, 100, 300]);
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-
-      const activeIds = new Set(normalized.map((c) => c.id));
-      autoDismissTimersRef.current.forEach((timer, callId) => {
-        if (!activeIds.has(callId)) {
-          window.clearTimeout(timer);
-          autoDismissTimersRef.current.delete(callId);
-        }
-      });
-      seenIdsRef.current.forEach((id) => {
-        if (!activeIds.has(id)) {
-          seenIdsRef.current.delete(id);
-          clearAutoDismiss(id);
-        }
-      });
-    } catch {
-      /* silent poll */
-    }
-  }, [enabled, clearAutoDismiss]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setCalls([]);
-      seenIdsRef.current.clear();
-      autoDismissTimersRef.current.forEach((t) => window.clearTimeout(t));
-      autoDismissTimersRef.current.clear();
-      return;
-    }
-    void fetchIncoming();
-    const id = window.setInterval(() => {
-      void fetchIncoming();
-    }, POLL_MS);
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [enabled, fetchIncoming]);
-
-  useEffect(() => {
-    for (const c of calls) {
-      if (!autoDismissTimersRef.current.has(c.id)) {
-        const timer = window.setTimeout(() => {
-          autoDismissTimersRef.current.delete(c.id);
-          void (async () => {
-            try {
-              await api.updateStudentIncomingCall(c.id, "declined");
-            } catch {
-              /* ignore */
-            }
-            removeCallLocal(c.id);
-          })();
-        }, AUTO_DISMISS_MS);
-        autoDismissTimersRef.current.set(c.id, timer);
-      }
-    }
-  }, [calls, removeCallLocal]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    if (calls.length === 0) {
-      if (flashIntervalRef.current !== null) {
-        window.clearInterval(flashIntervalRef.current);
-        flashIntervalRef.current = null;
-      }
-      if (baseTitleRef.current !== null) {
-        document.title = baseTitleRef.current;
-        baseTitleRef.current = null;
-      }
-      return;
-    }
-
-    if (baseTitleRef.current === null) {
-      baseTitleRef.current = document.title;
-    }
-    let flash = false;
-    if (flashIntervalRef.current !== null) {
-      window.clearInterval(flashIntervalRef.current);
-    }
-    flashIntervalRef.current = window.setInterval(() => {
-      flash = !flash;
-      const n = calls.length;
-      document.title = flash
-        ? `(${n}) Incoming session call — ${baseTitleRef.current ?? ""}`
-        : `${baseTitleRef.current ?? ""}`;
-    }, TAB_FLASH_MS);
-
-    return () => {
-      if (flashIntervalRef.current !== null) {
-        window.clearInterval(flashIntervalRef.current);
-        flashIntervalRef.current = null;
-      }
-      if (baseTitleRef.current !== null) {
-        document.title = baseTitleRef.current;
-        baseTitleRef.current = null;
-      }
-    };
-  }, [calls]);
+  useIncomingCallWakeSubscription(user?.id, enabled, () => {
+    void fetchIncoming({ urgent: true });
+  });
 
   const handleAccept = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
@@ -240,7 +103,6 @@ export function StudentIncomingCallBanner({
     return null;
   }
 
-  // For a single incoming call, show the immersive full-screen overlay.
   if (calls.length === 1) {
     const call = calls[0];
     const overlayCall: IncomingCallOverlayCall = {

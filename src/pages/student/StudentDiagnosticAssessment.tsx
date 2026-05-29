@@ -1,26 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
-  Bot,
-  Video,
-  Heart,
-  CheckCircle,
-  AlertCircle,
-  TrendingUp,
-  Loader2,
-  ClipboardCheck,
-} from "lucide-react";
+import { LayoutDashboard, MessageSquare, Calendar, Bot, Video, ClipboardCheck } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { WellnessCheckInIntro } from "@/components/assessment/WellnessCheckInIntro";
+import { WellnessCheckInQuestion } from "@/components/assessment/WellnessCheckInQuestion";
+import { WellnessCheckInResults } from "@/components/assessment/WellnessCheckInResults";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -806,7 +793,7 @@ const StudentDiagnosticAssessment = () => {
       }
       setResult(diag);
       setStep("results");
-      toast.success("Assessment completed successfully!");
+      toast.success("Check-in complete — here are your insights.");
       // Refresh user after the results page is visible. Fire-and-forget so a
       // transient network error here can't roll back the results display or
       // trigger an unexpected sign-out mid-session.
@@ -828,245 +815,11 @@ const StudentDiagnosticAssessment = () => {
     await runSubmit(responses);
   };
 
-  const getRiskColor = (riskLevel: string) => {
-    return {
-      low: "text-green-600",
-      medium: "text-yellow-600",
-      high: "text-orange-600",
-      critical: "text-red-600",
-    }[riskLevel] || "text-gray-600";
-  };
-
-  const getRiskBgColor = (riskLevel: string) => {
-    return {
-      low: "bg-green-100",
-      medium: "bg-yellow-100",
-      high: "bg-orange-100",
-      critical: "bg-red-100",
-    }[riskLevel] || "bg-gray-100";
-  };
-
-  const trendPoints = trends.slice(-7);
-
-  const renderQuestion = () => {
-    if (questions.length === 0) return null;
-
-    const question = questions[currentQuestionIndex];
-    const response = responses[question.id];
-    const prevQ = questions[currentQuestionIndex - 1];
-    const sectionChanged =
-      Boolean(question.section_title) &&
-      (!prevQ || prevQ.section_title !== question.section_title);
-
-    const isOptional = question.required === false;
-    const isSafetySection =
-      question.section === "10" || question.section_title?.toLowerCase().includes("safety");
-
-    return (
-      <div className="space-y-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 justify-between mb-2">
-            <h3 className="text-lg font-semibold text-foreground">
-              Question {currentQuestionIndex + 1} of {questions.length}
-            </h3>
-            <div className="flex items-center gap-2">
-              {isOptional && (
-                <Badge variant="outline" className="text-muted-foreground font-normal">
-                  Optional — you can skip
-                </Badge>
-              )}
-              <span className="text-sm text-muted-foreground">
-                {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%
-              </span>
-            </div>
-          </div>
-          <Progress value={((currentQuestionIndex + 1) / questions.length) * 100} className="h-2" />
-        </div>
-
-        {sectionChanged ? (
-          <div className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Section</p>
-            <p className="font-medium text-foreground">{question.section_title}</p>
-          </div>
-        ) : null}
-
-        {isSafetySection ? (
-          <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-foreground">
-            If you’re in immediate danger, contact local emergency services. Honest answers help us prioritise care.
-          </div>
-        ) : null}
-
-        <div className="space-y-3">
-          <h4 className="text-base font-medium text-foreground">{question.question}</h4>
-          {question.description ? (
-            <p className="text-sm text-muted-foreground">{question.description}</p>
-          ) : null}
-        </div>
-
-        <div className="space-y-3">
-          {(question.type === "scale" || question.type === "scale_1_5") && (
-            question.options?.length ? (
-              // Labeled options (e.g. Never → Almost always)
-              <div className="space-y-2">
-                {question.options.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={response === option.value ? "default" : "outline"}
-                    onClick={() => handleResponseChange(option.value)}
-                    className="w-full justify-start text-left h-auto whitespace-normal py-3"
-                  >
-                    <span className="mr-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs font-bold">
-                      {option.value}
-                    </span>
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              // Fallback: bare numeric scale
-              <div className="flex gap-2 flex-wrap">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <Button
-                    key={value}
-                    variant={response === value ? "default" : "outline"}
-                    onClick={() => handleResponseChange(value)}
-                    className="min-w-[2.5rem]"
-                  >
-                    {value}
-                  </Button>
-                ))}
-              </div>
-            )
-          )}
-
-          {question.type === "scale_1_10" && (
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => (
-                <Button
-                  key={value}
-                  size="sm"
-                  variant={response === value ? "default" : "outline"}
-                  onClick={() => handleResponseChange(value)}
-                  className="min-w-[2rem]"
-                >
-                  {value}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {(question.type === "frequency_5" || question.type === "multiple_choice") && question.options?.length ? (
-            <div className="space-y-2">
-              {question.options.map((option) => (
-                <Button
-                  key={option.value}
-                  variant={response === option.value ? "default" : "outline"}
-                  onClick={() => handleResponseChange(option.value)}
-                  className="w-full justify-start text-left h-auto whitespace-normal py-3"
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-
-          {question.type === "single_choice" && question.options?.length ? (
-            <div className="space-y-2">
-              {question.options.map((option) => (
-                <Button
-                  key={option.value}
-                  variant={response === option.value ? "default" : "outline"}
-                  onClick={() => handleResponseChange(option.value)}
-                  className="w-full justify-start text-left h-auto whitespace-normal py-3"
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-
-          {question.type === "multi_select" && question.options?.length ? (
-            <div className="space-y-3">
-              {question.options.map((option) => {
-                const selected = Array.isArray(response) && response.includes(option.value);
-                return (
-                  <label
-                    key={option.value}
-                    className="flex items-start gap-3 rounded-lg border border-border/80 bg-background/80 px-3 py-3 cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={selected}
-                      onCheckedChange={() => toggleMultiSelect(option.value)}
-                      className="mt-1"
-                    />
-                    <span className="text-sm text-foreground leading-snug">{option.label}</span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {question.type === "yes_no" && (
-            <div className="flex gap-2">
-              <Button
-                variant={response === "yes" ? "default" : "outline"}
-                onClick={() => handleResponseChange("yes")}
-                className="flex-1"
-              >
-                Yes
-              </Button>
-              <Button
-                variant={response === "no" ? "default" : "outline"}
-                onClick={() => handleResponseChange("no")}
-                className="flex-1"
-              >
-                No
-              </Button>
-            </div>
-          )}
-
-          {(question.type === "text" || question.type === "textarea") && (
-            <textarea
-              value={(response as string) || ""}
-              onChange={(e) => handleResponseChange(e.target.value)}
-              placeholder="Type your response here..."
-              className="w-full p-3 rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              rows={question.type === "textarea" ? 5 : 4}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 justify-between items-center">
-          <Button variant="outline" onClick={handlePreviousQuestion} disabled={currentQuestionIndex === 0}>
-            Previous
-          </Button>
-          <div className="flex gap-2 flex-wrap justify-end">
-            {isOptional ? (
-              <Button type="button" variant="ghost" size="sm" onClick={handleSkipOptional}>
-                Skip
-              </Button>
-            ) : null}
-            {currentQuestionIndex === questions.length - 1 ? (
-              <Button variant="hero" onClick={() => void handleSubmitAssessment()} disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Analyzing...
-                  </>
-                ) : (
-                  "Submit Assessment"
-                )}
-              </Button>
-            ) : (
-              <Button variant="default" onClick={handleNextQuestion}>
-                Next
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const currentQuestion = questions[currentQuestionIndex];
+  const prevQuestion = questions[currentQuestionIndex - 1];
+  const sectionChanged =
+    Boolean(currentQuestion?.section_title) &&
+    (!prevQuestion || prevQuestion.section_title !== currentQuestion.section_title);
 
   return (
     <div className="min-h-screen bg-background">
@@ -1080,320 +833,58 @@ const StudentDiagnosticAssessment = () => {
 
       <div className="lg:pl-72 pl-0">
         <DashboardHeader
-          title="Mental Health Assessment"
+          title="Wellness check-in"
           onMenuClick={user?.needs_assessment ? undefined : () => setSidebarOpen(true)}
         />
 
-        <main className="p-4 lg:p-6">
+        <main
+          className={
+            step === "intro" || step === "form"
+              ? "min-h-[calc(100dvh-4rem)] bg-gradient-to-b from-sky-50/50 via-background to-violet-50/40 p-4 pb-10 lg:p-8"
+              : "p-4 lg:p-6"
+          }
+        >
           {step === "intro" && (
-            <Card variant="glass" className="max-w-2xl mx-auto">
-              <CardHeader>
-                <CardTitle className="text-2xl flex items-center gap-3">
-                  <Heart className="h-6 w-6 text-primary" />
-                  Comprehensive Mental Health Assessment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {user?.needs_assessment && (
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-400">
-                    <ClipboardCheck className="h-5 w-5 flex-shrink-0 text-indigo-600 dark:text-indigo-400 mt-0.5" />
-                    <p className="text-sm font-medium">
-                      As a newly registered student (or because your counselor has requested it), completing this intake assessment is mandatory to access your dashboard, chat, and other features.
-                    </p>
-                  </div>
-                )}
-
-                <p className="text-muted-foreground">
-                  This assessment is designed to help you understand your mental health and well-being. 
-                  It takes approximately 7–10 minutes and covers {MAX_TOTAL} focused questions
-                  about your campus life, mood, relationships, sleep, academic stress and general wellbeing.
-                </p>
-
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-foreground">What to expect:</h4>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>Sections covering academic stress, mood, anxiety, sleep, social life, campus adjustment, coping, identity, support and physical wellbeing</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>Immediate AI-powered analysis and recommendations</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                      <span>Personalized insights based on your responses</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-info/10 border border-info/20">
-                  <AlertCircle className="h-5 w-5 text-info flex-shrink-0" />
-                  <p className="text-sm text-info">
-                    Your responses are confidential and secure. If you're in crisis, please contact emergency services.
-                  </p>
-                </div>
-
-                {isQuestionnaireLoading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading questionnaire…
-                  </div>
-                )}
-
-                {questionnaireError && !isQuestionnaireLoading && (
-                  <div className={`rounded-lg border px-4 py-3 text-sm ${
-                    isHardError
-                      ? "border-destructive/30 bg-destructive/10 text-destructive"
-                      : "border-warning/30 bg-warning/10 text-warning-foreground"
-                  }`}>
-                    <p className="font-medium mb-2">{questionnaireError}</p>
-                    <Button type="button" variant="outline" size="sm" onClick={() => void loadQuestionnaire()}>
-                      Retry
-                    </Button>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="hero"
-                    size="lg"
-                    onClick={handleStartAssessment}
-                    className="w-full"
-                    disabled={isQuestionnaireLoading || questions.length === 0 || isHardError}
-                  >
-                    {isQuestionnaireLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Loading…
-                      </>
-                    ) : (
-                      "Start Assessment"
-                    )}
-                  </Button>
-                  
-                  {!user?.needs_assessment && (
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => navigate("/student/dashboard")}
-                      className="w-full"
-                    >
-                      Back to Dashboard
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <WellnessCheckInIntro
+              needsAssessment={Boolean(user?.needs_assessment)}
+              isLoading={isQuestionnaireLoading}
+              questionCount={questions.length}
+              error={questionnaireError}
+              isHardError={isHardError}
+              onStart={handleStartAssessment}
+              onRetry={() => void loadQuestionnaire()}
+              canGoBack={!user?.needs_assessment}
+              onBack={user?.needs_assessment ? undefined : () => navigate("/student/dashboard")}
+            />
           )}
 
-          {step === "form" && (
-            <Card variant="glass" className="max-w-2xl mx-auto">
-              <CardHeader>
-                <CardTitle>Mental Health Assessment</CardTitle>
-              </CardHeader>
-              <CardContent>{renderQuestion()}</CardContent>
-            </Card>
+          {step === "form" && currentQuestion && (
+            <WellnessCheckInQuestion
+              question={currentQuestion}
+              questionIndex={currentQuestionIndex}
+              totalQuestions={questions.length}
+              response={responses[currentQuestion.id]}
+              showSection={sectionChanged}
+              isLoading={isLoading}
+              onResponse={handleResponseChange}
+              onToggleMulti={toggleMultiSelect}
+              onBack={handlePreviousQuestion}
+              onSkip={currentQuestion.required === false ? handleSkipOptional : undefined}
+              onNext={handleNextQuestion}
+              onSubmit={() => void handleSubmitAssessment()}
+            />
           )}
 
           {step === "results" && result && (
-            <div className="max-w-2xl mx-auto space-y-6">
-              <Card variant="glass">
-                <CardHeader>
-                  <CardTitle className="text-2xl">Your Assessment Results</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className={`p-6 rounded-lg ${getRiskBgColor(result.risk_level)}`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-foreground">Overall Risk Level</h3>
-                      <span className={`text-3xl font-bold ${getRiskColor(result.risk_level)}`}>
-                        {result.total_score}%
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-3 w-3 rounded-full ${
-                          result.risk_level === "low"
-                            ? "bg-green-600"
-                            : result.risk_level === "medium"
-                            ? "bg-yellow-600"
-                            : result.risk_level === "high"
-                            ? "bg-orange-600"
-                            : "bg-red-600"
-                        }`}
-                      />
-                      <span className="font-semibold text-foreground capitalize">{result.risk_level}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h4 className="font-semibold text-foreground">Category Breakdown</h4>
-                    {Object.entries(result.category_scores).map(([category, score]) => (
-                      <div key={category} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground capitalize">{category}</span>
-                          <span className="font-medium">{score}%</span>
-                        </div>
-                        <Progress value={score as number} className="h-2" />
-                      </div>
-                    ))}
-                  </div>
-
-                  {result.ai_recommendations.counselor_summary ? (
-                    <div className="space-y-2 p-4 rounded-lg border border-border bg-background/60">
-                      <h4 className="font-semibold text-foreground text-sm">Counselor-oriented summary</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {result.ai_recommendations.counselor_summary}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {result.ai_recommendations.focus_areas && result.ai_recommendations.focus_areas.length > 0 ? (
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-foreground text-sm">Suggested focus areas</h4>
-                      <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                        {result.ai_recommendations.focus_areas.map((area) => (
-                          <li key={area}>{area}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {result.ai_recommendations.risk_flags && result.ai_recommendations.risk_flags.length > 0 ? (
-                    <div className="space-y-2 p-4 rounded-lg bg-destructive/10 border border-destructive/25">
-                      <h4 className="font-semibold text-destructive text-sm">Follow-up flags</h4>
-                      <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
-                        {result.ai_recommendations.risk_flags.map((flag) => (
-                          <li key={flag}>{flag}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <div className="space-y-4 p-4 rounded-lg bg-secondary/30">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      AI Recommendations
-                    </h4>
-                    <p className="text-foreground font-medium">{result.ai_recommendations.primary}</p>
-                    <div className="space-y-2">
-                      {result.ai_recommendations.actions.map((action, index) => (
-                        <div key={index} className="flex items-start gap-2">
-                          <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{action}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {result.ai_recommendations.category_alerts && (
-                    <div className="space-y-3 p-4 rounded-lg bg-warning/10 border border-warning/20">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5 text-warning" />
-                        Areas of Concern
-                      </h4>
-                      {Object.entries(result.ai_recommendations.category_alerts).map(([category, alert]) => (
-                        <p key={category} className="text-sm text-muted-foreground">
-                          <span className="font-medium capitalize">{category}:</span> {alert}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-3 pt-4">
-                    <Button
-                      variant="hero"
-                      onClick={() => navigate("/student/dashboard")}
-                      className="w-full text-base py-6 font-semibold"
-                    >
-                      Proceed to Dashboard
-                    </Button>
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => navigate("/student/wellness")}
-                        className="flex-1"
-                      >
-                        View Wellness Dashboard
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => navigate("/student/appointments")}
-                        className="flex-1"
-                      >
-                        Book Counseling Session
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card variant="glass">
-                <CardHeader>
-                  <CardTitle className="text-lg">Assessment History</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isHistoryLoading ? (
-                    <p className="text-sm text-muted-foreground">Loading history...</p>
-                  ) : history.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No previous assessments yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {history.slice(0, 5).map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {new Date(item.created_at).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </p>
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {item.risk_level} risk
-                            </p>
-                          </div>
-                          <span className={`text-sm font-semibold ${getRiskColor(item.risk_level)}`}>
-                            {item.total_score}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card variant="glass">
-                <CardHeader>
-                  <CardTitle className="text-lg">30-Day Trend</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {trendPoints.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No trend data available yet.</p>
-                  ) : (
-                    trendPoints.map((trend) => (
-                      <div key={trend.date} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            {new Date(trend.date).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                          <span className={`font-medium ${getRiskColor(trend.risk_level)}`}>
-                            {trend.score}%
-                          </span>
-                        </div>
-                        <Progress value={trend.score} className="h-2" />
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            <WellnessCheckInResults
+              result={result}
+              history={history}
+              trends={trends}
+              isHistoryLoading={isHistoryLoading}
+              onDashboard={() => navigate("/student/dashboard")}
+              onWellness={() => navigate("/student/wellness")}
+              onAppointments={() => navigate("/student/appointments")}
+            />
           )}
         </main>
       </div>

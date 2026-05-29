@@ -11,11 +11,14 @@ import { ConfirmDialogProvider } from "@/hooks/useConfirm";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
+import { IncomingCallHost } from "@/components/call/IncomingCallHost";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { PushNotificationPrompt } from "@/components/pwa/PushNotificationPrompt";
 import { ChatPerfDevBadge } from "@/components/dev/ChatPerfDevBadge";
 
-import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { lazyWithRetry, clearLazyRetryGuard } from "@/lib/lazyWithRetry";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { Button } from "@/components/ui/button";
 
 const Index = lazyWithRetry(() => import("./pages/Index"));
 const OAuthCallback = lazyWithRetry(() => import("./pages/auth/OAuthCallback"));
@@ -84,6 +87,26 @@ const RouteLoader = () => (
   </div>
 );
 
+const LazyRouteErrorFallback = () => (
+  <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="max-w-md w-full rounded-2xl border border-border bg-card p-8 text-center space-y-4">
+      <h2 className="text-lg font-semibold">This page did not load</h2>
+      <p className="text-sm text-muted-foreground">
+        That usually means the app was updated in the background. Reload to fetch the latest version.
+      </p>
+      <Button
+        type="button"
+        onClick={() => {
+          clearLazyRetryGuard();
+          window.location.reload();
+        }}
+      >
+        Reload app
+      </Button>
+    </div>
+  </div>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -100,10 +123,12 @@ const App = () => (
             <AuthProvider>
               <ConfirmDialogProvider>
               <ChatIncomingNotificationHost />
+              <IncomingCallHost />
               <PushNotificationPrompt />
               <PwaInstallBanner />
               {import.meta.env.DEV && <ChatPerfDevBadge />}
               <ScreenshotShield />
+              <ErrorBoundary fallback={<LazyRouteErrorFallback />}>
               <Suspense fallback={<RouteLoader />}>
                 <Routes>
                 <Route path="/" element={<Index />} />
@@ -379,6 +404,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+              </ErrorBoundary>
               </ConfirmDialogProvider>
             </AuthProvider>
           </BrowserRouter>

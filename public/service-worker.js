@@ -1,5 +1,5 @@
 /* global self, caches, fetch */
-const CACHE_NAME = "cms-cache-v5";
+const CACHE_NAME = "cms-cache-v6";
 
 /** System notification artwork — black / crimson / white (matches counseling UI). */
 const NOTIFY_ICON = "/assets/icons/notify-192.png";
@@ -84,6 +84,22 @@ self.addEventListener("fetch", (event) => {
         .catch(() =>
           caches.match(request).then((hit) => hit || caches.match("/"))
         )
+    );
+    return;
+  }
+
+  // Hashed Vite bundles: network-first so deploys never serve stale JS/CSS from cache.
+  if (url.pathname.startsWith("/assets/") && /\.(js|css|mjs)$/i.test(url.pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((hit) => hit || fetch(request)))
     );
     return;
   }
