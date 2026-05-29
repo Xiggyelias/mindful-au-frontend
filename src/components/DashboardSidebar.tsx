@@ -6,6 +6,7 @@ import { LucideIcon, LogOut, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { isProfileAnonymousMode } from "@/lib/anonymousMode";
+import { prefetchRoute } from "@/hooks/usePagePrefetch";
 
 interface NavItem {
   label: string;
@@ -137,6 +138,35 @@ const isSecureChatPath = (path: string) =>
                         : undefined,
                     });
                     onClose?.();
+                  }}
+                  onMouseEnter={() => {
+                    // Prefetch the route chunk on hover for instant navigation
+                    // This is a no-op if already imported, but triggers network fetch if not
+                    if (item.path === "/student/chat") {
+                      prefetchRoute(() => import("@/pages/student/StudentChat"));
+                    } else if (item.path === "/student/dashboard") {
+                      prefetchRoute(() => import("@/pages/student/StudentDashboard"));
+                    } else if (item.path === "/student/appointments") {
+                      prefetchRoute(() => import("@/pages/student/StudentAppointments"));
+                    } else if (item.path === "/student/ai-support") {
+                      prefetchRoute(() => import("@/pages/student/StudentAISupport"));
+                    } else if (item.path === "/student/video-call") {
+                      prefetchRoute(() => import("@/pages/student/StudentVideoCall"));
+                    } else if (item.path === "/student/history") {
+                      prefetchRoute(() => import("@/pages/student/StudentHistory"));
+                    } else if (item.path === "/student/wellness") {
+                      prefetchRoute(() => import("@/pages/student/StudentWellness"));
+                    } else if (item.path === "/counselor/dashboard") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorDashboard"));
+                    } else if (item.path === "/counselor/messages") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorMessages"));
+                    } else if (item.path === "/counselor/appointments") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorAppointments"));
+                    } else if (item.path === "/peer/dashboard") {
+                      prefetchRoute(() => import("@/pages/peer/PeerDashboard"));
+                    } else if (item.path === "/peer/chats") {
+                      prefetchRoute(() => import("@/pages/peer/PeerChats"));
+                    }
                   }}
                   className={cn(
                     "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 transform",

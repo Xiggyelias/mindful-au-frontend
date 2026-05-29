@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,6 +19,31 @@ import { ChatPerfDevBadge } from "@/components/dev/ChatPerfDevBadge";
 import { lazyWithRetry, clearLazyRetryGuard } from "@/lib/lazyWithRetry";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { Button } from "@/components/ui/button";
+
+// Preload critical pages after initial render for instant navigation
+// This runs after the app mounts and doesn't block the initial render
+const preloadCriticalPages = () => {
+  // Use requestIdleCallback to not block the main thread
+  const doPreload = () => {
+    // Preload the most visited pages
+    const preloaders = [
+      () => import("./pages/student/StudentDashboard"),
+      () => import("./pages/student/StudentChat"),
+      () => import("./pages/counselor/CounselorDashboard"),
+      () => import("./pages/counselor/CounselorMessages"),
+    ];
+    
+    preloaders.forEach((fn, i) => {
+      setTimeout(() => fn().catch(() => {}), 500 + i * 200);
+    });
+  };
+  
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(doPreload, { timeout: 2000 });
+  } else {
+    setTimeout(doPreload, 500);
+  }
+};
 
 const Index = lazyWithRetry(() => import("./pages/Index"));
 const OAuthCallback = lazyWithRetry(() => import("./pages/auth/OAuthCallback"));
@@ -80,9 +105,13 @@ const queryClient = new QueryClient({
 
 const RouteLoader = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="flex flex-col items-center gap-4">
-      <div className="h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-      <p className="text-muted-foreground">Loading page...</p>
+    <div className="flex flex-col items-center gap-3">
+      {/* Faster spinner - use CSS animation instead of border trick */}
+      <div className="relative h-10 w-10">
+        <div className="absolute inset-0 rounded-full border-3 border-primary/20" />
+        <div className="absolute inset-0 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+      </div>
+      <p className="text-sm text-muted-foreground animate-pulse">Loading...</p>
     </div>
   </div>
 );
@@ -107,7 +136,13 @@ const LazyRouteErrorFallback = () => (
   </div>
 );
 
-const App = () => (
+const App = () => {
+  // Trigger critical pages preload after initial render
+  useEffect(() => {
+    preloadCriticalPages();
+  }, []);
+  
+  return (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <BandwidthProvider>
@@ -412,6 +447,7 @@ const App = () => (
       </BandwidthProvider>
     </ThemeProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
