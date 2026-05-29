@@ -446,7 +446,7 @@ const CounselorVideo = () => {
 
     const beginSession = async () => {
       const callType = pendingCallMode === "audio" ? "audio" : "video";
-      const activeRow = videoAppointments.find((item) => String(item.id) === activeSessionId);
+      const activeRow = upcomingSessions.find((item) => String(item.id) === activeSessionId);
       const studentId = Number(activeRow?.student_id);
 
       try {
@@ -511,7 +511,7 @@ const CounselorVideo = () => {
     pendingSessionStartId,
     startAudioCall,
     startCall,
-    videoAppointments,
+    upcomingSessions,
   ]);
 
   const isStartingActiveSession = Boolean(
