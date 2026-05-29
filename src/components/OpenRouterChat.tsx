@@ -143,18 +143,24 @@ export const OpenRouterChat: React.FC<OpenRouterChatProps> = ({
         currentConversationId || undefined,
         (chunk: StreamChunk) => {
           if (!chunk.done) {
-            setCurrentResponse(prev => prev + chunk.content);
+            setCurrentResponse(prev => {
+              const newRaw = prev + chunk.content;
+              // Strip <think>...</think> or incomplete <think>... from the stream
+              return newRaw.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '');
+            });
           }
         }
       );
 
       setCurrentResponse('');
-      if (result.content.trim() !== '') {
+      // Clean final content of any think tags/blocks
+      const cleanContent = result.content.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
+      if (cleanContent !== '') {
         setMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            content: result.content,
+            content: cleanContent,
           },
         ]);
       }
@@ -182,8 +188,8 @@ export const OpenRouterChat: React.FC<OpenRouterChatProps> = ({
   return (
     <div className={`h-[600px] flex ${className}`}>
       {/* Conversation Sidebar */}
-      <div className={`${showConversations ? 'w-64' : 'w-0'} transition-all duration-300 border-r bg-muted/50`}>
-        <div className="p-4 h-full flex flex-col">
+      <div className={`${showConversations ? 'w-64' : 'w-0'} transition-all duration-300 border-r bg-muted/50 overflow-hidden`}>
+        <div className="p-4 h-full flex flex-col w-64">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Conversations</h3>
             <Button size="sm" onClick={createNewConversation}>
