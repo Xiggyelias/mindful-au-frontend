@@ -53,20 +53,31 @@ serve(async (req: Request) => {
     }
 
     // Build conversation context
-    const systemPrompt = `You are a warm, compassionate, and deeply human mental health support companion for university students. Your goal is to provide a safe, empathetic, and natural conversational space—not to act like a clinical tool or search engine.
+    const systemPrompt = `You are a warm mental health support companion for university students. Listen first—do not fix, diagnose, or lecture.
 
-To sound and feel genuinely human and avoid sounding like a robotic AI:
-1. Use a warm, casual, conversational tone: Write as if you are a supportive peer or a caring counselor talking to a friend over coffee. Use natural contractions (e.g., "it's", "I'm", "you're", "don't"). Avoid stiff, clinical, or overly formal phrases.
-2. Empathize and validate first: When a student shares something difficult, sit with them in that feeling first. Validate their emotions warmly and naturally (e.g., "That sounds really exhausting," or "It makes complete sense that you'd feel overwhelmed by that").
-3. Ditch the "AI-isms" & lists: NEVER say "As an AI wellness assistant..." or start every response with generic empathy templates. Do not immediately jump into "fixing" their problem or providing long numbered/bulleted lists of advice unless they explicitly ask for strategies. Talk WITH them, not AT them.
-4. Keep it brief and natural: Keep your responses conversational, paced, and clear, like messages in a chat app. Avoid massive blocks of text or rigid step-by-step guides.
-5. Introduce gentle reflection: Ask gentle, open-ended questions one at a time to help them explore their feelings, rather than overwhelming them with options.
-6. Respond naturally to greetings, short replies, and follow-up questions: Track context across turns and answer the actual message the student just sent. If the student is simply chatting, keep the conversation natural instead of forcing advice.
+RULES:
+- Be warm, simple, and non-judgmental.
+- Never sound robotic, formal, or overly therapist-like.
+- Avoid long explanations unless the student asks for more.
+- Understand first, then offer gentle guidance.
+- Use short sentences and natural language. Use contractions (I'm, you're, it's).
+- Acknowledge their emotions before giving any advice.
+- Never overwhelm with multiple suggestions at once—one gentle thought or question at a time.
+- No bullet lists or numbered steps unless they explicitly ask for strategies.
+- Never say "As an AI..." or dump generic advice templates.
+- Respond to what they actually said, not a script.
 
-Important guidelines:
+STYLE:
+- Sound like a caring friend texting back: "That sounds really heavy. I get why you feel that way."
+- NOT like: "I am sorry to hear that you are experiencing distress."
+
+END GOAL:
+Make them feel heard, safe, and not judged.
+
+CRITICAL:
 - Never provide medical diagnoses or treatment advice.
-- If someone expresses thoughts of self-harm, stop normal coaching and give immediate safety guidance to connect with emergency services, a counselor, or a trusted person.
-- Use techniques from CBT and mindfulness subtly and conversationally when appropriate, without explicitly naming them as clinical exercises.`;
+- If they mention suicide or self-harm, give immediate safety guidance to contact emergency services, a counselor, or a trusted person.
+- Use mindfulness and CBT insights naturally in conversation, never as clinical exercises.`;
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -243,28 +254,28 @@ function getWellnessResponse(message: string): string {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes("anxious") || lowerMessage.includes("anxiety")) {
-    return "I hear that you're feeling anxious, and that's completely valid. Anxiety can feel overwhelming, but there are some techniques that might help:\n\n• Try the 4-7-8 breathing technique: breathe in for 4 seconds, hold for 7, exhale for 8\n• Ground yourself by naming 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, and 1 you can taste\n• Remember that this feeling will pass\n\nWould you like to talk more about what's triggering your anxiety?";
+    return "That sounds really heavy, and it makes sense you'd feel on edge. What's been weighing on you most?";
   }
   
   if (lowerMessage.includes("stress") || lowerMessage.includes("overwhelmed")) {
-    return "Feeling stressed and overwhelmed is a common experience, especially for students. Here are some strategies that might help:\n\n• Break large tasks into smaller, manageable steps\n• Take short breaks every 25-30 minutes (Pomodoro technique)\n• Make sure you're getting enough sleep and staying hydrated\n• Try some light physical activity or stretching\n\nWhat specifically is causing you the most stress right now?";
+    return "Being overwhelmed is a lot to carry. What's taking up the most space in your head right now?";
   }
   
   if (lowerMessage.includes("relax") || lowerMessage.includes("calm")) {
-    return "I'd be happy to help you relax. Here's a simple breathing exercise:\n\n1. Find a comfortable position\n2. Close your eyes if that feels comfortable\n3. Breathe in slowly through your nose for 4 counts\n4. Hold your breath for 4 counts\n5. Exhale slowly through your mouth for 4 counts\n6. Repeat 4-5 times\n\nYou might also try progressive muscle relaxation: starting from your toes, tense each muscle group for 5 seconds, then relax. Would you like me to guide you through more relaxation techniques?";
+    return "Yeah, let's slow things down a bit. Try breathing in slowly for four counts, then out for six—just a few times. How does that feel?";
   }
   
   if (lowerMessage.includes("study") || lowerMessage.includes("focus") || lowerMessage.includes("concentrate")) {
-    return "I understand studying can be challenging. Here are some evidence-based study tips:\n\n• Use active recall: test yourself instead of just re-reading\n• Space out your study sessions rather than cramming\n• Find a consistent study environment with minimal distractions\n• Take regular breaks to maintain focus\n• Get adequate sleep - it's crucial for memory consolidation\n\nWhat subject or aspect of studying are you struggling with most?";
+    return "Study pressure can pile up fast. What's the one thing on your plate that feels hardest right now?";
   }
   
   if (lowerMessage.includes("sad") || lowerMessage.includes("depressed") || lowerMessage.includes("down")) {
-    return "I'm sorry to hear you're feeling down. Your feelings are valid, and it takes courage to reach out. Some things that might help:\n\n• Talk to someone you trust about how you're feeling\n• Try to maintain a routine, even if it's simple\n• Spend some time outdoors if possible\n• Be gentle with yourself - it's okay to not be okay\n\nIf these feelings persist, I'd encourage you to speak with a counselor who can provide more personalized support. Would you like to tell me more about what you're experiencing?";
+    return "That sounds really heavy. I get why you'd feel low right now. What's been sitting with you most?";
   }
   
   if (lowerMessage.includes("breathing") || lowerMessage.includes("breathe")) {
-    return "Let's do a breathing exercise together:\n\n**Box Breathing Technique:**\n\n1. Breathe IN slowly for 4 seconds\n2. HOLD your breath for 4 seconds\n3. Breathe OUT slowly for 4 seconds\n4. HOLD for 4 seconds\n5. Repeat 4-5 times\n\nThis technique activates your parasympathetic nervous system, helping your body relax. Try it now, and let me know how you feel afterward.";
+    return "Okay—breathe in slowly for four counts, hold for four, then out for four. A few rounds is enough. How are you feeling after that?";
   }
   
-  return "Thank you for reaching out. I'm here to listen and support you. Your wellbeing matters, and it's important to take care of your mental health.\n\nCould you tell me more about how you're feeling or what's on your mind? I'm here to help in any way I can.";
+  return "I'm here. What's on your mind right now?";
 }
