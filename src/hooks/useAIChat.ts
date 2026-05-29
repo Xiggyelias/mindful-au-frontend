@@ -213,7 +213,19 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
         time: formatTime(),
       };
 
-      setMessages((prev) => [...prev, optimisticMessage]);
+      setMessages((prev) => {
+        const next = [...prev, optimisticMessage];
+        localStorage.setItem(
+          AI_HISTORY_CACHE_KEY,
+          JSON.stringify({
+            saved_at: Date.now(),
+            conversation_id: conversationId,
+            messages: next,
+            ml_signals: null,
+          })
+        );
+        return next;
+      });
       setIsLoading(true);
       setIsThinking(true);
       setError(null);
@@ -259,7 +271,7 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
           }
         }
 
-        setMlSignals({
+        const activeMlSignals = {
           modelVersion: typeof data?.ml_signals?.model_version === "string" ? data.ml_signals.model_version : undefined,
           conversationTopic: typeof data?.ml_signals?.conversation_topic === "string" ? data.ml_signals.conversation_topic : null,
           focusArea: typeof data?.ml_signals?.focus_area === "string" ? data.ml_signals.focus_area : null,
@@ -268,23 +280,16 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
           dominantTopics: Array.isArray(data?.ml_signals?.dominant_topics) ? data.ml_signals.dominant_topics : [],
           recommendedActions: Array.isArray(data?.ml_signals?.recommended_actions) ? data.ml_signals.recommended_actions : [],
           lowBandwidthMode: Boolean(data?.ml_signals?.low_bandwidth_mode),
-        });
+        };
 
-        const persistedUserMessageId = Number(data?.user_message_id);
-        if (Number.isFinite(persistedUserMessageId) && persistedUserMessageId > 0) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === optimisticId
-                ? { ...msg, id: persistedUserMessageId }
-                : msg
-            )
-          );
-        }
+        setMlSignals(activeMlSignals);
 
         const aiContent = typeof data?.response === "string" ? data.response.trim() : "";
         if (!aiContent) {
           throw new Error("Empty AI response");
         }
+
+        const persistedUserMessageId = Number(data?.user_message_id);
         const assistantMessageId = Number(data?.assistant_message_id);
         const providerMode = typeof data?.provider_mode === "string" ? data.provider_mode : undefined;
         const aiMessage: Message = {
@@ -298,7 +303,25 @@ export const useAIChat = (userContext?: AIUserContext | null) => {
           providerMode,
         };
 
-        setMessages((prev) => [...prev, aiMessage]);
+        setMessages((prev) => {
+          const next = prev.map((msg) =>
+            msg.id === optimisticId && Number.isFinite(persistedUserMessageId) && persistedUserMessageId > 0
+              ? { ...msg, id: persistedUserMessageId }
+              : msg
+          );
+          next.push(aiMessage);
+
+          localStorage.setItem(
+            AI_HISTORY_CACHE_KEY,
+            JSON.stringify({
+              saved_at: Date.now(),
+              conversation_id: nextConversationId,
+              messages: next,
+              ml_signals: activeMlSignals,
+            })
+          );
+          return next;
+        });
       } catch (err: any) {
         if (import.meta.env.DEV) {
           console.error("AI chat error:", err);
