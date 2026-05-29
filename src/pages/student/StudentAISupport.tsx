@@ -150,9 +150,9 @@ const AICard = memo(({ content, time, isThinking }: { content: string; time: str
 ));
 AICard.displayName = "AICard";
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// WELLNESS CAPSULE â€” Interactive emotional trigger
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// WELLNESS CAPSULE — Interactive emotional trigger
+// ═══════════════════════════════════════════════════════════════════════════════════════════
 const WellnessCapsule = ({ capsule, onClick, disabled }: {
   capsule: typeof wellnessCapsules[0];
   onClick: () => void;
@@ -189,34 +189,17 @@ const WellnessTyping = ({ isThinking }: { isThinking?: boolean }) => (
     animate={{ opacity: 1, y: 0 }}
     className="flex gap-4"
   >
-    <AICompanion isThinking />
-    <div className="rounded-2xl border border-border bg-muted backdrop-blur-sm px-6 py-4 shadow-xl">
-      <div className="flex items-center gap-2">
-        {isThinking ? (
-          <>
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            >
-              <Brain className="h-4 w-4 text-rose-400" />
-            </motion.div>
-            <span className="text-xs text-muted-foreground font-medium">Reasoning deeply...</span>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-1">
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="h-1.5 w-1.5 rounded-full bg-rose-400/60"
-                  animate={{ y: [-3, 3, -3], opacity: [0.4, 1, 0.4] }}
-                  transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                />
-              ))}
-            </div>
-            <span className="ml-1 text-xs text-muted-foreground">Thinking...</span>
-          </>
-        )}
+    <AICompanion isThinking={isThinking} />
+    <div className="rounded-2xl border border-border bg-muted backdrop-blur-sm px-6 py-4 shadow-xl flex items-center justify-center">
+      <div className="flex items-center gap-1.5 py-0.5">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="h-2 w-2 rounded-full bg-rose-500/80 dark:bg-rose-400/80"
+            animate={{ y: [-4, 4, -4], opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
+          />
+        ))}
       </div>
     </div>
   </motion.div>

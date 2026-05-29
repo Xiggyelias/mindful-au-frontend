@@ -514,10 +514,10 @@ export const MessageList: React.FC<MessageListProps> = ({
           })}
           {isPeerTyping && (
             <div className="flex items-center gap-3 pb-4 animate-in fade-in slide-in-from-left-2 duration-500 motion-reduce:animate-none">
-              <div className="flex gap-1 rounded-full border border-emerald-200/60 bg-emerald-50/80 p-3 dark:bg-emerald-950/35">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
+              <div className="flex gap-1.5 rounded-2xl rounded-tl-sm border border-border/50 bg-secondary/35 px-4 py-3 shadow-sm flex items-center justify-center">
+                <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "300ms" }} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                 {typingLabel}
@@ -582,10 +582,10 @@ export const MessageList: React.FC<MessageListProps> = ({
             <div className="space-y-6 pb-6 motion-reduce:animate-none">
               {isPeerTyping && (
                 <div className="flex items-center gap-3 px-4 lg:px-6 animate-in fade-in slide-in-from-left-2 duration-500 motion-reduce:animate-none">
-                  <div className="flex gap-1 rounded-full border border-emerald-200/60 bg-emerald-50/80 p-3 dark:bg-emerald-950/35">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.2s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0.4s]" />
+                  <div className="flex gap-1.5 rounded-2xl rounded-tl-sm border border-border/50 bg-secondary/35 px-4 py-3 shadow-sm flex items-center justify-center">
+                    <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                     {typingLabel}

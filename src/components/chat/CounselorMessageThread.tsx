@@ -328,20 +328,20 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
                   >
                     {studentIsAnonymous ? "AU" : getInitials(studentLabel)}
                   </div>
-                  <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-muted/40 px-4 py-2.5 dark:bg-muted/25">
-                    <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Student is typing…</p>
-                    <div className="flex items-center gap-1">
+                  <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-secondary/35 px-4 py-3 shadow-sm flex items-center justify-center flex-col items-start gap-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">Student is typing…</p>
+                    <div className="flex items-center gap-1.5 py-0.5">
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce"
+                        className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce"
                         style={{ animationDelay: "0ms" }}
                       />
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce"
-                        style={{ animationDelay: "120ms" }}
+                        className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce"
+                        style={{ animationDelay: "150ms" }}
                       />
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce"
-                        style={{ animationDelay: "240ms" }}
+                        className="h-2 w-2 rounded-full bg-rose-600/70 dark:bg-rose-400/80 animate-bounce"
+                        style={{ animationDelay: "300ms" }}
                       />
                     </div>
                   </div>
