@@ -7,6 +7,7 @@ import {
   Eye,
   RefreshCcw,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
