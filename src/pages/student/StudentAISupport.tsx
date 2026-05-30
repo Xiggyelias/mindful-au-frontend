@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "
 
 import {
   Send, Sparkles, Loader2, AlertTriangle, Phone,
-  Wind, Moon, Brain, Zap, MessageCircle, Mic,
+  Wind, Moon, Brain, Zap, MessageCircle,
   Activity, Waves, Flame, Lock, ChevronDown, Heart,
 } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
@@ -627,15 +627,6 @@ const StudentAISupport = () => {
                       className="flex-1 bg-background border border-input rounded-l-2xl px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
                     />
                     <div className="flex items-center gap-2 pr-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                        onClick={() => toast.info("Voice input coming soon!")}
-                      >
-                        <Mic className="h-5 w-5" />
-                      </Button>
                       <Button
                         type="submit"
                         size="icon"

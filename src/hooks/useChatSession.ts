@@ -96,14 +96,10 @@ type PagedMeta = {
 type SessionListResponse = Session[] | { data?: Session[]; meta?: PagedMeta };
 const isOpenChatSession = (session: Session) =>
   session.status !== "completed" && session.status !== "cancelled";
-const isPeerAssignedSession = (session: Session) =>
-  session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
 const conversationKey = (session: Session) => {
-  const cId = session.counselor_id || 0;
-  const pId = session.peer_counselor_id || 0;
+  const studentId = session.chat_peer_student_id || session.student_id || 0;
   const isAnon = isAnonymousSessionFlag(session.is_anonymous) ? 1 : 0;
-  const role = session.assigned_role || "counselor";
-  return `c:${cId}:p:${pId}:a:${isAnon}:r:${role}`;
+  return `student:${studentId}:anon:${isAnon}`;
 };
 
 
@@ -258,8 +254,8 @@ export const useChatSession = (userId: number | undefined) => {
         setSessionPage(nextPage);
       }
 
-      // Keep unique sessions by conversation key (counselor + peer + anonymity)
-      // to avoid showing multiple entries for the same chat thread.
+      // Keep one shared case row per student/anonymity state so counselor and
+      // peer participation never split the same case into duplicate chats.
       const dedupedByConversation = new Map<string, Session>();
       
       // Sort by ID descending first so we process latest sessions first
@@ -377,7 +373,6 @@ export const useChatSession = (userId: number | undefined) => {
           (s) =>
             s.counselor_id === counselorId &&
             s.session_type === "chat" &&
-            !isPeerAssignedSession(s) &&
             isAnonymousSessionFlag(s.is_anonymous) === shouldBeAnonymous &&
             isOpenChatSession(s)
         );

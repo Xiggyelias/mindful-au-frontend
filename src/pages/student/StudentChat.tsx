@@ -716,6 +716,21 @@ const StudentChat = () => {
                           </span>
                           <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure E2E channel</span>
                         </div>
+                        <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1.5">
+                          <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
+                            Student: You
+                          </span>
+                          {Number(activeSession.peer_counselor_id) > 0 && (
+                            <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200">
+                              Peer Counselor: {activeSession.peer_counselor?.profile?.full_name || activeSession.peer_counselor?.email || "Peer Counselor"}
+                            </span>
+                          )}
+                          {Number(activeSession.counselor_id) > 0 && (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                              Counselor: {activeSession.counselor?.profile?.full_name || activeSession.counselor?.email || "Counselor"}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -900,8 +915,7 @@ const StudentChat = () => {
             </div>
 
             <div className="mt-6 flex flex-col gap-2">
-              {messageToDelete.sender_id === Number(user?.id) &&
-                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 && (
+              {messageToDelete.sender_id === Number(user?.id) && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"

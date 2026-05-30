@@ -1,12 +1,20 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw } from "lucide-react";
+import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
 import { ChatAttachmentView } from "@/components/chat/ChatAttachmentView";
 import { messageIsAttachmentFirst } from "@/lib/chatAttachments";
+import {
+  chatAvatarClass,
+  chatInitials,
+  chatRoleBadgeClass,
+  chatRoleLabel,
+  chatSenderDisplayName,
+  normalizeChatRole,
+} from "@/lib/chatIdentity";
 import { ChatMessage } from "@/hooks/useEncryptedChat";
 import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
 import { Session } from "@/hooks/useChatSession";
@@ -20,6 +28,14 @@ const formatTimeLabel = (dateString: string): string => {
   } catch {
     return "";
   }
+};
+
+const deliveryLabel = (msg: ChatMessage) => {
+  if (msg.delivery_status === "sending") return "Sending";
+  if (msg.delivery_status === "failed") return "Failed";
+  if (msg.seen_at || msg.delivery_status === "read") return "Read";
+  if (msg.delivery_status === "delivered") return "Delivered";
+  return "Sent";
 };
 
 type BubbleRenderProps = {
@@ -39,6 +55,7 @@ type BubbleRenderProps = {
   uploadingTempId?: number;
   /** Upload progress 0-100 for the current upload. */
   currentUploadProgress?: number;
+  senderFallbackName?: string;
 };
 
 const MessageBubble = React.memo(
@@ -55,9 +72,13 @@ const MessageBubble = React.memo(
     onDeleteOptimistic,
     uploadingTempId,
     currentUploadProgress,
+    senderFallbackName,
   }: BubbleRenderProps) {
     const content = msg.decryptedContent ?? msg.content;
     const isDeletedMessage = content === "This message was deleted.";
+    const senderRole = normalizeChatRole(msg.sender_role || (isMe ? "student" : undefined));
+    const senderName = isMe ? "You" : chatSenderDisplayName(msg, senderFallbackName || chatRoleLabel(senderRole));
+    const roleLabel = chatRoleLabel(senderRole);
 
     const renderBody = () => {
       if (messageIsAttachmentFirst(msg) && !isDeletedMessage) {
@@ -109,7 +130,26 @@ const MessageBubble = React.memo(
             {timeLabel}
           </span>
         )}
-        <div className="flex items-center gap-2 max-w-[85%] lg:max-w-[70%]">
+        <div className={cn("flex w-full items-end gap-2", isMe ? "justify-end" : "justify-start")}>
+          {!isMe && (
+            <div
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background",
+                chatAvatarClass(senderRole)
+              )}
+              title={`${senderName} (${roleLabel})`}
+            >
+              {chatInitials(senderName)}
+            </div>
+          )}
+          <div className={cn("flex min-w-0 max-w-[85%] flex-col lg:max-w-[70%]", isMe ? "items-end" : "items-start")}>
+            <div className={cn("mb-1 flex max-w-full items-center gap-1.5 px-1", isMe ? "justify-end" : "justify-start")}>
+              <span className="truncate text-[11px] font-semibold text-foreground/80">{senderName}</span>
+              <span className={cn("shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide", chatRoleBadgeClass(senderRole))}>
+                {roleLabel}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
           {/* Show delete for plain text messages on hover.
               Attachment messages (voice/file/image) get their own delete button
               wired through ChatAttachmentView → VoiceMemoPlayer / image overlay. */}
@@ -118,7 +158,7 @@ const MessageBubble = React.memo(
               variant="ghost"
               size="icon"
               className={cn(
-                "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0",
+                "h-8 w-8 opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0 sm:opacity-0 sm:group-hover:opacity-100",
                 isMe ? "order-first" : "order-last"
               )}
               onClick={() => onDeleteMessage(msg.id)}
@@ -134,7 +174,7 @@ const MessageBubble = React.memo(
               variant="ghost"
               size="icon"
               className={cn(
-                "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0",
+                "h-8 w-8 opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0 sm:opacity-0 sm:group-hover:opacity-100",
                 isMe ? "order-first" : "order-last"
               )}
               onClick={() => onDeleteMessage(msg.id)}
@@ -162,15 +202,33 @@ const MessageBubble = React.memo(
               <ChatMessageErrorBoundary>{renderBody()}</ChatMessageErrorBoundary>
             </div>
           )}
+            </div>
+          </div>
         </div>
         {isMe && (
           <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">
             <div className="flex items-center gap-1.5 px-0.5">
               <span
-                className={cn("text-[11px]", msg.seen_at ? "text-emerald-500" : "text-muted-foreground/60")}
-                aria-label={msg.seen_at ? "Seen" : "Sent"}
-                title={msg.seen_at ? "Seen" : "Sent"}
+                className={cn(
+                  "inline-flex items-center text-[0px]",
+                  msg.delivery_status === "failed"
+                    ? "text-destructive"
+                    : msg.seen_at || msg.delivery_status === "read"
+                    ? "text-emerald-500"
+                    : "text-muted-foreground/60"
+                )}
+                aria-label={deliveryLabel(msg)}
+                title={deliveryLabel(msg)}
               >
+                {msg.delivery_status === "sending" ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                ) : msg.delivery_status === "failed" ? (
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                ) : msg.seen_at || msg.delivery_status === "read" || msg.delivery_status === "delivered" ? (
+                  <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
                 {msg.seen_at ? "✓✓" : "✓"}
               </span>
             </div>
@@ -185,6 +243,9 @@ const MessageBubble = React.memo(
     prev.msg.decryptedContent === next.msg.decryptedContent &&
     prev.msg.e2eVisual === next.msg.e2eVisual &&
     prev.msg.content === next.msg.content &&
+    prev.msg.sender_role === next.msg.sender_role &&
+    prev.msg.sender_name_snapshot === next.msg.sender_name_snapshot &&
+    prev.msg.sender_display_name === next.msg.sender_display_name &&
     prev.msg.is_encrypted === next.msg.is_encrypted &&
     prev.msg.message_type === next.msg.message_type &&
     prev.msg.file_url === next.msg.file_url &&
@@ -193,12 +254,14 @@ const MessageBubble = React.memo(
     prev.msg.attachment?.url === next.msg.attachment?.url &&
     prev.msg.isUploading === next.msg.isUploading &&
     prev.msg.uploadFailed === next.msg.uploadFailed &&
+    prev.msg.delivery_status === next.msg.delivery_status &&
     prev.isMe === next.isMe &&
     prev.showTime === next.showTime &&
     prev.timeLabel === next.timeLabel &&
     prev.isDeleting === next.isDeleting &&
     prev.uploadingTempId === next.uploadingTempId &&
-    prev.currentUploadProgress === next.currentUploadProgress
+    prev.currentUploadProgress === next.currentUploadProgress &&
+    prev.senderFallbackName === next.senderFallbackName
 );
 
 interface MessageListProps {
@@ -349,6 +412,15 @@ export const MessageList: React.FC<MessageListProps> = ({
     activeSession?.assigned_role === "peer_counselor" && Number(activeSession?.peer_counselor_id) > 0
       ? "Peer supporter is typing…"
       : "Counselor is typing…";
+
+  const supportFallbackName =
+    activeSession?.assigned_role === "peer_counselor" && Number(activeSession?.peer_counselor_id) > 0
+      ? activeSession.peer_counselor?.profile?.full_name ||
+        activeSession.peer_counselor?.email ||
+        "Peer Counselor"
+      : activeSession?.counselor?.profile?.full_name ||
+        activeSession?.counselor?.email ||
+        "Counselor";
 
   const handleStartReached = useCallback(() => {
     if (!hasOlderMessages || isLoadingOlderMessages || olderInflightRef.current) {
@@ -508,6 +580,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   onDeleteOptimistic={onDeleteOptimistic}
                   uploadingTempId={uploadingTempId}
                   currentUploadProgress={currentUploadProgress}
+                  senderFallbackName={supportFallbackName}
                 />
               </div>
             );
@@ -620,6 +693,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 onDeleteOptimistic={onDeleteOptimistic}
                 uploadingTempId={uploadingTempId}
                 currentUploadProgress={currentUploadProgress}
+                senderFallbackName={supportFallbackName}
               />
             </div>
           );

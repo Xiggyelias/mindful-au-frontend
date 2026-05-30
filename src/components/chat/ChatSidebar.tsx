@@ -8,7 +8,6 @@ import {
   Loader2, 
   ChevronLeft, 
   ChevronRight,
-  MoreVertical,
   Plus,
   Pin,
   Archive,
@@ -263,9 +262,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <h2 className="text-lg font-display font-bold tracking-tight text-slate-900 dark:text-slate-100">Counseling Inbox</h2>
             <p className="text-xs text-muted-foreground">Safe, private and real-time support</p>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl border border-border/50 bg-white/80 shadow-sm" aria-label="More options">
-            <MoreVertical className="h-4 w-4 text-slate-600" />
-          </Button>
         </div>
 
         <div className="relative group">

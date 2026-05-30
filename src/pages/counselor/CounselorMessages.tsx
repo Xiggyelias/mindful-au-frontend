@@ -20,6 +20,9 @@ import {
   UserCircle2,
   Menu,
   MoreHorizontal,
+  Pin,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { counselorNavItems, peerCounselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -111,9 +114,20 @@ type RawSession = {
       full_name?: string;
     };
   };
+  counselor?: {
+    id?: number;
+    email?: string;
+    last_seen_at?: string | null;
+    is_online?: boolean;
+    profile?: {
+      full_name?: string;
+    };
+  };
   peer_counselor?: {
     id?: number;
     email?: string;
+    last_seen_at?: string | null;
+    is_online?: boolean;
     profile?: {
       full_name?: string;
     };
@@ -138,6 +152,7 @@ type ChatListItem = {
   lastSeenAt: string | null;
   isPeerAssigned: boolean;
   peerCounselorName: string;
+  counselorName: string;
   unreadCount: number;
 };
 
@@ -154,6 +169,21 @@ type ChatListResponse = RawSession[] | { data?: RawSession[]; meta?: ChatListMet
 
 const getChatListCacheKey = (isPeerCounselor: boolean, page: number) =>
   `counselor_chat_list_v${CHAT_LIST_CACHE_VERSION}_${isPeerCounselor ? "peer" : "counselor"}_${page}`;
+const COUNSELOR_CHAT_PREFS_KEY = "counselor_chat_sidebar_prefs_v1";
+
+const readCounselorChatPrefs = (): { pinned: number[]; archived: number[] } => {
+  if (typeof window === "undefined") return { pinned: [], archived: [] };
+  try {
+    const raw = window.localStorage.getItem(COUNSELOR_CHAT_PREFS_KEY);
+    if (!raw) return { pinned: [], archived: [] };
+    const parsed = JSON.parse(raw) as { pinned?: unknown; archived?: unknown };
+    const toIds = (value: unknown) =>
+      Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
+    return { pinned: toIds(parsed.pinned), archived: toIds(parsed.archived) };
+  } catch {
+    return { pinned: [], archived: [] };
+  }
+};
 
 const readIdentityRevealGrants = (): Record<string, string> => {
   if (typeof window === "undefined") return {};
@@ -263,6 +293,9 @@ const CounselorMessages = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarLane, setSidebarLane] = useState<"direct" | "supervision">("direct");
+  const [conversationFilter, setConversationFilter] = useState<"active" | "pinned" | "archived">("active");
+  const [pinnedChatIds, setPinnedChatIds] = useState<number[]>(() => readCounselorChatPrefs().pinned);
+  const [archivedChatIds, setArchivedChatIds] = useState<number[]>(() => readCounselorChatPrefs().archived);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -467,6 +500,17 @@ const CounselorMessages = () => {
     return cleanup;
   }, [cleanup]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COUNSELOR_CHAT_PREFS_KEY,
+        JSON.stringify({ pinned: pinnedChatIds, archived: archivedChatIds })
+      );
+    } catch {
+      // Ignore storage failures; conversation actions still work for this tab.
+    }
+  }, [pinnedChatIds, archivedChatIds]);
+
   const [searchParams] = useSearchParams();
   const targetSessionParam = searchParams.get("session");
   const targetStudentParam = searchParams.get("student");
@@ -482,20 +526,31 @@ const CounselorMessages = () => {
   });
 
   const filteredChats = useMemo(() => {
-    // `chats` is de-duplicated in loadSessions (same student + anonymity + role lane).
+    // `chats` is de-duplicated in loadSessions (same student + anonymity).
     const needle = deferredSearchQuery.trim().toLowerCase();
-    if (!needle) {
-      return chats;
-    }
-    return chats.filter((chat) => {
+    const rows = chats.filter((chat) => {
+      const sessionId = Number(chat.id);
+      const isPinned = pinnedChatIds.includes(sessionId);
+      const isArchived = archivedChatIds.includes(sessionId);
+      if (conversationFilter === "archived" && !isArchived) return false;
+      if (conversationFilter === "pinned" && (!isPinned || isArchived)) return false;
+      if (conversationFilter === "active" && isArchived) return false;
+      if (!needle) return true;
       return (
         chat.studentName.toLowerCase().includes(needle) ||
         (chat.studentEmail || "").toLowerCase().includes(needle) ||
         String(chat.id).includes(needle) ||
-        chat.peerCounselorName.toLowerCase().includes(needle)
+        chat.peerCounselorName.toLowerCase().includes(needle) ||
+        chat.counselorName.toLowerCase().includes(needle)
       );
     });
-  }, [chats, deferredSearchQuery]);
+    return rows.sort((a, b) => {
+      const aPinned = pinnedChatIds.includes(Number(a.id));
+      const bPinned = pinnedChatIds.includes(Number(b.id));
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      return toTimestamp(b.lastActivity) - toTimestamp(a.lastActivity);
+    });
+  }, [archivedChatIds, chats, conversationFilter, deferredSearchQuery, pinnedChatIds]);
 
   const showSupervisionColumn = !isPeerCounselor;
 
@@ -563,7 +618,7 @@ const CounselorMessages = () => {
       // Session has truly expired (410 error)
       if (error.message.includes('410')) {
         toast.error('Chat session has expired.');
-        setSelectedSessionId(null);
+        setSelectedChatId(null);
       }
     },
   });
@@ -797,6 +852,10 @@ const CounselorMessages = () => {
               session.peer_counselor?.profile?.full_name ||
               session.peer_counselor?.email ||
               (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
+            const counselorName =
+              session.counselor?.profile?.full_name ||
+              session.counselor?.email ||
+              (session.counselor_id ? `Counselor #${session.counselor_id}` : "Counselor");
             const realName =
               session.student?.profile?.full_name ||
               session.student?.email?.split("@")[0] ||
@@ -831,6 +890,7 @@ const CounselorMessages = () => {
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
               peerCounselorName,
+              counselorName,
               unreadCount: (session.id && activeSessionIdRef.current && Number(session.id) === activeSessionIdRef.current) ? 0 : rowUnread,
             };
           })
@@ -1324,6 +1384,11 @@ const CounselorMessages = () => {
   };
 
   const handleSwitchToDirectChat = async () => {
+    if (selectedChat?.isPeerAssigned && selectedSessionId) {
+      toast.info("You are already in this shared case room. The peer counselor remains assigned.");
+      return;
+    }
+
     if (!selectedChat?.studentId) {
       toast.error("Cannot resolve student details for this chat.");
       return;
@@ -1373,6 +1438,10 @@ const CounselorMessages = () => {
   };
 
   const handleAttachClick = () => {
+    if (isPeerCounselor) {
+      toast.info("Peer counselors can send voice notes in this chat. File attachments stay counselor-only.");
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -1388,10 +1457,6 @@ const CounselorMessages = () => {
   };
 
   const sendVoiceNow = useCallback(async () => {
-    if (isPeerCounselor) {
-      toast.error("Peer counselors can only send text messages.");
-      return;
-    }
     if (!selectedSessionId) return;
     const file = await stopAndGetRecording();
     const durationMs = file ? (file as any).durationMs ?? 0 : 0;
@@ -1402,7 +1467,7 @@ const CounselorMessages = () => {
       return;
     }
     await sendVoiceInternal(file);
-  }, [selectedSessionId, isPeerCounselor, stopAndGetRecording, cancelRecording, clearRecording, sendVoiceInternal]);
+  }, [selectedSessionId, stopAndGetRecording, cancelRecording, clearRecording, sendVoiceInternal]);
 
 
   
@@ -1444,9 +1509,30 @@ const CounselorMessages = () => {
     [selectedChat]
   );
 
+  const togglePinnedChat = useCallback((chatId: number) => {
+    setPinnedChatIds((prev) =>
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
+    );
+  }, []);
+
+  const toggleArchivedChat = useCallback((chatId: number) => {
+    const isArchived = archivedChatIds.includes(chatId);
+    if (!isArchived && selectedChatId === chatId) {
+      setSelectedChatId(null);
+      activeSessionIdRef.current = null;
+    }
+    setArchivedChatIds((prev) => {
+      const archived = prev.includes(chatId);
+      if (archived) return prev.filter((id) => id !== chatId);
+      return [...prev, chatId];
+    });
+  }, [archivedChatIds, selectedChatId]);
+
   const renderConversationRow = useCallback(
     (chat: ChatListItem) => {
       const isActive = selectedChat?.id === chat.id;
+      const isPinned = pinnedChatIds.includes(Number(chat.id));
+      const isArchived = archivedChatIds.includes(Number(chat.id));
       return (
         <div
           key={chat.id}
@@ -1503,20 +1589,44 @@ const CounselorMessages = () => {
 
             <div className="flex items-center justify-between gap-1.5">
               <p className="flex-1 truncate pr-1 text-[12px] text-muted-foreground/85">{chat.preview}</p>
-              {chat.unreadCount > 0 && (
-                <span
-                  className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm"
-                  aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
+              <div className="flex shrink-0 items-center gap-1">
+                {chat.unreadCount > 0 && (
+                  <span
+                    className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm"
+                    aria-label={`${chat.unreadCount} unread message${chat.unreadCount === 1 ? "" : "s"}`}
+                  >
+                    {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    togglePinnedChat(chat.id);
+                  }}
+                  className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isPinned && "text-emerald-700")}
+                  aria-label={isPinned ? "Unpin conversation" : "Pin conversation"}
                 >
-                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                </span>
-              )}
+                  <Pin className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleArchivedChat(chat.id);
+                  }}
+                  className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isArchived && "text-amber-700")}
+                  aria-label={isArchived ? "Restore conversation" : "Archive conversation"}
+                >
+                  {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       );
     },
-    [handleRowMouseEnter, handleRowMouseLeave, selectConversationById, selectedChat?.id]
+    [archivedChatIds, handleRowMouseEnter, handleRowMouseLeave, pinnedChatIds, selectConversationById, selectedChat?.id, toggleArchivedChat, togglePinnedChat]
   );
 
   const renderConversationColumn = useCallback(
@@ -1567,7 +1677,7 @@ const CounselorMessages = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
       <DashboardSidebar
-        items={navItems}
+        items={[...navItems]}
         userType={isPeerCounselor ? "peer" : "counselor"}
         userName={userName}
         isOpen={sidebarOpen}
@@ -1606,6 +1716,27 @@ const CounselorMessages = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+                <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-slate-200/80 bg-white/80 p-1 shadow-sm">
+                  {([
+                    ["active", "Active"],
+                    ["pinned", "Pinned"],
+                    ["archived", "Archived"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setConversationFilter(id)}
+                      className={cn(
+                        "rounded-lg px-2 py-1.5 text-xs font-semibold transition-all",
+                        conversationFilter === id
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "text-muted-foreground hover:bg-slate-50"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 {showSupervisionColumn && (
                   <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 p-1 shadow-sm">
                     <button
@@ -1635,7 +1766,7 @@ const CounselorMessages = () => {
                     >
                       <p className="text-[11px] font-bold">Supervision</p>
                       <p className={cn("text-[10px]", sidebarLane === "supervision" ? "text-white/85" : "text-muted-foreground")}>
-                        Peer support (read-only)
+                        Join peer support
                       </p>
                     </button>
                   </div>
@@ -1784,6 +1915,21 @@ const CounselorMessages = () => {
                           {selectedChat ? (selectedChatIsOnline ? "Online" : "Away") : ""}
                         </p>
                       </div>
+                      {selectedChat && (
+                        <div className="flex max-w-full flex-wrap items-center gap-1.5 pt-1">
+                          <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
+                            Student: {selectedChat.studentName}
+                          </span>
+                          {selectedChat.isPeerAssigned && (
+                            <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200">
+                              Peer Counselor: {selectedChat.peerCounselorName}
+                            </span>
+                          )}
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                            Counselor: {selectedChat.counselorName}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   {selectedSessionId && (
@@ -1980,6 +2126,7 @@ const CounselorMessages = () => {
                       conversationKey={selectedSessionId}
                       messages={messages}
                       currentUserId={currentUserId}
+                      currentUserRole={isPeerCounselor ? "peer_counselor" : "counselor"}
                       studentLabel={threadStudentLabel}
                       studentIsAnonymous={Boolean(selectedChat?.isAnonymous)}
                       isPeerTyping={isPeerTyping}
@@ -2002,52 +2149,68 @@ const CounselorMessages = () => {
                 </div>
 
                 {role === "counselor" && selectedChat?.isPeerAssigned ? (
-                  <div className="border-t border-slate-200/80 bg-slate-50/50 p-4 sm:p-5 dark:border-slate-800/40 dark:bg-slate-900/30">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 max-w-3xl mx-auto rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/80 via-white to-blue-50/30 p-4 shadow-sm dark:border-blue-900/30 dark:from-blue-950/20 dark:via-background dark:to-blue-950/10">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 rounded-xl bg-blue-500/10 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-                          <Shield className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                            Supervisory View
-                          </h4>
-                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                            You are viewing a peer support conversation in read-only mode. You cannot send messages directly in this channel.
-                          </p>
+                  <>
+                    <div className="border-t border-slate-200/80 bg-slate-50/50 p-3 sm:p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
+                      <div className="mx-auto flex max-w-3xl flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm sm:flex-row sm:items-center dark:border-blue-900/30 dark:bg-blue-950/20">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 rounded-lg bg-blue-500/10 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                            <Shield className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                              Joined shared case room
+                            </h4>
+                            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                              You can message in this shared thread without changing the peer counselor assignment or rewriting history.
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        className="w-full sm:w-auto shrink-0 gap-1.5 rounded-xl bg-primary text-primary-foreground shadow hover:bg-primary/90 font-medium text-xs py-2 px-4 h-9"
-                        onClick={handleSwitchToDirectChat}
-                        disabled={isSwitchingChat}
-                      >
-                        {isSwitchingChat ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Switching...
-                          </>
-                        ) : (
-                          <>
-                            <MessageSquare className="h-3.5 w-3.5" />
-                            Switch to Direct Chat
-                          </>
-                        )}
-                      </Button>
                     </div>
-                  </div>
+                    <ChatInput
+                      message={message}
+                      isSending={isSending}
+                      isUploading={isUploading}
+                      uploadProgress={uploadProgress}
+                      isVoiceMode={true}
+                      recording={recording}
+                      recordingTime={recordingTime}
+                      isPaused={isPaused}
+                      selectedFile={selectedFile}
+                      allowAttachments={!isPeerCounselor}
+                      audioLevels={audioLevels}
+                      onMessageChange={(val) => {
+                        setMessage(val);
+                        notifyTyping(val.trim().length > 0);
+                      }}
+                      onTypingChange={(isTyping) => notifyTyping(isTyping)}
+                      onSubmit={handleSendMessage}
+                      onFileSelect={handleFileSelect}
+                      onAttachClick={handleAttachClick}
+                      onVoiceStart={startRecording}
+                      onVoiceStopAndSend={sendVoiceNow}
+                      onVoiceSendNow={sendVoiceNow}
+                      onVoicePause={pauseRecording}
+                      onVoiceResume={resumeRecording}
+                      onVoiceCancel={handleVoiceCancel}
+                      onVoiceError={(err) => toast.error(err.message)}
+                      onRemoveFile={removeSelectedFile}
+                      onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
+                      fileInputRef={fileInputRef}
+                    />
+                  </>
                 ) : (
                   <ChatInput
                     message={message}
                     isSending={isSending}
                     isUploading={isUploading}
                     uploadProgress={uploadProgress}
-                    isVoiceMode={false}
+                    isVoiceMode={true}
                     recording={recording}
                     recordingTime={recordingTime}
                     isPaused={isPaused}
                     selectedFile={selectedFile}
+                    allowAttachments={!isPeerCounselor}
                     audioLevels={audioLevels}
                     onMessageChange={(val) => {
                       setMessage(val);
@@ -2084,15 +2247,14 @@ const CounselorMessages = () => {
                 Delete message?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {messageToDelete.sender_id === Number(user?.id)
-                  ? "Would you like to delete this message for everyone in the chat, or just for yourself?"
-                  : "This message will be deleted for you. Others in the chat will still be able to see it."}
+                {messageToDelete.sender_id === Number(user?.id) || canModerateChat
+                  ? "Delete this message for everyone in the chat, or just hide it from your view?"
+                  : "This message will be hidden from your view. Others in the chat will still be able to see it."}
               </p>
             </div>
 
             <div className="mt-6 flex flex-col gap-2">
-              {messageToDelete.sender_id === Number(user?.id) &&
-                Date.now() - new Date(messageToDelete.created_at).getTime() < 60 * 60 * 1000 && (
+              {(messageToDelete.sender_id === Number(user?.id) || canModerateChat) && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"

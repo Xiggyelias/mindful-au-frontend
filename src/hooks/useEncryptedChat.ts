@@ -9,8 +9,12 @@ export type E2EVisualState = 'plain';
 
 export interface ChatMessage {
   id: number;
+  case_id?: number;
   content: string;
   sender_id: number;
+  sender_role?: 'student' | 'peer_counselor' | 'counselor' | 'admin' | string;
+  sender_name_snapshot?: string;
+  sender_display_name?: string;
   recipient_id?: number | null;
   created_at: string;
   seen_at?: string | null;
@@ -28,10 +32,12 @@ export interface ChatMessage {
   uploadFailed?: boolean;
   /** Local object URL for immediate playback before the server URL is ready. */
   localBlobUrl?: string;
+  /** Client-facing delivery state for optimistic and persisted outgoing rows. */
+  delivery_status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 export type RawMessage = ChatMessage & {
-  sender?: unknown;
+  sender?: { id?: number | string; name?: string; role?: string } | unknown;
 };
 
 interface UseEncryptedChatProps {
@@ -49,6 +55,8 @@ const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 9000;
 const TYPING_POLL_INTERVAL_ACTIVE_MS = 5000;
 const TYPING_POLL_INTERVAL_HIDDEN_MS = 12000;
 const POLL_JITTER_MAX_MS = 600;
+const FULL_RECONCILE_EVERY_POLLS = 5;
+const DELETED_MESSAGE_TEXT = 'This message was deleted.';
 
 const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
 
@@ -67,6 +75,13 @@ const filterVisibleMessages = <T extends { content?: unknown }>(msgs: T[]): T[] 
     const content = String(msg.content || '');
     return !isE2EHandshakeEnvelope(content);
   });
+
+const formatServerMessage = (msg: any): ChatMessage => ({
+  ...msg,
+  decryptedContent: msg.content,
+  e2eVisual: 'plain' as const,
+  delivery_status: msg.seen_at ? 'read' : 'delivered',
+});
 
 export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -97,6 +112,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const sessionIdRef = useRef(sessionId);
   const messageBackoffMsRef = useRef<number>(0);
   const typingBackoffMsRef = useRef<number>(0);
+  const pollCycleRef = useRef(0);
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
@@ -145,8 +161,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         msg.id === messageId
           ? {
               ...msg,
-              content: "This message was deleted.",
-              decryptedContent: "This message was deleted.",
+              content: DELETED_MESSAGE_TEXT,
+              decryptedContent: DELETED_MESSAGE_TEXT,
               is_encrypted: false,
               message_type: "text",
               // Clear all attachment-related fields so messageIsAttachmentFirst
@@ -162,12 +178,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     });
     try {
       await api.deleteMessage(sessionId, messageId);
-    } catch {
+    } catch (err) {
       if (removed) {
         setMessages((prev) =>
           prev.map((msg) => (msg.id === messageId ? removed! : msg))
         );
       }
+      throw err;
     }
   }, [sessionId]);
 
@@ -271,10 +288,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       loadInFlightRef.current = true;
       try {
         const queryParams = {
-          limit: fullHydration ? 50 : 20,
+          limit: fullHydration ? 50 : MESSAGE_BATCH_LIMIT,
           mark_read: true,
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
-          after_id: fullHydration ? undefined : lastMessageIdRef.current || undefined,
+          // Always reconcile the latest page. Incremental-only polling misses
+          // server-side tombstones because the message id does not change.
+          after_id: undefined,
         };
 
         const rawMessages = await api.getMessages(sessionId, queryParams);
@@ -282,16 +301,15 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
         if (Array.isArray(rawMessages) && rawMessages.length > 0) {
           const visibleMessages = filterVisibleMessages(rawMessages);
-          const formatted = visibleMessages.map((msg: any) => ({
-            ...msg,
-            decryptedContent: msg.content,
-            e2eVisual: 'plain' as const,
-          }));
+          const formatted = visibleMessages.map(formatServerMessage);
 
           setMessages((prev) => {
             const merged = new Map<number, ChatMessage>();
             for (const msg of prev) merged.set(msg.id, msg);
-            for (const msg of formatted) merged.set(msg.id, msg);
+            for (const msg of formatted) {
+              const existing = merged.get(msg.id);
+              merged.set(msg.id, existing ? { ...existing, ...msg } : msg);
+            }
             return Array.from(merged.values()).sort((a, b) => a.id - b.id);
           });
 
@@ -389,7 +407,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       : MESSAGE_POLL_INTERVAL_HIDDEN_MS;
     const delay = Math.max(baseInterval, messageBackoffMsRef.current);
     pollingTimeoutRef.current = window.setTimeout(async () => {
-      await loadMessages(false);
+      pollCycleRef.current += 1;
+      const shouldReconcileDeeply = pollCycleRef.current % FULL_RECONCILE_EVERY_POLLS === 0;
+      await loadMessages(shouldReconcileDeeply);
       scheduleNextPoll();
     }, delay + getJitter()) as unknown as number;
   }, [loadMessages]);
@@ -483,11 +503,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
         if (Array.isArray(cached) && cached.length > 0) {
           const visibleMessages = filterVisibleMessages(cached);
-          const preloaded = visibleMessages.map((msg: any) => ({
-            ...msg,
-            decryptedContent: msg.content,
-            e2eVisual: 'plain' as const,
-          }));
+          const preloaded = visibleMessages.map(formatServerMessage);
           setMessages(preloaded);
           const maxId = preloaded.reduce((max, msg) => Math.max(max, msg.id), 0);
           const minId = preloaded.reduce((min, msg) => Math.min(min, msg.id), Number.MAX_SAFE_INTEGER);
@@ -545,6 +561,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         has_file: !!fileUrl,
         attachment,
         e2eVisual: 'plain',
+        delivery_status: 'sending',
       };
 
       setMessages((prev) => [...prev, optimisticMsg]);
@@ -559,20 +576,27 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         const savedRaw = await api.sendMessage(sessionId, payload);
         // Handle both { message: {...} } and direct message object
         const rawMsg = savedRaw?.message ?? savedRaw;
-        const savedMsg = {
-          ...rawMsg,
-          decryptedContent: rawMsg.content,
-          e2eVisual: 'plain' as const,
-        };
+        const savedMsg = formatServerMessage(rawMsg);
 
-        setMessages((prev) =>
-          prev.map((msg) => (msg.id === optimisticId ? savedMsg : msg))
-        );
+        setMessages((prev) => {
+          const withoutOptimistic = prev.filter((msg) => msg.id !== optimisticId);
+          const existing = withoutOptimistic.find((msg) => msg.id === savedMsg.id);
+          if (existing) {
+            return withoutOptimistic.map((msg) =>
+              msg.id === savedMsg.id ? { ...msg, ...savedMsg } : msg
+            );
+          }
+          return [...withoutOptimistic, savedMsg].sort((a, b) => a.id - b.id);
+        });
         lastMessageIdRef.current = Math.max(lastMessageIdRef.current, savedMsg.id);
         return savedMsg;
       } catch (err) {
         console.error('Send failed:', err);
-        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticId));
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === optimisticId ? { ...msg, delivery_status: 'failed' } : msg
+          )
+        );
         throw err;
       }
     },
@@ -616,14 +640,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
   const registerServerMessage = useCallback((raw: RawMessage) => {
     if (isE2EHandshakeEnvelope(String(raw.content || ''))) return;
-    const formatted = {
-      ...raw,
-      decryptedContent: raw.content,
-      e2eVisual: 'plain' as const,
-    };
+    const formatted = formatServerMessage(raw);
     setMessages((prev) => {
-      if (prev.some((m) => m.id === formatted.id)) return prev;
-      return [...prev, formatted].sort((a, b) => a.id - b.id);
+      const existing = prev.find((m) => m.id === formatted.id);
+      if (!existing) return [...prev, formatted].sort((a, b) => a.id - b.id);
+      return prev.map((m) => (m.id === formatted.id ? { ...m, ...formatted } : m));
     });
     lastMessageIdRef.current = Math.max(lastMessageIdRef.current, formatted.id);
   }, []);
@@ -640,14 +661,24 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
   /** Replace the temporary optimistic message with the real server response. */
   const resolveOptimisticMessage = useCallback((tempId: number, real: ChatMessage) => {
+    const normalized = formatServerMessage(real);
     const resolved: ChatMessage = {
-      ...real,
-      decryptedContent: real.decryptedContent ?? real.content,
+      ...normalized,
+      decryptedContent: normalized.decryptedContent ?? normalized.content,
       e2eVisual: 'plain' as const,
       isUploading: false,
       uploadFailed: false,
     };
-    setMessages((prev) => prev.map((m) => (m.id === tempId ? resolved : m)));
+    setMessages((prev) => {
+      const withoutOptimistic = prev.filter((msg) => msg.id !== tempId);
+      const existing = withoutOptimistic.find((msg) => msg.id === resolved.id);
+      if (existing) {
+        return withoutOptimistic.map((msg) =>
+          msg.id === resolved.id ? { ...msg, ...resolved } : msg
+        );
+      }
+      return [...withoutOptimistic, resolved].sort((a, b) => a.id - b.id);
+    });
     lastMessageIdRef.current = Math.max(lastMessageIdRef.current, real.id);
   }, []);
 

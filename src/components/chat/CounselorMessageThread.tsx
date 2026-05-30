@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Loader2, Trash2, ArrowDown, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Trash2, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,14 @@ import {
 import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
 import type { ChatMessage } from "@/hooks/useEncryptedChat";
 import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
+import {
+  chatAvatarClass,
+  chatInitials,
+  chatRoleBadgeClass,
+  chatRoleLabel,
+  chatSenderDisplayName,
+  normalizeChatRole,
+} from "@/lib/chatIdentity";
 
 const parseBackendDateThread = (value?: string | null): Date | null => {
   if (value == null) return null;
@@ -33,35 +41,19 @@ const formatMessageTime = (dateString?: string) => {
   return formatInDisplayZone(d, "MMM d, h:mm a");
 };
 
-const getInitials = (name: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "??";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-};
-
-const getUserColor = (name: string) => {
-  const colors = [
-    "bg-blue-500",
-    "bg-purple-500",
-    "bg-emerald-500",
-    "bg-orange-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-    "bg-cyan-500",
-    "bg-rose-500",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
+const deliveryLabel = (msg: ChatMessage) => {
+  if (msg.delivery_status === "sending") return "Sending";
+  if (msg.delivery_status === "failed") return "Failed";
+  if (msg.seen_at || msg.delivery_status === "read") return "Read";
+  if (msg.delivery_status === "delivered") return "Delivered";
+  return "Sent";
 };
 
 type RowProps = {
   msg: ChatMessage;
   prevSenderId: string | null;
   currentUserId: number | string;
+  currentUserRole?: string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isDeleting: boolean;
@@ -75,6 +67,7 @@ const CounselorMessageRow = React.memo(
     msg,
     prevSenderId,
     currentUserId,
+    currentUserRole,
     studentLabel,
     studentIsAnonymous,
     isDeleting,
@@ -85,7 +78,12 @@ const CounselorMessageRow = React.memo(
     const isMine = Boolean(currentUserId) && String(msg.sender_id) === String(currentUserId);
     const sameSenderAsPrev = prevSenderId !== null && prevSenderId === String(msg.sender_id);
     const showAvatar = !sameSenderAsPrev;
-    const incomingInitials = studentIsAnonymous ? "AU" : getInitials(studentLabel);
+    const senderRole = normalizeChatRole(
+      msg.sender_role || (isMine ? currentUserRole : "student")
+    );
+    const fallbackName = studentIsAnonymous && senderRole === "student" ? "Anonymous Student" : studentLabel;
+    const senderName = isMine ? "You" : chatSenderDisplayName(msg, fallbackName);
+    const roleLabel = chatRoleLabel(senderRole);
 
     return (
       <div
@@ -95,10 +93,13 @@ const CounselorMessageRow = React.memo(
           <div className="flex w-9 shrink-0 justify-center">
             {showAvatar ? (
               <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(studentLabel)}`}
-                title={studentLabel}
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background",
+                  chatAvatarClass(senderRole)
+                )}
+                title={`${senderName} (${roleLabel})`}
               >
-                {incomingInitials}
+                {chatInitials(senderName)}
               </div>
             ) : (
               <div className="h-9 w-9" aria-hidden />
@@ -107,6 +108,14 @@ const CounselorMessageRow = React.memo(
         )}
 
         <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
+          {showAvatar && (
+            <div className={cn("mb-0.5 flex max-w-full items-center gap-1.5 px-1", isMine ? "justify-end" : "justify-start")}>
+              <span className="truncate text-[11px] font-semibold text-foreground/80">{senderName}</span>
+              <span className={cn("shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide", chatRoleBadgeClass(senderRole))}>
+                {roleLabel}
+              </span>
+            </div>
+          )}
           <div className={cn("flex items-end gap-1", isMine ? "flex-row-reverse" : "flex-row")}>
             {/* Attachment-first messages (voice notes, files, images) supply their own
                 visual bubble via ChatAttachmentView — skip the outer wrapper so we
@@ -135,7 +144,7 @@ const CounselorMessageRow = React.memo(
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
+                  "h-8 w-8 shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100",
                   isMine
                     ? "text-primary-foreground/90 hover:bg-primary-foreground/15 hover:text-primary-foreground"
                     : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -152,10 +161,26 @@ const CounselorMessageRow = React.memo(
             <span className="text-[10px] font-medium text-muted-foreground">{formatMessageTime(msg.created_at)}</span>
             {isMine && (
               <span
-                className={cn("text-[11px]", msg.seen_at ? "text-emerald-500" : "text-muted-foreground/50")}
-                aria-label={msg.seen_at ? "Seen" : "Sent"}
-                title={msg.seen_at ? "Seen" : "Sent"}
+                className={cn(
+                  "inline-flex items-center text-[0px]",
+                  msg.delivery_status === "failed"
+                    ? "text-destructive"
+                    : msg.seen_at || msg.delivery_status === "read"
+                    ? "text-emerald-500"
+                    : "text-muted-foreground/50"
+                )}
+                aria-label={deliveryLabel(msg)}
+                title={deliveryLabel(msg)}
               >
+                {msg.delivery_status === "sending" ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                ) : msg.delivery_status === "failed" ? (
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                ) : msg.seen_at || msg.delivery_status === "read" || msg.delivery_status === "delivered" ? (
+                  <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
                 {msg.seen_at ? "✓✓" : "✓"}
               </span>
             )}
@@ -170,16 +195,21 @@ const CounselorMessageRow = React.memo(
     prev.msg.decryptedContent === next.msg.decryptedContent &&
     prev.msg.e2eVisual === next.msg.e2eVisual &&
     prev.msg.content === next.msg.content &&
+    prev.msg.sender_role === next.msg.sender_role &&
+    prev.msg.sender_name_snapshot === next.msg.sender_name_snapshot &&
+    prev.msg.sender_display_name === next.msg.sender_display_name &&
     prev.msg.is_encrypted === next.msg.is_encrypted &&
     prev.msg.message_type === next.msg.message_type &&
     prev.msg.file_url === next.msg.file_url &&
     prev.msg.has_file === next.msg.has_file &&
     prev.msg.attachment?.id === next.msg.attachment?.id &&
     prev.msg.attachment?.url === next.msg.attachment?.url &&
+    prev.msg.delivery_status === next.msg.delivery_status &&
     prev.prevSenderId === next.prevSenderId &&
     prev.isDeleting === next.isDeleting &&
     prev.canModerateChat === next.canModerateChat &&
     prev.currentUserId === next.currentUserId &&
+    prev.currentUserRole === next.currentUserRole &&
     prev.studentLabel === next.studentLabel &&
     prev.studentIsAnonymous === next.studentIsAnonymous &&
     prev.renderMessageContent === next.renderMessageContent
@@ -190,6 +220,7 @@ export type CounselorMessageThreadProps = {
   conversationKey: string;
   messages: ChatMessage[];
   currentUserId: number | string;
+  currentUserRole?: string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isPeerTyping: boolean;
@@ -215,6 +246,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
   conversationKey,
   messages,
   currentUserId,
+  currentUserRole,
   studentLabel,
   studentIsAnonymous,
   isPeerTyping,
@@ -324,9 +356,12 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
               {isPeerTyping && (
                 <div className="flex items-end gap-2.5 motion-reduce:animate-none">
                   <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background ${getUserColor(studentLabel)}`}
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ring-2 ring-background",
+                      chatAvatarClass("student")
+                    )}
                   >
-                    {studentIsAnonymous ? "AU" : getInitials(studentLabel)}
+                    {chatInitials(studentIsAnonymous ? "Anonymous Student" : studentLabel)}
                   </div>
                   <div className="max-w-[min(92%,36rem)] rounded-2xl rounded-bl-md border border-border/50 bg-secondary/35 px-4 py-3 shadow-sm flex items-center justify-center flex-col items-start gap-1">
                     <p className="text-[11px] font-medium text-muted-foreground">Student is typing…</p>
@@ -362,6 +397,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
                 msg={msg}
                 prevSenderId={prevSenderId}
                 currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
                 studentLabel={studentLabel}
                 studentIsAnonymous={studentIsAnonymous}
                 isDeleting={isDeleting}

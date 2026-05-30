@@ -31,6 +31,7 @@ interface ChatInputProps {
   recordingTime: number;
   isPaused: boolean;
   selectedFile: File | null;
+  allowAttachments?: boolean;
   /** Live normalised bar heights (0–1) from Web Audio API. */
   audioLevels?: number[];
   onMessageChange: (val: string) => void;
@@ -80,6 +81,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     recordingTime,
     isPaused,
     selectedFile,
+    allowAttachments = true,
     audioLevels,
     onMessageChange,
     onTypingChange,
@@ -185,7 +187,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const hasTextOrFile = message.trim().length > 0 || !!selectedFile;
 
     return (
-      <div className="border-t border-border/40 bg-background px-2 py-2 sm:px-3 sm:py-2.5">
+      <div className="sticky bottom-0 z-30 border-t border-border/40 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:px-3 sm:py-2.5">
         <form onSubmit={onSubmit} className="flex flex-col gap-1.5">
 
 
@@ -230,7 +232,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             ) : isRecordingHold || isCancelling ? (
               /* Hold recording: nothing on the left — full width for pill */
               null
-            ) : (
+            ) : allowAttachments ? (
               /* Idle: attach button */
               <div className="flex shrink-0 items-center">
                 <Button
@@ -245,6 +247,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                   accept={CHAT_ATTACHMENT_ACCEPT} onChange={onFileSelect}
                 />
               </div>
+            ) : (
+              <div className="hidden" aria-hidden />
             )}
 
             {/* ── Input pill ─────────────────────────────────────────────── */}

@@ -70,7 +70,8 @@ function counselorChatListDashboardKey(row: Record<string, unknown>): string {
 export type CounselorChatDedupeMode = "messages" | "dashboard";
 
 /**
- * Stable key: same real student + anonymity + assignment lane → one row (messages sidebar).
+ * Stable key: same real student + anonymity -> one shared case room row.
+ * Peer counselor and counselor participation must not create separate lanes.
  */
 export function counselorChatListDedupeKey(
   row: Record<string, unknown>,
@@ -81,30 +82,26 @@ export function counselorChatListDedupeKey(
   }
 
   const isAnon = isAnonymousSessionFlag(row.is_anonymous);
-  const assigned = String(row.assigned_role || "").toLowerCase();
-  const targetPeer = Number(row.peer_counselor_id ?? 0);
-  const peerSuffix =
-    assigned === "peer_counselor" && Number.isFinite(targetPeer) && targetPeer > 0 ? `:pc:${targetPeer}` : "";
 
   if (isAnon) {
     const rid = realStudentId(row);
     if (rid > 0) {
-      return `anon${peerSuffix}:stu:${rid}`;
+      return `anon:stu:${rid}`;
     }
     const handle = String(row.anonymous_id ?? "").trim();
     if (handle) {
-      return `anon${peerSuffix}:h:${handle}`;
+      return `anon:h:${handle}`;
     }
-    return `anon${peerSuffix}:sid:${row.id}`;
+    return `anon:sid:${row.id}`;
   }
 
   const sid = realStudentId(row);
   if (sid > 0) {
-    return `id${peerSuffix}:stu:${sid}`;
+    return `id:stu:${sid}`;
   }
   const nk = normalizedNameKey(row);
-  if (nk) return `id${peerSuffix}:nm:${nk}`;
-  return `id${peerSuffix}:sid:${row.id}`;
+  if (nk) return `id:nm:${nk}`;
+  return `id:sid:${row.id}`;
 }
 
 export function dedupeCounselorChatListRows(
