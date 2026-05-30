@@ -117,17 +117,18 @@ const StudentChat = () => {
   } = useVoiceRecorder();
 
   // Get chat sessions and manage active one
-  const { 
-    activeSession, 
-    sessionId, 
-    sessions, 
+  const {
+    activeSession,
+    sessionId,
+    sessions,
     sessionPage,
     sessionTotalPages,
     isLoading: isSessionsLoading,
     selectSession,
     goToPrevPage: goToPrevSessionPage,
     goToNextPage: goToNextSessionPage,
-    startSessionWithCounselor
+    startSessionWithCounselor,
+    refreshSessions,
   } = useChatSession(user?.id);
 
   useChatPreloader({
@@ -219,10 +220,10 @@ const StudentChat = () => {
     enabled: Boolean(sessionId && !messagesLoading),
     onError: (error) => {
       // Session has truly expired (410 error)
-      if (error.message.includes('410')) {
-        toast.error('Chat session has expired. Please start a new session.');
+      if (error.message.includes("410")) {
+        toast.error("Chat session has expired. Please start a new session.");
         selectSession(null);
-        setSessions(prev => prev.filter(s => s.id !== Number(sessionId)));
+        void refreshSessions(true, { force: true });
       }
     },
   });
@@ -755,7 +756,9 @@ const StudentChat = () => {
                         error={chatError}
                         onAtBottomChange={handleAtBottomChange}
                         onLoadOlder={async () => { await loadOlderMessages(); }}
-                        onDeleteMessage={handleDeleteMessageWrapper}
+                        onDeleteMessage={async (id) => {
+                          handleDeleteMessageWrapper(id);
+                        }}
                         onStarterPrompt={setMessage}
                         scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                         messageScrollAreaRef={messageScrollAreaRef as any}

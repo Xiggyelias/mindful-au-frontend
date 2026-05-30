@@ -165,7 +165,7 @@ const isSecureChatPath = (path: string) =>
                     } else if (item.path === "/peer/dashboard") {
                       prefetchRoute(() => import("@/pages/peer/PeerDashboard"));
                     } else if (item.path === "/peer/chats") {
-                      prefetchRoute(() => import("@/pages/peer/PeerChats"));
+                      prefetchRoute(() => import("@/pages/counselor/CounselorMessages"));
                     }
                   }}
                   className={cn(
