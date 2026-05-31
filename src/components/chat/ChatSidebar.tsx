@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Session, isSessionExpired } from "@/hooks/useChatSession";
+import { Session, isSessionExpired, markSessionAsExpired } from "@/hooks/useChatSession";
 import { 
   Search, 
   MessageSquare, 
@@ -124,7 +124,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           timeout_ms: 5000,
         }).catch((err: any) => {
           const status = err?.response?.status ?? err?.status;
-          if (status === 410) return null; // expired session — skip silently
+          if (status === 410) {
+            markSessionAsExpired(sessionId);
+            return null;
+          }
           return null;
         });
         if (rawMessages?.length) {
@@ -154,19 +157,37 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return colors[Math.abs(hash) % colors.length];
   };
 
-  // Deduplicate "Recent Support" so each counselor (regardless of whether
-  // they engaged as a professional counselor or peer counselor, or whether
-  // some sessions were anonymous) appears exactly once. The displayed row
-  // reflects that counselor's MOST RECENT session, and the "(Session N)"
-  // label reflects the total number of sessions the user has had with them.
+  const isPeerSupportSession = (session: Session) =>
+    session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+
+  const supportPersonName = (session: Session) =>
+    isPeerSupportSession(session)
+      ? session.peer_counselor?.profile?.full_name ||
+        session.peer_counselor?.email ||
+        "Peer Counselor"
+      : session.counselor?.profile?.full_name ||
+        session.counselor?.email ||
+        "Counselor";
+
+  const supportPersonId = (session: Session) =>
+    isPeerSupportSession(session)
+      ? Number(session.peer_counselor_id || 0)
+      : Number(session.counselor_id || 0);
+
+  const supervisingCounselorName = (session: Session) =>
+    session.counselor?.profile?.full_name || session.counselor?.email || "Counselor";
+
+  // Deduplicate "Recent Support" by the active support person. Peer-assigned
+  // case rooms lead with the peer counselor, while the supervising counselor
+  // stays visible in the subtitle and participant chips.
   const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
 
   const recentSupportRows = useMemo(() => {
     if (!visibleSessions || visibleSessions.length === 0) return [];
 
     type GroupRow = {
+      supportId: number;
       counselorId: number;
-      counselorName: string;
       sessions: Session[];
       latest: Session;
       unreadCount: number;
@@ -175,18 +196,19 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     const groups = new Map<string, GroupRow>();
 
     for (const session of visibleSessions) {
-      const counselorId = Number(session.counselor_id || session.peer_counselor_id || 0);
-      const counselorName =
-        session.counselor?.profile?.full_name ||
-        session.peer_counselor?.profile?.full_name ||
-        "Counselor";
-      const groupKey = counselorId !== 0 ? `id:${counselorId}` : `name:${counselorName}`;
+      const activeSupportId = supportPersonId(session);
+      const activeSupportName = supportPersonName(session);
+      const counselorId = Number(session.counselor_id || 0);
+      const supportRole = isPeerSupportSession(session) ? "peer" : "counselor";
+      const groupKey = activeSupportId !== 0
+        ? `${supportRole}:id:${activeSupportId}`
+        : `${supportRole}:name:${activeSupportName}`;
 
       const existing = groups.get(groupKey);
       if (!existing) {
         groups.set(groupKey, {
+          supportId: activeSupportId,
           counselorId,
-          counselorName,
           sessions: [session],
           latest: session,
           unreadCount: Math.max(0, Number(session.unread_count || 0)),
@@ -204,6 +226,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     }
 
     const rows = Array.from(groups.values()).map((group) => ({
+      supportId: group.supportId,
       counselorId: group.counselorId,
       session: group.latest,
       totalSessions: group.sessions.length,
@@ -227,9 +250,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       const isArchived = archivedSessionIds.includes(sessionNumericId);
       const isPinned = pinnedSessionIds.includes(sessionNumericId);
       const name = (
-        session.counselor?.profile?.full_name ||
-        session.peer_counselor?.profile?.full_name ||
-        "Counselor"
+        supportPersonName(session)
       ).toLowerCase();
       const bySearch = normalizedQuery === "" || name.includes(normalizedQuery);
       if (!bySearch) return false;
@@ -267,7 +288,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
           <Input 
-            placeholder="Search by counselor or session..." 
+            placeholder="Search by support person or session..." 
             className="h-11 rounded-2xl border-slate-200/80 bg-white/90 pl-10 shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -340,17 +361,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="space-y-1">
-              {filteredRecentSupportRows.map(({ session, totalSessions, counselorId, unreadCount }) => {
-                const name =
-                  session.counselor?.profile?.full_name ||
-                  session.peer_counselor?.profile?.full_name ||
-                  "Counselor";
+              {filteredRecentSupportRows.map(({ session, totalSessions, counselorId, supportId, unreadCount }) => {
+                const name = supportPersonName(session);
                 const isActive = activeSession?.id === session.id;
-                const isPeer = session.assigned_role === "peer_counselor";
+                const isPeer = isPeerSupportSession(session);
                 const isAnon = isAnonymousSessionFlag(session.is_anonymous);
                 const sessionNumericId = Number(session.id);
                 const isPinned = pinnedSessionIds.includes(sessionNumericId);
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
+                const subtitle = isPeer
+                  ? `Peer Counselor${supervisingCounselorName(session) ? ` • Counselor: ${supervisingCounselorName(session)}` : ""}`
+                  : "Counselor";
 
                 const handleRowClick = () => {
                   // Anonymous rows must always open a brand-new chat session so
@@ -390,7 +411,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
                 return (
                   <button
-                    key={`recent-${counselorId || session.id}`}
+                    key={`recent-${isPeer ? "peer" : "counselor"}-${supportId || session.id}`}
                     onClick={handleRowClick}
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
@@ -417,7 +438,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       </div>
                       <p className="text-[10px] uppercase font-black tracking-widest opacity-70 flex items-center gap-1">
                         {isPeer && <Users className="h-2.5 w-2.5" />}
-                        {isPeer ? "Peer Support" : "Professional"}
+                        {subtitle}
                         {isAnon ? " \u2022 Anon" : ""}
                         {isPinned ? " \u2022 Pinned" : ""}
                         {isArchived ? " \u2022 Archived" : ""}

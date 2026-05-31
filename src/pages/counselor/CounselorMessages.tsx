@@ -67,6 +67,7 @@ import {
 import { ChatInput } from "@/components/chat/ChatInput";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { counselorChatDedupeKeyFromSession } from "@/lib/counselorChatListDedupe";
+import { markSessionAsExpired } from "@/hooks/useChatSession";
 import { isStorageQuotaError, trimLocalStorageByPrefix } from "@/lib/browserStorage";
 import {
   anonymousLabelForCounselor,
@@ -663,7 +664,10 @@ const CounselorMessages = () => {
           timeout_ms: 5000,
         }).catch((err: any) => {
           const status = err?.response?.status ?? err?.status;
-          if (status === 410) return null; // expired session — skip silently
+          if (status === 410) {
+            markSessionAsExpired(sidStr);
+            return null;
+          }
           return null;
         });
         if (rawMessages?.length) {

@@ -6,7 +6,13 @@ import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 export const expiredSessionIds = new Set<string>();
 
 export const markSessionAsExpired = (sessionId: string) => {
-  expiredSessionIds.add(sessionId);
+  const id = String(sessionId || "").trim();
+  if (!id) return;
+  const wasAlreadyExpired = expiredSessionIds.has(id);
+  expiredSessionIds.add(id);
+  if (!wasAlreadyExpired && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("CHAT_SESSION_EXPIRED", { detail: { sessionId: id } }));
+  }
 };
 
 export const isSessionExpired = (sessionId: string): boolean =>

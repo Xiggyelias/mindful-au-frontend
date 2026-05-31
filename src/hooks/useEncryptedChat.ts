@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
 import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
+import { markSessionAsExpired } from '@/hooks/useChatSession';
 import { playMessageNotificationSound } from '@/lib/sounds/notificationSoundManager';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 
@@ -112,6 +113,10 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const sessionIdRef = useRef(sessionId);
   const messageBackoffMsRef = useRef<number>(0);
   const typingBackoffMsRef = useRef<number>(0);
+  const typingWriteBackoffUntilRef = useRef<number>(0);
+  const typingWriteInFlightRef = useRef(false);
+  const lastTypingSentAtRef = useRef(0);
+  const lastTypingValueSentRef = useRef<boolean | null>(null);
   const pollCycleRef = useRef(0);
 
   const numericUserId = Number(userId);
@@ -328,6 +333,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         if (signal?.aborted) return;
         const status = err?.response?.status ?? err?.status;
         if (status === 410) {
+          markSessionAsExpired(sessionId);
           sessionExpiredRef.current = true;
           setSessionExpired(true);
           stopRealtimeAndTimers();
@@ -390,6 +396,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       setHasOlderMessages(false);
       return false;
     } catch (err) {
+      const status = (err as any)?.response?.status ?? (err as any)?.status;
+      if (status === 410) {
+        markSessionAsExpired(sessionId);
+        sessionExpiredRef.current = true;
+        setSessionExpired(true);
+        stopRealtimeAndTimers();
+      }
       return false;
     } finally {
       loadOlderInFlightRef.current = false;
@@ -425,6 +438,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     } catch (e: any) {
       const status = e?.response?.status ?? e?.status;
       if (status === 410) {
+        markSessionAsExpired(sessionId);
         sessionExpiredRef.current = true;
         setSessionExpired(true);
         stopRealtimeAndTimers();
@@ -477,7 +491,10 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const bootstrap = async () => {
       try {
         const sessionDetails = await api.getSession(sessionId, { minimal: true }).catch((e: any) => {
-          if (e?.response?.status === 410) return null;
+          if (e?.response?.status === 410) {
+            markSessionAsExpired(sessionId);
+            return null;
+          }
           throw e;
         });
 
@@ -486,6 +503,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         }
 
         if (!sessionDetails) {
+          markSessionAsExpired(sessionId);
           setIsLoading(false);
           setSessionExpired(true);
           sessionExpiredRef.current = true;
@@ -523,6 +541,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       } catch (err: any) {
         if (isDisposed || controller.signal.aborted) return;
         if (err?.response?.status === 410) {
+          markSessionAsExpired(sessionId);
           sessionExpiredRef.current = true;
           setSessionExpired(true);
           stopRealtimeAndTimers();
@@ -633,9 +652,37 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     (isTyping: boolean) => {
       if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
       isTypingRef.current = isTyping;
-      api.setTypingState(sessionId, isTyping).catch(() => {});
+      const now = Date.now();
+      if (now < typingWriteBackoffUntilRef.current) return;
+      if (typingWriteInFlightRef.current) return;
+
+      const lastValue = lastTypingValueSentRef.current;
+      const lastSentAt = lastTypingSentAtRef.current;
+      const minGap = isTyping ? 4000 : 1000;
+      if (lastValue === isTyping && now - lastSentAt < minGap) return;
+
+      typingWriteInFlightRef.current = true;
+      lastTypingValueSentRef.current = isTyping;
+      lastTypingSentAtRef.current = now;
+      api.setTypingState(sessionId, isTyping)
+        .catch((err: any) => {
+          const status = err?.response?.status ?? err?.status;
+          if (status === 410) {
+            markSessionAsExpired(sessionId);
+            sessionExpiredRef.current = true;
+            setSessionExpired(true);
+            stopRealtimeAndTimers();
+            return;
+          }
+          if (status === 429) {
+            typingWriteBackoffUntilRef.current = Date.now() + 15000;
+          }
+        })
+        .finally(() => {
+          typingWriteInFlightRef.current = false;
+        });
     },
-    [sessionId, hasValidUserId]
+    [sessionId, hasValidUserId, stopRealtimeAndTimers]
   );
 
   const registerServerMessage = useCallback((raw: RawMessage) => {

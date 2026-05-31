@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { isSessionExpired } from '@/hooks/useChatSession';
+import { isSessionExpired, markSessionAsExpired } from '@/hooks/useChatSession';
 import { resolveMessageAttachment } from "@/lib/chatAttachments";
 import { savePreloadedSessionMessages } from "@/lib/chatPreloadCache";
 import { saveTypingSnapshot } from "@/lib/chatTypingCache";
@@ -188,7 +188,10 @@ async function prefetchOne(sessionId: string, ownerUserId: string | null): Promi
       recordPrefetchResult(true);
     } catch (err: any) {
       const status = (err as any)?.response?.status ?? (err as any)?.status;
-      if (status === 410) return; // expired session — stop silently
+      if (status === 410) {
+        markSessionAsExpired(sessionId);
+        return;
+      }
       recordPrefetchResult(false);
       // silent prefetch only
     } finally {

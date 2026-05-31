@@ -198,11 +198,17 @@ export function useIncomingCalls<T extends IncomingCallBase>({
   const fetchIncoming = useCallback(
     async (options?: { urgent?: boolean }) => {
       if (!enabled) return;
-      if (!options?.urgent) {
+      if (options?.urgent) {
+        evaluateCallsLeadership();
+        const leader = readCallsLeader();
+        const leaderIsStale = !leader || Date.now() - leader.ts > CALLS_LEADER_STALE_MS;
+        if (!isLeaderTabRef.current && !leaderIsStale) return;
+        if (Date.now() < backoffUntilRef.current) return;
+      } else {
         if (!isLeaderTabRef.current) return;
         if (Date.now() < backoffUntilRef.current) return;
       }
-      if (fetchInFlightRef.current && !options?.urgent) {
+      if (fetchInFlightRef.current) {
         return;
       }
 
@@ -241,7 +247,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
         fetchInFlightRef.current = false;
       }
     },
-    [announceNewCall, applyRateLimitBackoff, clearAutoDismiss, enabled, fetchCalls]
+    [announceNewCall, applyRateLimitBackoff, clearAutoDismiss, enabled, evaluateCallsLeadership, fetchCalls]
   );
 
   const schedulePoll = useCallback(() => {
