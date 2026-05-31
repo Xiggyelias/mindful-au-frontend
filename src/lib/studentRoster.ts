@@ -15,6 +15,7 @@ export type StudentRosterRow = {
   riskLevel: "low" | "medium" | "high";
   isOnline: boolean;
   activeChatSessionId: number | null;
+  activeCounselorId: number | null;
   peerChatSessionId: number | null;
   assignedPeerCounselorId: number | null;
   needsAssessment: boolean;
@@ -122,6 +123,7 @@ export const buildStudentRosterRows = ({
     const studentId = Number(student.id);
     const directChat = directChatByStudent.get(studentId) || null;
     const peerChat = peerChatByStudent.get(studentId) || null;
+    const activeCounselorId = Number((directChat || peerChat)?.counselor_id || 0);
     const identityChat = directChat || peerChat;
     const latestRisk = latestRiskByStudent.get(studentId)?.riskLevel || "low";
     const lastTouchedMillis = lastTouchedByStudent.get(studentId) || 0;
@@ -145,6 +147,7 @@ export const buildStudentRosterRows = ({
       riskLevel: latestRisk,
       isOnline: Boolean(student.is_online),
       activeChatSessionId: directChat?.id ?? null,
+      activeCounselorId: activeCounselorId > 0 ? activeCounselorId : null,
       peerChatSessionId: peerChat?.id ?? null,
       assignedPeerCounselorId:
         Number(peerChat?.peer_counselor_id) > 0

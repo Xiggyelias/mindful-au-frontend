@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
-  Filter,
   FilterX,
   RefreshCcw,
   Loader2,
@@ -51,14 +50,6 @@ type PeerFilter = "all" | "assigned" | "unassigned";
 const readArrayResult = (result: PromiseSettledResult<unknown>) =>
   result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
 
-const readChatListResult = (result: PromiseSettledResult<unknown>) => {
-  if (result.status !== "fulfilled") return [];
-  const value = result.value as { data?: unknown[] } | unknown[];
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  return [];
-};
-
 const AdminStudents = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
@@ -67,6 +58,7 @@ const AdminStudents = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentRosterRow[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [counselors, setCounselors] = useState<any[]>([]);
   const [peerCounselors, setPeerCounselors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,6 +68,8 @@ const AdminStudents = () => {
   const [reloadToken, setReloadToken] = useState(0);
 
   const [selectedPeerByStudent, setSelectedPeerByStudent] = useState<Record<number, string>>({});
+  const [selectedCounselorByStudent, setSelectedCounselorByStudent] = useState<Record<number, string>>({});
+  const [assigningCounselorStudentId, setAssigningCounselorStudentId] = useState<number | null>(null);
   const [assigningStudentId, setAssigningStudentId] = useState<number | null>(null);
   const [assigningAssessmentStudentId, setAssigningAssessmentStudentId] = useState<number | null>(null);
   const [peerAssignmentAction, setPeerAssignmentAction] = useState<"assign" | "unassign" | null>(null);
@@ -89,9 +83,10 @@ const AdminStudents = () => {
   const loadStudents = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [studentsResult, sessionsResult, peerCounselorsResult] = await Promise.allSettled([
+      const [studentsResult, sessionsResult, counselorsResult, peerCounselorsResult] = await Promise.allSettled([
         api.getStudents({ limit: 500 }),
         api.getSessions({ lightweight: true, limit: 400, open_only: true }),
+        api.getCounselors({ limit: 300 }),
         api.getPeerCounselors(),
       ]);
 
@@ -101,6 +96,7 @@ const AdminStudents = () => {
 
       const studentData = readArrayResult(studentsResult);
       const sessionsData = readArrayResult(sessionsResult);
+      const counselorsData = readArrayResult(counselorsResult);
       const peerCounselorsData = readArrayResult(peerCounselorsResult);
 
       const stageOneRows = buildStudentRosterRows({
@@ -114,6 +110,7 @@ const AdminStudents = () => {
 
       setStudents(stageOneRows);
       setSessions(sessionsData);
+      setCounselors(counselorsData);
       setPeerCounselors(peerCounselorsData);
 
       const [appointmentsResult, diagnosticsResult] = await Promise.allSettled([
@@ -153,6 +150,22 @@ const AdminStudents = () => {
     });
     return map;
   }, [peerCounselors]);
+
+  const professionalCounselors = useMemo(() => {
+    return counselors.filter((counselor: any) => {
+      const roles = Array.isArray(counselor?.roles) ? counselor.roles : [];
+      return roles.some((role: any) => role?.role === "counselor" && Boolean(role?.approved));
+    });
+  }, [counselors]);
+
+  const counselorNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    professionalCounselors.forEach((counselor: any) => {
+      const label = counselor?.profile?.full_name || counselor?.email || `Counselor #${counselor.id}`;
+      map.set(Number(counselor.id), label);
+    });
+    return map;
+  }, [professionalCounselors]);
 
   const stats = useMemo(() => {
     const total = students.length;
@@ -234,6 +247,27 @@ const AdminStudents = () => {
     window.setTimeout(() => setHighlightedStudentId(null), 6000);
   }, [isLoading, openStudentDetails, searchParams, setSearchParams, students, user]);
 
+  const resolveDirectChatSession = (student: StudentRosterRow) => {
+    if (student.activeChatSessionId) {
+      const directById = sessions.find((s: any) => Number(s.id) === Number(student.activeChatSessionId));
+      if (directById && directById.status !== "completed" && directById.status !== "cancelled") {
+        return directById;
+      }
+    }
+
+    return (
+      sessions.find(
+        (session: any) =>
+          Number(session.student_id) === Number(student.id) &&
+          session.session_type === "chat" &&
+          session.assigned_role !== "peer_counselor" &&
+          Number(session.peer_counselor_id || 0) <= 0 &&
+          session.status !== "completed" &&
+          session.status !== "cancelled"
+      ) || null
+    );
+  };
+
   const resolveSessionForPeerAction = (student: StudentRosterRow) => {
     if (student.peerChatSessionId) {
       const peerById = sessions.find((s: any) => Number(s.id) === Number(student.peerChatSessionId));
@@ -270,6 +304,87 @@ const AdminStudents = () => {
     return null;
   };
 
+  const handleAssignCounselor = async (student: StudentRosterRow) => {
+    const selectedCounselorId = Number(selectedCounselorByStudent[student.id] || 0);
+    const currentCounselorId = Number(student.activeCounselorId || 0);
+
+    if (!selectedCounselorId) {
+      toast.error("Select a supervising counselor first.");
+      return;
+    }
+
+    if (Number(student.assignedPeerCounselorId) > 0) {
+      toast.error("Remove the peer assignment before changing the supervising counselor.");
+      return;
+    }
+
+    if (currentCounselorId > 0 && selectedCounselorId === currentCounselorId) {
+      toast.info("This student is already assigned to that counselor.");
+      return;
+    }
+
+    try {
+      setAssigningCounselorStudentId(student.id);
+      const existingSession = resolveDirectChatSession(student);
+      const updatedSession = existingSession
+        ? await api.updateSession(String(existingSession.id), { counselor_id: selectedCounselorId })
+        : await api.createSessionAsCounselor({
+            student_id: student.id,
+            counselor_id: selectedCounselorId,
+            session_type: "chat",
+          });
+
+      const nextSessionId = Number(updatedSession?.id || existingSession?.id || 0) || null;
+      const label = counselorNameById.get(selectedCounselorId) || `Counselor #${selectedCounselorId}`;
+      toast.success(`${nextSessionId ? "Case assigned" : "Case updated"} to ${label}.`);
+
+      setSelectedCounselorByStudent((prev) => ({
+        ...prev,
+        [student.id]: String(selectedCounselorId),
+      }));
+
+      setStudents((prev) =>
+        prev.map((row) =>
+          Number(row.id) === Number(student.id)
+            ? {
+                ...row,
+                activeChatSessionId: nextSessionId,
+                activeCounselorId: selectedCounselorId,
+                peerChatSessionId: null,
+                assignedPeerCounselorId: null,
+              }
+            : row
+        )
+      );
+
+      setSessions((prev) => {
+        if (!nextSessionId) return prev;
+        const normalized = {
+          ...(updatedSession || {}),
+          id: nextSessionId,
+          student_id: Number(updatedSession?.student_id || student.id),
+          counselor_id: selectedCounselorId,
+          session_type: "chat",
+          assigned_role: "counselor",
+          peer_counselor_id: null,
+        };
+        const existingIndex = prev.findIndex((session: any) => Number(session.id) === nextSessionId);
+        if (existingIndex === -1) {
+          return [normalized, ...prev];
+        }
+        const next = [...prev];
+        next[existingIndex] = { ...next[existingIndex], ...normalized };
+        return next;
+      });
+
+      setReloadToken((t) => t + 1);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to assign supervising counselor.");
+    } finally {
+      setAssigningCounselorStudentId(null);
+    }
+  };
+
   const handleAssignPeerCounselor = async (student: StudentRosterRow) => {
     const selectedPeerId = Number(selectedPeerByStudent[student.id] || 0);
     if (!selectedPeerId) {
@@ -285,31 +400,80 @@ const AdminStudents = () => {
       return;
     }
 
-    const session = resolveSessionForPeerAction(student);
-    const sessionId = Number(session?.id || 0);
-    if (!sessionId) {
-      toast.error("No active chat case found. A counselor must open a chat with this student first.");
-      return;
-    }
-
     try {
       setAssigningStudentId(student.id);
       setPeerAssignmentAction("assign");
+      let session = resolveSessionForPeerAction(student);
+      let sessionId = Number(session?.id || 0);
+      let createdDirectSession: any = null;
+
+      if (!sessionId) {
+        const selectedCounselorId = Number(selectedCounselorByStudent[student.id] || 0);
+        if (!selectedCounselorId) {
+          toast.error("Select a supervising counselor before assigning peer support.");
+          return;
+        }
+        createdDirectSession = await api.createSessionAsCounselor({
+          student_id: student.id,
+          counselor_id: selectedCounselorId,
+          session_type: "chat",
+        });
+        session = createdDirectSession;
+        sessionId = Number(createdDirectSession?.id || 0);
+      }
+
+      if (!sessionId) {
+        toast.error("Could not open a supervised chat case for this student.");
+        return;
+      }
+
       const assignedSession = await api.assignPeerCounselor(sessionId, selectedPeerId);
       const label = peerCounselorNameById.get(selectedPeerId) || `Peer #${selectedPeerId}`;
       toast.success(`Assigned to ${label}.`);
+
+      const supervisingCounselorId = Number(
+        assignedSession?.counselor_id || session?.counselor_id || selectedCounselorByStudent[student.id] || student.activeCounselorId || 0
+      );
 
       setStudents((prev) =>
         prev.map((row) =>
           Number(row.id) === Number(student.id)
             ? {
                 ...row,
+                activeChatSessionId: createdDirectSession?.id
+                  ? Number(createdDirectSession.id)
+                  : row.activeChatSessionId,
+                activeCounselorId: supervisingCounselorId > 0 ? supervisingCounselorId : row.activeCounselorId,
                 peerChatSessionId: Number(assignedSession?.id || sessionId),
                 assignedPeerCounselorId: selectedPeerId,
               }
             : row
         )
       );
+      setSelectedPeerByStudent((prev) => ({
+        ...prev,
+        [student.id]: String(selectedPeerId),
+      }));
+      if (supervisingCounselorId > 0) {
+        setSelectedCounselorByStudent((prev) => ({
+          ...prev,
+          [student.id]: String(supervisingCounselorId),
+        }));
+      }
+      if (createdDirectSession?.id) {
+        setSessions((prev) => [
+          {
+            ...createdDirectSession,
+            id: Number(createdDirectSession.id),
+            student_id: Number(createdDirectSession.student_id || student.id),
+            counselor_id: supervisingCounselorId || Number(createdDirectSession.counselor_id || 0),
+            session_type: "chat",
+            assigned_role: "counselor",
+            peer_counselor_id: null,
+          },
+          ...prev,
+        ]);
+      }
       setReloadToken((t) => t + 1);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to assign peer counselor.");
@@ -639,7 +803,7 @@ const AdminStudents = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg font-bold text-foreground">Student roster</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Manage, screen, and assign peer supervision</p>
+                  <p className="text-xs text-muted-foreground mt-1">Manage, screen, and control supervised chat cases</p>
                 </div>
                 <p className="text-sm font-semibold bg-secondary/80 px-3 py-1 rounded-lg border border-border/30 text-muted-foreground">
                   {filteredStudents.length} of {students.length} students
@@ -662,6 +826,7 @@ const AdminStudents = () => {
                         <TableHead className="min-w-[200px] text-xs font-semibold uppercase tracking-wider py-3.5 pl-6 text-foreground">Student</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Status</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Risk</TableHead>
+                        <TableHead className="min-w-[260px] text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Counselor Control</TableHead>
                         <TableHead className="min-w-[240px] text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Peer Counselor</TableHead>
                         <TableHead className="hidden lg:table-cell text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Sessions</TableHead>
                         <TableHead className="hidden md:table-cell text-xs font-semibold uppercase tracking-wider py-3.5 text-foreground">Last Active</TableHead>
@@ -690,6 +855,15 @@ const AdminStudents = () => {
                               session.status !== "cancelled"
                           )?.counselor_id || 0
                         );
+                        const currentCounselorId = Number(student.activeCounselorId || supervisingCounselorId || 0);
+                        const selectedCounselorId = Number(
+                          selectedCounselorByStudent[student.id] ??
+                            (currentCounselorId ? String(currentCounselorId) : "")
+                        );
+                        const counselorOptions = professionalCounselors.filter((counselor: any) => {
+                          const counselorId = Number(counselor?.id || 0);
+                          return counselorId > 0 && counselorId !== Number(student.id);
+                        });
                         const peerOptions = peerCounselors.filter((peer: any) => {
                           const peerId = Number(peer?.id || 0);
                           return (
@@ -773,6 +947,60 @@ const AdminStudents = () => {
                                 )}
                                 {student.riskLevel}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <div className="flex flex-col gap-1.5 max-w-[260px]">
+                                {currentCounselorId > 0 ? (
+                                  <span className="inline-flex items-center text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-900/30 truncate max-w-[220px]">
+                                    {counselorNameById.get(currentCounselorId) || `Counselor #${currentCounselorId}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground italic pl-1">No open counselor case</span>
+                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    className="h-7 w-36 rounded-lg border border-border/80 bg-background px-1.5 text-[11px] font-medium text-foreground focus:ring-1 focus:ring-primary/20 focus:border-primary/50"
+                                    value={String(selectedCounselorId || "")}
+                                    onChange={(e) =>
+                                      setSelectedCounselorByStudent((prev) => ({
+                                        ...prev,
+                                        [student.id]: e.target.value,
+                                      }))
+                                    }
+                                    disabled={assigningCounselorStudentId !== null}
+                                  >
+                                    <option value="">Select counselor</option>
+                                    {counselorOptions.map((counselor: any) => (
+                                      <option key={counselor.id} value={String(counselor.id)}>
+                                        {counselor?.profile?.full_name || counselor?.email || `Counselor #${counselor.id}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-7 text-[10px] px-2 rounded-lg font-medium hover:bg-secondary-foreground/10 transition-colors shrink-0"
+                                    disabled={
+                                      assigningCounselorStudentId !== null ||
+                                      Number(student.assignedPeerCounselorId) > 0 ||
+                                      !selectedCounselorId ||
+                                      selectedCounselorId === currentCounselorId
+                                    }
+                                    onClick={() => void handleAssignCounselor(student)}
+                                  >
+                                    {assigningCounselorStudentId === student.id
+                                      ? "..."
+                                      : currentCounselorId > 0
+                                      ? "Reassign"
+                                      : "Open"}
+                                  </Button>
+                                </div>
+                                {Number(student.assignedPeerCounselorId) > 0 && (
+                                  <p className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-none">
+                                    Remove peer support before changing counselor.
+                                  </p>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="py-3">
                               {showPeerControls && (peerOptions.length > 0 || hasPeer) ? (
@@ -926,6 +1154,15 @@ const AdminStudents = () => {
                 <div className="p-3 rounded-lg bg-secondary/30">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Risk</p>
                   <p className="text-sm font-medium mt-1 capitalize">{selectedStudent.riskLevel}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-secondary/30">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Supervising counselor</p>
+                  <p className="text-sm font-medium mt-1">
+                    {selectedStudent.activeCounselorId
+                      ? counselorNameById.get(Number(selectedStudent.activeCounselorId)) ||
+                        `#${selectedStudent.activeCounselorId}`
+                      : "Not assigned"}
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/30">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Peer counselor</p>

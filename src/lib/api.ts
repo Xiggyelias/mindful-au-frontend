@@ -1068,7 +1068,11 @@ class ApiClient {
     return response.data;
   }
 
-  async createSessionAsCounselor(data: { student_id: number; session_type: 'chat' | 'video' | 'voice' }) {
+  async createSessionAsCounselor(data: {
+    student_id: number;
+    session_type: 'chat' | 'video' | 'voice';
+    counselor_id?: number;
+  }) {
     const response = await this.client.post('/sessions/counselor', data);
     return response.data;
   }
