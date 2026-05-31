@@ -235,6 +235,13 @@ const AdminStudents = () => {
   }, [isLoading, openStudentDetails, searchParams, setSearchParams, students, user]);
 
   const resolveSessionForPeerAction = (student: StudentRosterRow) => {
+    if (student.peerChatSessionId) {
+      const peerById = sessions.find((s: any) => Number(s.id) === Number(student.peerChatSessionId));
+      if (peerById && peerById.status !== "completed" && peerById.status !== "cancelled") {
+        return peerById;
+      }
+    }
+
     const peerSession = sessions.find(
       (session: any) =>
         Number(session.student_id) === Number(student.id) &&
@@ -297,7 +304,7 @@ const AdminStudents = () => {
           Number(row.id) === Number(student.id)
             ? {
                 ...row,
-                activeChatSessionId: Number(assignedSession?.id || sessionId),
+                peerChatSessionId: Number(assignedSession?.id || sessionId),
                 assignedPeerCounselorId: selectedPeerId,
               }
             : row
@@ -325,6 +332,17 @@ const AdminStudents = () => {
       setPeerAssignmentAction("unassign");
       await api.unassignPeerCounselor(sessionId);
       toast.success("Peer counselor assignment removed.");
+      setStudents((prev) =>
+        prev.map((row) =>
+          Number(row.id) === Number(student.id)
+            ? {
+                ...row,
+                peerChatSessionId: null,
+                assignedPeerCounselorId: null,
+              }
+            : row
+        )
+      );
       setReloadToken((t) => t + 1);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to remove peer assignment.");
@@ -662,6 +680,24 @@ const AdminStudents = () => {
                         const showPeerControls =
                           student.riskLevel === "low" || hasPeer;
                         const isHighlighted = highlightedStudentId === student.id;
+                        const supervisingCounselorId = Number(
+                          sessions.find(
+                            (session: any) =>
+                              Number(session.student_id) === Number(student.id) &&
+                              session.session_type === "chat" &&
+                              session.assigned_role !== "peer_counselor" &&
+                              session.status !== "completed" &&
+                              session.status !== "cancelled"
+                          )?.counselor_id || 0
+                        );
+                        const peerOptions = peerCounselors.filter((peer: any) => {
+                          const peerId = Number(peer?.id || 0);
+                          return (
+                            peerId > 0 &&
+                            peerId !== Number(student.id) &&
+                            (!supervisingCounselorId || peerId !== supervisingCounselorId)
+                          );
+                        });
 
                         const initials = student.name
                           ? student.name
@@ -739,7 +775,7 @@ const AdminStudents = () => {
                               </Badge>
                             </TableCell>
                             <TableCell className="py-3">
-                              {showPeerControls && peerCounselors.length > 0 ? (
+                              {showPeerControls && (peerOptions.length > 0 || hasPeer) ? (
                                 <div className="flex flex-col gap-1.5 max-w-[240px]">
                                   {hasPeer ? (
                                     <div className="flex items-center gap-1.5">
@@ -767,7 +803,7 @@ const AdminStudents = () => {
                                       disabled={assigningStudentId !== null}
                                     >
                                       <option value="">Select peer</option>
-                                      {peerCounselors.map((peer: any) => (
+                                      {peerOptions.map((peer: any) => (
                                         <option key={peer.id} value={String(peer.id)}>
                                           {peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`}
                                         </option>

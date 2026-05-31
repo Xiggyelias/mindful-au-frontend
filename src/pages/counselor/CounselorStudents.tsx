@@ -145,7 +145,8 @@ const CounselorStudents = () => {
       ? chatSessionsData
       : sessionsData.filter((session: any) => session.session_type === "chat");
 
-    const preferredChatByStudent = new Map<number, any>();
+    const directChatByStudent = new Map<number, any>();
+    const peerChatByStudent = new Map<number, any>();
     chatSource.forEach((session: any) => {
       if (session.session_type !== "chat") return;
       if (session.status === "completed" || session.status === "cancelled") return;
@@ -153,29 +154,30 @@ const CounselorStudents = () => {
       const studentId = Number(session.student_id);
       if (!studentId) return;
 
-      const currentBest = preferredChatByStudent.get(studentId);
-      const isCurrentPeer = session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+      const isPeerChat = session.assigned_role === "peer_counselor" || Number(session.peer_counselor_id) > 0;
       const currentTimestamp = toMillis(session.updated_at || session.created_at || null);
+      const map = isPeerChat ? peerChatByStudent : directChatByStudent;
+      const currentBest = map.get(studentId);
       if (!currentBest) {
-        preferredChatByStudent.set(studentId, session);
+        map.set(studentId, session);
         return;
       }
 
-      const bestIsPeer =
-        currentBest.assigned_role === "peer_counselor" && Number(currentBest.peer_counselor_id) > 0;
       const bestTimestamp = toMillis(currentBest.updated_at || currentBest.created_at || null);
-      if ((isCurrentPeer && !bestIsPeer) || currentTimestamp > bestTimestamp) {
-        preferredChatByStudent.set(studentId, session);
+      if (currentTimestamp > bestTimestamp) {
+        map.set(studentId, session);
       }
     });
 
     return studentData.map((student: any) => {
       const studentId = Number(student.id);
-      const preferredChat = preferredChatByStudent.get(studentId) || null;
+      const directChat = directChatByStudent.get(studentId) || null;
+      const peerChat = peerChatByStudent.get(studentId) || null;
+      const identityChat = directChat || peerChat;
       const latestRisk = latestRiskByStudent.get(studentId)?.riskLevel || "low";
       const lastTouchedMillis = lastTouchedByStudent.get(studentId) || 0;
 
-      const isMasked = preferredChat && isAnonymousIdentityMaskedFromViewer(preferredChat);
+      const isMasked = identityChat && isAnonymousIdentityMaskedFromViewer(identityChat);
 
       return {
         id: student.id,
@@ -191,10 +193,11 @@ const CounselorStudents = () => {
           : "Never",
         riskLevel: latestRisk,
         isOnline: Boolean(student.is_online),
-        activeChatSessionId: preferredChat?.id ?? null,
+        activeChatSessionId: directChat?.id ?? null,
+        peerChatSessionId: peerChat?.id ?? null,
         assignedPeerCounselorId:
-          preferredChat?.assigned_role === "peer_counselor" && Number(preferredChat?.peer_counselor_id) > 0
-            ? Number(preferredChat.peer_counselor_id)
+          Number(peerChat?.peer_counselor_id) > 0
+            ? Number(peerChat.peer_counselor_id)
             : null,
       };
     });
@@ -389,13 +392,17 @@ const CounselorStudents = () => {
       setAssigningStudentId(student.id);
       setPeerAssignmentAction("assign");
 
-      let sessionId = Number(student.activeChatSessionId || 0);
+      let directSessionId = Number(student.activeChatSessionId || 0);
+      let sessionId = Number(student.peerChatSessionId || directSessionId || 0);
+      let createdDirectSession: any = null;
       if (!sessionId) {
         const created = await api.createSessionAsCounselor({
           student_id: student.id,
           session_type: "chat",
         });
-        sessionId = Number(created?.id || 0);
+        createdDirectSession = created;
+        directSessionId = Number(created?.id || 0);
+        sessionId = directSessionId;
       }
 
       if (!sessionId) {
@@ -419,7 +426,8 @@ const CounselorStudents = () => {
           Number(row.id) === Number(student.id)
             ? {
                 ...row,
-                activeChatSessionId: Number(assignedSession?.id || sessionId),
+                activeChatSessionId: directSessionId || row.activeChatSessionId || null,
+                peerChatSessionId: Number(assignedSession?.id || sessionId),
                 assignedPeerCounselorId: selectedPeerId,
               }
             : row
@@ -427,7 +435,7 @@ const CounselorStudents = () => {
       );
 
       setSessions((prev) => {
-        const normalized = {
+        const normalizedPeer = {
           ...(assignedSession || {}),
           id: Number(assignedSession?.id || sessionId),
           student_id: Number(assignedSession?.student_id || student.id),
@@ -435,16 +443,33 @@ const CounselorStudents = () => {
           assigned_role: "peer_counselor",
           peer_counselor_id: selectedPeerId,
         };
-        const existingIndex = prev.findIndex((s: any) => Number(s.id) === Number(normalized.id));
-        if (existingIndex === -1) {
-          return [normalized, ...prev];
+        const next = [...prev];
+        if (createdDirectSession && directSessionId) {
+          const normalizedDirect = {
+            ...createdDirectSession,
+            id: directSessionId,
+            student_id: Number(createdDirectSession?.student_id || student.id),
+            session_type: "chat",
+            assigned_role: "counselor",
+            peer_counselor_id: null,
+          };
+          const directIndex = next.findIndex((s: any) => Number(s.id) === directSessionId);
+          if (directIndex === -1) {
+            next.unshift(normalizedDirect);
+          } else {
+            next[directIndex] = { ...next[directIndex], ...normalizedDirect };
+          }
         }
 
-        const next = [...prev];
-        next[existingIndex] = {
-          ...next[existingIndex],
-          ...normalized,
-        };
+        const peerIndex = next.findIndex((s: any) => Number(s.id) === Number(normalizedPeer.id));
+        if (peerIndex === -1) {
+          next.unshift(normalizedPeer);
+        } else {
+          next[peerIndex] = {
+            ...next[peerIndex],
+            ...normalizedPeer,
+          };
+        }
         return next;
       });
 
@@ -480,7 +505,7 @@ const CounselorStudents = () => {
         session.status !== "cancelled"
     );
 
-    const sessionId = Number(delegatedSession?.id || student.activeChatSessionId || 0);
+    const sessionId = Number(student.peerChatSessionId || delegatedSession?.id || student.activeChatSessionId || 0);
     if (!sessionId) {
       toast.error("No active peer assignment found for this student.");
       return;
@@ -504,7 +529,8 @@ const CounselorStudents = () => {
           Number(row.id) === Number(student.id)
             ? {
                 ...row,
-                activeChatSessionId: Number(updatedSession?.id || sessionId),
+                activeChatSessionId: row.activeChatSessionId || null,
+                peerChatSessionId: null,
                 assignedPeerCounselorId: null,
               }
             : row
@@ -517,8 +543,9 @@ const CounselorStudents = () => {
           id: Number(updatedSession?.id || sessionId),
           student_id: Number(updatedSession?.student_id || student.id),
           session_type: "chat",
-          assigned_role: "counselor",
-          peer_counselor_id: null,
+          assigned_role: updatedSession?.assigned_role || "peer_counselor",
+          peer_counselor_id: Number(updatedSession?.peer_counselor_id || student.assignedPeerCounselorId || 0) || null,
+          status: updatedSession?.status || "completed",
         };
         const existingIndex = prev.findIndex((s: any) => Number(s.id) === Number(normalized.id));
         if (existingIndex === -1) {
@@ -652,6 +679,10 @@ const CounselorStudents = () => {
                       hasAssignedPeer &&
                       selectedPeerIdForStudent === Number(student.assignedPeerCounselorId);
                     const showPeerSection = student.riskLevel === "low" || hasAssignedPeer;
+                    const peerOptions = peerCounselors.filter((peer: any) => {
+                      const peerId = Number(peer?.id || 0);
+                      return peerId > 0 && peerId !== Number(student.id) && peerId !== Number(user?.id || 0);
+                    });
 
                     return (
                       <div
@@ -754,7 +785,7 @@ const CounselorStudents = () => {
                         </div>
 
                         {/* ── Peer Counselor Section (only for low-risk or already assigned) ── */}
-                        {showPeerSection && peerCounselors.length > 0 && (
+                        {showPeerSection && (peerOptions.length > 0 || hasAssignedPeer) && (
                           <div className="border-t border-border/40 bg-muted/20 px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
@@ -782,7 +813,7 @@ const CounselorStudents = () => {
                                 disabled={assigningStudentId !== null}
                               >
                                 <option value="">Select peer counselor</option>
-                                {peerCounselors.map((peer: any) => (
+                                {peerOptions.map((peer: any) => (
                                   <option key={peer.id} value={String(peer.id)}>
                                     {peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`}
                                   </option>

@@ -15,6 +15,7 @@ export type StudentRosterRow = {
   riskLevel: "low" | "medium" | "high";
   isOnline: boolean;
   activeChatSessionId: number | null;
+  peerChatSessionId: number | null;
   assignedPeerCounselorId: number | null;
   needsAssessment: boolean;
 };
@@ -91,7 +92,8 @@ export const buildStudentRosterRows = ({
       ? chatSessionsData
       : sessionsData.filter((session: any) => session.session_type === "chat");
 
-  const preferredChatByStudent = new Map<number, any>();
+  const directChatByStudent = new Map<number, any>();
+  const peerChatByStudent = new Map<number, any>();
   chatSource.forEach((session: any) => {
     if (session.session_type !== "chat") return;
     if (session.status === "completed" || session.status === "cancelled") return;
@@ -99,29 +101,31 @@ export const buildStudentRosterRows = ({
     const studentId = Number(session.student_id);
     if (!studentId) return;
 
-    const currentBest = preferredChatByStudent.get(studentId);
-    const isCurrentPeer =
-      session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+    const isPeerChat =
+      session.assigned_role === "peer_counselor" || Number(session.peer_counselor_id) > 0;
     const currentTimestamp = toMillis(session.updated_at || session.created_at || null);
+
+    const map = isPeerChat ? peerChatByStudent : directChatByStudent;
+    const currentBest = map.get(studentId);
     if (!currentBest) {
-      preferredChatByStudent.set(studentId, session);
+      map.set(studentId, session);
       return;
     }
 
-    const bestIsPeer =
-      currentBest.assigned_role === "peer_counselor" && Number(currentBest.peer_counselor_id) > 0;
     const bestTimestamp = toMillis(currentBest.updated_at || currentBest.created_at || null);
-    if ((isCurrentPeer && !bestIsPeer) || currentTimestamp > bestTimestamp) {
-      preferredChatByStudent.set(studentId, session);
+    if (currentTimestamp > bestTimestamp) {
+      map.set(studentId, session);
     }
   });
 
   return studentData.map((student: any) => {
     const studentId = Number(student.id);
-    const preferredChat = preferredChatByStudent.get(studentId) || null;
+    const directChat = directChatByStudent.get(studentId) || null;
+    const peerChat = peerChatByStudent.get(studentId) || null;
+    const identityChat = directChat || peerChat;
     const latestRisk = latestRiskByStudent.get(studentId)?.riskLevel || "low";
     const lastTouchedMillis = lastTouchedByStudent.get(studentId) || 0;
-    const isMasked = maskAnonymous && preferredChat && isAnonymousIdentityMaskedFromViewer(preferredChat);
+    const isMasked = maskAnonymous && identityChat && isAnonymousIdentityMaskedFromViewer(identityChat);
     const isActive = student.roles?.some((r: any) => r.role === "student" && r.approved);
 
     return {
@@ -140,10 +144,11 @@ export const buildStudentRosterRows = ({
         : "Never",
       riskLevel: latestRisk,
       isOnline: Boolean(student.is_online),
-      activeChatSessionId: preferredChat?.id ?? null,
+      activeChatSessionId: directChat?.id ?? null,
+      peerChatSessionId: peerChat?.id ?? null,
       assignedPeerCounselorId:
-        preferredChat?.assigned_role === "peer_counselor" && Number(preferredChat?.peer_counselor_id) > 0
-          ? Number(preferredChat.peer_counselor_id)
+        Number(peerChat?.peer_counselor_id) > 0
+          ? Number(peerChat.peer_counselor_id)
           : null,
       needsAssessment: Boolean(student.needs_assessment),
     };
