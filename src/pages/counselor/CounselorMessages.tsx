@@ -74,6 +74,7 @@ import {
   isAnonymousSessionFlag,
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
+import { canDeleteMessageForEveryone } from "@/lib/chatDeletion";
 
 const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
   const t = s.trim();
@@ -2324,14 +2325,16 @@ const CounselorMessages = () => {
                 Delete message?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {messageToDelete.sender_id === Number(user?.id) || canModerateChat
+                {canDeleteMessageForEveryone(messageToDelete, user?.id)
                   ? "Delete this message for everyone in the chat, or just hide it from your view?"
+                  : messageToDelete.sender_id === Number(user?.id)
+                  ? "The delete-for-everyone window has expired. This message will only be hidden from your view."
                   : "This message will be hidden from your view. Others in the chat will still be able to see it."}
               </p>
             </div>
 
             <div className="mt-6 flex flex-col gap-2">
-              {(messageToDelete.sender_id === Number(user?.id) || canModerateChat) && (
+              {canDeleteMessageForEveryone(messageToDelete, user?.id) && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"

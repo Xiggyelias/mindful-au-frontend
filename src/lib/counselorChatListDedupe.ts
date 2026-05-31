@@ -69,9 +69,29 @@ function counselorChatListDashboardKey(row: Record<string, unknown>): string {
 
 export type CounselorChatDedupeMode = "messages" | "dashboard";
 
+export function counselorChatListLane(row: Record<string, unknown>): "direct" | "supervision" {
+  const assignedRole = String(row.assigned_role ?? "").trim();
+  const peerCounselorId = _numberOrZero(row.peer_counselor_id);
+  const casePeerCounselorId = _numberOrZero(row.case_peer_counselor_id);
+  const peerCounselor = row.peer_counselor as Record<string, unknown> | undefined;
+  const casePeerCounselor = row.case_peer_counselor as Record<string, unknown> | undefined;
+
+  if (
+    assignedRole === "peer_counselor" ||
+    peerCounselorId > 0 ||
+    casePeerCounselorId > 0 ||
+    _numberOrZero(peerCounselor?.id) > 0 ||
+    _numberOrZero(casePeerCounselor?.id) > 0
+  ) {
+    return "supervision";
+  }
+
+  return "direct";
+}
+
 /**
- * Stable key: same real student + anonymity -> one shared case room row.
- * Peer counselor and counselor participation must not create separate lanes.
+ * Stable key: same real student + anonymity + lane -> one row.
+ * The lane keeps direct counselor chats separate from supervised peer cases.
  */
 export function counselorChatListDedupeKey(
   row: Record<string, unknown>,
@@ -82,26 +102,27 @@ export function counselorChatListDedupeKey(
   }
 
   const isAnon = isAnonymousSessionFlag(row.is_anonymous);
+  const lane = counselorChatListLane(row);
 
   if (isAnon) {
     const rid = realStudentId(row);
     if (rid > 0) {
-      return `anon:stu:${rid}`;
+      return `${lane}:anon:stu:${rid}`;
     }
     const handle = String(row.anonymous_id ?? "").trim();
     if (handle) {
-      return `anon:h:${handle}`;
+      return `${lane}:anon:h:${handle}`;
     }
-    return `anon:sid:${row.id}`;
+    return `${lane}:anon:sid:${row.id}`;
   }
 
   const sid = realStudentId(row);
   if (sid > 0) {
-    return `id:stu:${sid}`;
+    return `${lane}:id:stu:${sid}`;
   }
   const nk = normalizedNameKey(row);
-  if (nk) return `id:nm:${nk}`;
-  return `id:sid:${row.id}`;
+  if (nk) return `${lane}:id:nm:${nk}`;
+  return `${lane}:id:sid:${row.id}`;
 }
 
 export function dedupeCounselorChatListRows(
@@ -144,6 +165,7 @@ export function counselorChatDedupeKeyFromSession(session: {
   chat_peer_student_id?: number | null;
   assigned_role?: string | null;
   peer_counselor_id?: number | null;
+  case_peer_counselor_id?: number | null;
   is_anonymous?: unknown;
   anonymous_id?: string | null;
 }): string {
@@ -153,6 +175,7 @@ export function counselorChatDedupeKeyFromSession(session: {
     chat_peer_student_id: session.chat_peer_student_id,
     assigned_role: session.assigned_role,
     peer_counselor_id: session.peer_counselor_id,
+    case_peer_counselor_id: session.case_peer_counselor_id,
     is_anonymous: session.is_anonymous,
     anonymous_id: session.anonymous_id,
   }, "messages");

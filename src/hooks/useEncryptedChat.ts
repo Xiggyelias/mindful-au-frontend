@@ -35,6 +35,8 @@ export interface ChatMessage {
   localBlobUrl?: string;
   /** Client-facing delivery state for optimistic and persisted outgoing rows. */
   delivery_status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  is_deleted?: boolean;
+  delete_for_everyone_until?: string | null;
 }
 
 export type RawMessage = ChatMessage & {
@@ -177,6 +179,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
               file_url: undefined,
               localBlobUrl: undefined,
               attachment: null,
+              is_deleted: true,
+              delete_for_everyone_until: null,
             }
           : msg
       );

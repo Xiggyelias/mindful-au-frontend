@@ -34,6 +34,7 @@ import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { useConfirm } from "@/hooks/useConfirm";
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
+import { canDeleteMessageForEveryone } from "@/lib/chatDeletion";
 import { cn } from "@/lib/utils";
 
 type Counselor = {
@@ -946,14 +947,16 @@ const StudentChat = () => {
                 Delete message?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {messageToDelete.sender_id === Number(user?.id)
+                {canDeleteMessageForEveryone(messageToDelete, user?.id)
                   ? "Would you like to delete this message for everyone in the chat, or just for yourself?"
+                  : messageToDelete.sender_id === Number(user?.id)
+                  ? "The delete-for-everyone window has expired. This message will only be hidden from your view."
                   : "This message will be deleted for you. Others in the chat will still be able to see it."}
               </p>
             </div>
 
             <div className="mt-6 flex flex-col gap-2">
-              {messageToDelete.sender_id === Number(user?.id) && (
+              {canDeleteMessageForEveryone(messageToDelete, user?.id) && (
                   <Button
                     variant="destructive"
                     className="w-full rounded-2xl py-5 font-semibold text-sm hover:scale-[1.01] active:scale-95 transition-all shadow-md"

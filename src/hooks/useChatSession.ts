@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { counselorChatListLane } from "@/lib/counselorChatListDedupe";
 
 export const expiredSessionIds = new Set<string>();
 
@@ -117,7 +118,8 @@ const isOpenChatSession = (session: Session) =>
 const conversationKey = (session: Session) => {
   const studentId = session.chat_peer_student_id || session.student_id || 0;
   const isAnon = isAnonymousSessionFlag(session.is_anonymous) ? 1 : 0;
-  return `student:${studentId}:anon:${isAnon}`;
+  const lane = counselorChatListLane(session as unknown as Record<string, unknown>);
+  return `student:${studentId}:anon:${isAnon}:lane:${lane}`;
 };
 
 
@@ -272,8 +274,8 @@ export const useChatSession = (userId: number | undefined) => {
         setSessionPage(nextPage);
       }
 
-      // Keep one shared case row per student/anonymity state so counselor and
-      // peer participation never split the same case into duplicate chats.
+      // Keep one row per student/anonymity/lane. Direct counselor chats and
+      // supervised peer-support chats must remain independently selectable.
       const dedupedByConversation = new Map<string, Session>();
       
       // Sort by ID descending first so we process latest sessions first
