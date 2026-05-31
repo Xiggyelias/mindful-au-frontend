@@ -644,7 +644,7 @@ const CounselorMessages = () => {
   useSessionKeepAlive({
     sessionId: selectedSessionId,
     intervalMs: 30 * 60 * 1000, // 30 minutes
-    enabled: Boolean(selectedSessionId && !messagesLoading),
+    enabled: Boolean(selectedSessionId),
     onError: (error) => {
       // Session has truly expired (410 error)
       if (error.message.includes('410')) {
@@ -875,9 +875,10 @@ const CounselorMessages = () => {
         const nextChatsRaw = Array.from(dedupedByConversation.values())
           .map(({ session }): ChatListItem => {
             const isAnonymous = isAnonymousSessionFlag(session.is_anonymous);
-            const numericStudentId = Number(session.student_id || session.chat_peer_student_id || 0);
+            const identityVisibleToViewer = Boolean(session.identity_visible_to_viewer);
+            const numericStudentId = Number(session.student_id || 0);
             const visibleStudentId =
-              Number.isInteger(numericStudentId) && numericStudentId > 0
+              identityVisibleToViewer && Number.isInteger(numericStudentId) && numericStudentId > 0
                 ? numericStudentId
                 : null;
             const peerCounselorId = Number(
@@ -920,7 +921,7 @@ const CounselorMessages = () => {
               studentEmail: realEmail,
               isAnonymous,
               anonymousId: String(session.anonymous_id ?? "").trim(),
-              identityVisibleToViewer: Boolean(session.identity_visible_to_viewer),
+              identityVisibleToViewer,
               status: session.status || null,
               lastActivity: session.updated_at || session.created_at || "",
               preview: !isOpenSession(session.status)
@@ -1406,7 +1407,7 @@ const CounselorMessages = () => {
   };
 
   const handleRevealIdentity = async () => {
-    if (!selectedSessionId || !selectedChat?.isAnonymous || isRevealingIdentity) {
+    if (!selectedSessionId || !selectedChat?.isAnonymous || isPeerCounselor || isRevealingIdentity) {
       return;
     }
     const reason = await prompt({
@@ -2048,7 +2049,7 @@ const CounselorMessages = () => {
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         <span className="text-xs font-semibold">{isTriggeringEmergency ? "Alerting..." : "Emergency"}</span>
                       </Button>
-                      {(selectedChat?.isAnonymous || isPeerCounselor) && (
+                      {(isPeerCounselor || (!isPeerCounselor && selectedChat?.isAnonymous)) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm" className="h-9 shrink-0 gap-2 rounded-xl px-3">
@@ -2057,13 +2058,12 @@ const CounselorMessages = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
-                            {selectedChat?.isAnonymous && (
+                            {!isPeerCounselor && selectedChat?.isAnonymous && (
                               <DropdownMenuItem onClick={() => void handleRevealIdentity()} disabled={isRevealingIdentity}>
                                 <Shield className="mr-2 h-4 w-4" />
                                 {isRevealingIdentity ? "Revealing..." : "Reveal identity"}
                               </DropdownMenuItem>
                             )}
-                            {selectedChat?.isAnonymous && isPeerCounselor && <DropdownMenuSeparator />}
                             {isPeerCounselor && (
                               <>
                                 <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>

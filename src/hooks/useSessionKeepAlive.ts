@@ -27,9 +27,14 @@ const getErrorStatus = (error: unknown): number | null => {
   if (Number.isFinite(status)) return status;
 
   const message = error instanceof Error ? error.message : String(error);
-  const matchedStatus = message.match(/\b(404|410)\b/);
+  const matchedStatus = message.match(/\b(404|410|429)\b/);
   return matchedStatus ? Number(matchedStatus[1]) : null;
 };
+
+const MIN_TOUCH_GAP_MS = 60 * 1000;
+const NETWORK_BACKOFF_MS = 30 * 1000;
+const RATE_LIMIT_BACKOFF_MS = 90 * 1000;
+const TOUCH_JITTER_MS = 2500;
 
 /**
  * Keep a chat session alive by periodically pinging the backend.
@@ -54,13 +59,18 @@ export const useSessionKeepAlive = ({
 }: UseSessionKeepAliveOptions) => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTouchTimeRef = useRef<number>(0);
+  const lastTouchBySessionRef = useRef<Map<string, number>>(new Map());
+  const backoffUntilBySessionRef = useRef<Map<string, number>>(new Map());
+  const touchInFlightRef = useRef<Promise<void> | null>(null);
   const sessionIdRef = useRef<string | number | undefined>(sessionId);
   const enabledRef = useRef(enabled);
+  const intervalMsRef = useRef(intervalMs);
   const onErrorRef = useRef(onError);
   const onSuccessRef = useRef(onSuccess);
 
   sessionIdRef.current = sessionId;
   enabledRef.current = enabled;
+  intervalMsRef.current = intervalMs;
   onErrorRef.current = onError;
   onSuccessRef.current = onSuccess;
 
@@ -71,14 +81,27 @@ export const useSessionKeepAlive = ({
     }
   }, []);
 
-  const touchSession = useCallback(async () => {
+  const touchSession = useCallback(async (options?: { force?: boolean }) => {
     const currentSessionId = sessionIdRef.current;
     const currentSessionKey = String(currentSessionId || '').trim();
     if (!currentSessionKey || !enabledRef.current || isSessionExpired(currentSessionKey)) return;
+    if (touchInFlightRef.current) {
+      await touchInFlightRef.current;
+      return;
+    }
 
-    try {
-      // Add small jitter (0-5s) to prevent thundering herd from multiple clients
-      const jitter = Math.random() * 5000;
+    const now = Date.now();
+    const backoffUntil = backoffUntilBySessionRef.current.get(currentSessionKey) || 0;
+    if (now < backoffUntil) return;
+
+    const lastTouchAt = lastTouchBySessionRef.current.get(currentSessionKey) || 0;
+    const configuredInterval = Math.max(MIN_TOUCH_GAP_MS, Number(intervalMsRef.current || 0));
+    const minTouchGap = Math.min(configuredInterval, Math.max(MIN_TOUCH_GAP_MS, configuredInterval / 3));
+    if (!options?.force && now - lastTouchAt < minTouchGap) return;
+
+    const run = (async () => {
+      // Small jitter prevents multiple tabs/dev StrictMode mounts from touching at once.
+      const jitter = Math.random() * TOUCH_JITTER_MS;
       await new Promise(resolve => setTimeout(resolve, jitter));
 
       if (
@@ -89,47 +112,69 @@ export const useSessionKeepAlive = ({
         return;
       }
 
-      const response = await api.client.post(
-        `/sessions/${currentSessionKey}/touch`,
-        {},
-        { timeout: 5000 } // 5 second timeout for keep-alive
-      );
+      try {
+        const response = await api.client.post(
+          `/sessions/${currentSessionKey}/touch`,
+          {},
+          { timeout: 5000 }
+        );
 
-      if (response.data?.ok) {
-        lastTouchTimeRef.current = Date.now();
-        onSuccessRef.current?.();
-      } else {
-        onErrorRef.current?.(new Error(`Keep-alive failed: ${response.data?.message || 'Unknown error'}`));
-      }
-    } catch (error) {
-      // Silently handle network errors for keep-alive (not critical)
-      const message = error instanceof Error ? error.message : String(error);
-      console.debug('[SessionKeepAlive] Touch failed:', message);
-
-      const status = getErrorStatus(error);
-      if (status === 410 || status === 404) {
-        const wasAlreadyExpired = isSessionExpired(currentSessionKey);
-        markSessionAsExpired(currentSessionKey);
-        clearTouchInterval();
-
-        if (!wasAlreadyExpired) {
-          onErrorRef.current?.(error instanceof Error ? error : new Error(message));
+        if (response.data?.ok) {
+          const touchedAt = Date.now();
+          lastTouchTimeRef.current = touchedAt;
+          lastTouchBySessionRef.current.set(currentSessionKey, touchedAt);
+          backoffUntilBySessionRef.current.delete(currentSessionKey);
+          onSuccessRef.current?.();
+        } else {
+          onErrorRef.current?.(new Error(`Keep-alive failed: ${response.data?.message || 'Unknown error'}`));
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.debug('[SessionKeepAlive] Touch failed:', message);
+
+        const status = getErrorStatus(error);
+        if (status === 410 || status === 404) {
+          const wasAlreadyExpired = isSessionExpired(currentSessionKey);
+          markSessionAsExpired(currentSessionKey);
+          clearTouchInterval();
+
+          if (!wasAlreadyExpired) {
+            onErrorRef.current?.(error instanceof Error ? error : new Error(message));
+          }
+          return;
+        }
+
+        if (status === 429) {
+          backoffUntilBySessionRef.current.set(currentSessionKey, Date.now() + RATE_LIMIT_BACKOFF_MS);
+          return;
+        }
+
+        backoffUntilBySessionRef.current.set(currentSessionKey, Date.now() + NETWORK_BACKOFF_MS);
+      }
+    })();
+
+    touchInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (touchInFlightRef.current === run) {
+        touchInFlightRef.current = null;
       }
     }
   }, [clearTouchInterval]);
 
   useEffect(() => {
+    clearTouchInterval();
+
     if (!sessionId || !enabled || isSessionExpired(String(sessionId))) {
-      clearTouchInterval();
       return;
     }
 
-    // Initial touch immediately
-    touchSession();
+    void touchSession();
 
-    // Set up recurring touches
-    intervalRef.current = setInterval(touchSession, intervalMs);
+    intervalRef.current = setInterval(() => {
+      void touchSession({ force: true });
+    }, Math.max(MIN_TOUCH_GAP_MS, intervalMs));
 
     return () => {
       clearTouchInterval();

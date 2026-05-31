@@ -31,7 +31,8 @@ test.describe("admin case controls", () => {
       }
       cleanupSessionIds.add(Number(peerSession.id));
 
-      expect(peerSession.student_id).toBe(ids.studentId);
+      expect(Number(peerSession.student_id ?? 0)).toBe(0);
+      expect(peerSession.is_anonymous).toBe(true);
       expect(peerSession.counselor_id).toBe(ids.counselorId);
       expect(peerSession.peer_counselor_id).toBe(ids.peerCounselorId);
       expect(peerSession.assigned_role).toBe("peer_counselor");

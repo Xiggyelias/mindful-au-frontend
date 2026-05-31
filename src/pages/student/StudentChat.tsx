@@ -218,7 +218,7 @@ const StudentChat = () => {
   useSessionKeepAlive({
     sessionId: sessionId,
     intervalMs: 30 * 60 * 1000, // 30 minutes
-    enabled: Boolean(sessionId && !messagesLoading),
+    enabled: Boolean(sessionId),
     onError: (error) => {
       // Session has truly expired (410 error)
       if (error.message.includes("410")) {

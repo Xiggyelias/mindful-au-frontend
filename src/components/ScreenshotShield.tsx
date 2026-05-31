@@ -92,7 +92,7 @@ export const ScreenshotShield = () => {
         />
       </div>
       {policyNoticeOpen && (
-        <div className="fixed bottom-4 left-1/2 z-[9992] w-[min(96vw,720px)] -translate-x-1/2 rounded-lg border border-amber-300/30 bg-amber-500/15 px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur-md">
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-1/2 z-[9992] w-[min(94vw,720px)] -translate-x-1/2 rounded-lg border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 shadow-xl backdrop-blur-md sm:bottom-6">
           <div className="flex items-start justify-between gap-3">
             <p>
               Privacy notice: Capturing or sharing counseling content is restricted.
@@ -100,7 +100,7 @@ export const ScreenshotShield = () => {
             </p>
             <button
               type="button"
-              className="shrink-0 rounded border border-amber-100/40 px-2 py-0.5 text-xs"
+              className="shrink-0 rounded border border-amber-300 bg-white/70 px-2 py-0.5 text-xs font-semibold text-amber-950 hover:bg-white"
               onClick={() => setPolicyNoticeOpen(false)}
             >
               Dismiss
