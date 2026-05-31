@@ -1319,6 +1319,88 @@ class ApiClient {
   }
 
   // Appointments
+  async getCounselorSlots(params: {
+    counselor_id: number;
+    from?: string;
+    to?: string;
+    generate?: boolean;
+    timeout_ms?: number;
+  }) {
+    const queryParams: Record<string, unknown> = {
+      counselor_id: params.counselor_id,
+    };
+    if (params.from) queryParams.from = params.from;
+    if (params.to) queryParams.to = params.to;
+    if (typeof params.generate === 'boolean') queryParams.generate = params.generate ? 1 : 0;
+
+    const timeoutMs =
+      typeof params.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+
+    const response = await this.client.get('/counselor-slots', {
+      params: queryParams,
+      timeout: timeoutMs,
+    });
+    return response.data;
+  }
+
+  async getCounselorSchedules(params?: { counselor_id?: number; timeout_ms?: number }) {
+    const queryParams: Record<string, unknown> = {};
+    if (typeof params?.counselor_id === 'number' && Number.isFinite(params.counselor_id) && params.counselor_id > 0) {
+      queryParams.counselor_id = Math.floor(params.counselor_id);
+    }
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+    const response = await this.client.get('/counselor-schedules', {
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      timeout: timeoutMs,
+    });
+    return response.data;
+  }
+
+  async updateCounselorSchedules(data: {
+    counselor_id?: number;
+    schedules: Array<{
+      day_of_week: number;
+      is_working_day: boolean;
+      start_time: string;
+      end_time: string;
+      break_start?: string | null;
+      break_end?: string | null;
+      slot_duration_minutes: number;
+    }>;
+  }) {
+    const response = await this.client.put('/counselor-schedules', data);
+    return response.data;
+  }
+
+  async generateCounselorSlots(data?: { counselor_id?: number; week_start?: string; weeks?: number }) {
+    const response = await this.client.post('/counselor-slots/generate', data ?? {});
+    return response.data;
+  }
+
+  async createEmergencyRequest(data?: {
+    counselor_id?: number;
+    requested_at?: string;
+    reason?: string;
+    location?: string;
+  }) {
+    const response = await this.client.post('/emergency-requests', data ?? {});
+    return response.data;
+  }
+
+  async getEmergencyRequests(params?: { timeout_ms?: number }) {
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+    const response = await this.client.get('/emergency-requests', { timeout: timeoutMs });
+    return response.data;
+  }
+
   async getAppointments(params?: {
     status?: 'pending' | 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
     from?: string;
@@ -1393,6 +1475,7 @@ class ApiClient {
   async createAppointment(data: {
     counselor_id: number;
     scheduled_at: string;
+    counselor_slot_id?: number;
     duration_minutes?: number;
     notes?: string;
     is_anonymous?: boolean;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { isSessionExpired, markSessionAsExpired } from '@/hooks/useChatSession';
 
 interface UseSessionKeepAliveOptions {
   /** Session ID to keep alive */
@@ -17,6 +18,18 @@ interface UseSessionKeepAliveOptions {
   /** Called when keep-alive succeeds */
   onSuccess?: () => void;
 }
+
+const getErrorStatus = (error: unknown): number | null => {
+  const rawStatus =
+    (error as { response?: { status?: unknown }; status?: unknown })?.response?.status ??
+    (error as { status?: unknown })?.status;
+  const status = Number(rawStatus);
+  if (Number.isFinite(status)) return status;
+
+  const message = error instanceof Error ? error.message : String(error);
+  const matchedStatus = message.match(/\b(404|410)\b/);
+  return matchedStatus ? Number(matchedStatus[1]) : null;
+};
 
 /**
  * Keep a chat session alive by periodically pinging the backend.
@@ -41,45 +54,74 @@ export const useSessionKeepAlive = ({
 }: UseSessionKeepAliveOptions) => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastTouchTimeRef = useRef<number>(0);
+  const sessionIdRef = useRef<string | number | undefined>(sessionId);
+  const enabledRef = useRef(enabled);
+  const onErrorRef = useRef(onError);
+  const onSuccessRef = useRef(onSuccess);
+
+  sessionIdRef.current = sessionId;
+  enabledRef.current = enabled;
+  onErrorRef.current = onError;
+  onSuccessRef.current = onSuccess;
+
+  const clearTouchInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
 
   const touchSession = useCallback(async () => {
-    if (!sessionId || !enabled) return;
+    const currentSessionId = sessionIdRef.current;
+    const currentSessionKey = String(currentSessionId || '').trim();
+    if (!currentSessionKey || !enabledRef.current || isSessionExpired(currentSessionKey)) return;
 
     try {
       // Add small jitter (0-5s) to prevent thundering herd from multiple clients
       const jitter = Math.random() * 5000;
       await new Promise(resolve => setTimeout(resolve, jitter));
 
+      if (
+        String(sessionIdRef.current || '').trim() !== currentSessionKey ||
+        !enabledRef.current ||
+        isSessionExpired(currentSessionKey)
+      ) {
+        return;
+      }
+
       const response = await api.client.post(
-        `/sessions/${sessionId}/touch`,
+        `/sessions/${currentSessionKey}/touch`,
         {},
         { timeout: 5000 } // 5 second timeout for keep-alive
       );
 
       if (response.data?.ok) {
         lastTouchTimeRef.current = Date.now();
-        onSuccess?.();
+        onSuccessRef.current?.();
       } else {
-        onError?.(new Error(`Keep-alive failed: ${response.data?.message || 'Unknown error'}`));
+        onErrorRef.current?.(new Error(`Keep-alive failed: ${response.data?.message || 'Unknown error'}`));
       }
     } catch (error) {
       // Silently handle network errors for keep-alive (not critical)
       const message = error instanceof Error ? error.message : String(error);
       console.debug('[SessionKeepAlive] Touch failed:', message);
-      
-      // Only call onError for critical failures (session expired 410, not found 404)
-      if (error instanceof Error && (message.includes('410') || message.includes('404'))) {
-        onError?.(error);
+
+      const status = getErrorStatus(error);
+      if (status === 410 || status === 404) {
+        const wasAlreadyExpired = isSessionExpired(currentSessionKey);
+        markSessionAsExpired(currentSessionKey);
+        clearTouchInterval();
+
+        if (!wasAlreadyExpired) {
+          onErrorRef.current?.(error instanceof Error ? error : new Error(message));
+        }
       }
     }
-  }, [sessionId, enabled, onSuccess, onError]);
+  }, [clearTouchInterval]);
 
   useEffect(() => {
-    if (!sessionId || !enabled) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+    if (!sessionId || !enabled || isSessionExpired(String(sessionId))) {
+      clearTouchInterval();
       return;
     }
 
@@ -90,12 +132,9 @@ export const useSessionKeepAlive = ({
     intervalRef.current = setInterval(touchSession, intervalMs);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      clearTouchInterval();
     };
-  }, [sessionId, enabled, intervalMs, touchSession]);
+  }, [sessionId, enabled, intervalMs, touchSession, clearTouchInterval]);
 
   return {
     /** Time of last successful keep-alive touch (milliseconds since epoch) */

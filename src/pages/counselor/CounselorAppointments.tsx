@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Calendar,
+  CalendarPlus,
   Users,
   Brain,
   Video,
@@ -17,6 +18,8 @@ import {
   Filter,
   FilterX,
   AlertTriangle,
+  Loader2,
+  Settings,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -47,6 +50,16 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 type AppointmentFilter = "all" | "action_needed" | "upcoming" | "completed" | "cancelled";
+type CounselorSchedule = {
+  id?: number;
+  day_of_week: number;
+  is_working_day: boolean;
+  start_time: string;
+  end_time: string;
+  break_start?: string | null;
+  break_end?: string | null;
+  slot_duration_minutes: number;
+};
 type PagedMeta = {
   page?: number;
   per_page?: number;
@@ -56,6 +69,12 @@ type PagedMeta = {
 type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
 const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function timeInputValue(value?: string | null): string {
+  const raw = String(value || "");
+  return /^\d{2}:\d{2}/.test(raw) ? raw.slice(0, 5) : "";
+}
 
 const CounselorAppointments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -71,6 +90,11 @@ const CounselorAppointments = () => {
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [bulkCancelReason, setBulkCancelReason] = useState("");
   const [bulkCancelSubmitting, setBulkCancelSubmitting] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedules, setSchedules] = useState<CounselorSchedule[]>([]);
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
+  const [isSavingSchedules, setIsSavingSchedules] = useState(false);
+  const [isGeneratingSlots, setIsGeneratingSlots] = useState(false);
   const bulkCancelInFlightRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<AppointmentFilter>("all");
@@ -85,6 +109,7 @@ const CounselorAppointments = () => {
     setAppointmentTotalItems(0);
     appointmentsRequestInFlightRef.current = null;
     lastAppointmentsLoadAtRef.current = 0;
+    setSchedules([]);
   }, [user?.id]);
 
   const loadAppointments = useCallback(
@@ -168,6 +193,66 @@ const CounselorAppointments = () => {
   );
 
   const hasInitiallyLoadedRef = useRef(false);
+  const loadSchedules = useCallback(async () => {
+    try {
+      setIsLoadingSchedules(true);
+      const payload = await api.getCounselorSchedules({ timeout_ms: 10000 });
+      setSchedules(Array.isArray(payload?.data) ? payload.data : []);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to load schedule"));
+    } finally {
+      setIsLoadingSchedules(false);
+    }
+  }, []);
+
+  const updateScheduleField = useCallback(
+    (dayOfWeek: number, field: keyof CounselorSchedule, value: string | boolean | number | null) => {
+      setSchedules((prev) =>
+        prev.map((schedule) =>
+          Number(schedule.day_of_week) === dayOfWeek
+            ? { ...schedule, [field]: value }
+            : schedule
+        )
+      );
+    },
+    []
+  );
+
+  const saveSchedules = useCallback(async () => {
+    try {
+      setIsSavingSchedules(true);
+      const payload = await api.updateCounselorSchedules({
+        schedules: schedules.map((schedule) => ({
+          day_of_week: Number(schedule.day_of_week),
+          is_working_day: Boolean(schedule.is_working_day),
+          start_time: timeInputValue(schedule.start_time) || "08:00",
+          end_time: timeInputValue(schedule.end_time) || "16:30",
+          break_start: timeInputValue(schedule.break_start) || null,
+          break_end: timeInputValue(schedule.break_end) || null,
+          slot_duration_minutes: Number(schedule.slot_duration_minutes) || 30,
+        })),
+      });
+      setSchedules(Array.isArray(payload?.data) ? payload.data : schedules);
+      toast.success("Schedule saved");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to save schedule"));
+    } finally {
+      setIsSavingSchedules(false);
+    }
+  }, [schedules]);
+
+  const generateWeeklySlots = useCallback(async () => {
+    try {
+      setIsGeneratingSlots(true);
+      const payload = await api.generateCounselorSlots({ weeks: 1 });
+      toast.success(`Generated ${Number(payload?.generated_count ?? 0)} slot${Number(payload?.generated_count ?? 0) === 1 ? "" : "s"}`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to generate slots"));
+    } finally {
+      setIsGeneratingSlots(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user?.id || hasInitiallyLoadedRef.current) {
       if (!user?.id) setIsLoading(false);
@@ -177,6 +262,11 @@ const CounselorAppointments = () => {
     hasInitiallyLoadedRef.current = true;
     void loadAppointments(true, { force: true });
   }, [loadAppointments, user?.id]);
+
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    void loadSchedules();
+  }, [loadSchedules, scheduleOpen]);
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
@@ -429,12 +519,116 @@ const CounselorAppointments = () => {
               type="button"
               variant="outline"
               size="sm"
+              className="rounded-xl h-9 gap-2"
+              onClick={() => void generateWeeklySlots()}
+              disabled={isGeneratingSlots}
+            >
+              {isGeneratingSlots ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+              Generate Weekly Slots
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl h-9 gap-2"
+              onClick={() => setScheduleOpen(true)}
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Edit Schedule
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
               onClick={openBulkCancelModal}
             >
               Cancel All Sessions
             </Button>
           </div>
+
+          <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Slot schedule</DialogTitle>
+                <DialogDescription>
+                  Working hours generate 30-minute bookable slots. Lunch is locked out of student booking.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+                {isLoadingSchedules ? (
+                  <p className="text-sm text-muted-foreground">Loading schedule...</p>
+                ) : (
+                  schedules.map((schedule) => (
+                    <div
+                      key={schedule.day_of_week}
+                      className="grid gap-3 rounded-2xl border border-border/60 bg-secondary/10 p-3 md:grid-cols-[70px_90px_repeat(5,minmax(0,1fr))]"
+                    >
+                      <div className="text-sm font-bold">{DAY_LABELS[Number(schedule.day_of_week) - 1] || schedule.day_of_week}</div>
+                      <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(schedule.is_working_day)}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "is_working_day", event.target.checked)}
+                        />
+                        Active
+                      </label>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider">Start</Label>
+                        <Input
+                          type="time"
+                          value={timeInputValue(schedule.start_time)}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "start_time", event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider">End</Label>
+                        <Input
+                          type="time"
+                          value={timeInputValue(schedule.end_time)}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "end_time", event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider">Lunch start</Label>
+                        <Input
+                          type="time"
+                          value={timeInputValue(schedule.break_start)}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "break_start", event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider">Lunch end</Label>
+                        <Input
+                          type="time"
+                          value={timeInputValue(schedule.break_end)}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "break_end", event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider">Slot mins</Label>
+                        <Input
+                          type="number"
+                          min={15}
+                          max={120}
+                          value={Number(schedule.slot_duration_minutes) || 30}
+                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "slot_duration_minutes", Number(event.target.value))}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setScheduleOpen(false)}>
+                  Close
+                </Button>
+                <Button type="button" onClick={() => void saveSchedules()} disabled={isSavingSchedules || isLoadingSchedules}>
+                  {isSavingSchedules ? "Saving..." : "Save Schedule"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog
             open={bulkCancelOpen}

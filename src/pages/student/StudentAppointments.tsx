@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
-import { Mic, Plus, Clock, Shield, Video, Calendar } from "lucide-react";
+import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,24 +35,38 @@ type PagedMeta = {
 };
 
 type AppointmentListResponse = Appointment[] | { data?: Appointment[]; meta?: PagedMeta };
+type CounselorSlot = {
+  id: number;
+  counselor_id: number;
+  appointment_id?: number | null;
+  slot_date: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  status: "available" | "booked" | "unavailable" | string;
+};
+
 const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
-const MIN_APPOINTMENT_DURATION_MINUTES = 15;
-const MAX_APPOINTMENT_DURATION_MINUTES = 120;
+const SLOT_LOOKAHEAD_DAYS = 7;
 
-function normalizeDurationMinutes(value: number): number {
-  if (!Number.isFinite(value)) return 60;
-  return Math.min(
-    MAX_APPOINTMENT_DURATION_MINUTES,
-    Math.max(MIN_APPOINTMENT_DURATION_MINUTES, Math.floor(value))
-  );
+function toDateOnly(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Value for `<input type="datetime-local" min=…>` in the user's local timezone (no `Z`). */
-function toDatetimeLocalInputValue(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function minutesBetween(start: string, end: string): number {
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 30;
+  return Math.max(15, Math.round((endMs - startMs) / 60000));
+}
+
+function formatSlotTime(value: string): string {
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function isHttpServerError(error: unknown): boolean {
@@ -73,7 +86,10 @@ const StudentAppointments = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
-  const [bookDialogMinLocal, setBookDialogMinLocal] = useState("");
+  const [slots, setSlots] = useState<CounselorSlot[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [isEmergencySubmitting, setIsEmergencySubmitting] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
@@ -83,7 +99,7 @@ const StudentAppointments = () => {
     scheduled_at: "",
     mode: "online",
     online_media: "video" as "video" | "audio",
-    duration_minutes: 60,
+    duration_minutes: 30,
     is_anonymous: false,
   });
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
@@ -112,6 +128,8 @@ const StudentAppointments = () => {
     setIsLoading(false);
     setAppointments([]);
     setCounselors([]);
+    setSlots([]);
+    setSelectedSlotId(null);
   }, [user?.id]);
 
   useEffect(() => {
@@ -404,13 +422,6 @@ const StudentAppointments = () => {
   }, [availableCounselors, openDialog]);
 
   useEffect(() => {
-    if (!openDialog) {
-      return;
-    }
-    setBookDialogMinLocal(toDatetimeLocalInputValue(new Date()));
-  }, [openDialog]);
-
-  useEffect(() => {
     if (!user || !openDialog) {
       return;
     }
@@ -418,14 +429,138 @@ const StudentAppointments = () => {
     void loadCounselorMatches(form.mode === "physical" ? "physical" : "online");
   }, [form.mode, loadCounselorMatches, openDialog, user]);
 
+  const loadCounselorSlots = useCallback(
+    async (counselorId: string) => {
+      const numericCounselorId = Number(counselorId);
+      if (!Number.isFinite(numericCounselorId) || numericCounselorId <= 0) {
+        setSlots([]);
+        setSelectedSlotId(null);
+        return;
+      }
+
+      try {
+        setIsLoadingSlots(true);
+        const from = new Date();
+        const to = new Date();
+        to.setDate(to.getDate() + SLOT_LOOKAHEAD_DAYS);
+        const payload = await api.getCounselorSlots({
+          counselor_id: numericCounselorId,
+          from: toDateOnly(from),
+          to: toDateOnly(to),
+          generate: true,
+          timeout_ms: 15000,
+        });
+        const nextSlots = Array.isArray(payload?.data) ? (payload.data as CounselorSlot[]) : [];
+        setSlots(nextSlots);
+
+        const firstAvailable = nextSlots.find(
+          (slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now()
+        );
+        if (firstAvailable) {
+          setSelectedSlotId(Number(firstAvailable.id));
+          setForm((prev) => ({
+            ...prev,
+            scheduled_at: firstAvailable.start_time,
+            duration_minutes: minutesBetween(firstAvailable.start_time, firstAvailable.end_time),
+          }));
+        } else {
+          setSelectedSlotId(null);
+          setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 30 }));
+        }
+      } catch (err: unknown) {
+        if (import.meta.env.DEV) console.error("Failed to load counselor slots", err);
+        setSlots([]);
+        setSelectedSlotId(null);
+        toast({
+          title: "Could not load appointment slots",
+          description: getApiErrorMessage(err, "Please try again."),
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingSlots(false);
+      }
+    },
+    [toast]
+  );
+
+  useEffect(() => {
+    if (!openDialog || !form.counselor_id) return;
+    void loadCounselorSlots(form.counselor_id);
+  }, [form.counselor_id, loadCounselorSlots, openDialog]);
+
+  const selectedSlot = useMemo(
+    () => slots.find((slot) => Number(slot.id) === Number(selectedSlotId)) ?? null,
+    [selectedSlotId, slots]
+  );
+
+  const slotDays = useMemo(() => {
+    const grouped = new Map<string, CounselorSlot[]>();
+    slots.forEach((slot) => {
+      if (!slot.slot_date) return;
+      const existing = grouped.get(slot.slot_date) ?? [];
+      existing.push(slot);
+      grouped.set(slot.slot_date, existing);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, daySlots]) => ({
+        date,
+        label: new Date(`${date}T00:00:00`).toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }),
+        morning: daySlots
+          .filter((slot) => new Date(slot.start_time).getHours() < 13)
+          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+        afternoon: daySlots
+          .filter((slot) => new Date(slot.start_time).getHours() >= 14)
+          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+      }));
+  }, [slots]);
+
+  const chooseSlot = useCallback((slot: CounselorSlot) => {
+    if (slot.status !== "available") return;
+    setSelectedSlotId(Number(slot.id));
+    setForm((prev) => ({
+      ...prev,
+      scheduled_at: slot.start_time,
+      duration_minutes: minutesBetween(slot.start_time, slot.end_time),
+    }));
+  }, []);
+
+  const handleEmergencyRequest = useCallback(async () => {
+    try {
+      setIsEmergencySubmitting(true);
+      await api.createEmergencyRequest({
+        counselor_id: Number(form.counselor_id) || undefined,
+        requested_at: new Date().toISOString(),
+        reason: "Emergency support requested from appointment booking.",
+      });
+      toast({
+        title: "Emergency request sent",
+        description: "Your request is now in the priority counselor queue.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Emergency request failed",
+        description: getApiErrorMessage(err, "Please try again or contact campus security directly."),
+        variant: "destructive",
+      });
+    } finally {
+      setIsEmergencySubmitting(false);
+    }
+  }, [form.counselor_id, toast]);
+
   const handleSubmit = async () => {
-    if (!form.counselor_id || !form.scheduled_at) {
-      toast({ title: "Please select counselor and time" });
+    if (!form.counselor_id || !selectedSlot) {
+      toast({ title: "Please select counselor and an available slot" });
       return;
     }
     try {
       setIsSubmitting(true);
-      const parsedScheduledAt = new Date(form.scheduled_at);
+      const parsedScheduledAt = new Date(selectedSlot.start_time);
       if (!Number.isFinite(parsedScheduledAt.getTime())) {
         toast({
           title: "Invalid date/time",
@@ -445,16 +580,18 @@ const StudentAppointments = () => {
 
       const callTypeForApi =
         form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
-      const durationMinutes = normalizeDurationMinutes(form.duration_minutes);
+      const durationMinutes = minutesBetween(selectedSlot.start_time, selectedSlot.end_time);
       const basePayload = {
         counselor_id: Number(form.counselor_id),
+        counselor_slot_id: Number(selectedSlot.id),
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         notes: sessionNotes,
         is_anonymous: form.is_anonymous,
       };
+      let created: any;
       try {
-        await api.createAppointment({
+        created = await api.createAppointment({
           ...basePayload,
           ...(callTypeForApi ? { call_type: callTypeForApi } : {}),
         });
@@ -463,21 +600,30 @@ const StudentAppointments = () => {
         if (!isHttpServerError(firstError) || !callTypeForApi) {
           throw firstError;
         }
-        await api.createAppointment({
+        created = await api.createAppointment({
           ...basePayload,
           notes: sessionNotes,
         });
       }
-      toast({ title: "Appointment booked!" });
+      if (created?.emergency) {
+        toast({
+          title: "Emergency request queued",
+          description: created.message || "This request has been sent to the priority queue.",
+        });
+      } else {
+        toast({ title: "Appointment booked!" });
+      }
       setOpenDialog(false);
       setForm({
         counselor_id: "",
         scheduled_at: "",
         mode: "online",
         online_media: "video",
-        duration_minutes: 60,
+        duration_minutes: 30,
         is_anonymous: profileAnonymousMode,
       });
+      setSelectedSlotId(null);
+      setSlots([]);
       await loadAppointments(false, { force: true });
     } catch (err: unknown) {
       if (import.meta.env.DEV) {
@@ -623,15 +769,26 @@ const StudentAppointments = () => {
         />
 
         <main className="p-4 lg:p-6 space-y-6">
-          <div className="flex justify-between items-center gap-3">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <h2 className="text-xl font-semibold">Scheduled Sessions</h2>
-            <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-              <DialogTrigger asChild>
-                <Button variant="hero" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Book Appointment
-                </Button>
-              </DialogTrigger>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="destructive"
+                className="gap-2"
+                onClick={() => void handleEmergencyRequest()}
+                disabled={isEmergencySubmitting}
+              >
+                {isEmergencySubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                Emergency Support
+              </Button>
+              <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="hero" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Book Appointment
+                  </Button>
+                </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Book an appointment</DialogTitle>
@@ -661,7 +818,16 @@ const StudentAppointments = () => {
                                 ? "border-primary bg-primary/5"
                                 : "border-border bg-secondary/20 hover:border-primary/30"
                             }`}
-                            onClick={() => setForm((prev) => ({ ...prev, counselor_id: String(match.id) }))}
+                            onClick={() => {
+                              setSelectedSlotId(null);
+                              setSlots([]);
+                              setForm((prev) => ({
+                                ...prev,
+                                counselor_id: String(match.id),
+                                scheduled_at: "",
+                                duration_minutes: 30,
+                              }));
+                            }}
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div>
@@ -691,7 +857,11 @@ const StudentAppointments = () => {
                     <Label>Counselor</Label>
                     <Select
                       value={form.counselor_id}
-                      onValueChange={(val) => setForm({ ...form, counselor_id: val })}
+                      onValueChange={(val) => {
+                        setSelectedSlotId(null);
+                        setSlots([]);
+                        setForm({ ...form, counselor_id: val, scheduled_at: "", duration_minutes: 30 });
+                      }}
                       disabled={availableCounselors.length === 0}
                     >
                       <SelectTrigger>
@@ -850,41 +1020,91 @@ const StudentAppointments = () => {
                   {form.is_anonymous && (
                     <AnonymousModeIndicator variant="banner" className="mt-1" />
                   )}
-                  <div className="space-y-2">
-                    <Label>Date & Time</Label>
-                    <Input
-                      type="datetime-local"
-                      min={bookDialogMinLocal || undefined}
-                      value={form.scheduled_at}
-                      onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Duration (minutes)</Label>
-                    <Input
-                      type="number"
-                      min={MIN_APPOINTMENT_DURATION_MINUTES}
-                      max={MAX_APPOINTMENT_DURATION_MINUTES}
-                      value={form.duration_minutes}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          duration_minutes: normalizeDurationMinutes(Number(e.target.value)),
-                        })
-                      }
-                    />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label>Available slots</Label>
+                      {isLoadingSlots && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading slots
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-[320px] space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-secondary/10 p-3">
+                      {!form.counselor_id ? (
+                        <p className="text-sm text-muted-foreground">Choose a counselor to see bookable times.</p>
+                      ) : isLoadingSlots ? (
+                        <p className="text-sm text-muted-foreground">Preparing this week&apos;s calendar.</p>
+                      ) : slotDays.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No generated slots are available for this counselor yet.</p>
+                      ) : (
+                        slotDays.map((day) => (
+                          <div key={day.date} className="space-y-2">
+                            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                              {day.label}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {[...day.morning, { id: `lunch-${day.date}` } as any, ...day.afternoon].map((slot: CounselorSlot | any) => {
+                                if (String(slot.id).startsWith("lunch-")) {
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      type="button"
+                                      disabled
+                                      className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-medium text-slate-500"
+                                    >
+                                      13:00-14:00
+                                      <span className="block text-[10px] font-normal">Lunch locked</span>
+                                    </button>
+                                  );
+                                }
+                                const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now();
+                                const isSelected = Number(slot.id) === Number(selectedSlotId);
+                                return (
+                                  <button
+                                    key={slot.id}
+                                    type="button"
+                                    disabled={!isAvailable}
+                                    onClick={() => chooseSlot(slot)}
+                                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                                      isSelected
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : isAvailable
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400"
+                                          : "border-border bg-muted text-muted-foreground opacity-70"
+                                    }`}
+                                  >
+                                    {formatSlotTime(slot.start_time)}
+                                    <span className="block text-[10px] font-medium">
+                                      {isAvailable ? "Available" : "Booked"}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {selectedSlot && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {new Date(selectedSlot.start_time).toLocaleDateString()} at{" "}
+                        {formatSlotTime(selectedSlot.start_time)} for {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} minutes.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setOpenDialog(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleSubmit} disabled={isSubmitting || availableCounselors.length === 0}>
+                  <Button onClick={handleSubmit} disabled={isSubmitting || availableCounselors.length === 0 || !selectedSlot}>
                     {isSubmitting ? "Booking..." : "Book"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">

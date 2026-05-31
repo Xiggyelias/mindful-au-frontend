@@ -162,7 +162,8 @@ export const useChatSession = (userId: number | undefined) => {
         (session) =>
           session.session_type === "chat" &&
           typeof session.counselor_id === "number" &&
-          session.counselor_id > 0
+          session.counselor_id > 0 &&
+          !isSessionExpired(String(session.id))
       );
 
       setSessions(normalizedSessions);
