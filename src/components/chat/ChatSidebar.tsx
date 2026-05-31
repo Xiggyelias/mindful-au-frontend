@@ -394,9 +394,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const sessionNumericId = Number(session.id);
                 const isPinned = pinnedSessionIds.includes(sessionNumericId);
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
-                const subtitle = isPeer
-                  ? `Peer Counselor${supervisingCounselorName(session) ? ` • Counselor: ${supervisingCounselorName(session)}` : ""}`
-                  : "Counselor";
+                const supportSubtitleParts = isPeer
+                  ? [
+                      "Peer Counselor",
+                      supervisingCounselorName(session)
+                        ? `Counselor: ${supervisingCounselorName(session)}`
+                        : "",
+                    ]
+                  : ["Counselor"];
+                if (isAnon) supportSubtitleParts.push("Anon");
+                if (isPinned) supportSubtitleParts.push("Pinned");
+                if (isArchived) supportSubtitleParts.push("Archived");
+                const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
                   // Anonymous rows must always open a brand-new chat session so
@@ -435,42 +444,57 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 };
 
                 return (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     key={`recent-${isPeer ? "peer" : "counselor"}-${supportId || session.id}`}
                     onClick={handleRowClick}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleRowClick();
+                      }
+                    }}
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
-                    className={`group w-full rounded-2xl border p-3 shadow-sm transition-all duration-200 ${
+                    className={cn(
+                      "group w-full overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
                         : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
-                    }`}
+                    )}
                   >
-                    <div className="flex items-center gap-3">
-                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ring-2 ring-white/50 ${
-                      isActive ? "bg-white/20" : getUserColor(name) + " text-white"
-                    }`}>
-                      {getInitials(name)}
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-bold truncate text-sm">
-                          {name}
-                          <span className="text-[10px] font-normal text-muted-foreground/70 ml-1">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ring-2 ring-white/50 ${
+                        isActive ? "bg-white/20" : getUserColor(name) + " text-white"
+                      }`}>
+                        {getInitials(name)}
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="min-w-0 truncate text-sm font-bold">
+                            {name}
+                          </p>
+                          <span className={cn(
+                            "shrink-0 text-[10px] font-normal",
+                            isActive ? "text-white/70" : "text-muted-foreground/70"
+                          )}>
                             (Session {totalSessions})
                           </span>
+                        </div>
+                        <p
+                          className={cn(
+                            "mt-1 flex min-w-0 items-center gap-1 text-[10px] font-black uppercase tracking-wider",
+                            isActive ? "text-white/80" : "text-muted-foreground"
+                          )}
+                          title={supportSubtitle}
+                        >
+                          {isPeer && <Users className="h-2.5 w-2.5 shrink-0" />}
+                          <span className="min-w-0 truncate">{supportSubtitle}</span>
                         </p>
                       </div>
-                      <p className="text-[10px] uppercase font-black tracking-widest opacity-70 flex items-center gap-1">
-                        {isPeer && <Users className="h-2.5 w-2.5" />}
-                        {subtitle}
-                        {isAnon ? " \u2022 Anon" : ""}
-                        {isPinned ? " \u2022 Pinned" : ""}
-                        {isArchived ? " \u2022 Archived" : ""}
-                      </p>
                     </div>
-                    </div>
-                    <div className="flex items-center gap-1">
+                    <div className="mt-2 flex items-center gap-1">
                       {unreadCount > 0 && (
                         <span
                           className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white tabular-nums shadow-sm shrink-0"
@@ -496,7 +520,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                       </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
               {!hasRecentSupport && (

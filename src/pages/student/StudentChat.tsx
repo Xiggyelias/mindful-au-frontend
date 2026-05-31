@@ -497,18 +497,31 @@ const StudentChat = () => {
   const handleSelectSessionById = useCallback((id: string) => {
     if (!id) {
       selectSession(null);
+      if (sessionFromUrl) {
+        navigate("/student/chat", { replace: true });
+      }
       return;
     }
     const session = sessions.find(s => s.id.toString() === id);
     if (session) {
       selectSession(session);
+      if (sessionFromUrl !== id) {
+        navigate(`/student/chat?session=${encodeURIComponent(id)}`, { replace: true });
+      }
       void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(() => {
         setTimeout(() => {
           void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch(() => {});
         }, 2000);
       });
     }
-  }, [sessions, selectSession]);
+  }, [navigate, sessionFromUrl, sessions, selectSession]);
+
+  const closeActiveChat = useCallback(() => {
+    selectSession(null);
+    if (sessionFromUrl) {
+      navigate("/student/chat", { replace: true });
+    }
+  }, [navigate, selectSession, sessionFromUrl]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
     void startSessionWithCounselor(id, { isAnonymous: isAnon });
@@ -729,7 +742,7 @@ const StudentChat = () => {
                       <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                         <Menu className="h-5 w-5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => selectSession(null)}>
+                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={closeActiveChat} aria-label="Close chat">
                         <X className="h-5 w-5" />
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">

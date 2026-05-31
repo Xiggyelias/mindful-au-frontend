@@ -350,6 +350,7 @@ const CounselorMessages = () => {
   // every render, which the ErrorBoundary catches as "Something went wrong".
   const selectedChat = useMemo(() => {
     if (!chats.length) return null;
+    if (selectedChatId === -1) return null;
     if (!selectedChatId) return chats[0];
     return chats.find((chat) => chat.id === selectedChatId) || chats[0];
   }, [chats, selectedChatId]);
@@ -529,6 +530,12 @@ const CounselorMessages = () => {
   const targetStudentParam = searchParams.get("student");
 
   const selectedSessionId = selectedChat ? String(selectedChat.id) : "";
+  const closeSelectedChat = useCallback(() => {
+    setSelectedChatId(-1);
+    activeSessionIdRef.current = null;
+    navigate(isPeerCounselor ? "/peer/chats" : "/counselor/messages", { replace: true });
+  }, [isPeerCounselor, navigate]);
+
   const currentUserId = useMemo(() => {
     const authId = Number(user?.id || 0);
     if (Number.isFinite(authId) && authId > 0) {
@@ -1006,6 +1013,10 @@ const CounselorMessages = () => {
               });
               return targetChat.id;
             }
+          }
+
+          if (current === -1) {
+            return -1;
           }
 
           return nextChats[0]?.id ?? null;
@@ -1942,7 +1953,7 @@ const CounselorMessages = () => {
                     <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                       <Menu className="h-5 w-5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => { setSelectedChatId(null); activeSessionIdRef.current = null; }}>
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={closeSelectedChat} aria-label="Close chat">
                       <X className="h-5 w-5" />
                     </Button>
                     <div
