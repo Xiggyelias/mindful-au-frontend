@@ -140,7 +140,7 @@ const StudentDashboard = () => {
         if (!isMounted) return;
         const errorMessage = error instanceof Error ? error.message : "Failed to load dashboard statistics";
         setStatsError(errorMessage);
-        if (process.env.NODE_ENV === 'development') {
+        if (import.meta.env.DEV) {
           console.error('Failed to load stats:', error);
         }
       } finally {
@@ -180,10 +180,7 @@ const StudentDashboard = () => {
             navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
           });
           location = `${position.coords.latitude}, ${position.coords.longitude}`;
-        } catch (err) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Could not get location:', err);
-          }
+        } catch {
           toast.warning("Location unavailable - we'll send your alert without location data.");
         }
       }
@@ -191,7 +188,7 @@ const StudentDashboard = () => {
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent! A counselor will contact you shortly.");
     } catch (error: any) {
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error('Panic button error:', error);
       }
       toast.error(error.response?.data?.message || "Failed to send emergency alert. Please try again.");
@@ -235,7 +232,7 @@ const StudentDashboard = () => {
             setDailyMood(today.log.mood as StudentMood);
           }
         } catch (syncError) {
-          if (process.env.NODE_ENV === 'development') {
+          if (import.meta.env.DEV) {
             console.error('Failed to sync mood state:', syncError);
           }
         }

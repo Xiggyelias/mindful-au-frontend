@@ -1,8 +1,8 @@
 /**
- * Merge duplicate open chat sessions for the same counselor–student conversation
+ * Merge duplicate open chat sessions for the same counselor-student conversation
  * (e.g. multiple pending/active rows) into one list entry. Unread badges use the
  * representative row's unread_count only (same session id as the row), not a sum
- * across merged rows — summing inflated badges vs. what you see after opening chat.
+ * across merged rows. Summing inflated badges vs. what you see after opening chat.
  */
 
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
