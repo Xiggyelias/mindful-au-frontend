@@ -25,6 +25,7 @@ export interface Session {
   student_id: number;
   counselor_id: number | null;
   peer_counselor_id?: number | null;
+  case_peer_counselor_id?: number | null;
   assigned_role?: "counselor" | "peer_counselor" | string | null;
   status: string | null;
   session_type: string | null;
@@ -52,6 +53,16 @@ export interface Session {
       avatar_url?: string;
     };
   };
+  case_peer_counselor?: {
+    id: number;
+    email?: string;
+    is_online?: boolean;
+    last_seen_at?: string | null;
+    profile?: {
+      full_name?: string;
+      avatar_url?: string;
+    };
+  } | null;
 }
 
 export interface Appointment {
@@ -88,6 +99,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
+const SESSION_CACHE_VERSION = 2;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -123,7 +135,7 @@ export const useChatSession = (userId: number | undefined) => {
 
   const hydrateCachedSessions = useCallback(() => {
     if (!userId) return false;
-    const cacheKey = `student_chat_sessions_${userId}_${sessionPageRef.current}`;
+    const cacheKey = `student_chat_sessions_v${SESSION_CACHE_VERSION}_${userId}_${sessionPageRef.current}`;
 
     try {
       const raw = localStorage.getItem(cacheKey);
@@ -287,7 +299,7 @@ export const useChatSession = (userId: number | undefined) => {
 
       const normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
       setSessions(normalizedSessions);
-      const cacheKey = `student_chat_sessions_${userId}_${sessionPageRef.current}`;
+      const cacheKey = `student_chat_sessions_v${SESSION_CACHE_VERSION}_${userId}_${sessionPageRef.current}`;
       localStorage.setItem(
         cacheKey,
           JSON.stringify({

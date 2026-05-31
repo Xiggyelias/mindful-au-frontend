@@ -85,7 +85,7 @@ const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 7;
+const CHAT_LIST_CACHE_VERSION = 8;
 const IDENTITY_REVEAL_GRANTS_KEY = "counselor_identity_reveal_grants_v1";
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 const CHAT_LIST_MIN_REFRESH_GAP_MS = 8000;
@@ -97,6 +97,7 @@ type RawSession = {
   chat_peer_student_id?: number | null;
   counselor_id: number;
   peer_counselor_id?: number | null;
+  case_peer_counselor_id?: number | null;
   assigned_role?: string | null;
   session_type: string;
   status: string | null;
@@ -133,6 +134,15 @@ type RawSession = {
       full_name?: string;
     };
   };
+  case_peer_counselor?: {
+    id?: number;
+    email?: string;
+    last_seen_at?: string | null;
+    is_online?: boolean;
+    profile?: {
+      full_name?: string;
+    };
+  };
 };
 
 type ChatListItem = {
@@ -152,6 +162,7 @@ type ChatListItem = {
   isOnline: boolean;
   lastSeenAt: string | null;
   isPeerAssigned: boolean;
+  peerCounselorId: number | null;
   peerCounselorName: string;
   counselorName: string;
   unreadCount: number;
@@ -517,7 +528,18 @@ const CounselorMessages = () => {
   const targetStudentParam = searchParams.get("student");
 
   const selectedSessionId = selectedChat ? String(selectedChat.id) : "";
-  const currentUserId = user?.id ? (isNaN(Number(user.id)) ? user.id : Number(user.id)) : 0;
+  const currentUserId = useMemo(() => {
+    const authId = Number(user?.id || 0);
+    if (Number.isFinite(authId) && authId > 0) {
+      return authId;
+    }
+    if (!selectedChat) {
+      return 0;
+    }
+    return isPeerCounselor
+      ? selectedChat.peerCounselorId || 0
+      : selectedChat.counselorId || 0;
+  }, [isPeerCounselor, selectedChat, user?.id]);
 
   useChatPreloader({
     sessions: chats,
@@ -850,12 +872,25 @@ const CounselorMessages = () => {
               Number.isInteger(numericStudentId) && numericStudentId > 0
                 ? numericStudentId
                 : null;
+            const peerCounselorId = Number(
+              session.peer_counselor_id ||
+                session.peer_counselor?.id ||
+                session.case_peer_counselor_id ||
+                session.case_peer_counselor?.id ||
+                0
+            );
+            const peerParticipant = session.peer_counselor || session.case_peer_counselor || null;
+            const peerParticipantName =
+              peerParticipant?.profile?.full_name ||
+              peerParticipant?.email ||
+              "";
             const isPeerAssigned =
-              session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+              session.assigned_role === "peer_counselor" ||
+              peerCounselorId > 0 ||
+              peerParticipantName.trim() !== "";
             const peerCounselorName =
-              session.peer_counselor?.profile?.full_name ||
-              session.peer_counselor?.email ||
-              (session.peer_counselor_id ? `Peer #${session.peer_counselor_id}` : "Peer Counselor");
+              peerParticipantName ||
+              (peerCounselorId ? `Peer #${peerCounselorId}` : "Peer Counselor");
             const counselorName =
               session.counselor?.profile?.full_name ||
               session.counselor?.email ||
@@ -885,7 +920,7 @@ const CounselorMessages = () => {
                 : isPeerAssigned
                 ? isPeerCounselor
                   ? "Assigned to you by counselor"
-                  : `Delegated to ${peerCounselorName}`
+                  : `Shared with ${peerCounselorName}`
                 : "Tap to continue chat",
               isOnline:
                 typeof session.student?.is_online === "boolean"
@@ -893,6 +928,7 @@ const CounselorMessages = () => {
                   : isOnlineFromLastSeen(session.student?.last_seen_at),
               lastSeenAt: session.student?.last_seen_at || null,
               isPeerAssigned,
+              peerCounselorId: peerCounselorId > 0 ? peerCounselorId : null,
               peerCounselorName,
               counselorName,
               unreadCount: (session.id && activeSessionIdRef.current && Number(session.id) === activeSessionIdRef.current) ? 0 : rowUnread,
@@ -1497,10 +1533,41 @@ const CounselorMessages = () => {
     setShowThreadScrollToBottom(false);
   }, [selectedSessionId]);
 
+  const activePeerParticipant = useMemo(() => {
+    if (!selectedChat) {
+      return null;
+    }
+
+    if (selectedChat.peerCounselorId || selectedChat.isPeerAssigned) {
+      return {
+        id: selectedChat.peerCounselorId,
+        name: selectedChat.peerCounselorName || "Peer Counselor",
+      };
+    }
+
+    const peerMessage = [...messages]
+      .reverse()
+      .find((msg) => msg.sender_role === "peer_counselor");
+
+    if (!peerMessage) {
+      return null;
+    }
+
+    return {
+      id: Number(peerMessage.sender_id || 0) || null,
+      name:
+        peerMessage.sender_display_name ||
+        peerMessage.sender_name_snapshot ||
+        "Peer Counselor",
+    };
+  }, [messages, selectedChat]);
+
+  const selectedChatIsSharedPeerCase = Boolean(activePeerParticipant);
+
   useEffect(() => {
     if (!showSupervisionColumn || !selectedChat) return;
-    setSidebarLane(selectedChat.isPeerAssigned ? "supervision" : "direct");
-  }, [selectedChat?.id, selectedChat?.isPeerAssigned, showSupervisionColumn]);
+    setSidebarLane(selectedChatIsSharedPeerCase ? "supervision" : "direct");
+  }, [selectedChat?.id, selectedChatIsSharedPeerCase, showSupervisionColumn]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedSessionId) return;
@@ -1585,6 +1652,11 @@ const CounselorMessages = () => {
                   {chat.studentName}
                 </p>
                 {chat.isAnonymous && <AnonymousModeIndicator variant="inline" />}
+                {chat.isPeerAssigned && (
+                  <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+                    Peer
+                  </span>
+                )}
               </div>
               <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground/80">
                 {formatChatListTime(chat.lastActivity)}
@@ -1892,9 +1964,9 @@ const CounselorMessages = () => {
                         {selectedChat?.isAnonymous && (
                           <AnonymousModeIndicator variant="badge" audience="counselor" />
                         )}
-                        {selectedChat?.isPeerAssigned && (
-                          <span className="rounded-md bg-primary/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-                            Peer
+                        {selectedChatIsSharedPeerCase && (
+                          <span className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+                            Shared Peer Case
                           </span>
                         )}
                         <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
@@ -1924,9 +1996,9 @@ const CounselorMessages = () => {
                           <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
                             Student: {selectedChat.studentName}
                           </span>
-                          {selectedChat.isPeerAssigned && (
-                            <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200">
-                              Peer Counselor: {selectedChat.peerCounselorName}
+                          {activePeerParticipant && (
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+                              Peer Counselor: {activePeerParticipant.name}
                             </span>
                           )}
                           <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
@@ -2131,6 +2203,7 @@ const CounselorMessages = () => {
                       messages={messages}
                       currentUserId={currentUserId}
                       currentUserRole={isPeerCounselor ? "peer_counselor" : "counselor"}
+                      currentUserDisplayName={userName}
                       studentLabel={threadStudentLabel}
                       studentIsAnonymous={Boolean(selectedChat?.isAnonymous)}
                       isPeerTyping={isPeerTyping}
@@ -2152,7 +2225,7 @@ const CounselorMessages = () => {
                   )}
                 </div>
 
-                {role === "counselor" && selectedChat?.isPeerAssigned ? (
+                {role === "counselor" && selectedChatIsSharedPeerCase ? (
                   <>
                     <div className="border-t border-slate-200/80 bg-slate-50/50 p-3 sm:p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
                       <div className="mx-auto flex max-w-3xl flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm sm:flex-row sm:items-center dark:border-blue-900/30 dark:bg-blue-950/20">

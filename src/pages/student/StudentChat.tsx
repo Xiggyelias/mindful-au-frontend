@@ -596,6 +596,49 @@ const StudentChat = () => {
     ? isSavingChatAnonymity
     : isSavingProfileAnonymous;
 
+  const activePeerParticipant = useMemo(() => {
+    if (!activeSession) return null;
+
+    const sessionPeerName =
+      activeSession.peer_counselor?.profile?.full_name ||
+      activeSession.peer_counselor?.email ||
+      activeSession.case_peer_counselor?.profile?.full_name ||
+      activeSession.case_peer_counselor?.email ||
+      "";
+    const sessionPeerId = Number(
+      activeSession.peer_counselor_id ||
+        activeSession.peer_counselor?.id ||
+        activeSession.case_peer_counselor_id ||
+        activeSession.case_peer_counselor?.id ||
+        0
+    );
+
+    if (sessionPeerId > 0 || sessionPeerName) {
+      return {
+        id: sessionPeerId || null,
+        name: sessionPeerName || "Peer Counselor",
+        email: activeSession.peer_counselor?.email || activeSession.case_peer_counselor?.email,
+      };
+    }
+
+    const peerMessage = [...messages].reverse().find((msg) => msg.sender_role === "peer_counselor");
+    if (!peerMessage) return null;
+
+    return {
+      id: Number(peerMessage.sender_id || 0) || null,
+      name: peerMessage.sender_display_name || peerMessage.sender_name_snapshot || "Peer Counselor",
+    };
+  }, [activeSession, messages]);
+
+  const activeSupportName =
+    activePeerParticipant?.name ||
+    activeSession?.counselor?.profile?.full_name ||
+    activeSession?.counselor?.email ||
+    "Support Session";
+  const activeSupportSubtitle = activePeerParticipant
+    ? "Supervised Peer Support Chat"
+    : "Confidential support conversation";
+
   if (sessionExpired) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center 
@@ -656,6 +699,7 @@ const StudentChat = () => {
                 onNextSessionPage={goToNextSessionPage}
                 onPrevSessionPage={goToPrevSessionPage}
                 ownerUserId={user?.id?.toString() ?? null}
+                activePeerParticipant={activePeerParticipant}
               />
             </div>
 
@@ -688,9 +732,7 @@ const StudentChat = () => {
                         <X className="h-5 w-5" />
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">
-                        {(activeSession.assigned_role === 'peer_counselor'
-                          ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
-                          : activeSession.counselor?.profile?.full_name || "Support")
+                        {(activeSupportName || "Support")
                           .split(/\s+/)
                           .filter(Boolean)
                           .slice(0, 2)
@@ -700,14 +742,10 @@ const StudentChat = () => {
                       </div>
                       <div className="min-w-0">
                         <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
-                          {activeSession.assigned_role === 'peer_counselor'
-                            ? activeSession.peer_counselor?.profile?.full_name || "Peer Support"
-                            : activeSession.counselor?.profile?.full_name || "Support Session"}
+                          {activeSupportName}
                         </h2>
                         <p className="truncate text-[11px] text-muted-foreground sm:text-xs">
-                          {activeSession.assigned_role === 'peer_counselor'
-                            ? "Supervised Peer Support Chat"
-                            : "Confidential support conversation"}
+                          {activeSupportSubtitle}
                         </p>
                         <div className="mt-0.5 flex items-center gap-2">
                           <span className={cn("h-2 w-2 shrink-0 rounded-full", chatError ? "bg-destructive" : "bg-emerald-500")} />
@@ -720,9 +758,9 @@ const StudentChat = () => {
                           <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
                             Student: You
                           </span>
-                          {Number(activeSession.peer_counselor_id) > 0 && (
+                          {activePeerParticipant && (
                             <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200">
-                              Peer Counselor: {activeSession.peer_counselor?.profile?.full_name || activeSession.peer_counselor?.email || "Peer Counselor"}
+                              Peer Counselor: {activePeerParticipant.name}
                             </span>
                           )}
                           {Number(activeSession.counselor_id) > 0 && (

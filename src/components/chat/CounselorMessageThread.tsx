@@ -54,6 +54,7 @@ type RowProps = {
   prevSenderId: string | null;
   currentUserId: number | string;
   currentUserRole?: string;
+  currentUserDisplayName?: string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isDeleting: boolean;
@@ -68,6 +69,7 @@ const CounselorMessageRow = React.memo(
     prevSenderId,
     currentUserId,
     currentUserRole,
+    currentUserDisplayName,
     studentLabel,
     studentIsAnonymous,
     isDeleting,
@@ -75,14 +77,24 @@ const CounselorMessageRow = React.memo(
     onDeleteMessage,
     renderMessageContent,
   }: RowProps) {
-    const isMine = Boolean(currentUserId) && String(msg.sender_id) === String(currentUserId);
-    const sameSenderAsPrev = prevSenderId !== null && prevSenderId === String(msg.sender_id);
-    const showAvatar = !sameSenderAsPrev;
+    const isMineById = Boolean(currentUserId) && String(msg.sender_id) === String(currentUserId);
     const senderRole = normalizeChatRole(
-      msg.sender_role || (isMine ? currentUserRole : "student")
+      msg.sender_role || (isMineById ? currentUserRole : "student")
     );
     const fallbackName = studentIsAnonymous && senderRole === "student" ? "Anonymous Student" : studentLabel;
-    const senderName = isMine ? "You" : chatSenderDisplayName(msg, fallbackName);
+    const snapshotSenderName = chatSenderDisplayName(msg, fallbackName);
+    const normalizedCurrentName = String(currentUserDisplayName || "").trim().toLowerCase();
+    const normalizedSnapshotName = String(snapshotSenderName || "").trim().toLowerCase();
+    const isMine =
+      isMineById ||
+      (
+        Boolean(normalizedCurrentName) &&
+        normalizedCurrentName === normalizedSnapshotName &&
+        senderRole === normalizeChatRole(currentUserRole)
+      );
+    const sameSenderAsPrev = prevSenderId !== null && prevSenderId === String(msg.sender_id);
+    const showAvatar = !sameSenderAsPrev;
+    const senderName = isMine ? "You" : snapshotSenderName;
     const roleLabel = chatRoleLabel(senderRole);
 
     return (
@@ -210,6 +222,7 @@ const CounselorMessageRow = React.memo(
     prev.canModerateChat === next.canModerateChat &&
     prev.currentUserId === next.currentUserId &&
     prev.currentUserRole === next.currentUserRole &&
+    prev.currentUserDisplayName === next.currentUserDisplayName &&
     prev.studentLabel === next.studentLabel &&
     prev.studentIsAnonymous === next.studentIsAnonymous &&
     prev.renderMessageContent === next.renderMessageContent
@@ -221,6 +234,7 @@ export type CounselorMessageThreadProps = {
   messages: ChatMessage[];
   currentUserId: number | string;
   currentUserRole?: string;
+  currentUserDisplayName?: string;
   studentLabel: string;
   studentIsAnonymous: boolean;
   isPeerTyping: boolean;
@@ -247,6 +261,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
   messages,
   currentUserId,
   currentUserRole,
+  currentUserDisplayName,
   studentLabel,
   studentIsAnonymous,
   isPeerTyping,
@@ -398,6 +413,7 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
                 prevSenderId={prevSenderId}
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
+                currentUserDisplayName={currentUserDisplayName}
                 studentLabel={studentLabel}
                 studentIsAnonymous={studentIsAnonymous}
                 isDeleting={isDeleting}

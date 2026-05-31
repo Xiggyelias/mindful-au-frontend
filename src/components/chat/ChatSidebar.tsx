@@ -56,6 +56,11 @@ interface ChatSidebarProps {
    * on cold start and would silently disable all hover prefetching).
    */
   ownerUserId?: string | null;
+  activePeerParticipant?: {
+    id?: number | null;
+    name: string;
+    email?: string;
+  } | null;
 }
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
@@ -80,6 +85,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onNextSessionPage,
   onPrevSessionPage,
   ownerUserId,
+  activePeerParticipant,
 }) => {
   const [conversationFilter, setConversationFilter] = useState<"unread" | "active" | "pinned" | "archived">("active");
   const [pinnedSessionIds, setPinnedSessionIds] = useState<number[]>([]);
@@ -157,22 +163,41 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const isPeerSupportSession = (session: Session) =>
-    session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+  const peerParticipantForSession = (session: Session) => {
+    if (activeSession?.id === session.id && activePeerParticipant) {
+      return activePeerParticipant;
+    }
+    const currentPeerName =
+      session.peer_counselor?.profile?.full_name || session.peer_counselor?.email || "";
+    if (Number(session.peer_counselor_id) > 0 || currentPeerName) {
+      return {
+        id: Number(session.peer_counselor_id || session.peer_counselor?.id || 0) || null,
+        name: currentPeerName || "Peer Counselor",
+        email: session.peer_counselor?.email,
+      };
+    }
+    const casePeerName =
+      session.case_peer_counselor?.profile?.full_name || session.case_peer_counselor?.email || "";
+    if (Number(session.case_peer_counselor_id) > 0 || casePeerName) {
+      return {
+        id: Number(session.case_peer_counselor_id || session.case_peer_counselor?.id || 0) || null,
+        name: casePeerName || "Peer Counselor",
+        email: session.case_peer_counselor?.email,
+      };
+    }
+    return null;
+  };
+
+  const isPeerSupportSession = (session: Session) => Boolean(peerParticipantForSession(session));
 
   const supportPersonName = (session: Session) =>
-    isPeerSupportSession(session)
-      ? session.peer_counselor?.profile?.full_name ||
-        session.peer_counselor?.email ||
-        "Peer Counselor"
-      : session.counselor?.profile?.full_name ||
+    peerParticipantForSession(session)?.name ||
+    session.counselor?.profile?.full_name ||
         session.counselor?.email ||
         "Counselor";
 
   const supportPersonId = (session: Session) =>
-    isPeerSupportSession(session)
-      ? Number(session.peer_counselor_id || 0)
-      : Number(session.counselor_id || 0);
+    Number(peerParticipantForSession(session)?.id || session.counselor_id || 0);
 
   const supervisingCounselorName = (session: Session) =>
     session.counselor?.profile?.full_name || session.counselor?.email || "Counselor";
@@ -241,7 +266,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     );
 
     return rows;
-  }, [visibleSessions]);
+  }, [activePeerParticipant, activeSession?.id, visibleSessions]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRecentSupportRows = useMemo(() => {
