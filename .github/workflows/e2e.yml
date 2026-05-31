@@ -1,0 +1,113 @@
+name: CMS E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    name: Playwright critical CMS flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          path: mindful-au-frontend
+
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: Xiggyelias/mindful-au-backend
+          token: ${{ secrets.CMS_BACKEND_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: mindful-au-backend
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: bcmath, ctype, fileinfo, json, mbstring, openssl, pdo, pdo_sqlite, tokenizer, xml
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mindful-au-frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: mindful-au-backend
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare backend test database
+        working-directory: mindful-au-backend
+        run: |
+          cp .env.example .env
+          cat >> .env <<ENV
+          APP_ENV=testing
+          APP_DEBUG=true
+          APP_URL=http://127.0.0.1:8000
+          FRONTEND_URL=http://127.0.0.1:4173
+          CORS_ALLOWED_ORIGINS=http://127.0.0.1:4173
+          DB_CONNECTION=sqlite
+          DB_DATABASE=${GITHUB_WORKSPACE}/mindful-au-backend/database/database.sqlite
+          AUTH_REQUIRE_GOOGLE_FOR_STUDENTS=false
+          AUTH_REQUIRE_GOOGLE_FOR_STUDENT_STAFF=false
+          BROADCAST_DRIVER=log
+          QUEUE_CONNECTION=sync
+          SESSION_DRIVER=file
+          CACHE_STORE=file
+          WEB_PUSH_ENABLED=false
+          CHAT_LEGACY_BROADCAST=false
+          ENV
+          mkdir -p database storage/testing/reports
+          touch database/database.sqlite
+          php artisan key:generate --force
+          php artisan migrate --force
+          php artisan db:seed --class=TestUserSeeder --force
+
+      - name: Run backend test suite
+        working-directory: mindful-au-backend
+        run: php artisan test
+
+      - name: Install frontend dependencies
+        working-directory: mindful-au-frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: mindful-au-frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: mindful-au-frontend
+        env:
+          VITE_API_URL: http://127.0.0.1:8000/api
+        run: npm run build
+
+      - name: Run critical E2E flows
+        working-directory: mindful-au-frontend
+        env:
+          CMS_BACKEND_DIR: ${{ github.workspace }}/mindful-au-backend
+          CMS_E2E_API_URL: http://127.0.0.1:8000/api
+          CMS_E2E_REPORT_DIR: ${{ github.workspace }}/mindful-au-backend/storage/testing/reports
+          CMS_E2E_ADMIN_EMAIL: admin@example.com
+          CMS_E2E_ADMIN_PASSWORD: password123
+          CMS_E2E_COUNSELOR_EMAIL: counselor@example.com
+          CMS_E2E_COUNSELOR_PASSWORD: password123
+          CMS_E2E_PEER_EMAIL: peer.counselor@example.com
+          CMS_E2E_PEER_PASSWORD: password123
+          CMS_E2E_STUDENT_EMAIL: student@example.com
+          CMS_E2E_STUDENT_PASSWORD: password123
+        run: npm run test:e2e:ci
+
+      - name: Upload E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cms-e2e-reports
+          path: mindful-au-backend/storage/testing/reports
+          if-no-files-found: ignore
