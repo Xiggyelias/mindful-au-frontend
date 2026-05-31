@@ -2,7 +2,7 @@
  * Single source of truth for anonymous flags from the API (Laravel / JSON).
  * Handles boolean, 0/1, and common string encodings so UI matches server intent everywhere.
  *
- * **Online anonymous bookings** are always **audio-only** for WebRTC; use
+ * Online anonymous bookings are always audio-only for WebRTC; use
  * `effectiveWebRtcCallMode` / `isAppointmentAudioOnly` from `@/lib/videoCall` so video vs audio
  * stays aligned with the backend (do not infer from `isProfileAnonymousMode` alone).
  */
@@ -32,8 +32,8 @@ export function isIdentityVisibleToViewerFlag(value: unknown): boolean {
 }
 
 /**
- * Anonymous booking/session where the viewer still must not see the student’s real identity
- * (counselor video list, badges). Non-anonymous rows are never “masked”.
+ * Anonymous booking/session where the viewer still must not see the student's real identity
+ * (counselor video list, badges). Non-anonymous rows are never masked.
  */
 export function isAnonymousIdentityMaskedFromViewer(
   entity: { is_anonymous?: unknown; identity_visible_to_viewer?: unknown } | null | undefined
@@ -68,9 +68,7 @@ export function anonymousLabelForCounselor(): string {
   return ANONYMOUS_DISPLAY_NAME_COUNSELOR;
 }
 
-/**
- * Student-facing session title on dashboard/history when the thread is anonymous.
- */
+/** Student-facing session title on dashboard/history when the thread is anonymous. */
 export function formatStudentAnonymousSessionTitle(anonymousId: unknown): string {
   const label = typeof anonymousId === "string" ? anonymousId.trim() : "";
   return label !== "" ? `Anonymous (${label})` : "Anonymous session";
@@ -89,9 +87,7 @@ export type CounselorStudentIdentityRow = {
   student_name?: string | null;
 };
 
-/**
- * Unified counselor-facing student label: masked only when the API says identity is hidden.
- */
+/** Unified counselor-facing student label: masked only when the API says identity is hidden. */
 export function resolveCounselorStudentDisplayName(
   row: CounselorStudentIdentityRow | null | undefined,
   fallback = "Student"

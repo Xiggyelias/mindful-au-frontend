@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Shield,
   Loader2,
@@ -28,7 +28,6 @@ import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
@@ -64,7 +63,6 @@ const COUNSELOR_PAGE_SIZE = 24;
 const StudentChat = () => {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
   const sessionFromUrl = searchParams.get("session");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -103,7 +101,6 @@ const StudentChat = () => {
 
   // Voice recording functionality
   const {
-    isRecording,
     isPaused,
     recording,
     recordingTime,
@@ -124,7 +121,6 @@ const StudentChat = () => {
     sessions,
     sessionPage,
     sessionTotalPages,
-    isLoading: isSessionsLoading,
     selectSession,
     goToPrevPage: goToPrevSessionPage,
     goToNextPage: goToNextSessionPage,
@@ -186,10 +182,14 @@ const StudentChat = () => {
   const handleSidebarAnonymousToggle = useCallback(
     async (checked: boolean) => {
       if (!user?.id) return;
+      const previous = profileAnonymousMode;
       setAnonymousStartMode(checked);
-      await toggleProfileAnonymousMode(checked);
+      const saved = await toggleProfileAnonymousMode(checked);
+      if (!saved) {
+        setAnonymousStartMode(previous);
+      }
     },
-    [toggleProfileAnonymousMode, user?.id],
+    [profileAnonymousMode, toggleProfileAnonymousMode, user?.id],
   );
 
   const {
@@ -561,14 +561,14 @@ const StudentChat = () => {
       if (turningOn || turningOff) {
         const ok = await confirm(
           turningOn
-            ? "Turn on anonymous mode for this chat?\n\nOlder messages stay exactly as you sent them. New messages and activity use anonymous identity for your counselor. Continue?"
-            : "Turn off anonymous mode for this chat?\n\nOlder anonymous messages stay in that context on your counselor's screen. Your real name applies to new activity in this thread. Continue?",
+            ? "Turn on anonymous mode for this chat?\n\nOlder messages stay exactly as you sent them. New messages and activity use anonymous identity for your support team. Continue?"
+            : "Turn off anonymous mode for this chat?\n\nOlder anonymous messages stay in that context on your support team's screen. Your real name applies to new activity in this thread. Continue?",
         );
         if (!ok) return;
       }
     } else if (sessionIsAnonymous && !checked) {
       const ok = await confirm(
-        "Turning this off will show your real name to this counselor for active chats. Continue?",
+        "Turning this off will show your real name to this support team for active chats. Continue?",
       );
       if (!ok) return;
     }
@@ -577,6 +577,7 @@ const StudentChat = () => {
       setIsSavingChatAnonymity(true);
       await api.updateSessionChatAnonymity(sessionId, checked);
       await refreshUser();
+      await refreshSessions(true, { force: true });
       dispatchChatAnonymitySync();
       toast.success(
         checked
@@ -589,7 +590,7 @@ const StudentChat = () => {
     } finally {
       setIsSavingChatAnonymity(false);
     }
-  }, [activeSession, messages.length, refreshUser, sessionId]);
+  }, [activeSession, confirm, messages.length, refreshSessions, refreshUser, sessionId]);
 
   const sidebarAnonymousChecked = activeSession
     ? isAnonymousSessionFlag(activeSession.is_anonymous)
@@ -627,7 +628,10 @@ const StudentChat = () => {
         0
     );
 
-    if (sessionPeerId > 0 || sessionPeerName) {
+    const currentStudentId = Number(user?.id || activeSession.student_id || 0);
+    const peerMatchesStudent = sessionPeerId > 0 && sessionPeerId === currentStudentId;
+
+    if (!peerMatchesStudent && (sessionPeerId > 0 || sessionPeerName)) {
       return {
         id: sessionPeerId || null,
         name: sessionPeerName || "Peer Counselor",
@@ -635,14 +639,17 @@ const StudentChat = () => {
       };
     }
 
-    const peerMessage = [...messages].reverse().find((msg) => msg.sender_role === "peer_counselor");
+    const peerMessage = [...messages].reverse().find((msg) => (
+      msg.sender_role === "peer_counselor" &&
+      Number(msg.sender_id || 0) !== currentStudentId
+    ));
     if (!peerMessage) return null;
 
     return {
       id: Number(peerMessage.sender_id || 0) || null,
       name: peerMessage.sender_display_name || peerMessage.sender_name_snapshot || "Peer Counselor",
     };
-  }, [activeSession, messages]);
+  }, [activeSession, messages, user?.id]);
 
   const activeSupportName =
     activePeerParticipant?.name ||

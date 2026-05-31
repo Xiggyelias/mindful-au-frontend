@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Session, isSessionExpired, markSessionAsExpired } from "@/hooks/useChatSession";
 import { 
   Search, 
   MessageSquare, 
   Users, 
   Shield, 
-  Loader2, 
   ChevronLeft, 
   ChevronRight,
   Plus,
@@ -163,15 +162,25 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const peerParticipantForSession = (session: Session) => {
+  const peerParticipantForSession = useCallback((session: Session) => {
+    const currentStudentId = Number(ownerUserId || session.chat_peer_student_id || session.student_id || 0);
+
     if (activeSession?.id === session.id && activePeerParticipant) {
+      const activePeerId = Number(activePeerParticipant.id || 0);
+      if (activePeerId > 0 && activePeerId === currentStudentId) {
+        return null;
+      }
       return activePeerParticipant;
     }
     const currentPeerName =
       session.peer_counselor?.profile?.full_name || session.peer_counselor?.email || "";
     if (Number(session.peer_counselor_id) > 0 || currentPeerName) {
+      const peerId = Number(session.peer_counselor_id || session.peer_counselor?.id || 0) || null;
+      if (peerId && peerId === currentStudentId) {
+        return null;
+      }
       return {
-        id: Number(session.peer_counselor_id || session.peer_counselor?.id || 0) || null,
+        id: peerId,
         name: currentPeerName || "Peer Counselor",
         email: session.peer_counselor?.email,
       };
@@ -179,28 +188,44 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     const casePeerName =
       session.case_peer_counselor?.profile?.full_name || session.case_peer_counselor?.email || "";
     if (Number(session.case_peer_counselor_id) > 0 || casePeerName) {
+      const casePeerId = Number(session.case_peer_counselor_id || session.case_peer_counselor?.id || 0) || null;
+      if (casePeerId && casePeerId === currentStudentId) {
+        return null;
+      }
       return {
-        id: Number(session.case_peer_counselor_id || session.case_peer_counselor?.id || 0) || null,
+        id: casePeerId,
         name: casePeerName || "Peer Counselor",
         email: session.case_peer_counselor?.email,
       };
     }
     return null;
-  };
+  }, [activePeerParticipant, activeSession?.id, ownerUserId]);
 
-  const isPeerSupportSession = (session: Session) => Boolean(peerParticipantForSession(session));
+  const isPeerSupportSession = useCallback(
+    (session: Session) => Boolean(peerParticipantForSession(session)),
+    [peerParticipantForSession]
+  );
 
-  const supportPersonName = (session: Session) =>
-    peerParticipantForSession(session)?.name ||
-    session.counselor?.profile?.full_name ||
-        session.counselor?.email ||
-        "Counselor";
+  const supportPersonName = useCallback(
+    (session: Session) =>
+      peerParticipantForSession(session)?.name ||
+      session.counselor?.profile?.full_name ||
+      session.counselor?.email ||
+      "Counselor",
+    [peerParticipantForSession]
+  );
 
-  const supportPersonId = (session: Session) =>
-    Number(peerParticipantForSession(session)?.id || session.counselor_id || 0);
+  const supportPersonId = useCallback(
+    (session: Session) =>
+      Number(peerParticipantForSession(session)?.id || session.counselor_id || 0),
+    [peerParticipantForSession]
+  );
 
-  const supervisingCounselorName = (session: Session) =>
-    session.counselor?.profile?.full_name || session.counselor?.email || "Counselor";
+  const supervisingCounselorName = useCallback(
+    (session: Session) =>
+      session.counselor?.profile?.full_name || session.counselor?.email || "Counselor",
+    []
+  );
 
   // Deduplicate "Recent Support" by the active support person. Peer-assigned
   // case rooms lead with the peer counselor, while the supervising counselor
@@ -266,7 +291,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     );
 
     return rows;
-  }, [activePeerParticipant, activeSession?.id, visibleSessions]);
+  }, [isPeerSupportSession, supportPersonId, supportPersonName, visibleSessions]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRecentSupportRows = useMemo(() => {
@@ -286,7 +311,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       if (conversationFilter === "active") return session.status !== "completed" && session.status !== "cancelled";
       return false;
     });
-  }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds]);
+  }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds, supportPersonName]);
 
   const filteredCounselors = useMemo(() => {
     return counselors.filter((c) =>
@@ -396,9 +421,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
                 const supportSubtitleParts = isPeer
                   ? [
-                      "Peer Counselor",
+                      "Peer support",
                       supervisingCounselorName(session)
-                        ? `Counselor: ${supervisingCounselorName(session)}`
+                        ? `Supervised by ${supervisingCounselorName(session)}`
                         : "",
                     ]
                   : ["Counselor"];
@@ -458,7 +483,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
                     className={cn(
-                      "group w-full overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
+                      "group w-full min-w-0 overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
                         : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
@@ -484,13 +509,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         </div>
                         <p
                           className={cn(
-                            "mt-1 flex min-w-0 items-center gap-1 text-[10px] font-black uppercase tracking-wider",
+                            "mt-1 flex min-w-0 items-start gap-1 text-[10px] font-black uppercase tracking-wider leading-snug",
                             isActive ? "text-white/80" : "text-muted-foreground"
                           )}
                           title={supportSubtitle}
                         >
                           {isPeer && <Users className="h-2.5 w-2.5 shrink-0" />}
-                          <span className="min-w-0 truncate">{supportSubtitle}</span>
+                          <span className="min-w-0 [overflow-wrap:anywhere]">{supportSubtitle}</span>
                         </p>
                       </div>
                     </div>

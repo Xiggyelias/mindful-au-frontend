@@ -1,9 +1,8 @@
 /**
- * Unified hook for toggling the user's **profile-level** anonymous mode.
+ * Unified hook for toggling the user's profile-level anonymous mode.
  *
- * Every student page that offers an anonymous-mode toggle
- * (Dashboard, Chat, Video Call) should use this instead of
- * re-implementing the confirm → api → refreshUser → dispatch cycle.
+ * Every student page that offers an anonymous-mode toggle should use this
+ * instead of re-implementing the confirm -> api -> refreshUser -> dispatch cycle.
  */
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -29,7 +28,7 @@ export interface UseProfileAnonymousModeReturn {
    * Handles confirmation dialogs, API call, user refresh, and toast feedback.
    * Pass `true` to turn on anonymous mode, `false` to turn it off.
    */
-  toggleProfileAnonymousMode: (nextChecked: boolean) => Promise<void>;
+  toggleProfileAnonymousMode: (nextChecked: boolean) => Promise<boolean>;
 }
 
 export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
@@ -41,12 +40,14 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
 
   const toggleProfileAnonymousMode = useCallback(
     async (nextChecked: boolean) => {
-      if (!user?.id || isSaving) return;
+      if (!user?.id || isSaving) return false;
 
       const current = isProfileAnonymousMode(user.profile?.anonymous_mode);
+      if (current === nextChecked) return true;
+
       if (current && !nextChecked) {
         const ok = await confirm(PROFILE_ANON_MODE_OFF_CONFIRMATION);
-        if (!ok) return;
+        if (!ok) return false;
       }
 
       setIsSaving(true);
@@ -57,9 +58,11 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
         toast.success(getProfileAnonymousModeSuccessTitle(nextChecked), {
           description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
         });
+        return true;
       } catch (error: unknown) {
         const message = getApiErrorMessage(error, "Failed to update anonymous mode");
         toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
+        return false;
       } finally {
         setIsSaving(false);
       }
