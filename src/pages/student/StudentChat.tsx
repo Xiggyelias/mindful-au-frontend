@@ -494,6 +494,21 @@ const StudentChat = () => {
     }
   };
 
+  const navigateToChatSession = useCallback((id: string | number) => {
+    const nextId = String(id);
+    if (sessionFromUrl !== nextId) {
+      navigate(`/student/chat?session=${encodeURIComponent(nextId)}`, { replace: true });
+    }
+  }, [navigate, sessionFromUrl]);
+
+  const markSessionReadSoon = useCallback((id: string) => {
+    void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(() => {
+      setTimeout(() => {
+        void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch(() => {});
+      }, 2000);
+    });
+  }, []);
+
   const handleSelectSessionById = useCallback((id: string) => {
     if (!id) {
       selectSession(null);
@@ -502,19 +517,30 @@ const StudentChat = () => {
       }
       return;
     }
-    const session = sessions.find(s => s.id.toString() === id);
-    if (session) {
+
+    const selectAndOpen = (session: (typeof sessions)[number]) => {
       selectSession(session);
-      if (sessionFromUrl !== id) {
-        navigate(`/student/chat?session=${encodeURIComponent(id)}`, { replace: true });
-      }
-      void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(() => {
-        setTimeout(() => {
-          void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch(() => {});
-        }, 2000);
-      });
+      navigateToChatSession(id);
+      markSessionReadSoon(id);
+    };
+
+    const session = sessions.find(s => String(s.id) === id);
+    if (session) {
+      selectAndOpen(session);
+      return;
     }
-  }, [navigate, sessionFromUrl, sessions, selectSession]);
+
+    void (async () => {
+      try {
+        const fetchedSession = await api.getSession(id);
+        if (fetchedSession?.id) {
+          selectAndOpen(fetchedSession);
+        }
+      } catch (error: unknown) {
+        toast.error(getApiErrorMessage(error, "Could not open that conversation."));
+      }
+    })();
+  }, [markSessionReadSoon, navigate, navigateToChatSession, sessionFromUrl, sessions, selectSession]);
 
   const closeActiveChat = useCallback(() => {
     selectSession(null);
@@ -524,14 +550,22 @@ const StudentChat = () => {
   }, [navigate, selectSession, sessionFromUrl]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
-    void startSessionWithCounselor(id, { isAnonymous: isAnon });
-  }, [startSessionWithCounselor]);
+    void startSessionWithCounselor(id, { isAnonymous: isAnon }).then((session) => {
+      if (session?.id) {
+        navigateToChatSession(session.id);
+      }
+    });
+  }, [navigateToChatSession, startSessionWithCounselor]);
 
   const handleStartFreshAnonymousSession = useCallback((counselorId: number) => {
     // Always force a brand-new anonymous session here so the anonymity
     // contract is preserved (no silent reuse of an old anonymous thread).
-    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true });
-  }, [startSessionWithCounselor]);
+    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true }).then((session) => {
+      if (session?.id) {
+        navigateToChatSession(session.id);
+      }
+    });
+  }, [navigateToChatSession, startSessionWithCounselor]);
 
   const handleDeleteMessageWrapper = useCallback((id: number) => {
     const msg = messages.find((m) => m.id === id);

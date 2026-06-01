@@ -68,6 +68,14 @@ function counselorChatListDashboardKey(row: Record<string, unknown>): string {
 }
 
 export type CounselorChatDedupeMode = "messages" | "dashboard";
+type CounselorChatDedupeOptions = {
+  /**
+   * Counselor message lists can receive both an anonymous and named row for
+   * the same active supervised case after an anonymity transition. Collapse
+   * those identity modes so the inbox shows one selectable case.
+   */
+  collapseIdentityModes?: boolean;
+};
 
 export function counselorChatListLane(row: Record<string, unknown>): "direct" | "supervision" {
   const assignedRole = String(row.assigned_role ?? "").trim();
@@ -96,6 +104,7 @@ export function counselorChatListLane(row: Record<string, unknown>): "direct" | 
 export function counselorChatListDedupeKey(
   row: Record<string, unknown>,
   mode: CounselorChatDedupeMode = "messages",
+  options: CounselorChatDedupeOptions = {},
 ): string {
   if (mode === "dashboard") {
     return counselorChatListDashboardKey(row);
@@ -103,6 +112,21 @@ export function counselorChatListDedupeKey(
 
   const isAnon = isAnonymousSessionFlag(row.is_anonymous);
   const lane = counselorChatListLane(row);
+  const collapseIdentityModes = options.collapseIdentityModes === true;
+
+  if (collapseIdentityModes) {
+    const rid = realStudentId(row);
+    if (rid > 0) {
+      return `${lane}:stu:${rid}`;
+    }
+    const handle = String(row.anonymous_id ?? "").trim();
+    if (handle) {
+      return `${lane}:h:${handle}`;
+    }
+    const nk = normalizedNameKey(row);
+    if (nk) return `${lane}:nm:${nk}`;
+    return `${lane}:sid:${row.id}`;
+  }
 
   if (isAnon) {
     const rid = realStudentId(row);
@@ -168,7 +192,7 @@ export function counselorChatDedupeKeyFromSession(session: {
   case_peer_counselor_id?: number | null;
   is_anonymous?: unknown;
   anonymous_id?: string | null;
-}): string {
+}, options: CounselorChatDedupeOptions = {}): string {
   return counselorChatListDedupeKey({
     id: session.id,
     student_id: session.student_id,
@@ -178,5 +202,5 @@ export function counselorChatDedupeKeyFromSession(session: {
     case_peer_counselor_id: session.case_peer_counselor_id,
     is_anonymous: session.is_anonymous,
     anonymous_id: session.anonymous_id,
-  }, "messages");
+  }, "messages", options);
 }

@@ -162,6 +162,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const sessionActivityTime = useCallback((session: Session) => {
+    const raw = session.updated_at || session.created_at;
+    const timestamp = new Date(raw).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }, []);
+
   const peerParticipantForSession = useCallback((session: Session) => {
     const currentStudentId = Number(ownerUserId || session.chat_peer_student_id || session.student_id || 0);
 
@@ -268,9 +274,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
       existing.sessions.push(session);
       existing.unreadCount += Math.max(0, Number(session.unread_count || 0));
-      const currentLatestTime = new Date(existing.latest.created_at).getTime();
-      const candidateTime = new Date(session.created_at).getTime();
-      if (Number.isFinite(candidateTime) && candidateTime > currentLatestTime) {
+      const currentLatestTime = sessionActivityTime(existing.latest);
+      const candidateTime = sessionActivityTime(session);
+      if (candidateTime > currentLatestTime) {
         existing.latest = session;
       }
     }
@@ -279,6 +285,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       supportId: group.supportId,
       counselorId: group.counselorId,
       session: group.latest,
+      sessionIds: group.sessions.map((item) => String(item.id)),
       totalSessions: group.sessions.length,
       unreadCount: group.unreadCount,
     }));
@@ -286,12 +293,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     // Most recently active counselors first.
     rows.sort(
       (a, b) =>
-        new Date(b.session.created_at).getTime() -
-        new Date(a.session.created_at).getTime()
+        sessionActivityTime(b.session) -
+        sessionActivityTime(a.session)
     );
 
     return rows;
-  }, [isPeerSupportSession, supportPersonId, supportPersonName, visibleSessions]);
+  }, [isPeerSupportSession, sessionActivityTime, supportPersonId, supportPersonName, visibleSessions]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRecentSupportRows = useMemo(() => {
@@ -411,9 +418,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="min-w-0 space-y-1">
-              {filteredRecentSupportRows.map(({ session, totalSessions, counselorId, supportId, unreadCount }) => {
+              {filteredRecentSupportRows.map(({ session, sessionIds, totalSessions, counselorId, supportId, unreadCount }) => {
                 const name = supportPersonName(session);
-                const isActive = activeSession?.id === session.id;
+                const isActive = sessionIds.includes(String(activeSession?.id ?? ""));
                 const isPeer = isPeerSupportSession(session);
                 const isAnon = isAnonymousSessionFlag(session.is_anonymous);
                 const sessionNumericId = Number(session.id);
@@ -484,6 +491,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onMouseLeave={handleRowMouseLeave}
                     className={cn(
                       "group w-full min-w-0 max-w-full overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
+                      "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
                         : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"

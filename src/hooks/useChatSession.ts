@@ -34,6 +34,7 @@ export interface Session {
   anonymous_id?: string | null;
   unread_count?: number;
   created_at: string;
+  updated_at?: string | null;
   counselor?: {
     id: number;
     email?: string;
@@ -135,6 +136,31 @@ export const useChatSession = (userId: number | undefined) => {
   const sessionsRequestInFlightRef = useRef<Promise<void> | null>(null);
   const lastSessionsLoadAtRef = useRef(0);
   const sessionPageRef = useRef(sessionPage);
+  const activeSessionIdRef = useRef<string | null>(null);
+
+  const resolveActiveSession = useCallback((current: Session | null, nextSessions: Session[]) => {
+    const preferredId = activeSessionIdRef.current || (current ? String(current.id) : null);
+    if (preferredId) {
+      const refreshedSession = nextSessions.find((session) => String(session.id) === preferredId);
+      if (refreshedSession) {
+        activeSessionIdRef.current = String(refreshedSession.id);
+        return refreshedSession;
+      }
+
+      if (
+        current &&
+        String(current.id) === preferredId &&
+        isOpenChatSession(current) &&
+        !isSessionExpired(String(current.id))
+      ) {
+        return current;
+      }
+    }
+
+    const fallback = nextSessions[0] || null;
+    activeSessionIdRef.current = fallback ? String(fallback.id) : null;
+    return fallback;
+  }, []);
 
   const hydrateCachedSessions = useCallback(() => {
     if (!userId) return false;
@@ -171,23 +197,14 @@ export const useChatSession = (userId: number | undefined) => {
       setSessionTotalPages(Math.max(1, Number(parsed?.total_pages || 1)));
       setSessionTotalItems(Math.max(0, Number(parsed?.total_items || normalizedSessions.length)));
       setActiveSession((current) => {
-        if (!normalizedSessions.length) {
-          return null;
-        }
-        if (current) {
-          const refreshedSession = normalizedSessions.find((session) => session.id === current.id);
-          if (refreshedSession) {
-            return refreshedSession;
-          }
-        }
-        return normalizedSessions[0];
+        return resolveActiveSession(current, normalizedSessions);
       });
       setIsLoading(false);
       return true;
     } catch {
       return false;
     }
-  }, [userId]);
+  }, [resolveActiveSession, userId]);
 
   const loadSessions = useCallback(async (silent = false, options?: { force?: boolean }) => {
     if (!userId) {
@@ -317,12 +334,7 @@ export const useChatSession = (userId: number | undefined) => {
 
       // If active session is missing/invalid, switch to the latest valid one.
       setActiveSession((current) => {
-        if (!current) {
-          return normalizedSessions[0] || null;
-        }
-
-        const refreshedSession = normalizedSessions.find((session) => session.id === current.id);
-        return refreshedSession || normalizedSessions[0] || null;
+        return resolveActiveSession(current, normalizedSessions);
       });
     } catch (err) {
       console.error("Failed to load sessions:", err);
@@ -342,7 +354,7 @@ export const useChatSession = (userId: number | undefined) => {
     } finally {
       sessionsRequestInFlightRef.current = null;
     }
-  }, [userId]);
+  }, [resolveActiveSession, userId]);
 
   useEffect(() => {
     const handleExpired = () => {
@@ -354,10 +366,16 @@ export const useChatSession = (userId: number | undefined) => {
   }, []);
 
   const selectSession = useCallback((session: Session | null) => {
+    activeSessionIdRef.current = session ? String(session.id) : null;
     if (session) {
-      setSessions((prev) =>
-        prev.map((s) => (s.id === session.id ? { ...s, unread_count: 0 } : s))
-      );
+      setSessions((prev) => {
+        const nextSession = { ...session, unread_count: 0 };
+        const hasSession = prev.some((s) => String(s.id) === String(session.id));
+        if (!hasSession) {
+          return [nextSession, ...prev];
+        }
+        return prev.map((s) => (String(s.id) === String(session.id) ? nextSession : s));
+      });
     }
     setActiveSession(session);
   }, []);
@@ -399,6 +417,7 @@ export const useChatSession = (userId: number | undefined) => {
             isOpenChatSession(s)
         );
         if (existing) {
+          activeSessionIdRef.current = String(existing.id);
           setActiveSession(existing);
           return existing;
         }
@@ -420,6 +439,7 @@ export const useChatSession = (userId: number | undefined) => {
           return [newSession, ...withoutSameSession];
         });
         // Set active session immediately so UI opens the chat
+        activeSessionIdRef.current = String(newSession.id);
         setActiveSession(newSession);
         // Loading false immediately so chat UI is accessible
         setIsLoading(false);

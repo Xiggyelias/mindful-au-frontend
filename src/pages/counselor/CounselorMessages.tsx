@@ -258,6 +258,11 @@ const resolveChatOnline = (chat?: Pick<ChatListItem, "isOnline" | "lastSeenAt"> 
   return chat.isOnline || isOnlineFromLastSeen(chat.lastSeenAt);
 };
 
+const isActualPeerSupportRoom = (session: RawSession) => {
+  const peerCounselorId = Number(session.peer_counselor_id || session.peer_counselor?.id || 0);
+  return session.assigned_role === "peer_counselor" || (Number.isFinite(peerCounselorId) && peerCounselorId > 0);
+};
+
 /** Sidebar / session list: clock time in display zone (default Africa/Harare). */
 const formatChatListTime = (dateString?: string) => {
   const d = parseBackendDate(dateString);
@@ -846,7 +851,7 @@ const CounselorMessages = () => {
         const dedupedByConversation = new Map<string, { session: RawSession }>();
 
         for (const session of chatSessions) {
-          const conversationKey = counselorChatDedupeKeyFromSession(session);
+          const conversationKey = counselorChatDedupeKeyFromSession(session, { collapseIdentityModes: true });
           const bucket = dedupedByConversation.get(conversationKey);
           if (!bucket) {
             dedupedByConversation.set(conversationKey, { session });
@@ -854,6 +859,17 @@ const CounselorMessages = () => {
           }
 
           const existing = bucket.session;
+          const existingPeerRoom = isActualPeerSupportRoom(existing);
+          const currentPeerRoom = isActualPeerSupportRoom(session);
+          if (currentPeerRoom && !existingPeerRoom) {
+            bucket.session = session;
+            continue;
+          }
+
+          if (!currentPeerRoom && existingPeerRoom) {
+            continue;
+          }
+
           const existingOpen = isOpenSession(existing.status);
           const currentOpen = isOpenSession(session.status);
           if (currentOpen && !existingOpen) {
