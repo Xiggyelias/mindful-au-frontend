@@ -441,6 +441,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const isPeer = isPeerSupportSession(session);
                 const actualSessionIsAnon = isAnonymousSessionFlag(session.is_anonymous);
                 const isAnon = Boolean(displayAsAnonymous);
+                const isAnonymousIntent = isAnon && !actualSessionIsAnon;
                 const sessionNumericId = Number(session.id);
                 const isPinned = pinnedSessionIds.includes(sessionNumericId);
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
@@ -452,16 +453,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         : "",
                     ]
                   : ["Counselor"];
-                if (isAnon) supportSubtitleParts.push("Anon");
+                if (isAnon) supportSubtitleParts.push(isAnonymousIntent ? "New anonymous chat" : "Anon");
                 if (isPinned) supportSubtitleParts.push("Pinned");
                 if (isArchived) supportSubtitleParts.push("Archived");
                 const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
-                  if (isAnon && !actualSessionIsAnon && counselorId > 0 && onStartFreshAnonymousSession) {
-                    onStartFreshAnonymousSession(counselorId);
-                    return;
-                  }
                   // Anonymous rows must always open a brand-new chat session so
                   // an old anonymous thread is never silently resumed (which
                   // would re-link the student's previous anonymous identity to
@@ -516,7 +513,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
-                        : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
+                        : isAnon
+                        ? "border-rose-200/80 bg-rose-50/95 text-slate-950 hover:-translate-y-0.5 hover:border-rose-300 hover:bg-rose-50"
+                        : "border-slate-200/80 bg-white/90 text-slate-950 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-3">
@@ -527,14 +526,19 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       </div>
                       <div className="min-w-0 flex-1 text-left">
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <p className="min-w-0 max-w-full flex-1 truncate text-sm font-bold leading-tight">
+                          <p className={cn(
+                            "min-w-0 max-w-full flex-1 truncate text-sm font-bold leading-tight",
+                            isActive ? "text-white" : "text-slate-900"
+                          )}>
                             {name}
                           </p>
                           <span className={cn(
                             "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                             isActive
                               ? "bg-white/15 text-white/80"
-                              : "bg-slate-100 text-muted-foreground"
+                              : isAnon
+                              ? "bg-rose-100 text-rose-700"
+                              : "bg-slate-100 text-slate-600"
                           )}>
                             {totalSessions} {totalSessions === 1 ? "session" : "sessions"}
                           </span>
@@ -542,7 +546,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         <p
                           className={cn(
                             "mt-1 flex min-w-0 items-start gap-1 text-[10px] font-black uppercase tracking-wider leading-snug",
-                            isActive ? "text-white/80" : "text-muted-foreground"
+                            isActive ? "text-white/80" : isAnon ? "text-rose-700/80" : "text-slate-500"
                           )}
                           title={supportSubtitle}
                         >
@@ -563,7 +567,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       <button
                         type="button"
                         onClick={togglePin}
-                        className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isPinned && "text-emerald-700")}
+                        className={cn(
+                          "rounded-md p-1 transition-colors",
+                          isActive
+                            ? "text-white/70 hover:bg-white/10 hover:text-white"
+                            : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                          isPinned && (isActive ? "text-white" : "text-emerald-700")
+                        )}
                         aria-label={isPinned ? "Unpin conversation" : "Pin conversation"}
                       >
                         <Pin className="h-3.5 w-3.5" />
@@ -571,7 +581,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       <button
                         type="button"
                         onClick={toggleArchive}
-                        className={cn("rounded-md p-1 text-muted-foreground hover:bg-slate-100", isArchived && "text-amber-700")}
+                        className={cn(
+                          "rounded-md p-1 transition-colors",
+                          isActive
+                            ? "text-white/70 hover:bg-white/10 hover:text-white"
+                            : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                          isArchived && (isActive ? "text-white" : "text-amber-700")
+                        )}
                         aria-label={isArchived ? "Restore conversation" : "Archive conversation"}
                       >
                         {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}

@@ -583,11 +583,15 @@ const StudentChat = () => {
   }, [markSessionReadSoon, navigate, navigateToChatSession, sessionFromUrl, sessions, selectSession]);
 
   const closeActiveChat = useCallback(() => {
+    notifyTyping(false);
+    setSidebarOpen(false);
+    setMessage("");
+    setSelectedFile(null);
     selectSession(null);
     if (sessionFromUrl) {
       navigate("/student/chat", { replace: true });
     }
-  }, [navigate, selectSession, sessionFromUrl]);
+  }, [navigate, notifyTyping, selectSession, sessionFromUrl]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
     void startSessionWithCounselor(id, { isAnonymous: isAnon }).then((session) => {
@@ -808,12 +812,12 @@ const StudentChat = () => {
 
               {activeSession ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-4 lg:px-6">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
+                  <div className="relative z-10 flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border/60 bg-background/80 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-4 lg:px-6">
+                    <div className="flex min-w-[14rem] flex-1 items-center gap-2 sm:gap-3">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 xl:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
                         <Menu className="h-5 w-5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="xl:hidden shrink-0" onClick={closeActiveChat} aria-label="Close chat">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 xl:hidden" onClick={closeActiveChat} aria-label="Close chat" title="Close chat">
                         <X className="h-5 w-5" />
                       </Button>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">
@@ -825,7 +829,7 @@ const StudentChat = () => {
                           .join("")
                           .toUpperCase() || "SC"}
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
                           {activeSupportName}
                         </h2>
@@ -856,12 +860,13 @@ const StudentChat = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+                    <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
                         checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
                         onCheckedChange={(v) => void handleUnifiedAnonymousToggle(v)}
                         disabled={unifiedAnonymousToggleDisabled}
+                        className="shrink-0"
                       />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
                         <Shield className="h-3 w-3" />
