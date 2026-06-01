@@ -15,7 +15,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
-import { useChatSession } from "@/hooks/useChatSession";
+import { isSessionExpired, markSessionAsExpired, useChatSession } from "@/hooks/useChatSession";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
 import { useSessionKeepAlive } from "@/hooks/useSessionKeepAlive";
@@ -86,6 +86,7 @@ const StudentChat = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedCounselorsRef = useRef(false);
+  const expiredSessionNoticeRef = useRef<string | null>(null);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const {
@@ -141,14 +142,24 @@ const StudentChat = () => {
   });
 
   useEffect(() => {
-    if (!sessionFromUrl || !sessions?.length) {
+    if (!sessionFromUrl) {
       return;
     }
+
+    if (isSessionExpired(sessionFromUrl)) {
+      navigate("/student/chat", { replace: true });
+      return;
+    }
+
+    if (!sessions?.length) {
+      return;
+    }
+
     const found = sessions.find((s) => String(s.id) === String(sessionFromUrl));
     if (found) {
       selectSession(found);
     }
-  }, [sessionFromUrl, sessions, selectSession]);
+  }, [navigate, sessionFromUrl, sessions, selectSession]);
 
   const {
     messages,
@@ -174,6 +185,24 @@ const StudentChat = () => {
     userId: user?.id?.toString() || "",
     sessions: sessions,
   });
+
+  useEffect(() => {
+    if (!sessionExpired || !sessionId) {
+      return;
+    }
+
+    const expiredId = String(sessionId);
+    if (expiredSessionNoticeRef.current !== expiredId) {
+      toast.error("That chat session has expired. Please choose another counselor or start a new session.");
+      expiredSessionNoticeRef.current = expiredId;
+    }
+
+    selectSession(null);
+    if (sessionFromUrl === expiredId) {
+      navigate("/student/chat", { replace: true });
+    }
+    void refreshSessions(true, { force: true });
+  }, [navigate, refreshSessions, selectSession, sessionExpired, sessionFromUrl, sessionId]);
 
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
@@ -502,11 +531,24 @@ const StudentChat = () => {
   }, [navigate, sessionFromUrl]);
 
   const markSessionReadSoon = useCallback((id: string) => {
-    void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(() => {
+    const handleReadError = (error: unknown) => {
+      const status = Number((error as { response?: { status?: unknown }; status?: unknown })?.response?.status ?? (error as { status?: unknown })?.status);
+      if (status === 404 || status === 410) {
+        markSessionAsExpired(id);
+        return;
+      }
+
       setTimeout(() => {
-        void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch(() => {});
+        void api.markSessionInboundRead(id, { timeout_ms: 8000 }).catch((retryError) => {
+          const retryStatus = Number((retryError as { response?: { status?: unknown }; status?: unknown })?.response?.status ?? (retryError as { status?: unknown })?.status);
+          if (retryStatus === 404 || retryStatus === 410) {
+            markSessionAsExpired(id);
+          }
+        });
       }, 2000);
-    });
+    };
+
+    void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(handleReadError);
   }, []);
 
   const handleSelectSessionById = useCallback((id: string) => {
@@ -694,19 +736,6 @@ const StudentChat = () => {
     ? "Supervised Peer Support Chat"
     : "Confidential support conversation";
 
-  if (sessionExpired) {
-    return (
-      <div className="flex h-screen w-full flex-col items-center justify-center 
-                      gap-3 text-muted-foreground px-4 text-center">
-        <Lock className="h-8 w-8 opacity-40" />
-        <p className="text-sm font-medium">This session has ended.</p>
-        <p className="text-xs opacity-60">
-          This conversation is no longer available.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
       <DashboardSidebar
@@ -760,15 +789,14 @@ const StudentChat = () => {
 
             {/* Main Chat Area */}
             <div className="relative flex min-h-0 flex-1 flex-col bg-gradient-to-b from-background via-background to-slate-50/70 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35">
-              {/* Session Expired - Check FIRST before any other UI */}
-              {sessionExpired && (
-                <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground text-sm">
-                  <Lock className="w-5 h-5 opacity-50" />
+              {sessionExpired ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
+                  <Lock className="h-5 w-5 opacity-50" />
                   <p>This session has ended and is no longer available.</p>
+                  <p className="max-w-sm text-xs opacity-70">Select another conversation from the sidebar or start a new chat.</p>
                 </div>
-              )}
-
-              <>
+              ) : (
+                <>
               {activeSession && chatError && (
                 <div className="shrink-0 bg-destructive/10 border-b border-destructive/20 px-4 py-3 flex items-center justify-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
@@ -987,7 +1015,8 @@ const StudentChat = () => {
                     </div>
                  </div>
               )}
-              </>
+                </>
+              )}
             </div>
           </div>
         </ErrorBoundary>

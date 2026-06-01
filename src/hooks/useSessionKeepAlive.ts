@@ -113,11 +113,7 @@ export const useSessionKeepAlive = ({
       }
 
       try {
-        const response = await api.client.post(
-          `/sessions/${currentSessionKey}/touch`,
-          {},
-          { timeout: 5000 }
-        );
+        const response = await api.touchSession(currentSessionKey, { timeout_ms: 5000 });
 
         if (response.data?.ok) {
           const touchedAt = Date.now();

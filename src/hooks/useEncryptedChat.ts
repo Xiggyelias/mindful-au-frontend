@@ -121,6 +121,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const lastTypingValueSentRef = useRef<boolean | null>(null);
   const pollCycleRef = useRef(0);
 
+  const isCurrentSession = useCallback(
+    (targetSessionId: string) => String(sessionIdRef.current || '') === String(targetSessionId || ''),
+    []
+  );
+
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
 
@@ -207,13 +212,16 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   useEffect(() => {
     sessionExpiredRef.current = false;
     bootstrapRunningRef.current = false;
+    loadInFlightRef.current = false;
+    loadOlderInFlightRef.current = false;
+    pollCycleRef.current = 0;
     setSessionExpired(false);
     lastMessageIdRef.current = 0;
     oldestMessageIdRef.current = Number.MAX_SAFE_INTEGER;
     setMessages([]);
     setTemporarilyHiddenMessageIds([]);
     setError(null);
-    setIsLoading(true);
+    setIsLoading(Boolean(sessionId));
   }, [sessionId]);
 
   // Keep sessionIdRef in sync so page-unload listeners always have the current value.
@@ -306,7 +314,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         };
 
         const rawMessages = await api.getMessages(sessionId, queryParams);
-        if (signal?.aborted) return;
+        if (signal?.aborted || !isCurrentSession(sessionId)) return;
 
         if (Array.isArray(rawMessages) && rawMessages.length > 0) {
           const visibleMessages = filterVisibleMessages(rawMessages);
@@ -334,7 +342,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         setError(null);
         messageBackoffMsRef.current = 0; // Reset backoff on success!
       } catch (err: any) {
-        if (signal?.aborted) return;
+        if (signal?.aborted || !isCurrentSession(sessionId)) return;
         const status = err?.response?.status ?? err?.status;
         if (status === 410) {
           markSessionAsExpired(sessionId);
@@ -361,10 +369,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         }
       } finally {
         loadInFlightRef.current = false;
-        setIsLoading(false);
+        if (isCurrentSession(sessionId)) {
+          setIsLoading(false);
+        }
       }
     },
-    [sessionId, stopRealtimeAndTimers]
+    [isCurrentSession, sessionId, stopRealtimeAndTimers]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -376,6 +386,8 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         before_id: oldestMessageIdRef.current,
         limit: OLDER_MESSAGE_BATCH_LIMIT,
       });
+
+      if (!isCurrentSession(sessionId)) return false;
 
       if (Array.isArray(rawMessages) && rawMessages.length > 0) {
         const visibleMessages = filterVisibleMessages(rawMessages);
@@ -400,6 +412,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       setHasOlderMessages(false);
       return false;
     } catch (err) {
+      if (!isCurrentSession(sessionId)) return false;
       const status = (err as any)?.response?.status ?? (err as any)?.status;
       if (status === 410) {
         markSessionAsExpired(sessionId);
@@ -410,9 +423,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       return false;
     } finally {
       loadOlderInFlightRef.current = false;
-      setIsLoadingOlderMessages(false);
+      if (isCurrentSession(sessionId)) {
+        setIsLoadingOlderMessages(false);
+      }
     }
-  }, [sessionId, hasOlderMessages]);
+  }, [hasOlderMessages, isCurrentSession, sessionId, stopRealtimeAndTimers]);
 
   const scheduleNextPoll = useCallback(() => {
     if (pollingTimeoutRef.current !== null) {
@@ -435,11 +450,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
     try {
       const data = await api.getTypingState(sessionId, { timeout_ms: 5000 });
+      if (!isCurrentSession(sessionId)) return;
       if (data?.is_typing !== undefined) {
         setIsPeerTyping(data.is_typing === true);
       }
       typingBackoffMsRef.current = 0; // Reset backoff on success!
     } catch (e: any) {
+      if (!isCurrentSession(sessionId)) return;
       const status = e?.response?.status ?? e?.status;
       if (status === 410) {
         markSessionAsExpired(sessionId);
@@ -461,7 +478,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         );
       }
     }
-  }, [sessionId, hasValidUserId, stopRealtimeAndTimers]);
+  }, [hasValidUserId, isCurrentSession, sessionId, stopRealtimeAndTimers]);
 
   const scheduleTypingPoll = useCallback(() => {
     if (!sessionId) return;
@@ -670,6 +687,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       lastTypingSentAtRef.current = now;
       api.setTypingState(sessionId, isTyping)
         .catch((err: any) => {
+          if (!isCurrentSession(sessionId)) return;
           const status = err?.response?.status ?? err?.status;
           if (status === 410) {
             markSessionAsExpired(sessionId);
@@ -686,7 +704,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           typingWriteInFlightRef.current = false;
         });
     },
-    [sessionId, hasValidUserId, stopRealtimeAndTimers]
+    [hasValidUserId, isCurrentSession, sessionId, stopRealtimeAndTimers]
   );
 
   const registerServerMessage = useCallback((raw: RawMessage) => {

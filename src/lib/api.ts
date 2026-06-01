@@ -1058,7 +1058,7 @@ class ApiClient {
     return response.data;
   }
 
-  async createSession(data: { counselor_id?: number; session_type: string; is_anonymous?: boolean }) {
+  async createSession(data: { counselor_id?: number; session_type: string; is_anonymous?: boolean; force_new?: boolean }) {
     const response = await this.client.post('/sessions', data);
     return response.data;
   }
@@ -1125,8 +1125,12 @@ class ApiClient {
     return response.data;
   }
 
-  async touchSession(sessionId: string | number) {
-    const response = await this.client.post(`/sessions/${sessionId}/touch`);
+  async touchSession(sessionId: string | number, params?: { timeout_ms?: number }) {
+    const timeoutMs =
+      typeof params?.timeout_ms === 'number' && Number.isFinite(params.timeout_ms) && params.timeout_ms > 0
+        ? Math.floor(params.timeout_ms)
+        : DEFAULT_READ_TIMEOUT_MS;
+    const response = await this.client.post(`/sessions/${sessionId}/touch`, {}, { timeout: timeoutMs });
     return response.data as { ok: boolean; session_id: number; updated_at: string; throttled?: boolean };
   }
 

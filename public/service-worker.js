@@ -1,7 +1,7 @@
 /* global self, caches, fetch */
-const CACHE_NAME = "cms-cache-v8";
+const CACHE_NAME = "cms-cache-v9";
 
-/** System notification artwork — black / crimson / white (matches counseling UI). */
+/** System notification artwork: black / crimson / white (matches counseling UI). */
 const NOTIFY_ICON = "/assets/icons/notify-192.png";
 const NOTIFY_BADGE = "/assets/icons/notify-badge-96.png";
 
@@ -41,33 +41,22 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  // Never intercept API calls - let them go directly to server
-  if (url.hostname === 'mindfulapi.africau.co.zw') {
-    return; // bypass service worker completely for all API calls
-  }
-
-  // ✅ Never intercept signed file URLs — let them go straight to network
-  if (
-    url.pathname.includes('/chat/files/') ||
-    url.searchParams.has('signature') ||
-    url.searchParams.has('expires')
-  ) {
-    return; // bypass service worker entirely
-  }
-
   const { request } = event;
   if (request.method !== "GET") return;
 
+  // Never intercept cross-origin API/storage calls. Let the browser surface the
+  // real HTTP result instead of wrapping failures as "Service Worker Error".
   if (url.origin !== self.location.origin) {
-    event.respondWith(
-      fetch(request).catch(() => {
-        // Return a basic error response for cross-origin failures
-        return new Response('Service worker fetch failed', { 
-          status: 500, 
-          statusText: 'Service Worker Error' 
-        });
-      })
-    );
+    return;
+  }
+
+  const signedParamKeys = Array.from(url.searchParams.keys()).map((key) => key.toLowerCase());
+  if (
+    url.pathname.includes("/chat/files/") ||
+    signedParamKeys.includes("signature") ||
+    signedParamKeys.includes("expires") ||
+    signedParamKeys.some((key) => key.startsWith("x-amz-"))
+  ) {
     return;
   }
 
@@ -81,9 +70,12 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() =>
-          caches.match(request).then((hit) => hit || caches.match("/"))
-        )
+        .catch(async () => {
+          const hit = await caches.match(request);
+          if (hit) return hit;
+          const shell = await caches.match("/", { ignoreSearch: true });
+          return shell || new Response("Offline", { status: 503, statusText: "Offline" });
+        })
     );
     return;
   }
@@ -99,7 +91,11 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(request).then((hit) => hit || fetch(request)))
+        .catch(() =>
+          caches.match(request).then((hit) =>
+            hit || new Response("Offline", { status: 503, statusText: "Offline" })
+          )
+        )
     );
     return;
   }
@@ -107,23 +103,22 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
-      return fetch(request).then((res) => {
-        if (!res || res.status !== 200 || res.type !== "basic") return res;
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return res;
-      }).catch(() => {
-        // Return a basic error response for fetch failures
-        return new Response('Service worker fetch failed', { 
-          status: 500, 
-          statusText: 'Service Worker Error' 
+      return fetch(request)
+        .then((res) => {
+          if (!res || res.status !== 200 || res.type !== "basic") return res;
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return res;
+        })
+        .catch(async () => {
+          const hit = await caches.match(request);
+          return hit || new Response("Offline", { status: 503, statusText: "Offline" });
         });
-      });
     })
   );
 });
 
-/** Web Push — payload JSON: { title, body, url, path, icon?, badge?, tag, requireInteraction?, silent?, urgency? } */
+/** Web Push payload JSON: { title, body, url, path, icon?, badge?, tag, requireInteraction?, silent?, urgency? } */
 self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {

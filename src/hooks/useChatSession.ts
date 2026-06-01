@@ -101,7 +101,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
-const SESSION_CACHE_VERSION = 3;
+const SESSION_CACHE_VERSION = 4;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -357,9 +357,23 @@ export const useChatSession = (userId: number | undefined) => {
   }, [resolveActiveSession, userId]);
 
   useEffect(() => {
-    const handleExpired = () => {
+    const handleExpired = (event: Event) => {
+      const expiredId = String((event as CustomEvent<{ sessionId?: string }>).detail?.sessionId || "").trim();
+      if (expiredId && activeSessionIdRef.current === expiredId) {
+        activeSessionIdRef.current = null;
+      }
+
       setSessions(prev => prev.filter(s => !isSessionExpired(String(s.id))));
-      setActiveSession(prev => prev && isSessionExpired(String(prev.id)) ? null : prev);
+      setActiveSession(prev => {
+        if (!prev || !isSessionExpired(String(prev.id))) {
+          return prev;
+        }
+
+        if (!expiredId || String(prev.id) === expiredId) {
+          activeSessionIdRef.current = null;
+        }
+        return null;
+      });
     };
     window.addEventListener('CHAT_SESSION_EXPIRED', handleExpired);
     return () => window.removeEventListener('CHAT_SESSION_EXPIRED', handleExpired);
@@ -429,6 +443,7 @@ export const useChatSession = (userId: number | undefined) => {
         counselor_id: counselorId,
         session_type: "chat",
         is_anonymous: shouldBeAnonymous,
+        ...(forceNew ? { force_new: true } : {}),
       });
       
       if (newSession) {
