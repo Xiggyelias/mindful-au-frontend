@@ -154,7 +154,7 @@ const CounselorStudents = () => {
       const studentId = Number(session.student_id);
       if (!studentId) return;
 
-      const isPeerChat = session.assigned_role === "peer_counselor" || Number(session.peer_counselor_id) > 0;
+      const isPeerChat = session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
       const currentTimestamp = toMillis(session.updated_at || session.created_at || null);
       const map = isPeerChat ? peerChatByStudent : directChatByStudent;
       const currentBest = map.get(studentId);
@@ -543,8 +543,8 @@ const CounselorStudents = () => {
           id: Number(updatedSession?.id || sessionId),
           student_id: Number(updatedSession?.student_id || student.id),
           session_type: "chat",
-          assigned_role: updatedSession?.assigned_role || "peer_counselor",
-          peer_counselor_id: Number(updatedSession?.peer_counselor_id || student.assignedPeerCounselorId || 0) || null,
+          assigned_role: updatedSession?.assigned_role || "counselor",
+          peer_counselor_id: Number(updatedSession?.peer_counselor_id || 0) || null,
           status: updatedSession?.status || "completed",
         };
         const existingIndex = prev.findIndex((s: any) => Number(s.id) === Number(normalized.id));

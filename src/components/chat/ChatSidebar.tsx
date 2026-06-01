@@ -397,9 +397,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="space-y-8 px-3 pb-8 pt-4">
-          <div className="space-y-2">
+      <ScrollArea className="min-w-0 flex-1">
+        <div className="w-full min-w-0 max-w-full space-y-8 px-3 pb-8 pt-4">
+          <div className="min-w-0 space-y-2">
             <div className="flex items-center justify-between px-3">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/70">Recent Support</h3>
               {sessionTotalPages > 1 && (
@@ -410,7 +410,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               )}
             </div>
             
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               {filteredRecentSupportRows.map(({ session, totalSessions, counselorId, supportId, unreadCount }) => {
                 const name = supportPersonName(session);
                 const isActive = activeSession?.id === session.id;
@@ -483,7 +483,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
                     className={cn(
-                      "group w-full min-w-0 overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
+                      "group w-full min-w-0 max-w-full overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
                         : "border-slate-200/80 bg-white/80 text-foreground hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
@@ -496,15 +496,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         {getInitials(name)}
                       </div>
                       <div className="min-w-0 flex-1 text-left">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <p className="min-w-0 truncate text-sm font-bold">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <p className="min-w-0 max-w-full flex-1 truncate text-sm font-bold leading-tight">
                             {name}
                           </p>
                           <span className={cn(
-                            "shrink-0 text-[10px] font-normal",
-                            isActive ? "text-white/70" : "text-muted-foreground/70"
+                            "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                            isActive
+                              ? "bg-white/15 text-white/80"
+                              : "bg-slate-100 text-muted-foreground"
                           )}>
-                            (Session {totalSessions})
+                            {totalSessions} {totalSessions === 1 ? "session" : "sessions"}
                           </span>
                         </div>
                         <p

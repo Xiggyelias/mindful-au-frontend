@@ -103,7 +103,7 @@ export const buildStudentRosterRows = ({
     if (!studentId) return;
 
     const isPeerChat =
-      session.assigned_role === "peer_counselor" || Number(session.peer_counselor_id) > 0;
+      session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
     const currentTimestamp = toMillis(session.updated_at || session.created_at || null);
 
     const map = isPeerChat ? peerChatByStudent : directChatByStudent;
