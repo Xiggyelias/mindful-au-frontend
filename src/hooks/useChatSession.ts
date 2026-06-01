@@ -189,6 +189,7 @@ export const useChatSession = (userId: number | undefined) => {
           session.session_type === "chat" &&
           typeof session.counselor_id === "number" &&
           session.counselor_id > 0 &&
+          isOpenChatSession(session) &&
           !isSessionExpired(String(session.id))
       );
 
@@ -267,7 +268,8 @@ export const useChatSession = (userId: number | undefined) => {
         (session: Session) =>
           session.session_type === "chat" &&
           typeof session.counselor_id === "number" &&
-          session.counselor_id > 0
+          session.counselor_id > 0 &&
+          isOpenChatSession(session)
       );
 
       const receivedPage = Number(pagedPayload?.meta?.page);

@@ -170,6 +170,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const peerParticipantForSession = useCallback((session: Session) => {
     const currentStudentId = Number(ownerUserId || session.chat_peer_student_id || session.student_id || 0);
+    const isLivePeerAssignment =
+      session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
+
+    if (!isLivePeerAssignment) {
+      return null;
+    }
 
     if (activeSession?.id === session.id && activePeerParticipant) {
       const activePeerId = Number(activePeerParticipant.id || 0);
@@ -189,19 +195,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         id: peerId,
         name: currentPeerName || "Peer Counselor",
         email: session.peer_counselor?.email,
-      };
-    }
-    const casePeerName =
-      session.case_peer_counselor?.profile?.full_name || session.case_peer_counselor?.email || "";
-    if (Number(session.case_peer_counselor_id) > 0 || casePeerName) {
-      const casePeerId = Number(session.case_peer_counselor_id || session.case_peer_counselor?.id || 0) || null;
-      if (casePeerId && casePeerId === currentStudentId) {
-        return null;
-      }
-      return {
-        id: casePeerId,
-        name: casePeerName || "Peer Counselor",
-        email: session.case_peer_counselor?.email,
       };
     }
     return null;

@@ -695,18 +695,17 @@ const StudentChat = () => {
 
   const activePeerParticipant = useMemo(() => {
     if (!activeSession) return null;
+    const isLivePeerAssignment =
+      activeSession.assigned_role === "peer_counselor" && Number(activeSession.peer_counselor_id) > 0;
+    if (!isLivePeerAssignment) return null;
 
     const sessionPeerName =
       activeSession.peer_counselor?.profile?.full_name ||
       activeSession.peer_counselor?.email ||
-      activeSession.case_peer_counselor?.profile?.full_name ||
-      activeSession.case_peer_counselor?.email ||
       "";
     const sessionPeerId = Number(
       activeSession.peer_counselor_id ||
         activeSession.peer_counselor?.id ||
-        activeSession.case_peer_counselor_id ||
-        activeSession.case_peer_counselor?.id ||
         0
     );
 
@@ -717,7 +716,7 @@ const StudentChat = () => {
       return {
         id: sessionPeerId || null,
         name: sessionPeerName || "Peer Counselor",
-        email: activeSession.peer_counselor?.email || activeSession.case_peer_counselor?.email,
+        email: activeSession.peer_counselor?.email,
       };
     }
 
