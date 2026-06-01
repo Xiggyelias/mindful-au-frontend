@@ -101,7 +101,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
-const SESSION_CACHE_VERSION = 5;
+const SESSION_CACHE_VERSION = 6;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -116,6 +116,12 @@ type PagedMeta = {
 type SessionListResponse = Session[] | { data?: Session[]; meta?: PagedMeta };
 const isOpenChatSession = (session: Session) =>
   session.status !== "completed" && session.status !== "cancelled";
+const getHttpStatus = (error: unknown) =>
+  Number(
+    (error as { response?: { status?: unknown }; status?: unknown })?.response?.status ??
+      (error as { status?: unknown })?.status ??
+      0
+  );
 const conversationKey = (session: Session) => {
   const studentId = session.chat_peer_student_id || session.student_id || 0;
   const counselorId = session.counselor_id || 0;
@@ -139,7 +145,7 @@ export const useChatSession = (userId: number | undefined) => {
   const activeSessionIdRef = useRef<string | null>(null);
 
   const resolveActiveSession = useCallback((current: Session | null, nextSessions: Session[]) => {
-    const preferredId = activeSessionIdRef.current || (current ? String(current.id) : null);
+    const preferredId = activeSessionIdRef.current;
     if (preferredId) {
       const refreshedSession = nextSessions.find((session) => String(session.id) === preferredId);
       if (refreshedSession) {
@@ -319,7 +325,36 @@ export const useChatSession = (userId: number | undefined) => {
         }
       }
 
-      const normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
+      let normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
+      const activeSessionId = activeSessionIdRef.current;
+      if (
+        activeSessionId &&
+        !normalizedSessions.some((session) => String(session.id) === activeSessionId)
+      ) {
+        try {
+          const activeSnapshot = (await api.getSession(activeSessionId, {
+            minimal: true,
+            timeout_ms: 8000,
+          })) as Session;
+          const activeStillOpen =
+            activeSnapshot &&
+            typeof activeSnapshot.counselor_id === "number" &&
+            activeSnapshot.counselor_id > 0 &&
+            isOpenChatSession(activeSnapshot) &&
+            !isSessionExpired(activeSessionId);
+
+          if (!activeStillOpen) {
+            activeSessionIdRef.current = null;
+            markSessionAsExpired(activeSessionId);
+          }
+        } catch (activeErr) {
+          const status = getHttpStatus(activeErr);
+          if (status === 403 || status === 404 || status === 410) {
+            activeSessionIdRef.current = null;
+            markSessionAsExpired(activeSessionId);
+          }
+        }
+      }
       setSessions(normalizedSessions);
       const cacheKey = `student_chat_sessions_v${SESSION_CACHE_VERSION}_${userId}_${sessionPageRef.current}`;
       localStorage.setItem(
@@ -403,6 +438,7 @@ export const useChatSession = (userId: number | undefined) => {
     const next = Math.max(1, sessionPage - 1);
     sessionPageRef.current = next;
     setSessionPage(next);
+    void loadSessions(true, { force: true });
   };
 
   const goToNextPage = () => {
@@ -410,6 +446,7 @@ export const useChatSession = (userId: number | undefined) => {
     const next = Math.min(sessionTotalPages, sessionPage + 1);
     sessionPageRef.current = next;
     setSessionPage(next);
+    void loadSessions(true, { force: true });
   };
 
   const startSessionWithCounselor = async (

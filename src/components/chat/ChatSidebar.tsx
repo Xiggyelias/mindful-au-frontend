@@ -29,7 +29,7 @@ interface ChatSidebarProps {
   isCounselorsLoading: boolean;
   searchQuery: string;
   onSearchChange: (val: string) => void;
-  onSelectSession: (id: string) => void;
+  onSelectSession: (id: string, session?: Session) => void;
   onStartSession: (id: number, isAnon: boolean) => void;
   /**
    * Optional callback fired when a Recent Support row is clicked while its
@@ -463,7 +463,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onStartSession(counselorId, true);
                     return;
                   }
-                  onSelectSession(String(session.id));
+                  onSelectSession(String(session.id), session);
                 };
                 const togglePin = (e: React.MouseEvent<HTMLButtonElement>) => {
                   e.stopPropagation();

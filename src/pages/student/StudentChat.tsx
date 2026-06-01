@@ -15,7 +15,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEncryptedChat } from "@/hooks/useEncryptedChat";
-import { isSessionExpired, markSessionAsExpired, useChatSession } from "@/hooks/useChatSession";
+import { isSessionExpired, markSessionAsExpired, useChatSession, type Session } from "@/hooks/useChatSession";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
 import { useSessionKeepAlive } from "@/hooks/useSessionKeepAlive";
@@ -549,20 +549,28 @@ const StudentChat = () => {
     void api.markSessionInboundRead(id, { timeout_ms: 5000 }).catch(handleReadError);
   }, []);
 
-  const handleSelectSessionById = useCallback((id: string) => {
+  const handleSelectSessionById = useCallback((id: string, clickedSession?: Session) => {
     if (!id) {
       selectSession(null);
+      setSidebarOpen(false);
       if (sessionFromUrl) {
         navigate("/student/chat", { replace: true });
       }
       return;
     }
 
-    const selectAndOpen = (session: (typeof sessions)[number]) => {
+    const selectAndOpen = (session: Session) => {
+      const selectedId = String(session.id || id);
       selectSession(session);
-      navigateToChatSession(id);
-      markSessionReadSoon(id);
+      setSidebarOpen(false);
+      navigateToChatSession(selectedId);
+      markSessionReadSoon(selectedId);
     };
+
+    if (clickedSession && String(clickedSession.id) === id) {
+      selectAndOpen(clickedSession);
+      return;
+    }
 
     const session = sessions.find(s => String(s.id) === id);
     if (session) {
@@ -596,6 +604,7 @@ const StudentChat = () => {
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
     void startSessionWithCounselor(id, { isAnonymous: isAnon }).then((session) => {
       if (session?.id) {
+        setSidebarOpen(false);
         navigateToChatSession(session.id);
       }
     });
@@ -606,6 +615,7 @@ const StudentChat = () => {
     // contract is preserved (no silent reuse of an old anonymous thread).
     void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true }).then((session) => {
       if (session?.id) {
+        setSidebarOpen(false);
         navigateToChatSession(session.id);
       }
     });
