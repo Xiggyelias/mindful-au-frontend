@@ -655,6 +655,7 @@ const StudentChat = () => {
         ...updatedSession,
         is_anonymous: checked,
       });
+      setAnonymousStartMode(checked);
       await refreshUser();
       await refreshSessions(true, { force: true });
       dispatchChatAnonymitySync();
@@ -671,9 +672,7 @@ const StudentChat = () => {
     }
   }, [activeSession, confirm, messages.length, refreshSessions, refreshUser, selectSession, sessionId]);
 
-  const sidebarAnonymousChecked = activeSession
-    ? isAnonymousSessionFlag(activeSession.is_anonymous)
-    : anonymousStartMode;
+  const sidebarAnonymousChecked = anonymousStartMode;
 
   const handleUnifiedAnonymousToggle = useCallback(
     async (checked: boolean) => {

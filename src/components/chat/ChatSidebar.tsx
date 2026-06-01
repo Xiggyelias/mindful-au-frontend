@@ -244,7 +244,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     type GroupRow = {
       supportId: number;
       counselorId: number;
-      supportRole: "counselor" | "peer";
       sessions: Session[];
     };
 
@@ -264,7 +263,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         groups.set(groupKey, {
           supportId: activeSupportId,
           counselorId,
-          supportRole,
           sessions: [session],
         });
         continue;
@@ -286,6 +284,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       const displaySessions = matchingPrivacySessions.length > 0
         ? matchingPrivacySessions
         : group.sessions;
+      const displaySession = latestOf(displaySessions);
+      const displayAsAnonymous = matchingPrivacySessions.length > 0
+        ? prefersAnonymous
+        : prefersAnonymous || isAnonymousSessionFlag(displaySession.is_anonymous);
+      const displaySessionIds = group.sessions
+        .filter((item) => isAnonymousSessionFlag(item.is_anonymous) === displayAsAnonymous)
+        .map((item) => String(item.id));
       const displayUnreadCount = displaySessions.reduce(
         (sum, item) => sum + Math.max(0, Number(item.unread_count || 0)),
         0
@@ -294,9 +299,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       return {
         supportId: group.supportId,
         counselorId: group.counselorId,
-        supportRole: group.supportRole,
-        session: latestOf(displaySessions),
-        sessionIds: group.sessions.map((item) => String(item.id)),
+        session: displaySession,
+        displaySessionIds,
+        displayAsAnonymous,
         totalSessions: displaySessions.length,
         unreadCount: displayUnreadCount,
       };
@@ -332,24 +337,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     });
   }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds, supportPersonName]);
 
-  const recentDirectCounselorIds = useMemo(() => {
-    return new Set(
-      recentSupportRows
-        .filter((row) => row.supportRole === "counselor")
-        .map((row) => Number(row.counselorId || row.supportId || 0))
-        .filter((id) => Number.isFinite(id) && id > 0)
-    );
-  }, [recentSupportRows]);
-
   const filteredCounselors = useMemo(() => {
     return counselors.filter((c) =>
-      !recentDirectCounselorIds.has(Number(c?.id || 0)) &&
-      (
-        normalizedQuery === "" ||
-        String(c?.profile?.full_name || "Counselor").toLowerCase().includes(normalizedQuery)
-      )
+      normalizedQuery === "" ||
+      String(c?.profile?.full_name || "Counselor").toLowerCase().includes(normalizedQuery)
     );
-  }, [counselors, normalizedQuery, recentDirectCounselorIds]);
+  }, [counselors, normalizedQuery]);
 
   const counselorSkeletons = Array.from({ length: 4 }, (_, idx) => idx);
   const hasRecentSupport = filteredRecentSupportRows.length > 0;
@@ -442,11 +435,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="min-w-0 space-y-1">
-              {filteredRecentSupportRows.map(({ session, sessionIds, totalSessions, counselorId, supportId, unreadCount }) => {
+              {filteredRecentSupportRows.map(({ session, displaySessionIds, displayAsAnonymous, totalSessions, counselorId, supportId, unreadCount }) => {
                 const name = supportPersonName(session);
-                const isActive = sessionIds.includes(String(activeSession?.id ?? ""));
+                const isActive = displaySessionIds.includes(String(activeSession?.id ?? ""));
                 const isPeer = isPeerSupportSession(session);
-                const isAnon = isAnonymousSessionFlag(session.is_anonymous);
+                const actualSessionIsAnon = isAnonymousSessionFlag(session.is_anonymous);
+                const isAnon = Boolean(displayAsAnonymous);
                 const sessionNumericId = Number(session.id);
                 const isPinned = pinnedSessionIds.includes(sessionNumericId);
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
@@ -464,7 +458,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
-                  if (anonymousStartMode && !isAnon && counselorId > 0 && onStartFreshAnonymousSession) {
+                  if (isAnon && !actualSessionIsAnon && counselorId > 0 && onStartFreshAnonymousSession) {
                     onStartFreshAnonymousSession(counselorId);
                     return;
                   }
