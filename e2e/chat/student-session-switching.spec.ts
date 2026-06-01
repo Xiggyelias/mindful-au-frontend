@@ -180,8 +180,8 @@ function makeMessages(): Record<number, MockMessage[]> {
   };
 }
 
-async function installStudentChatApiMock(page: Page) {
-  const sessions = makeSessions();
+async function installStudentChatApiMock(page: Page, sessionFixture?: MockSession[]) {
+  const sessions = sessionFixture ?? makeSessions();
   const messages = makeMessages();
 
   await page.route("**/api/**", async (route: Route) => {
@@ -327,6 +327,29 @@ test.describe("student chat session switching", () => {
     await sessionCard(page, 101).click();
     await expectActiveSession(page, 101, "Counselor Alpha", "Alpha counselor history");
     await expect(page.getByText("Peer support history")).toBeHidden();
+  });
+
+  test("deduplicates duplicate active direct counselor rows before rendering", async ({ page }) => {
+    const sessions = makeSessions();
+    sessions.push({
+      ...sessions[0],
+      id: 103,
+      is_anonymous: true,
+      anonymous_id: "User_0103",
+      unread_count: 5,
+      created_at: "2026-06-01T09:15:00.000Z",
+      updated_at: "2026-06-01T10:15:00.000Z",
+    });
+
+    await installStudentChatApiMock(page, sessions);
+    await page.goto("/student/chat");
+
+    await expect(
+      page.locator(`[data-support-role="counselor"][data-support-id="${counselorAlpha.id}"]:visible`),
+    ).toHaveCount(1);
+    await expect(page.locator('[data-testid="student-chat-session-card-101"]:visible')).toHaveCount(0);
+    await expect(sessionCard(page, 103)).toBeVisible();
+    await expect(sessionCard(page, 201)).toBeVisible();
   });
 
   test("supports mobile card selection and close-to-sidebar flow", async ({ page }) => {

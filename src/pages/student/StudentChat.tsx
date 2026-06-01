@@ -79,6 +79,16 @@ const getHttpStatus = (error: unknown) => {
 const isOpenSession = (session: Session) =>
   session.status !== "completed" && session.status !== "cancelled";
 
+const dedupeCounselors = (items: Counselor[]): Counselor[] => {
+  const byId = new Map<number, Counselor>();
+  items.forEach((item) => {
+    const id = Number(item?.id || 0);
+    if (id <= 0 || byId.has(id)) return;
+    byId.set(id, item);
+  });
+  return Array.from(byId.values());
+};
+
 const StudentChat = () => {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
@@ -382,7 +392,7 @@ const StudentChat = () => {
         const parsed = JSON.parse(cachedRaw);
         const savedAt = Number(parsed?.saved_at || 0);
         if (Date.now() - savedAt <= COUNSELOR_CACHE_TTL_MS) {
-          setCounselors(parsed.counselors || []);
+          setCounselors(dedupeCounselors(parsed.counselors || []));
           setCounselorTotalPages(parsed.total_pages || 1);
           setIsCounselorsLoading(false);
           hasLoadedCounselorsRef.current = true;
@@ -406,7 +416,7 @@ const StudentChat = () => {
         })) as CounselorListResponse;
         
         const paged = !Array.isArray(payload) ? payload : { data: payload, meta: { page: 1, total_pages: 1, total: payload.length } };
-        const nextCounselors = paged.data || [];
+        const nextCounselors = dedupeCounselors(paged.data || []);
         
         if (active) {
           setCounselors(nextCounselors);

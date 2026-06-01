@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Session, isSessionExpired, markSessionAsExpired } from "@/hooks/useChatSession";
+import { Session, dedupeChatSessions, isSessionExpired, markSessionAsExpired } from "@/hooks/useChatSession";
 import { 
   Search, 
   MessageSquare, 
@@ -219,7 +219,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     []
   );
 
-  const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
+  const visibleSessions = useMemo(
+    () => dedupeChatSessions(sessions.filter(s => !isSessionExpired(String(s.id)))),
+    [sessions]
+  );
 
   const recentSupportRows = useMemo(() => {
     return visibleSessions

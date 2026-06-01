@@ -1059,7 +1059,7 @@ class ApiClient {
     return response.data;
   }
 
-  async createSession(data: { counselor_id?: number; session_type: string; is_anonymous?: boolean; force_new?: boolean }) {
+  async createSession(data: { counselor_id?: number; session_type: string; is_anonymous?: boolean }) {
     const response = await this.client.post('/sessions', data);
     return response.data;
   }

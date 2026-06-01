@@ -34,6 +34,16 @@ export interface Session {
   unread_count?: number;
   created_at: string;
   updated_at?: string | null;
+  student?: {
+    id: number;
+    email?: string | null;
+    is_online?: boolean;
+    last_seen_at?: string | null;
+    profile?: {
+      full_name?: string;
+      avatar_url?: string | null;
+    };
+  };
   counselor?: {
     id: number;
     email?: string;
@@ -123,15 +133,67 @@ const getHttpStatus = (error: unknown) =>
   );
 const directCounselorSessionMatches = (
   session: Session,
-  counselorId: number,
-  isAnonymous: boolean
+  counselorId: number
 ) =>
   session.counselor_id === counselorId &&
   session.session_type === "chat" &&
-  isAnonymousSessionFlag(session.is_anonymous) === isAnonymous &&
   isOpenChatSession(session) &&
   Number(session.peer_counselor_id || 0) <= 0 &&
   (session.assigned_role == null || session.assigned_role === "counselor");
+
+const sessionActivityTime = (session: Session): number => {
+  const timestamp = new Date(session.updated_at || session.created_at || 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+export const supportSessionDedupeKey = (session: Session): string => {
+  const studentId = Number(session.chat_peer_student_id || session.student_id || session.student?.id || 0);
+  const sessionType = String(session.session_type || "chat");
+  const peerId = Number(session.peer_counselor_id || session.peer_counselor?.id || 0);
+  const counselorId = Number(session.counselor_id || session.counselor?.id || 0);
+
+  if (session.assigned_role === "peer_counselor" && peerId > 0) {
+    return `peer:${studentId}:${peerId}:${sessionType}`;
+  }
+
+  if (counselorId > 0) {
+    return `counselor:${studentId}:${counselorId}:${sessionType}`;
+  }
+
+  return `session:${session.id}`;
+};
+
+export const dedupeChatSessions = (items: Session[]): Session[] => {
+  const bySessionId = new Map<string, Session>();
+
+  items.forEach((item) => {
+    if (!item?.id) return;
+    const sessionId = String(item.id);
+    const current = bySessionId.get(sessionId);
+    if (!current || sessionActivityTime(item) >= sessionActivityTime(current)) {
+      bySessionId.set(sessionId, item);
+    }
+  });
+
+  const bySupport = new Map<string, Session>();
+  Array.from(bySessionId.values()).forEach((item) => {
+    const key = supportSessionDedupeKey(item);
+    const current = bySupport.get(key);
+    if (
+      !current ||
+      sessionActivityTime(item) > sessionActivityTime(current) ||
+      (sessionActivityTime(item) === sessionActivityTime(current) && Number(item.id) > Number(current.id))
+    ) {
+      bySupport.set(key, item);
+    }
+  });
+
+  return Array.from(bySupport.values()).sort((a, b) => {
+    const byActivity = sessionActivityTime(b) - sessionActivityTime(a);
+    if (byActivity !== 0) return byActivity;
+    return Number(b.id) - Number(a.id);
+  });
+};
 
 const logStudentSessionDebug = (event: string, payload: Record<string, unknown>) => {
   // Keep this visible enough for field debugging without interrupting the UI.
@@ -159,6 +221,16 @@ export const useChatSession = (userId: number | undefined) => {
       if (refreshedSession) {
         activeSessionIdRef.current = String(refreshedSession.id);
         return refreshedSession;
+      }
+
+      if (current && String(current.id) === preferredId) {
+        const equivalentSession = nextSessions.find(
+          (session) => supportSessionDedupeKey(session) === supportSessionDedupeKey(current)
+        );
+        if (equivalentSession) {
+          activeSessionIdRef.current = String(equivalentSession.id);
+          return equivalentSession;
+        }
       }
 
       if (
@@ -198,13 +270,15 @@ export const useChatSession = (userId: number | undefined) => {
         return false;
       }
 
-      const normalizedSessions = cachedSessions.filter(
-        (session) =>
-          session.session_type === "chat" &&
-          typeof session.counselor_id === "number" &&
-          session.counselor_id > 0 &&
-          isOpenChatSession(session) &&
-          !isSessionExpired(String(session.id))
+      const normalizedSessions = dedupeChatSessions(
+        cachedSessions.filter(
+          (session) =>
+            session.session_type === "chat" &&
+            typeof session.counselor_id === "number" &&
+            session.counselor_id > 0 &&
+            isOpenChatSession(session) &&
+            !isSessionExpired(String(session.id))
+        )
       );
 
       setSessions(normalizedSessions);
@@ -307,14 +381,9 @@ export const useChatSession = (userId: number | undefined) => {
         setSessionPage(nextPage);
       }
 
-      const normalizedSessions = [...chatSessions]
-        .filter((session) => !isSessionExpired(String(session.id)))
-        .sort((a, b) => {
-          const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
-          const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
-          if (aTime !== bTime) return bTime - aTime;
-          return Number(b.id) - Number(a.id);
-        });
+      const normalizedSessions = dedupeChatSessions(
+        chatSessions.filter((session) => !isSessionExpired(String(session.id)))
+      );
       const activeSessionId = activeSessionIdRef.current;
       if (
         activeSessionId &&
@@ -388,7 +457,7 @@ export const useChatSession = (userId: number | undefined) => {
         activeSessionIdRef.current = null;
       }
 
-      setSessions(prev => prev.filter(s => !isSessionExpired(String(s.id))));
+      setSessions(prev => dedupeChatSessions(prev.filter(s => !isSessionExpired(String(s.id)))));
       setActiveSession(prev => {
         if (!prev || !isSessionExpired(String(prev.id))) {
           return prev;
@@ -410,11 +479,10 @@ export const useChatSession = (userId: number | undefined) => {
     if (session) {
       setSessions((prev) => {
         const nextSession = { ...session, unread_count: 0 };
-        const hasSession = prev.some((s) => String(s.id) === String(session.id));
-        if (!hasSession) {
-          return [nextSession, ...prev];
-        }
-        return prev.map((s) => (String(s.id) === String(session.id) ? nextSession : s));
+        const next = prev.some((s) => String(s.id) === String(session.id))
+          ? prev.map((s) => (String(s.id) === String(session.id) ? nextSession : s))
+          : [nextSession, ...prev];
+        return dedupeChatSessions(next);
       });
     }
     logStudentSessionDebug("select", {
@@ -448,25 +516,26 @@ export const useChatSession = (userId: number | undefined) => {
 
   const startSessionWithCounselor = async (
     counselorId: number,
-    options?: { isAnonymous?: boolean; forceNew?: boolean }
+    options?: { isAnonymous?: boolean }
   ) => {
     try {
       const shouldBeAnonymous = Boolean(options?.isAnonymous);
-      const forceNew = Boolean(options?.forceNew);
 
-      // Check if session already exists. When forceNew is set (e.g. clicking
-      // an anonymous entry from "Recent Support"), we always create a fresh
-      // session so the anonymity contract isn't broken by resuming an old one.
-      if (!forceNew) {
-        const existing = sessions.find(
-          (s) =>
-            directCounselorSessionMatches(s, counselorId, shouldBeAnonymous)
-        );
-        if (existing) {
-          activeSessionIdRef.current = String(existing.id);
-          setActiveSession(existing);
-          return existing;
-        }
+      const existing = sessions.find((s) => directCounselorSessionMatches(s, counselorId));
+      if (existing) {
+        const nextSession = isAnonymousSessionFlag(existing.is_anonymous) === shouldBeAnonymous
+          ? existing
+          : await api.updateSessionChatAnonymity(existing.id, shouldBeAnonymous);
+
+        setSessions((prev) => {
+          const next = prev.some((session) => Number(session.id) === Number(nextSession.id))
+            ? prev.map((session) => (Number(session.id) === Number(nextSession.id) ? nextSession : session))
+            : [nextSession, ...prev];
+          return dedupeChatSessions(next);
+        });
+        activeSessionIdRef.current = String(nextSession.id);
+        setActiveSession(nextSession);
+        return nextSession;
       }
 
       // Create new session - set loading to show activity but don't block UI
@@ -475,7 +544,6 @@ export const useChatSession = (userId: number | undefined) => {
         counselor_id: counselorId,
         session_type: "chat",
         is_anonymous: shouldBeAnonymous,
-        ...(forceNew ? { force_new: true } : {}),
       });
       
       if (newSession) {
@@ -483,7 +551,7 @@ export const useChatSession = (userId: number | undefined) => {
           const withoutSameSession = prev.filter(
             (session) => Number(session.id) !== Number(newSession.id)
           );
-          return [newSession, ...withoutSameSession];
+          return dedupeChatSessions([newSession, ...withoutSameSession]);
         });
         // Set active session immediately so UI opens the chat
         activeSessionIdRef.current = String(newSession.id);
