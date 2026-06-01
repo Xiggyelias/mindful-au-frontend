@@ -84,11 +84,19 @@ const PeerDashboard = () => {
 
   const handleAvailabilityToggle = async (available: boolean) => {
     try {
+      // Optimistic update
+      setData((prev) => (prev ? { ...prev, availability: available } : prev));
       setSavingAvailability(true);
+      
       const result = await api.updatePeerAvailability(available);
-      setData((prev) => (prev ? { ...prev, availability: Boolean(result?.available) } : prev));
+      
+      // Confirm update with server response
+      const serverAvailability = result?.available ?? result?.availability ?? available;
+      setData((prev) => (prev ? { ...prev, availability: Boolean(serverAvailability) } : prev));
       toast.success(`Availability set to ${available ? "online" : "offline"}`);
     } catch (error: unknown) {
+      // Restore previous state on error
+      setData((prev) => (prev ? { ...prev, availability: !available } : prev));
       toast.error(getApiErrorMessage(error, "Failed to update availability"));
     } finally {
       setSavingAvailability(false);
@@ -119,7 +127,7 @@ const PeerDashboard = () => {
         <DashboardHeader title="Peer Support Dashboard" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6">
-          <Card variant="glass" className="border-primary/20">
+          <Card variant="glass" className="border-primary/20 relative z-10">
             <CardContent className="pt-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-display font-bold text-foreground">
@@ -129,18 +137,20 @@ const PeerDashboard = () => {
                   You support anonymized students only. Escalate any urgent or high-risk concern immediately.
                 </p>
               </div>
-              <div className="flex items-center gap-3 rounded-xl border border-border/60 px-4 py-3 bg-secondary/20">
-                <UserCheck2 className="h-4 w-4 text-primary" />
+              <div className="flex items-center gap-3 rounded-xl border border-border/60 px-4 py-3 bg-secondary/20 whitespace-nowrap flex-shrink-0">
+                <UserCheck2 className="h-4 w-4 text-primary flex-shrink-0" />
                 <div className="text-sm">
                   <p className="font-medium text-foreground">Availability</p>
-                  <p className="text-xs text-muted-foreground">
-                    {data?.availability ? "Online for assignments" : "Offline"}
+                  <p className="text-xs text-muted-foreground min-h-[18px]">
+                    {loading ? "Loading..." : data?.availability ? "Online for assignments" : "Offline"}
                   </p>
                 </div>
                 <Switch
                   checked={Boolean(data?.availability)}
                   onCheckedChange={handleAvailabilityToggle}
                   disabled={loading || savingAvailability}
+                  aria-label="Toggle availability status"
+                  className="flex-shrink-0"
                 />
               </div>
             </CardContent>
