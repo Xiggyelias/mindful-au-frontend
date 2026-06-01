@@ -117,7 +117,7 @@ const StudentChat = () => {
   const expiredSessionNoticeRef = useRef<string | null>(null);
   const urlSessionFetchRef = useRef<string | null>(null);
   const closingSessionRef = useRef<string | null>(null);
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const {
     profileAnonymousMode,
@@ -811,8 +811,6 @@ const StudentChat = () => {
         ...updatedSession,
         is_anonymous: checked,
       });
-      setAnonymousStartMode(checked);
-      await refreshUser();
       await refreshSessions(true, { force: true });
       dispatchChatAnonymitySync();
       toast.success(
@@ -826,24 +824,11 @@ const StudentChat = () => {
     } finally {
       setIsSavingChatAnonymity(false);
     }
-  }, [activeSession, confirm, messages.length, refreshSessions, refreshUser, selectSession, sessionId]);
+  }, [activeSession, confirm, messages.length, refreshSessions, selectSession, sessionId]);
 
   const sidebarAnonymousChecked = anonymousStartMode;
-
-  const handleUnifiedAnonymousToggle = useCallback(
-    async (checked: boolean) => {
-      if (activeSession) {
-        await handleActiveChatAnonymityToggle(checked);
-        return;
-      }
-      await handleSidebarAnonymousToggle(checked);
-    },
-    [activeSession, handleActiveChatAnonymityToggle, handleSidebarAnonymousToggle]
-  );
-
-  const unifiedAnonymousToggleDisabled = activeSession
-    ? isSavingChatAnonymity
-    : isSavingProfileAnonymous;
+  const sidebarAnonymousToggleDisabled = isSavingProfileAnonymous;
+  const activeAnonymousToggleDisabled = isSavingChatAnonymity;
 
   const activePeerParticipant = useMemo(() => {
     if (!activeSession) return null;
@@ -928,8 +913,8 @@ const StudentChat = () => {
                 onSelectSession={handleSelectSessionById}
                 onStartSession={handleStartSessionWrapper}
                 anonymousStartMode={sidebarAnonymousChecked}
-                onToggleAnonymous={handleUnifiedAnonymousToggle}
-                anonymousToggleDisabled={unifiedAnonymousToggleDisabled}
+                onToggleAnonymous={handleSidebarAnonymousToggle}
+                anonymousToggleDisabled={sidebarAnonymousToggleDisabled}
                 counselorPage={counselorPage}
                 counselorTotalPages={counselorTotalPages}
                 onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
@@ -962,15 +947,15 @@ const StudentChat = () => {
 
               {activeSession ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border/60 bg-background/80 p-3 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-4 lg:px-6">
-                    <div className="flex min-w-[14rem] flex-1 items-center gap-2 sm:gap-3">
-                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 xl:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
-                        <Menu className="h-5 w-5" />
+                  <div className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background/80 p-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-3 lg:px-4">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 xl:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
+                        <Menu className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 xl:hidden" onClick={closeActiveChat} aria-label="Close chat" title="Close chat">
-                        <X className="h-5 w-5" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 xl:hidden" onClick={closeActiveChat} aria-label="Close chat" title="Close chat">
+                        <X className="h-4 w-4" />
                       </Button>
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-primary text-xs font-bold text-primary-foreground shadow-md">
                         {(activeSupportName || "Support")
                           .split(/\s+/)
                           .filter(Boolean)
@@ -979,54 +964,54 @@ const StudentChat = () => {
                           .join("")
                           .toUpperCase() || "SC"}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="truncate text-sm sm:text-base font-bold leading-tight lg:text-lg">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <h2 className="truncate text-sm font-bold leading-tight sm:text-base">
                           {activeSupportName}
                         </h2>
                         <p className="truncate text-[11px] text-muted-foreground sm:text-xs">
                           {activeSupportSubtitle}
                         </p>
-                        <div className="mt-0.5 flex items-center gap-2">
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                           <span className={cn("h-2 w-2 shrink-0 rounded-full", chatError ? "bg-destructive" : "bg-emerald-500")} />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                             {chatError ? "Chat error" : "Session active"}
                           </span>
-                          <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure support channel</span>
+                          <span className="hidden truncate text-[10px] font-semibold text-muted-foreground/80 2xl:inline">Secure support channel</span>
                         </div>
                         <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1.5">
-                          <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
+                          <span className="max-w-full truncate rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
                             Student: You
                           </span>
                           {activePeerParticipant && (
-                            <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200">
-                              Peer Counselor: {activePeerParticipant.name}
+                            <span className="max-w-56 truncate rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700 dark:border-pink-900/50 dark:bg-pink-950/30 dark:text-pink-200 md:max-w-80" title={`Peer: ${activePeerParticipant.name}`}>
+                              Peer: {activePeerParticipant.name}
                             </span>
                           )}
                           {Number(activeSession.counselor_id) > 0 && (
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                            <span className="max-w-52 truncate rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 md:max-w-72" title={`Counselor: ${activeSession.counselor?.profile?.full_name || activeSession.counselor?.email || "Counselor"}`}>
                               Counselor: {activeSession.counselor?.profile?.full_name || activeSession.counselor?.email || "Counselor"}
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                    <div className="ml-auto flex max-w-full shrink-0 items-center justify-end gap-1.5 sm:gap-2">
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
                         checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
-                        onCheckedChange={(v) => void handleUnifiedAnonymousToggle(v)}
-                        disabled={unifiedAnonymousToggleDisabled}
-                        className="shrink-0"
+                        onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
+                        disabled={activeAnonymousToggleDisabled}
+                        className="max-w-[11.5rem] shrink-0"
                       />
-                      <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 xl:flex">
+                      <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 2xl:flex">
                         <Shield className="h-3 w-3" />
                         <span>Active</span>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall}>
-                        {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-5 w-5" />}
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall} aria-label="Start video call">
+                        {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10 rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency}>
-                        <AlertTriangle className="h-5 w-5" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-destructive/5 hover:text-destructive" onClick={handleTriggerEmergency} disabled={isTriggeringEmergency} aria-label="Emergency alert">
+                        <AlertTriangle className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -1114,8 +1099,8 @@ const StudentChat = () => {
                     onSelectSession={handleSelectSessionById}
                     onStartSession={handleStartSessionWrapper}
                     anonymousStartMode={sidebarAnonymousChecked}
-                    onToggleAnonymous={handleUnifiedAnonymousToggle}
-                    anonymousToggleDisabled={unifiedAnonymousToggleDisabled}
+                    onToggleAnonymous={handleSidebarAnonymousToggle}
+                    anonymousToggleDisabled={sidebarAnonymousToggleDisabled}
                     counselorPage={counselorPage}
                     counselorTotalPages={counselorTotalPages}
                     onNextCounselorPage={() => setCounselorPage(p => Math.min(p + 1, counselorTotalPages))}
@@ -1130,25 +1115,23 @@ const StudentChat = () => {
               )}
               
               {!activeSession && (
-                 <div className="hidden lg:flex flex-1 flex-col items-center justify-center p-10 text-center animate-in fade-in zoom-in duration-700">
-                    <div className="mb-6 rounded-[2.5rem] border border-emerald-200/70 bg-gradient-to-br from-emerald-100 via-white to-sky-100 p-6 shadow-xl shadow-emerald-100/60">
-                      <Shield className="h-16 w-16 text-emerald-700" />
+                 <div className="hidden flex-1 flex-col items-center justify-center px-6 py-8 text-center animate-in fade-in zoom-in duration-700 lg:flex">
+                    <div className="mb-4 rounded-3xl border border-emerald-200/70 bg-emerald-50/90 p-4 shadow-md shadow-emerald-100/50">
+                      <Shield className="h-10 w-10 text-emerald-700" />
                     </div>
-                    <h2 className="mb-2 text-2xl font-display font-bold tracking-tight xl:text-3xl">Welcome to Your Counseling Space</h2>
-                    <p className="mx-auto mb-3 max-w-md leading-relaxed text-muted-foreground">
+                    <h2 className="mb-2 text-xl font-display font-bold tracking-tight xl:text-2xl">Welcome to Your Counseling Space</h2>
+                    <p className="mx-auto mb-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
                       Select a conversation from the left panel to begin your support chat session.
                     </p>
-                    <p className="mx-auto mb-5 max-w-md text-sm text-muted-foreground">
-                      No active sessions yet. Counselors will appear here once connected.
-                    </p>
-                    <div className="mb-4 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+                    <div className="mb-4 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
                       <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                       Private support chat
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <Button
                         type="button"
-                        className="rounded-xl bg-gradient-to-r from-emerald-600 to-primary px-5 text-white shadow-md shadow-emerald-300/30"
+                        size="sm"
+                        className="rounded-xl bg-gradient-to-r from-emerald-600 to-primary px-4 text-white shadow-md shadow-emerald-300/30"
                         onClick={() => {
                           const firstCounselor = counselors[0];
                           if (firstCounselor?.id) {
@@ -1163,6 +1146,7 @@ const StudentChat = () => {
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         className="rounded-xl border-slate-300 bg-white/80"
                         onClick={() => window.location.reload()}
                       >

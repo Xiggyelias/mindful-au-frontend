@@ -21,14 +21,14 @@ export function AnonymousModeToggle({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50/70 px-2.5 py-1",
+        "inline-flex max-w-full items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/70 px-2.5 py-1",
         className
       )}
     >
       <Shield className="h-3.5 w-3.5 text-rose-600" aria-hidden />
       <Label
         htmlFor={id}
-        className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-rose-700"
+        className="min-w-0 cursor-pointer truncate text-[10px] font-bold uppercase tracking-widest text-rose-700"
       >
         <span className="hidden sm:inline">Anonymous mode</span>
         <span className="sm:hidden">Anon</span>

@@ -284,8 +284,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
           <Input 
-            placeholder="Search by support person or session..." 
-            className="h-11 rounded-2xl border-slate-200/80 bg-white/90 pl-10 shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
+            placeholder="Search chats..." 
+            className="h-10 rounded-xl border-slate-200/80 bg-white/90 pl-10 shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/20"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -316,7 +316,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
         <div
           className={cn(
-            "mt-4 flex items-center justify-between rounded-2xl border p-3 shadow-sm transition-colors relative z-10",
+            "mt-3 flex items-center justify-between rounded-xl border p-2.5 shadow-sm transition-colors relative z-10",
             anonymousStartMode
               ? "border-rose-700 bg-slate-950 text-white shadow-[inset_0_0_0_1px_rgba(190,24,93,0.4)]"
               : "border-emerald-200/80 bg-emerald-50/70"
@@ -345,7 +345,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       <ScrollArea className="min-w-0 flex-1">
-        <div className="w-full min-w-0 max-w-full space-y-8 px-3 pb-8 pt-4">
+        <div className="w-full min-w-0 max-w-full space-y-5 px-3 pb-6 pt-3">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center justify-between px-3">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/70">Recent Support</h3>
@@ -420,7 +420,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onMouseEnter={() => handleRowMouseEnter(String(session.id))}
                     onMouseLeave={handleRowMouseLeave}
                     className={cn(
-                      "group w-full min-w-0 max-w-full overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition-all duration-200",
+                      "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-2.5 text-left shadow-sm transition-all duration-200",
                       "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                       isActive
                         ? "border-primary/20 bg-gradient-to-r from-primary/95 to-primary text-primary-foreground"
@@ -429,8 +429,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         : "border-slate-200/80 bg-white/90 text-slate-950 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white"
                     )}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ring-2 ring-white/50 ${
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-sm shadow-sm ring-2 ring-white/50 ${
                         isActive ? "bg-white/20" : getUserColor(name) + " text-white"
                       }`}>
                         {getInitials(name)}
@@ -541,7 +541,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="px-3 flex items-center justify-between">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/70">Available Now</h3>
               {counselorTotalPages > 1 && (
@@ -552,10 +552,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {isCounselorsLoading ? (
                 counselorSkeletons.map((item) => (
-                  <div key={item} className="animate-pulse rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm">
+                  <div key={item} className="animate-pulse rounded-xl border border-slate-200/70 bg-white/80 p-2.5 shadow-sm">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-slate-200/80" />
                       <div className="flex-1 space-y-2">
@@ -570,8 +570,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 filteredCounselors.map((counselor) => {
                   const name = counselor.profile?.full_name || "Counselor";
                   return (
-                    <div key={counselor.id} className="group rounded-2xl border border-slate-200/70 bg-white/85 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white relative z-0">
-                      <div className="flex items-center gap-3">
+                    <div key={counselor.id} className="group rounded-xl border border-slate-200/70 bg-white/85 p-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white relative z-0">
+                      <div className="flex items-center gap-2.5">
                         <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-xs text-white ${getUserColor(name)}`}>
                           {getInitials(name)}
                         </div>
