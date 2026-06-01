@@ -20,6 +20,7 @@ interface DashboardSidebarProps {
   userName?: string;
   isOpen?: boolean;
   onClose?: () => void;
+  onNavigate?: (path: string) => void;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export const DashboardSidebar = ({
   userName = "User",
   isOpen = true,
   onClose,
+  onNavigate,
   className,
 }: DashboardSidebarProps) => {
   const navigate = useNavigate();
@@ -132,6 +134,7 @@ const isSecureChatPath = (path: string) =>
                 <button
                   key={item.path}
                   onClick={() => {
+                    onNavigate?.(item.path);
                     navigate(item.path, {
                       state: isSecureChatPath(item.path)
                         ? { secureChatPreflight: true, startedAt: Date.now() }

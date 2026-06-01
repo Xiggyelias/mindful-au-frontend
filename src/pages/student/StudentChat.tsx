@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Shield,
   Loader2,
@@ -92,8 +92,10 @@ const dedupeCounselors = (items: Counselor[]): Counselor[] => {
 const StudentChat = () => {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const sessionFromUrl = searchParams.get("session");
+  const location = useLocation();
+  const sessionFromUrl = useMemo(() => {
+    return new URLSearchParams(location.search).get("session");
+  }, [location.search]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -116,6 +118,8 @@ const StudentChat = () => {
   const hasLoadedCounselorsRef = useRef(false);
   const expiredSessionNoticeRef = useRef<string | null>(null);
   const urlSessionFetchRef = useRef<string | null>(null);
+  const lastUrlSessionRef = useRef<string | null>(null);
+  const openingSessionRef = useRef<string | null>(null);
   const closingSessionRef = useRef<string | null>(null);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
@@ -174,9 +178,14 @@ const StudentChat = () => {
   useEffect(() => {
     const requestedSessionId = String(sessionFromUrl || "").trim();
     if (!requestedSessionId) {
+      lastUrlSessionRef.current = null;
+      urlSessionFetchRef.current = null;
       closingSessionRef.current = null;
       return;
     }
+
+    openingSessionRef.current = null;
+    lastUrlSessionRef.current = requestedSessionId;
 
     if (closingSessionRef.current === requestedSessionId) {
       return;
@@ -213,12 +222,21 @@ const StudentChat = () => {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     urlSessionFetchRef.current = requestedSessionId;
 
     void (async () => {
       try {
-        const fetchedSession = (await api.getSession(requestedSessionId)) as Session;
+        const fetchedSession = (await api.getSession(requestedSessionId, {
+          signal: controller.signal,
+        })) as Session;
         if (cancelled) return;
+        if (
+          urlSessionFetchRef.current !== requestedSessionId ||
+          lastUrlSessionRef.current !== requestedSessionId
+        ) {
+          return;
+        }
 
         if (fetchedSession?.id && String(fetchedSession.id) === requestedSessionId) {
           if (!isOpenSession(fetchedSession)) {
@@ -249,8 +267,24 @@ const StudentChat = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [activeSession, navigate, sessionFromUrl, sessions, selectSession]);
+
+  useEffect(() => {
+    if (sessionFromUrl || !activeSession) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const currentSessionParam = new URLSearchParams(window.location.search).get("session");
+      if (!currentSessionParam && openingSessionRef.current !== "pending") {
+        selectSession(null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [activeSession, selectSession, sessionFromUrl]);
 
   const {
     messages,
@@ -645,6 +679,8 @@ const StudentChat = () => {
     const nextId = String(id);
     if (sessionFromUrl !== nextId) {
       navigate(`/student/chat?session=${encodeURIComponent(nextId)}`, { replace: true });
+    } else {
+      openingSessionRef.current = null;
     }
   }, [navigate, sessionFromUrl]);
 
@@ -693,6 +729,7 @@ const StudentChat = () => {
       }
 
       notifyTyping(false);
+      urlSessionFetchRef.current = null;
       setMessage("");
       setSelectedFile(null);
       cancelRecording();
@@ -736,6 +773,7 @@ const StudentChat = () => {
 
   const closeActiveChat = useCallback(() => {
     closingSessionRef.current = String(sessionId || sessionFromUrl || "").trim() || null;
+    openingSessionRef.current = null;
     notifyTyping(false);
     setSidebarOpen(false);
     setMessage("");
@@ -750,14 +788,18 @@ const StudentChat = () => {
   }, [cancelRecording, clearRecording, navigate, notifyTyping, selectSession, sessionFromUrl, sessionId]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
+    openingSessionRef.current = "pending";
     void startSessionWithCounselor(id, { isAnonymous: isAnon })
       .then((session) => {
         if (session?.id) {
           setSidebarOpen(false);
           navigateToChatSession(session.id);
+        } else {
+          openingSessionRef.current = null;
         }
       })
       .catch((error) => {
+        openingSessionRef.current = null;
         console.error("Failed to start session:", error);
         toast.error("Failed to start chat session. Please try again.");
       });
@@ -886,6 +928,11 @@ const StudentChat = () => {
         userName={userName}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onNavigate={(path) => {
+          if (path === "/student/chat" && activeSession) {
+            closeActiveChat();
+          }
+        }}
       />
 
       <div className="flex h-full min-w-0 flex-col overflow-hidden lg:pl-72 pl-0">

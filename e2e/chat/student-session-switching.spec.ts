@@ -369,6 +369,22 @@ test.describe("student chat session switching", () => {
     await expectActiveSession(page, 102, "Counselor Beta", "Beta counselor history", { visibleCard: false });
   });
 
+  test("clears the active conversation when the base chat route is restored", async ({ page }) => {
+    await installStudentChatApiMock(page);
+    await page.goto("/student/chat");
+
+    await sessionCard(page, 101).click();
+    await expectActiveSession(page, 101, "Counselor Alpha", "Alpha counselor history");
+
+    await page.getByRole("button", { name: "Chat" }).first().click();
+
+    await expect(page).toHaveURL(/\/student\/chat$/);
+    await expect(page.getByRole("heading", { name: "Counselor Alpha" })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Welcome to Your Counseling Space" })).toBeVisible();
+    await sessionCard(page, 102).click();
+    await expectActiveSession(page, 102, "Counselor Beta", "Beta counselor history");
+  });
+
   test("refreshes the selected session after an incoming digest event", async ({ page }) => {
     const { messages } = await installStudentChatApiMock(page);
     await page.goto("/student/chat");
