@@ -100,7 +100,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
-const SESSION_CACHE_VERSION = 2;
+const SESSION_CACHE_VERSION = 3;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -117,9 +117,10 @@ const isOpenChatSession = (session: Session) =>
   session.status !== "completed" && session.status !== "cancelled";
 const conversationKey = (session: Session) => {
   const studentId = session.chat_peer_student_id || session.student_id || 0;
+  const counselorId = session.counselor_id || 0;
   const isAnon = isAnonymousSessionFlag(session.is_anonymous) ? 1 : 0;
   const lane = counselorChatListLane(session as unknown as Record<string, unknown>);
-  return `student:${studentId}:anon:${isAnon}:lane:${lane}`;
+  return `student:${studentId}:counselor:${counselorId}:anon:${isAnon}:lane:${lane}`;
 };
 
 

@@ -27,6 +27,9 @@ const toMillis = (value?: string | null) => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+const getSessionStudentId = (session: any) =>
+  Number(session?.chat_peer_student_id || session?.student_id || session?.student?.id || 0);
+
 export const buildStudentRosterRows = ({
   studentData,
   appointmentData,
@@ -70,7 +73,7 @@ export const buildStudentRosterRows = ({
   const totalSessionsByStudent = new Map<number, number>();
   const lastTouchedByStudent = new Map<number, number>();
   sessionsData.forEach((session: any) => {
-    const studentId = Number(session.student_id);
+    const studentId = getSessionStudentId(session);
     if (!studentId) return;
     totalSessionsByStudent.set(studentId, (totalSessionsByStudent.get(studentId) || 0) + 1);
     const touchedAt = toMillis(session.updated_at || session.created_at || null);
@@ -99,7 +102,7 @@ export const buildStudentRosterRows = ({
     if (session.session_type !== "chat") return;
     if (session.status === "completed" || session.status === "cancelled") return;
 
-    const studentId = Number(session.student_id);
+    const studentId = getSessionStudentId(session);
     if (!studentId) return;
 
     const isPeerChat =

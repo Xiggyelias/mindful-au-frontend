@@ -38,13 +38,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import {
-  anonymousLabelForCounselor,
-  isAnonymousIdentityMaskedFromViewer
-} from "@/lib/anonymousMode";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -63,6 +58,9 @@ const readChatListResult = (result: PromiseSettledResult<any>) => {
   if (Array.isArray(result.value?.data)) return result.value.data;
   return [];
 };
+
+const getSessionStudentId = (session: any) =>
+  Number(session?.chat_peer_student_id || session?.student_id || session?.student?.id || 0);
 
 const CounselorStudents = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -123,7 +121,7 @@ const CounselorStudents = () => {
     const totalSessionsByStudent = new Map<number, number>();
     const lastTouchedByStudent = new Map<number, number>();
     sessionsData.forEach((session: any) => {
-      const studentId = Number(session.student_id);
+      const studentId = getSessionStudentId(session);
       if (!studentId) return;
       totalSessionsByStudent.set(studentId, (totalSessionsByStudent.get(studentId) || 0) + 1);
       const touchedAt = toMillis(session.updated_at || session.created_at || null);
@@ -151,7 +149,7 @@ const CounselorStudents = () => {
       if (session.session_type !== "chat") return;
       if (session.status === "completed" || session.status === "cancelled") return;
 
-      const studentId = Number(session.student_id);
+      const studentId = getSessionStudentId(session);
       if (!studentId) return;
 
       const isPeerChat = session.assigned_role === "peer_counselor" && Number(session.peer_counselor_id) > 0;
@@ -173,20 +171,16 @@ const CounselorStudents = () => {
       const studentId = Number(student.id);
       const directChat = directChatByStudent.get(studentId) || null;
       const peerChat = peerChatByStudent.get(studentId) || null;
-      const identityChat = directChat || peerChat;
       const latestRisk = latestRiskByStudent.get(studentId)?.riskLevel || "low";
       const lastTouchedMillis = lastTouchedByStudent.get(studentId) || 0;
 
-      const isMasked = identityChat && isAnonymousIdentityMaskedFromViewer(identityChat);
-
       return {
         id: student.id,
-        name: isMasked
-          ? anonymousLabelForCounselor()
-          : student.profile?.full_name ||
-            student.email?.split("@")[0] ||
-            `Student #${String(student.id).slice(-4)}`,
-        isAnonymous: Boolean(isMasked),
+        name:
+          student.profile?.full_name ||
+          student.email?.split("@")[0] ||
+          `Student #${String(student.id).slice(-4)}`,
+        isAnonymous: false,
         sessions: totalSessionsByStudent.get(studentId) || 0,
         lastSession: lastTouchedMillis
           ? formatDistanceToNow(new Date(lastTouchedMillis), { addSuffix: true })
@@ -714,9 +708,6 @@ const CounselorStudents = () => {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-semibold text-foreground truncate">{student.name}</p>
-                                {student.isAnonymous && (
-                                  <AnonymousModeIndicator variant="badge" audience="counselor" />
-                                )}
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {student.sessions} {student.sessions === 1 ? "session" : "sessions"} · Last active {student.lastSession}
@@ -920,9 +911,6 @@ const CounselorStudents = () => {
               </div>
               <div>
                 <span>{selectedStudentForProfile?.name || "Student"}</span>
-                {selectedStudentForProfile?.isAnonymous && (
-                  <AnonymousModeIndicator variant="badge" audience="counselor" />
-                )}
               </div>
             </DialogTitle>
             <DialogDescription>
