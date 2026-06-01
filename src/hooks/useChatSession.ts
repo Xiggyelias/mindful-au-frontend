@@ -325,7 +325,7 @@ export const useChatSession = (userId: number | undefined) => {
         }
       }
 
-      let normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
+      const normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
       const activeSessionId = activeSessionIdRef.current;
       if (
         activeSessionId &&

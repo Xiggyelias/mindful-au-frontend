@@ -98,12 +98,14 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
     return uploadFile(file, options);
   }, [uploadFile]);
 
+  const clearError = useCallback(() => setError(null), []);
+
   return {
     uploadFile,
     sendFileMessage,
     isUploading,
     uploadProgress,
     error,
-    clearError: () => setError(null)
+    clearError
   };
 };

@@ -27,6 +27,7 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
+import type { ChatMessage } from "@/hooks/useEncryptedChat";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AnonymousModeToggle } from "@/components/privacy/AnonymousModeToggle";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
@@ -60,6 +61,24 @@ const COUNSELOR_REFRESH_INTERVAL_MS = 20 * 1000;
 const COUNSELOR_LIST_TIMEOUT_MS = 30000;
 const COUNSELOR_PAGE_SIZE = 24;
 
+type RecordedVoiceFile = File & { durationMs?: number };
+
+const getHttpStatus = (error: unknown) => {
+  const status = Number(
+    (error as { response?: { status?: unknown }; status?: unknown })?.response?.status ??
+      (error as { status?: unknown })?.status ??
+      0
+  );
+  if (Number.isFinite(status) && status > 0) return status;
+
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/\b(403|404|410|429)\b/);
+  return match ? Number(match[1]) : 0;
+};
+
+const isOpenSession = (session: Session) =>
+  session.status !== "completed" && session.status !== "cancelled";
+
 const StudentChat = () => {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
@@ -75,7 +94,6 @@ const StudentChat = () => {
   const [isCounselorsLoading, setIsCounselorsLoading] = useState(false);
   const [counselorPage, setCounselorPage] = useState(1);
   const [counselorTotalPages, setCounselorTotalPages] = useState(1);
-  const counselorPageRef = useRef(counselorPage);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -87,6 +105,7 @@ const StudentChat = () => {
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedCounselorsRef = useRef(false);
   const expiredSessionNoticeRef = useRef<string | null>(null);
+  const urlSessionFetchRef = useRef<string | null>(null);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const {
@@ -98,7 +117,7 @@ const StudentChat = () => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [messageToDelete, setMessageToDelete] = useState<any | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<ChatMessage | null>(null);
 
   // Voice recording functionality
   const {
@@ -142,24 +161,80 @@ const StudentChat = () => {
   });
 
   useEffect(() => {
-    if (!sessionFromUrl) {
+    const requestedSessionId = String(sessionFromUrl || "").trim();
+    if (!requestedSessionId) {
       return;
     }
 
-    if (isSessionExpired(sessionFromUrl)) {
+    if (isSessionExpired(requestedSessionId)) {
       navigate("/student/chat", { replace: true });
       return;
     }
 
-    if (!sessions?.length) {
+    if (activeSession && String(activeSession.id) === requestedSessionId) {
+      if (!isOpenSession(activeSession)) {
+        markSessionAsExpired(requestedSessionId);
+        navigate("/student/chat", { replace: true });
+      }
       return;
     }
 
-    const found = sessions.find((s) => String(s.id) === String(sessionFromUrl));
+    const found = sessions.find((s) => String(s.id) === requestedSessionId);
     if (found) {
+      if (!isOpenSession(found)) {
+        markSessionAsExpired(requestedSessionId);
+        navigate("/student/chat", { replace: true });
+        return;
+      }
+
+      urlSessionFetchRef.current = null;
       selectSession(found);
+      return;
     }
-  }, [navigate, sessionFromUrl, sessions, selectSession]);
+
+    if (urlSessionFetchRef.current === requestedSessionId) {
+      return;
+    }
+
+    let cancelled = false;
+    urlSessionFetchRef.current = requestedSessionId;
+
+    void (async () => {
+      try {
+        const fetchedSession = (await api.getSession(requestedSessionId)) as Session;
+        if (cancelled) return;
+
+        if (fetchedSession?.id && String(fetchedSession.id) === requestedSessionId) {
+          if (!isOpenSession(fetchedSession)) {
+            markSessionAsExpired(requestedSessionId);
+            navigate("/student/chat", { replace: true });
+            return;
+          }
+
+          selectSession(fetchedSession);
+        }
+      } catch (error: unknown) {
+        if (cancelled) return;
+
+        const status = getHttpStatus(error);
+        if (status === 404 || status === 410) {
+          markSessionAsExpired(requestedSessionId);
+          navigate("/student/chat", { replace: true });
+          return;
+        }
+
+        toast.error(getApiErrorMessage(error, "Could not open that conversation."));
+      } finally {
+        if (urlSessionFetchRef.current === requestedSessionId) {
+          urlSessionFetchRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession, navigate, sessionFromUrl, sessions, selectSession]);
 
   const {
     messages,
@@ -198,6 +273,7 @@ const StudentChat = () => {
     }
 
     selectSession(null);
+    markSessionAsExpired(expiredId);
     if (sessionFromUrl === expiredId) {
       navigate("/student/chat", { replace: true });
     }
@@ -211,14 +287,14 @@ const StudentChat = () => {
   const handleSidebarAnonymousToggle = useCallback(
     async (checked: boolean) => {
       if (!user?.id) return;
-      const previous = profileAnonymousMode;
+      const previousValue = anonymousStartMode; // Use current state value, not stale closure
       setAnonymousStartMode(checked);
       const saved = await toggleProfileAnonymousMode(checked);
       if (!saved) {
-        setAnonymousStartMode(previous);
+        setAnonymousStartMode(previousValue);
       }
     },
-    [profileAnonymousMode, toggleProfileAnonymousMode, user?.id],
+    [toggleProfileAnonymousMode, user?.id, anonymousStartMode],
   );
 
   const {
@@ -234,9 +310,10 @@ const StudentChat = () => {
   useEffect(() => {
     if (uploadError) {
       toast.error(uploadError);
-      clearUploadError();
+      const timer = setTimeout(() => clearUploadError(), 0);
+      return () => clearTimeout(timer);
     }
-  }, [uploadError, clearUploadError]);
+  }, [clearUploadError, uploadError]);
 
   // Cleanup voice recorder on unmount
   useEffect(() => {
@@ -249,10 +326,18 @@ const StudentChat = () => {
     intervalMs: 30 * 60 * 1000, // 30 minutes
     enabled: Boolean(sessionId),
     onError: (error) => {
-      // Session has truly expired (410 error)
-      if (error.message.includes("410")) {
+      // Session has truly expired or is no longer visible to this student.
+      const status = getHttpStatus(error);
+      if (status === 404 || status === 410) {
+        const expiredId = String(sessionId || "").trim();
         toast.error("Chat session has expired. Please start a new session.");
+        if (expiredId) {
+          markSessionAsExpired(expiredId);
+        }
         selectSession(null);
+        if (sessionFromUrl === expiredId) {
+          navigate("/student/chat", { replace: true });
+        }
         void refreshSessions(true, { force: true });
       }
     },
@@ -266,7 +351,7 @@ const StudentChat = () => {
     }
 
     let active = true;
-    const cacheKey = `student_chat_counselors_${user.id}_${counselorPageRef.current}`;
+    const cacheKey = `student_chat_counselors_${user.id}_${counselorPage}`;
     const cachedRaw = localStorage.getItem(cacheKey);
     let cacheLoaded = false;
 
@@ -283,7 +368,11 @@ const StudentChat = () => {
           hasLoadedCounselorsRef.current = true;
           cacheLoaded = true;
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        // Log cache parsing errors in development and clear corrupted cache
+        if (import.meta.env.DEV) console.warn("Counselor cache parse error:", err);
+        localStorage.removeItem(cacheKey); // Clear corrupted cache
+      }
     }
 
     const loadCounselors = async (showErrorToast = false) => {
@@ -291,7 +380,7 @@ const StudentChat = () => {
       try {
         const payload = (await api.getCounselors({
           lightweight: true,
-          page: counselorPageRef.current,
+          page: counselorPage,
           per_page: COUNSELOR_PAGE_SIZE,
           timeout_ms: COUNSELOR_LIST_TIMEOUT_MS,
         })) as CounselorListResponse;
@@ -380,7 +469,7 @@ const StudentChat = () => {
   const handleVoiceStopAndSend = useCallback(async () => {
     if (!sessionId) return;
     const file = await stopAndGetRecording();
-    const durationMs = file ? (file as any).durationMs ?? 0 : 0;
+    const durationMs = file ? Number((file as RecordedVoiceFile).durationMs ?? 0) : 0;
     // Guard: require at least 1 second of actual audio before sending.
     // Also check file.size > 0 for safety.
     if (!file || file.size === 0 || durationMs < 1000) {
@@ -438,8 +527,9 @@ const StudentChat = () => {
         console.error("Failed to send message:", error);
       }
       toast.error("Failed to send message");
+    } finally {
+      setIsSending(false);
     }
-    setIsSending(false);
   };
 
 
@@ -561,6 +651,16 @@ const StudentChat = () => {
 
     const selectAndOpen = (session: Session) => {
       const selectedId = String(session.id || id);
+      if (!isOpenSession(session)) {
+        markSessionAsExpired(selectedId);
+        setSidebarOpen(false);
+        if (sessionFromUrl === selectedId) {
+          navigate("/student/chat", { replace: true });
+        }
+        toast.error("That chat session has ended. Please choose another conversation.");
+        return;
+      }
+
       selectSession(session);
       setSidebarOpen(false);
       navigateToChatSession(selectedId);
@@ -585,6 +685,13 @@ const StudentChat = () => {
           selectAndOpen(fetchedSession);
         }
       } catch (error: unknown) {
+        const status = getHttpStatus(error);
+        if (status === 404 || status === 410) {
+          markSessionAsExpired(id);
+          if (sessionFromUrl === id) {
+            navigate("/student/chat", { replace: true });
+          }
+        }
         toast.error(getApiErrorMessage(error, "Could not open that conversation."));
       }
     })();
@@ -602,23 +709,33 @@ const StudentChat = () => {
   }, [navigate, notifyTyping, selectSession, sessionFromUrl]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
-    void startSessionWithCounselor(id, { isAnonymous: isAnon }).then((session) => {
-      if (session?.id) {
-        setSidebarOpen(false);
-        navigateToChatSession(session.id);
-      }
-    });
+    void startSessionWithCounselor(id, { isAnonymous: isAnon })
+      .then((session) => {
+        if (session?.id) {
+          setSidebarOpen(false);
+          navigateToChatSession(session.id);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to start session:", error);
+        toast.error("Failed to start chat session. Please try again.");
+      });
   }, [navigateToChatSession, startSessionWithCounselor]);
 
   const handleStartFreshAnonymousSession = useCallback((counselorId: number) => {
     // Always force a brand-new anonymous session here so the anonymity
     // contract is preserved (no silent reuse of an old anonymous thread).
-    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true }).then((session) => {
-      if (session?.id) {
-        setSidebarOpen(false);
-        navigateToChatSession(session.id);
-      }
-    });
+    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true })
+      .then((session) => {
+        if (session?.id) {
+          setSidebarOpen(false);
+          navigateToChatSession(session.id);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to start anonymous session:", error);
+        toast.error("Failed to start anonymous chat. Please try again.");
+      });
   }, [navigateToChatSession, startSessionWithCounselor]);
 
   const handleDeleteMessageWrapper = useCallback((id: number) => {
@@ -913,7 +1030,7 @@ const StudentChat = () => {
                         }}
                         onStarterPrompt={setMessage}
                         scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                        messageScrollAreaRef={messageScrollAreaRef as any}
+                        messageScrollAreaRef={messageScrollAreaRef}
                         scrollRef={scrollRef}
                         onRetryLoad={() => {}}
                         onRetryUpload={handleRetryVoiceUpload}
