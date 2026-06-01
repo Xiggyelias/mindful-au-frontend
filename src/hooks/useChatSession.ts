@@ -101,7 +101,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
-const SESSION_CACHE_VERSION = 4;
+const SESSION_CACHE_VERSION = 5;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -157,9 +157,8 @@ export const useChatSession = (userId: number | undefined) => {
       }
     }
 
-    const fallback = nextSessions[0] || null;
-    activeSessionIdRef.current = fallback ? String(fallback.id) : null;
-    return fallback;
+    activeSessionIdRef.current = null;
+    return null;
   }, []);
 
   const hydrateCachedSessions = useCallback(() => {

@@ -422,9 +422,7 @@ const StudentChat = () => {
         const text = message.trim();
         const success = await sendMessage(text);
         if (success) {
-          // Scan the outgoing plaintext for crisis keywords and notify staff.
-          // This runs client-side so encrypted sessions (where the server cannot
-          // read the body) still produce a staff alert when trigger words are used.
+          // Scan outgoing chat text for crisis keywords and notify staff.
           if (sessionId && !isE2EHandshakeEnvelopeContent(text)) {
             const matches = detectCrisisTermsInText(text);
             if (matches.length > 0) {
@@ -756,7 +754,7 @@ const StudentChat = () => {
 
         <ErrorBoundary
           title="Something went wrong"
-          description="The clinical chat encountered an unexpected error. This might be due to a connection issue or an encryption sync failure."
+          description="The clinical chat encountered an unexpected error. This might be due to a connection or session sync issue."
         >
           <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:p-4 lg:gap-4">
             {/* Chat Sidebar */}
@@ -835,7 +833,7 @@ const StudentChat = () => {
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                             {chatError ? "Chat error" : "Session active"}
                           </span>
-                          <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure E2E channel</span>
+                          <span className="hidden text-[10px] font-semibold text-muted-foreground/80 sm:inline">Secure support channel</span>
                         </div>
                         <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1.5">
                           <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
@@ -987,7 +985,7 @@ const StudentChat = () => {
                     </p>
                     <div className="mb-4 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
                       <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      End-to-end encrypted support
+                      Private support chat
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <Button

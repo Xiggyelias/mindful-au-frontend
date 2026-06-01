@@ -326,8 +326,8 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
             <div className="mx-auto mb-4 inline-flex rounded-[1.75rem] border border-emerald-200/70 bg-emerald-100/80 p-5 shadow-sm">
               <Loader2 className="h-8 w-8 text-emerald-700 animate-spin" />
             </div>
-            <h3 className="text-xl font-display font-bold tracking-tight text-slate-900">Preparing secure thread</h3>
-            <p className="mt-2 text-sm text-muted-foreground">Encrypted conversation context is loading.</p>
+            <h3 className="text-xl font-display font-bold tracking-tight text-slate-900">Preparing chat thread</h3>
+            <p className="mt-2 text-sm text-muted-foreground">Conversation context is loading.</p>
           </div>
         </div>
       ) : null}

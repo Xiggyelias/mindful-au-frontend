@@ -511,19 +511,22 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
     const bootstrap = async () => {
       try {
-        const sessionDetails = await api.getSession(sessionId, { minimal: true }).catch((e: any) => {
+        let sessionGone = false;
+        try {
+          await api.getSession(sessionId, { minimal: true });
+        } catch (e: any) {
           if (e?.response?.status === 410) {
-            markSessionAsExpired(sessionId);
-            return null;
+            sessionGone = true;
+          } else {
+            console.warn('Session metadata unavailable; loading messages directly.', e);
           }
-          throw e;
-        });
+        }
 
         if (isDisposed || controller.signal.aborted) {
           return;
         }
 
-        if (!sessionDetails) {
+        if (sessionGone) {
           markSessionAsExpired(sessionId);
           setIsLoading(false);
           setSessionExpired(true);

@@ -104,7 +104,7 @@ const MessageBubble = React.memo(
       if (msg.is_encrypted && !msg.decryptedContent) {
         return (
           <p className="text-xs italic text-muted-foreground">
-            [Message sent with previous encryption - not readable]
+            [This older message cannot be displayed]
           </p>
         );
       }
