@@ -7,15 +7,17 @@ import {
 } from "@/lib/sounds/notificationSoundManager";
 import { subscribeIncomingCallWake } from "@/lib/incomingCallRealtime";
 
-const POLL_ACTIVE_MS = 8_000;
-const POLL_HIDDEN_MS = 20_000;
-const POLL_BACKOFF_INITIAL_MS = 45_000;
+const POLL_ACTIVE_MS = 30_000;
+const POLL_HIDDEN_MS = 90_000;
+const POLL_BACKOFF_INITIAL_MS = 60_000;
 const POLL_BACKOFF_MAX_MS = 5 * 60_000;
+const POLL_JITTER_MAX_MS = 5_000;
 const AUTO_DISMISS_MS = 30_000;
 const TAB_FLASH_MS = 1_000;
 const CALLS_LEADER_KEY = "mindful:incoming-calls-leader";
-const CALLS_LEADER_HEARTBEAT_MS = 4_000;
-const CALLS_LEADER_STALE_MS = 12_000;
+const CALLS_RATE_LIMIT_KEY = "mindful:incoming-calls-rate-limit";
+const CALLS_LEADER_HEARTBEAT_MS = 6_000;
+const CALLS_LEADER_STALE_MS = 20_000;
 
 type IncomingCallBase = {
   id: number;
@@ -56,6 +58,39 @@ function clearCallsLeaderIfOwned(tabId: string): void {
   if (!leader || leader.id !== tabId) return;
   try {
     localStorage.removeItem(CALLS_LEADER_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
+function getPollJitter(): number {
+  return Math.floor(Math.random() * POLL_JITTER_MAX_MS);
+}
+
+function readCallsRateLimitUntil(): number {
+  if (typeof localStorage === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(CALLS_RATE_LIMIT_KEY);
+    const until = Number(raw || 0);
+    if (!Number.isFinite(until) || until <= 0) return 0;
+    if (until <= Date.now()) {
+      localStorage.removeItem(CALLS_RATE_LIMIT_KEY);
+      return 0;
+    }
+    return until;
+  } catch {
+    return 0;
+  }
+}
+
+function getCallsRateLimitRemainingMs(): number {
+  return Math.max(0, readCallsRateLimitUntil() - Date.now());
+}
+
+function writeCallsRateLimitUntil(until: number): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(CALLS_RATE_LIMIT_KEY, String(until));
   } catch {
     /* best effort */
   }
@@ -187,17 +222,30 @@ export function useIncomingCalls<T extends IncomingCallBase>({
 
   const applyRateLimitBackoff = useCallback((error: unknown) => {
     const retryAfter = retryAfterMs(error);
+    const fallback = backoffMsRef.current > POLL_BACKOFF_INITIAL_MS
+      ? backoffMsRef.current * 2
+      : POLL_BACKOFF_INITIAL_MS;
     const nextBackoff = Math.min(
       POLL_BACKOFF_MAX_MS,
-      Math.max(POLL_BACKOFF_INITIAL_MS, retryAfter ?? backoffMsRef.current * 2)
+      Math.max(POLL_BACKOFF_INITIAL_MS, retryAfter ?? fallback)
     );
     backoffMsRef.current = nextBackoff;
-    backoffUntilRef.current = Date.now() + nextBackoff;
+    const until = Date.now() + nextBackoff;
+    backoffUntilRef.current = until;
+    writeCallsRateLimitUntil(until);
   }, []);
 
   const fetchIncoming = useCallback(
     async (options?: { urgent?: boolean }) => {
       if (!enabled) return;
+      const sharedBackoffRemaining = getCallsRateLimitRemainingMs();
+      if (sharedBackoffRemaining > 0) {
+        backoffUntilRef.current = Math.max(
+          backoffUntilRef.current,
+          Date.now() + sharedBackoffRemaining
+        );
+        return;
+      }
       if (options?.urgent) {
         evaluateCallsLeadership();
         const leader = readCallsLeader();
@@ -261,12 +309,16 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     const hidden =
       typeof document !== "undefined" && document.visibilityState === "hidden";
     const baseDelay = hidden ? POLL_HIDDEN_MS : POLL_ACTIVE_MS;
-    const backoffRemaining = Math.max(0, backoffUntilRef.current - Date.now());
+    const backoffRemaining = Math.max(
+      0,
+      backoffUntilRef.current - Date.now(),
+      getCallsRateLimitRemainingMs()
+    );
     const delay = Math.max(baseDelay, backoffRemaining);
     pollTimerRef.current = window.setTimeout(() => {
       pollTimerRef.current = null;
       void fetchIncoming().finally(() => schedulePoll());
-    }, delay);
+    }, delay + getPollJitter());
   }, [enabled, fetchIncoming]);
 
   useEffect(() => {
@@ -293,6 +345,8 @@ export function useIncomingCalls<T extends IncomingCallBase>({
   }, []);
 
   useEffect(() => {
+    const tabId = tabIdRef.current;
+
     if (!enabled) {
       setCalls([]);
       seenIdsRef.current.clear();
@@ -304,7 +358,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
         window.clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
-      clearCallsLeaderIfOwned(tabIdRef.current);
+      clearCallsLeaderIfOwned(tabId);
       return;
     }
 
@@ -318,7 +372,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     const onVisible = () => {
       evaluateCallsLeadership();
       if (document.visibilityState === "visible") {
-        if (Date.now() >= backoffUntilRef.current) {
+        if (Date.now() >= backoffUntilRef.current && getCallsRateLimitRemainingMs() === 0) {
           void fetchIncoming({ urgent: true });
         }
         schedulePoll();
@@ -328,13 +382,13 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     };
     const onFocus = () => {
       evaluateCallsLeadership();
-      if (Date.now() >= backoffUntilRef.current) {
+      if (Date.now() >= backoffUntilRef.current && getCallsRateLimitRemainingMs() === 0) {
         void fetchIncoming({ urgent: true });
       }
     };
     const onOnline = () => {
       evaluateCallsLeadership();
-      if (Date.now() >= backoffUntilRef.current) {
+      if (Date.now() >= backoffUntilRef.current && getCallsRateLimitRemainingMs() === 0) {
         void fetchIncoming({ urgent: true });
       }
     };
@@ -352,7 +406,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
         window.clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
-      clearCallsLeaderIfOwned(tabIdRef.current);
+      clearCallsLeaderIfOwned(tabId);
     };
   }, [enabled, evaluateCallsLeadership, fetchIncoming, schedulePoll]);
 

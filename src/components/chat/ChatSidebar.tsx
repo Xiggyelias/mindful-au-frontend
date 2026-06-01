@@ -31,12 +31,6 @@ interface ChatSidebarProps {
   onSearchChange: (val: string) => void;
   onSelectSession: (id: string, session?: Session) => void;
   onStartSession: (id: number, isAnon: boolean) => void;
-  /**
-   * Optional callback fired when a Recent Support row is clicked while its
-   * latest session is anonymous. Should ALWAYS open a brand-new anonymous
-   * chat session with the same counselor (do not resume the old one).
-   */
-  onStartFreshAnonymousSession?: (counselorId: number) => void;
   anonymousStartMode: boolean;
   onToggleAnonymous: (val: boolean) => void;
   /** True while profile anonymous_mode is saving (sidebar switch only updated local state before). */
@@ -71,7 +65,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onSearchChange,
   onSelectSession,
   onStartSession,
-  onStartFreshAnonymousSession,
   anonymousStartMode,
   onToggleAnonymous,
   anonymousToggleDisabled = false,
@@ -226,89 +219,22 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     []
   );
 
-  // Deduplicate "Recent Support" by support person/lane. If that person has
-  // both named and anonymous chats, show the one matching the current privacy
-  // context instead of rendering duplicate rows.
   const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
 
   const recentSupportRows = useMemo(() => {
-    if (!visibleSessions || visibleSessions.length === 0) return [];
-
-    type GroupRow = {
-      supportId: number;
-      counselorId: number;
-      sessions: Session[];
-    };
-
-    const groups = new Map<string, GroupRow>();
-
-    for (const session of visibleSessions) {
-      const activeSupportId = supportPersonId(session);
-      const activeSupportName = supportPersonName(session);
-      const counselorId = Number(session.counselor_id || 0);
-      const supportRole = isPeerSupportSession(session) ? "peer" : "counselor";
-      const groupKey = activeSupportId !== 0
-        ? `${supportRole}:id:${activeSupportId}`
-        : `${supportRole}:name:${activeSupportName}`;
-
-      const existing = groups.get(groupKey);
-      if (!existing) {
-        groups.set(groupKey, {
-          supportId: activeSupportId,
-          counselorId,
-          sessions: [session],
-        });
-        continue;
-      }
-
-      existing.sessions.push(session);
-    }
-
-    const latestOf = (items: Session[]) =>
-      items.reduce((latest, item) =>
-        sessionActivityTime(item) > sessionActivityTime(latest) ? item : latest
-      );
-
-    const prefersAnonymous = Boolean(anonymousStartMode);
-    const rows = Array.from(groups.values()).map((group) => {
-      const matchingPrivacySessions = group.sessions.filter(
-        (item) => isAnonymousSessionFlag(item.is_anonymous) === prefersAnonymous
-      );
-      const displaySessions = matchingPrivacySessions.length > 0
-        ? matchingPrivacySessions
-        : group.sessions;
-      const displaySession = latestOf(displaySessions);
-      const displayAsAnonymous = matchingPrivacySessions.length > 0
-        ? prefersAnonymous
-        : prefersAnonymous || isAnonymousSessionFlag(displaySession.is_anonymous);
-      const displaySessionIds = group.sessions
-        .filter((item) => isAnonymousSessionFlag(item.is_anonymous) === displayAsAnonymous)
-        .map((item) => String(item.id));
-      const displayUnreadCount = displaySessions.reduce(
-        (sum, item) => sum + Math.max(0, Number(item.unread_count || 0)),
-        0
-      );
-
-      return {
-        supportId: group.supportId,
-        counselorId: group.counselorId,
-        session: displaySession,
-        displaySessionIds,
-        displayAsAnonymous,
-        totalSessions: displaySessions.length,
-        unreadCount: displayUnreadCount,
-      };
-    });
-
-    // Most recently active counselors first.
-    rows.sort(
-      (a, b) =>
-        sessionActivityTime(b.session) -
-        sessionActivityTime(a.session)
-    );
-
-    return rows;
-  }, [anonymousStartMode, isPeerSupportSession, sessionActivityTime, supportPersonId, supportPersonName, visibleSessions]);
+    return visibleSessions
+      .map((session) => ({
+        supportId: supportPersonId(session),
+        session,
+        totalSessions: 1,
+        unreadCount: Math.max(0, Number(session.unread_count || 0)),
+      }))
+      .sort((a, b) => {
+        const byActivity = sessionActivityTime(b.session) - sessionActivityTime(a.session);
+        if (byActivity !== 0) return byActivity;
+        return Number(b.session.id || 0) - Number(a.session.id || 0);
+      });
+  }, [sessionActivityTime, supportPersonId, visibleSessions]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRecentSupportRows = useMemo(() => {
@@ -429,13 +355,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
             
             <div className="min-w-0 space-y-1">
-              {filteredRecentSupportRows.map(({ session, displaySessionIds, displayAsAnonymous, totalSessions, counselorId, supportId, unreadCount }) => {
+              {filteredRecentSupportRows.map(({ session, totalSessions, supportId, unreadCount }) => {
                 const name = supportPersonName(session);
-                const isActive = displaySessionIds.includes(String(activeSession?.id ?? ""));
+                const isActive = String(activeSession?.id ?? "") === String(session.id);
                 const isPeer = isPeerSupportSession(session);
-                const actualSessionIsAnon = isAnonymousSessionFlag(session.is_anonymous);
-                const isAnon = Boolean(displayAsAnonymous);
-                const isAnonymousIntent = isAnon && !actualSessionIsAnon;
+                const isAnon = isAnonymousSessionFlag(session.is_anonymous);
                 const sessionNumericId = Number(session.id);
                 const isPinned = pinnedSessionIds.includes(sessionNumericId);
                 const isArchived = archivedSessionIds.includes(sessionNumericId);
@@ -447,22 +371,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         : "",
                     ]
                   : ["Counselor"];
-                if (isAnon) supportSubtitleParts.push(isAnonymousIntent ? "New anonymous chat" : "Anon");
+                if (isAnon) supportSubtitleParts.push("Anon");
                 if (isPinned) supportSubtitleParts.push("Pinned");
                 if (isArchived) supportSubtitleParts.push("Archived");
                 const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
-                  if (isAnonymousIntent && counselorId > 0 && onStartFreshAnonymousSession) {
-                    onStartFreshAnonymousSession(counselorId);
-                    return;
-                  }
-                  if (isAnonymousIntent && counselorId > 0) {
-                    // Fallback: if the parent didn't supply a fresh-start
-                    // callback, still create/open an anonymous chat.
-                    onStartSession(counselorId, true);
-                    return;
-                  }
                   onSelectSession(String(session.id), session);
                 };
                 const togglePin = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -486,7 +400,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <div
                     role="button"
                     tabIndex={0}
-                    key={`recent-${isPeer ? "peer" : "counselor"}-${supportId || session.id}`}
+                    key={`recent-session-${session.id}`}
+                    data-testid={`student-chat-session-card-${session.id}`}
+                    data-session-id={String(session.id)}
+                    data-support-id={supportId || undefined}
+                    data-support-role={isPeer ? "peer" : "counselor"}
+                    aria-label={`Open ${name} session ${session.id}`}
+                    aria-pressed={isActive}
                     onClick={handleRowClick}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {

@@ -354,6 +354,7 @@ class ApiClient {
         const isNetworkError = isApiNetworkError(error);
         const statusCode = Number((error as { response?: { status?: number } })?.response?.status);
         const isTransientStatus = Number.isFinite(statusCode) && TRANSIENT_STATUS_CODES.has(statusCode);
+        const isRetryableTransientStatus = isTransientStatus && statusCode !== 429;
         const method = String(config?.method || '').toLowerCase();
         const retryCount = Number(config?.__retry_count || 0);
         const canRetry =
@@ -362,7 +363,7 @@ class ApiClient {
           && retryCount < MAX_GET_RETRY_ATTEMPTS
           && !isNetworkChangedError;
 
-        if ((isTimeout || isNetworkError || isTransientStatus) && canRetry) {
+        if ((isTimeout || isNetworkError || isRetryableTransientStatus) && canRetry) {
           const currentTimeout = Number(config?.timeout);
           const nextTimeout = Number.isFinite(currentTimeout) && currentTimeout > 0
             ? Math.min(Math.floor(currentTimeout * 2), TIMEOUT_RETRY_MAX_MS)

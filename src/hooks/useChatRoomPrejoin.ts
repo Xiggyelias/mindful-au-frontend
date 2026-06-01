@@ -250,8 +250,11 @@ export function useChatRoomPrejoin(params: {
     let isDisposed = false;
 
     const clearAll = () => {
-      for (const channel of channelsRef.current.values()) {
+      for (const [sessionId, channel] of channelsRef.current.entries()) {
         try {
+          console.debug("[StudentChatSession] socket-unsubscribe", {
+            socketChannelId: `chat-sync:${sessionId}`,
+          });
           channel.unsubscribe?.();
         } catch {
           // best effort cleanup
@@ -275,7 +278,6 @@ export function useChatRoomPrejoin(params: {
 
     const prioritized = prioritizeSessions(sessions, boostedAtBySession);
     const normalizedActiveId = String(activeSessionId || "").trim();
-    const foregroundTarget = isDocumentVisible && isLeaderTab ? FOREGROUND_ROOM_TARGETS : 0;
     const foreground = normalizedActiveId ? [normalizedActiveId] : [];
     const adaptiveBackgroundTarget = getAdaptiveBackgroundTarget(BACKGROUND_ROOM_TARGETS);
     const backgroundTarget = isDocumentVisible
@@ -287,7 +289,7 @@ export function useChatRoomPrejoin(params: {
       .map((session) => String(session.id))
       .filter(Boolean);
 
-    const targetIds = [...foreground.slice(0, foregroundTarget), ...background];
+    const targetIds = [...foreground.slice(0, FOREGROUND_ROOM_TARGETS), ...background];
     const targetSet = new Set(targetIds);
 
     const setup = async () => {
@@ -298,6 +300,9 @@ export function useChatRoomPrejoin(params: {
       for (const [sessionId, channel] of channelsRef.current.entries()) {
         if (targetSet.has(sessionId)) continue;
         try {
+          console.debug("[StudentChatSession] socket-unsubscribe", {
+            socketChannelId: `chat-sync:${sessionId}`,
+          });
           channel.unsubscribe?.();
         } catch {
           // best effort cleanup
@@ -308,6 +313,10 @@ export function useChatRoomPrejoin(params: {
       for (const sessionId of targetIds) {
         if (channelsRef.current.has(sessionId)) continue;
         const channel = client.channel(`chat-sync:${sessionId}`);
+        console.debug("[StudentChatSession] socket-subscribe", {
+          selectedSessionId: normalizedActiveId || null,
+          socketChannelId: `chat-sync:${sessionId}`,
+        });
         channel.subscribe();
         channelsRef.current.set(sessionId, channel);
       }

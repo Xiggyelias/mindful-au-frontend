@@ -106,6 +106,7 @@ const StudentChat = () => {
   const hasLoadedCounselorsRef = useRef(false);
   const expiredSessionNoticeRef = useRef<string | null>(null);
   const urlSessionFetchRef = useRef<string | null>(null);
+  const closingSessionRef = useRef<string | null>(null);
   const { user, refreshUser } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const {
@@ -163,6 +164,11 @@ const StudentChat = () => {
   useEffect(() => {
     const requestedSessionId = String(sessionFromUrl || "").trim();
     if (!requestedSessionId) {
+      closingSessionRef.current = null;
+      return;
+    }
+
+    if (closingSessionRef.current === requestedSessionId) {
       return;
     }
 
@@ -258,8 +264,22 @@ const StudentChat = () => {
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
-    sessions: sessions,
   });
+
+  useEffect(() => {
+    console.debug("[StudentChatSession] active", {
+      selectedSessionId: sessionId,
+      counselorId: activeSession?.counselor_id ?? null,
+      peerCounselorId: activeSession?.peer_counselor_id ?? null,
+      assignedRole: activeSession?.assigned_role ?? null,
+      loadedConversationId: sessionId,
+    });
+  }, [
+    activeSession?.assigned_role,
+    activeSession?.counselor_id,
+    activeSession?.peer_counselor_id,
+    sessionId,
+  ]);
 
   useEffect(() => {
     if (!sessionExpired || !sessionId) {
@@ -651,6 +671,7 @@ const StudentChat = () => {
 
     const selectAndOpen = (session: Session) => {
       const selectedId = String(session.id || id);
+      closingSessionRef.current = null;
       if (!isOpenSession(session)) {
         markSessionAsExpired(selectedId);
         setSidebarOpen(false);
@@ -661,6 +682,12 @@ const StudentChat = () => {
         return;
       }
 
+      notifyTyping(false);
+      setMessage("");
+      setSelectedFile(null);
+      cancelRecording();
+      clearRecording();
+      setIsVoiceMode(false);
       selectSession(session);
       setSidebarOpen(false);
       navigateToChatSession(selectedId);
@@ -695,18 +722,22 @@ const StudentChat = () => {
         toast.error(getApiErrorMessage(error, "Could not open that conversation."));
       }
     })();
-  }, [markSessionReadSoon, navigate, navigateToChatSession, sessionFromUrl, sessions, selectSession]);
+  }, [cancelRecording, clearRecording, markSessionReadSoon, navigate, navigateToChatSession, notifyTyping, sessionFromUrl, sessions, selectSession]);
 
   const closeActiveChat = useCallback(() => {
+    closingSessionRef.current = String(sessionId || sessionFromUrl || "").trim() || null;
     notifyTyping(false);
     setSidebarOpen(false);
     setMessage("");
     setSelectedFile(null);
+    cancelRecording();
+    clearRecording();
+    setIsVoiceMode(false);
     selectSession(null);
     if (sessionFromUrl) {
       navigate("/student/chat", { replace: true });
     }
-  }, [navigate, notifyTyping, selectSession, sessionFromUrl]);
+  }, [cancelRecording, clearRecording, navigate, notifyTyping, selectSession, sessionFromUrl, sessionId]);
 
   const handleStartSessionWrapper = useCallback((id: number, isAnon: boolean) => {
     void startSessionWithCounselor(id, { isAnonymous: isAnon })
@@ -719,22 +750,6 @@ const StudentChat = () => {
       .catch((error) => {
         console.error("Failed to start session:", error);
         toast.error("Failed to start chat session. Please try again.");
-      });
-  }, [navigateToChatSession, startSessionWithCounselor]);
-
-  const handleStartFreshAnonymousSession = useCallback((counselorId: number) => {
-    // Always force a brand-new anonymous session here so the anonymity
-    // contract is preserved (no silent reuse of an old anonymous thread).
-    void startSessionWithCounselor(counselorId, { isAnonymous: true, forceNew: true })
-      .then((session) => {
-        if (session?.id) {
-          setSidebarOpen(false);
-          navigateToChatSession(session.id);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to start anonymous session:", error);
-        toast.error("Failed to start anonymous chat. Please try again.");
       });
   }, [navigateToChatSession, startSessionWithCounselor]);
 
@@ -902,7 +917,6 @@ const StudentChat = () => {
                 onSearchChange={setSearchQuery}
                 onSelectSession={handleSelectSessionById}
                 onStartSession={handleStartSessionWrapper}
-                onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                 anonymousStartMode={sidebarAnonymousChecked}
                 onToggleAnonymous={handleUnifiedAnonymousToggle}
                 anonymousToggleDisabled={unifiedAnonymousToggleDisabled}
@@ -1089,7 +1103,6 @@ const StudentChat = () => {
                     onSearchChange={setSearchQuery}
                     onSelectSession={handleSelectSessionById}
                     onStartSession={handleStartSessionWrapper}
-                    onStartFreshAnonymousSession={handleStartFreshAnonymousSession}
                     anonymousStartMode={sidebarAnonymousChecked}
                     onToggleAnonymous={handleUnifiedAnonymousToggle}
                     anonymousToggleDisabled={unifiedAnonymousToggleDisabled}

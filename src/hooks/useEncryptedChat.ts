@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
 import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
-import { loadTypingSnapshot, saveTypingSnapshot } from '@/lib/chatTypingCache';
 import { markSessionAsExpired } from '@/hooks/useChatSession';
-import { playMessageNotificationSound } from '@/lib/sounds/notificationSoundManager';
 import type { ChatAttachment } from '@/lib/chatAttachments';
+import {
+  CHAT_INCOMING_DIGEST_EVENT,
+  type ChatIncomingDigestDetail,
+} from '@/lib/chatRealtimeEvents';
 
 export type E2EVisualState = 'plain';
 
@@ -46,22 +48,89 @@ export type RawMessage = ChatMessage & {
 interface UseEncryptedChatProps {
   sessionId: string;
   userId: string;
-  sessions?: any[];
 }
 
 const MESSAGE_POLL_TIMEOUT_MS = 5000;
 const OLDER_MESSAGE_BATCH_LIMIT = 20;
-const INITIAL_SYNC_BATCH_LIMIT = 20;
 const MESSAGE_BATCH_LIMIT = 20;
-const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 3000;
-const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 9000;
-const TYPING_POLL_INTERVAL_ACTIVE_MS = 5000;
-const TYPING_POLL_INTERVAL_HIDDEN_MS = 12000;
-const POLL_JITTER_MAX_MS = 600;
+const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 10_000;
+const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 45_000;
+const TYPING_POLL_INTERVAL_ACTIVE_MS = 20_000;
+const TYPING_POLL_INTERVAL_HIDDEN_MS = 60_000;
+const POLL_JITTER_MAX_MS = 2_000;
+const RATE_LIMIT_BACKOFF_INITIAL_MS = 30_000;
+const RATE_LIMIT_BACKOFF_MAX_MS = 5 * 60_000;
+const NETWORK_BACKOFF_MAX_MS = 60_000;
+const TYPING_WRITE_BACKOFF_INITIAL_MS = 30_000;
+const TYPING_WRITE_MIN_GAP_ACTIVE_MS = 6_000;
+const TYPING_WRITE_MIN_GAP_IDLE_MS = 2_000;
 const FULL_RECONCILE_EVERY_POLLS = 5;
 const DELETED_MESSAGE_TEXT = 'This message was deleted.';
 
 const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
+
+type ChatRateLimitScope = 'messages' | 'typing-read' | 'typing-write';
+
+const getErrorStatus = (error: unknown): number | undefined =>
+  (error as { response?: { status?: number } })?.response?.status ??
+  (error as { status?: number })?.status;
+
+const retryAfterMs = (error: unknown): number | null => {
+  const headers = (error as { response?: { headers?: Record<string, string> } })?.response?.headers;
+  const header = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const dateMs = Date.parse(header);
+  if (!Number.isFinite(dateMs)) return null;
+  const delta = dateMs - Date.now();
+  return delta > 0 ? delta : null;
+};
+
+const getRateLimitDelayMs = (
+  error: unknown,
+  previousBackoffMs: number,
+  initialBackoffMs: number,
+  maxBackoffMs: number
+): number => {
+  const fallback = previousBackoffMs > initialBackoffMs
+    ? previousBackoffMs * 2
+    : initialBackoffMs;
+  return Math.min(
+    maxBackoffMs,
+    Math.max(initialBackoffMs, retryAfterMs(error) ?? fallback)
+  );
+};
+
+const chatRateLimitKey = (scope: ChatRateLimitScope, sessionId: string): string =>
+  `mindful:chat-rate-limit:${scope}:${encodeURIComponent(String(sessionId || ''))}`;
+
+const getStoredRateLimitRemainingMs = (key: string): number => {
+  if (typeof localStorage === 'undefined') return 0;
+  try {
+    const until = Number(localStorage.getItem(key) || 0);
+    if (!Number.isFinite(until) || until <= 0) return 0;
+    if (until <= Date.now()) {
+      localStorage.removeItem(key);
+      return 0;
+    }
+    return until - Date.now();
+  } catch {
+    return 0;
+  }
+};
+
+const storeRateLimitDelay = (key: string, delayMs: number): number => {
+  const until = Date.now() + delayMs;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(key, String(until));
+    } catch {
+      /* best effort */
+    }
+  }
+  return until;
+};
 
 const isE2EHandshakeEnvelope = (content: string): boolean => {
   try {
@@ -86,7 +155,7 @@ const formatServerMessage = (msg: any): ChatMessage => ({
   delivery_status: msg.seen_at ? 'read' : 'delivered',
 });
 
-export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedChatProps) => {
+export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
@@ -215,6 +284,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     loadInFlightRef.current = false;
     loadOlderInFlightRef.current = false;
     pollCycleRef.current = 0;
+    messageBackoffMsRef.current = 0;
+    typingBackoffMsRef.current = 0;
+    typingWriteBackoffUntilRef.current = 0;
+    lastTypingSentAtRef.current = 0;
+    lastTypingValueSentRef.current = null;
     setSessionExpired(false);
     lastMessageIdRef.current = 0;
     oldestMessageIdRef.current = Number.MAX_SAFE_INTEGER;
@@ -238,11 +312,23 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         const sid = sessionIdRef.current;
         if (sid && !sessionExpiredRef.current) {
           isTypingRef.current = false;
-          api.setTypingState(sid, false).catch(() => {});
+          const typingWriteKey = chatRateLimitKey('typing-write', sid);
+          if (getStoredRateLimitRemainingMs(typingWriteKey) === 0) {
+            api.setTypingState(sid, false, { timeout_ms: 5000 }).catch((err: unknown) => {
+              if (getErrorStatus(err) === 429) {
+                const delayMs = getRateLimitDelayMs(
+                  err,
+                  0,
+                  TYPING_WRITE_BACKOFF_INITIAL_MS,
+                  RATE_LIMIT_BACKOFF_MAX_MS
+                );
+                storeRateLimitDelay(typingWriteKey, delayMs);
+              }
+            });
+          }
         }
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Clear typing state when the tab is hidden (switch / minimise) or the page is
@@ -257,6 +343,9 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       const sid = sessionIdRef.current;
       if (!sid) return;
       isTypingRef.current = false;
+      if (getStoredRateLimitRemainingMs(chatRateLimitKey('typing-write', sid)) > 0) {
+        return;
+      }
       const base = api.getBaseUrl().replace(/\/$/, '');
       const url = `${base}/sessions/${sid}/typing`;
       const token = api.getToken();
@@ -301,6 +390,12 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
   const loadMessages = useCallback(
     async (fullHydration: boolean, signal?: AbortSignal) => {
       if (sessionExpiredRef.current) return;
+      const messageRateLimitKey = chatRateLimitKey('messages', sessionId);
+      const storedBackoffMs = getStoredRateLimitRemainingMs(messageRateLimitKey);
+      if (storedBackoffMs > 0) {
+        messageBackoffMsRef.current = Math.max(messageBackoffMsRef.current, storedBackoffMs);
+        return;
+      }
       if (loadInFlightRef.current) return;
       loadInFlightRef.current = true;
       try {
@@ -308,6 +403,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           limit: fullHydration ? 50 : MESSAGE_BATCH_LIMIT,
           mark_read: true,
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
+          signal,
           // Always reconcile the latest page. Incremental-only polling misses
           // server-side tombstones because the message id does not change.
           after_id: undefined,
@@ -315,6 +411,13 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
 
         const rawMessages = await api.getMessages(sessionId, queryParams);
         if (signal?.aborted || !isCurrentSession(sessionId)) return;
+
+        console.debug('[StudentChatSession] messages-loaded', {
+          loadedConversationId: sessionId,
+          selectedSessionId: sessionIdRef.current,
+          messageCount: Array.isArray(rawMessages) ? rawMessages.length : 0,
+          fullHydration,
+        });
 
         if (Array.isArray(rawMessages) && rawMessages.length > 0) {
           const visibleMessages = filterVisibleMessages(rawMessages);
@@ -343,7 +446,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         messageBackoffMsRef.current = 0; // Reset backoff on success!
       } catch (err: any) {
         if (signal?.aborted || !isCurrentSession(sessionId)) return;
-        const status = err?.response?.status ?? err?.status;
+        const status = getErrorStatus(err);
         if (status === 410) {
           markSessionAsExpired(sessionId);
           sessionExpiredRef.current = true;
@@ -352,16 +455,20 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
           return;
         }
         if (status === 429) {
-          // Exponential backoff: start at 8s, up to 60s
-          messageBackoffMsRef.current = Math.min(
-            60000,
-            Math.max(8000, messageBackoffMsRef.current * 2 || 8000)
+          const delayMs = getRateLimitDelayMs(
+            err,
+            messageBackoffMsRef.current,
+            RATE_LIMIT_BACKOFF_INITIAL_MS,
+            RATE_LIMIT_BACKOFF_MAX_MS
           );
+          messageBackoffMsRef.current = delayMs;
+          storeRateLimitDelay(messageRateLimitKey, delayMs);
+          setError(null);
+          return;
         } else {
-          // For network errors, also back off slightly to be safe
           messageBackoffMsRef.current = Math.min(
-            30000,
-            Math.max(6000, messageBackoffMsRef.current + 3000)
+            NETWORK_BACKOFF_MAX_MS,
+            Math.max(MESSAGE_POLL_INTERVAL_ACTIVE_MS, messageBackoffMsRef.current + 5000)
           );
         }
         if (!isApiNetworkError(err)) {
@@ -419,6 +526,15 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         sessionExpiredRef.current = true;
         setSessionExpired(true);
         stopRealtimeAndTimers();
+      } else if (status === 429) {
+        const delayMs = getRateLimitDelayMs(
+          err,
+          messageBackoffMsRef.current,
+          RATE_LIMIT_BACKOFF_INITIAL_MS,
+          RATE_LIMIT_BACKOFF_MAX_MS
+        );
+        messageBackoffMsRef.current = delayMs;
+        storeRateLimitDelay(chatRateLimitKey('messages', sessionId), delayMs);
       }
       return false;
     } finally {
@@ -437,17 +553,27 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const baseInterval = document.visibilityState === 'visible'
       ? MESSAGE_POLL_INTERVAL_ACTIVE_MS
       : MESSAGE_POLL_INTERVAL_HIDDEN_MS;
-    const delay = Math.max(baseInterval, messageBackoffMsRef.current);
+    const delay = Math.max(
+      baseInterval,
+      messageBackoffMsRef.current,
+      getStoredRateLimitRemainingMs(chatRateLimitKey('messages', sessionId))
+    );
     pollingTimeoutRef.current = window.setTimeout(async () => {
       pollCycleRef.current += 1;
       const shouldReconcileDeeply = pollCycleRef.current % FULL_RECONCILE_EVERY_POLLS === 0;
       await loadMessages(shouldReconcileDeeply);
       scheduleNextPoll();
     }, delay + getJitter()) as unknown as number;
-  }, [loadMessages]);
+  }, [loadMessages, sessionId]);
 
   const refreshPeerTypingStatus = useCallback(async () => {
     if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
+    const typingReadKey = chatRateLimitKey('typing-read', sessionId);
+    const storedBackoffMs = getStoredRateLimitRemainingMs(typingReadKey);
+    if (storedBackoffMs > 0) {
+      typingBackoffMsRef.current = Math.max(typingBackoffMsRef.current, storedBackoffMs);
+      return;
+    }
     try {
       const data = await api.getTypingState(sessionId, { timeout_ms: 5000 });
       if (!isCurrentSession(sessionId)) return;
@@ -457,7 +583,7 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       typingBackoffMsRef.current = 0; // Reset backoff on success!
     } catch (e: any) {
       if (!isCurrentSession(sessionId)) return;
-      const status = e?.response?.status ?? e?.status;
+      const status = getErrorStatus(e);
       if (status === 410) {
         markSessionAsExpired(sessionId);
         sessionExpiredRef.current = true;
@@ -466,19 +592,47 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
         return;
       }
       if (status === 429) {
-        // Exponential backoff: start at 10s, up to 60s
-        typingBackoffMsRef.current = Math.min(
-          60000,
-          Math.max(10000, typingBackoffMsRef.current * 2 || 10000)
+        const delayMs = getRateLimitDelayMs(
+          e,
+          typingBackoffMsRef.current,
+          RATE_LIMIT_BACKOFF_INITIAL_MS,
+          RATE_LIMIT_BACKOFF_MAX_MS
         );
+        typingBackoffMsRef.current = delayMs;
+        storeRateLimitDelay(typingReadKey, delayMs);
+        return;
       } else {
         typingBackoffMsRef.current = Math.min(
-          30000,
-          Math.max(8000, typingBackoffMsRef.current + 4000)
+          NETWORK_BACKOFF_MAX_MS,
+          Math.max(TYPING_POLL_INTERVAL_ACTIVE_MS, typingBackoffMsRef.current + 5000)
         );
       }
     }
   }, [hasValidUserId, isCurrentSession, sessionId, stopRealtimeAndTimers]);
+
+  useEffect(() => {
+    if (!sessionId || typeof window === 'undefined') return;
+
+    const onDigest = (event: Event) => {
+      const detail = (event as CustomEvent<ChatIncomingDigestDetail>).detail;
+      const ids = Array.isArray(detail?.session_ids)
+        ? detail.session_ids.map((id) => String(id || '').trim())
+        : [];
+      if (!ids.includes(String(sessionId))) return;
+
+      console.debug('[StudentChatSession] digest-refresh', {
+        selectedSessionId: sessionId,
+        loadedConversationId: sessionId,
+      });
+      void loadMessages(false);
+      void refreshPeerTypingStatus();
+    };
+
+    window.addEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+    return () => {
+      window.removeEventListener(CHAT_INCOMING_DIGEST_EVENT, onDigest as EventListener);
+    };
+  }, [loadMessages, refreshPeerTypingStatus, sessionId]);
 
   const scheduleTypingPoll = useCallback(() => {
     if (!sessionId) return;
@@ -489,7 +643,11 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
     const baseInterval = document.visibilityState === 'visible'
       ? TYPING_POLL_INTERVAL_ACTIVE_MS
       : TYPING_POLL_INTERVAL_HIDDEN_MS;
-    const delay = Math.max(baseInterval, typingBackoffMsRef.current);
+    const delay = Math.max(
+      baseInterval,
+      typingBackoffMsRef.current,
+      getStoredRateLimitRemainingMs(chatRateLimitKey('typing-read', sessionId))
+    );
     typingPollTimeoutRef.current = window.setTimeout(async () => {
       if (!sessionId) {
         if (typingPollTimeoutRef.current !== null) {
@@ -677,21 +835,30 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
       if (!sessionId || !hasValidUserId || sessionExpiredRef.current) return;
       isTypingRef.current = isTyping;
       const now = Date.now();
+      const typingWriteKey = chatRateLimitKey('typing-write', sessionId);
+      const storedBackoffMs = getStoredRateLimitRemainingMs(typingWriteKey);
+      if (storedBackoffMs > 0) {
+        typingWriteBackoffUntilRef.current = Math.max(
+          typingWriteBackoffUntilRef.current,
+          now + storedBackoffMs
+        );
+        return;
+      }
       if (now < typingWriteBackoffUntilRef.current) return;
       if (typingWriteInFlightRef.current) return;
 
       const lastValue = lastTypingValueSentRef.current;
       const lastSentAt = lastTypingSentAtRef.current;
-      const minGap = isTyping ? 4000 : 1000;
+      const minGap = isTyping ? TYPING_WRITE_MIN_GAP_ACTIVE_MS : TYPING_WRITE_MIN_GAP_IDLE_MS;
       if (lastValue === isTyping && now - lastSentAt < minGap) return;
 
       typingWriteInFlightRef.current = true;
       lastTypingValueSentRef.current = isTyping;
       lastTypingSentAtRef.current = now;
-      api.setTypingState(sessionId, isTyping)
+      api.setTypingState(sessionId, isTyping, { timeout_ms: 5000 })
         .catch((err: any) => {
           if (!isCurrentSession(sessionId)) return;
-          const status = err?.response?.status ?? err?.status;
+          const status = getErrorStatus(err);
           if (status === 410) {
             markSessionAsExpired(sessionId);
             sessionExpiredRef.current = true;
@@ -700,7 +867,14 @@ export const useEncryptedChat = ({ sessionId, userId, sessions }: UseEncryptedCh
             return;
           }
           if (status === 429) {
-            typingWriteBackoffUntilRef.current = Date.now() + 15000;
+            const currentDelayMs = Math.max(0, typingWriteBackoffUntilRef.current - Date.now());
+            const delayMs = getRateLimitDelayMs(
+              err,
+              currentDelayMs,
+              TYPING_WRITE_BACKOFF_INITIAL_MS,
+              RATE_LIMIT_BACKOFF_MAX_MS
+            );
+            typingWriteBackoffUntilRef.current = storeRateLimitDelay(typingWriteKey, delayMs);
           }
         })
         .finally(() => {

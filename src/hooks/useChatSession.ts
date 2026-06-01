@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
-import { counselorChatListLane } from "@/lib/counselorChatListDedupe";
 
 export const expiredSessionIds = new Set<string>();
 
@@ -101,7 +100,7 @@ export interface Appointment {
 
 const SESSION_POLL_INTERVAL_MS = 12000;
 const SESSION_CACHE_TTL_MS = 60 * 1000;
-const SESSION_CACHE_VERSION = 6;
+const SESSION_CACHE_VERSION = 7;
 const SESSION_LIST_TIMEOUT_MS = 20000;
 const SESSION_LIST_RETRY_TIMEOUT_MS = 45000;
 const SESSION_PAGE_SIZE = 24;
@@ -122,12 +121,21 @@ const getHttpStatus = (error: unknown) =>
       (error as { status?: unknown })?.status ??
       0
   );
-const conversationKey = (session: Session) => {
-  const studentId = session.chat_peer_student_id || session.student_id || 0;
-  const counselorId = session.counselor_id || 0;
-  const isAnon = isAnonymousSessionFlag(session.is_anonymous) ? 1 : 0;
-  const lane = counselorChatListLane(session as unknown as Record<string, unknown>);
-  return `student:${studentId}:counselor:${counselorId}:anon:${isAnon}:lane:${lane}`;
+const directCounselorSessionMatches = (
+  session: Session,
+  counselorId: number,
+  isAnonymous: boolean
+) =>
+  session.counselor_id === counselorId &&
+  session.session_type === "chat" &&
+  isAnonymousSessionFlag(session.is_anonymous) === isAnonymous &&
+  isOpenChatSession(session) &&
+  Number(session.peer_counselor_id || 0) <= 0 &&
+  (session.assigned_role == null || session.assigned_role === "counselor");
+
+const logStudentSessionDebug = (event: string, payload: Record<string, unknown>) => {
+  // Keep this visible enough for field debugging without interrupting the UI.
+  console.debug(`[StudentChatSession] ${event}`, payload);
 };
 
 
@@ -238,9 +246,8 @@ export const useChatSession = (userId: number | undefined) => {
       }
 
       const fetchSessions = (perPage: number, timeoutMs: number) =>
-        api.getSessions({
-          lightweight: true,
-          session_type: "chat",
+        api.getChatSessions({
+          as_role: "student",
           open_only: true,
           page: sessionPageRef.current,
           per_page: perPage,
@@ -300,32 +307,14 @@ export const useChatSession = (userId: number | undefined) => {
         setSessionPage(nextPage);
       }
 
-      // Keep one row per student/anonymity/lane. Direct counselor chats and
-      // supervised peer-support chats must remain independently selectable.
-      const dedupedByConversation = new Map<string, Session>();
-      
-      // Sort by ID descending first so we process latest sessions first
-      const sortedByRecency = [...chatSessions].sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      
-      for (const session of sortedByRecency) {
-        const key = conversationKey(session);
-        const existing = dedupedByConversation.get(key);
-        
-        if (!existing) {
-          dedupedByConversation.set(key, session);
-          continue;
-        }
-
-        // If we found an open version of a session we already have, prefer it
-        // (though we already sorted by recency, so this is a safety check).
-        if (!isOpenChatSession(existing) && isOpenChatSession(session)) {
-          dedupedByConversation.set(key, session);
-        }
-      }
-
-      const normalizedSessions = Array.from(dedupedByConversation.values()).filter(s => !isSessionExpired(String(s.id)));
+      const normalizedSessions = [...chatSessions]
+        .filter((session) => !isSessionExpired(String(session.id)))
+        .sort((a, b) => {
+          const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+          const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+          if (aTime !== bTime) return bTime - aTime;
+          return Number(b.id) - Number(a.id);
+        });
       const activeSessionId = activeSessionIdRef.current;
       if (
         activeSessionId &&
@@ -416,6 +405,7 @@ export const useChatSession = (userId: number | undefined) => {
   }, []);
 
   const selectSession = useCallback((session: Session | null) => {
+    const previousSessionId = activeSessionIdRef.current;
     activeSessionIdRef.current = session ? String(session.id) : null;
     if (session) {
       setSessions((prev) => {
@@ -427,6 +417,13 @@ export const useChatSession = (userId: number | undefined) => {
         return prev.map((s) => (String(s.id) === String(session.id) ? nextSession : s));
       });
     }
+    logStudentSessionDebug("select", {
+      previousSessionId,
+      selectedSessionId: session ? String(session.id) : null,
+      counselorId: session?.counselor_id ?? null,
+      peerCounselorId: session?.peer_counselor_id ?? null,
+      assignedRole: session?.assigned_role ?? null,
+    });
     setActiveSession(session);
   }, []);
 
@@ -463,10 +460,7 @@ export const useChatSession = (userId: number | undefined) => {
       if (!forceNew) {
         const existing = sessions.find(
           (s) =>
-            s.counselor_id === counselorId &&
-            s.session_type === "chat" &&
-            isAnonymousSessionFlag(s.is_anonymous) === shouldBeAnonymous &&
-            isOpenChatSession(s)
+            directCounselorSessionMatches(s, counselorId, shouldBeAnonymous)
         );
         if (existing) {
           activeSessionIdRef.current = String(existing.id);
