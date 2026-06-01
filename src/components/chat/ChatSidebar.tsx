@@ -233,8 +233,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     []
   );
 
-  // Deduplicate "Recent Support" by support person and privacy mode. A named
-  // chat and an anonymous chat with the same counselor are separate identities.
+  // Deduplicate "Recent Support" by support person/lane. If that person has
+  // both named and anonymous chats, show the one matching the current privacy
+  // context instead of rendering duplicate rows.
   const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
 
   const recentSupportRows = useMemo(() => {
@@ -243,9 +244,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     type GroupRow = {
       supportId: number;
       counselorId: number;
+      supportRole: "counselor" | "peer";
       sessions: Session[];
-      latest: Session;
-      unreadCount: number;
     };
 
     const groups = new Map<string, GroupRow>();
@@ -255,40 +255,52 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       const activeSupportName = supportPersonName(session);
       const counselorId = Number(session.counselor_id || 0);
       const supportRole = isPeerSupportSession(session) ? "peer" : "counselor";
-      const privacyKey = isAnonymousSessionFlag(session.is_anonymous) ? "anonymous" : "named";
       const groupKey = activeSupportId !== 0
-        ? `${supportRole}:${privacyKey}:id:${activeSupportId}`
-        : `${supportRole}:${privacyKey}:name:${activeSupportName}`;
+        ? `${supportRole}:id:${activeSupportId}`
+        : `${supportRole}:name:${activeSupportName}`;
 
       const existing = groups.get(groupKey);
       if (!existing) {
         groups.set(groupKey, {
           supportId: activeSupportId,
           counselorId,
+          supportRole,
           sessions: [session],
-          latest: session,
-          unreadCount: Math.max(0, Number(session.unread_count || 0)),
         });
         continue;
       }
 
       existing.sessions.push(session);
-      existing.unreadCount += Math.max(0, Number(session.unread_count || 0));
-      const currentLatestTime = sessionActivityTime(existing.latest);
-      const candidateTime = sessionActivityTime(session);
-      if (candidateTime > currentLatestTime) {
-        existing.latest = session;
-      }
     }
 
-    const rows = Array.from(groups.values()).map((group) => ({
-      supportId: group.supportId,
-      counselorId: group.counselorId,
-      session: group.latest,
-      sessionIds: group.sessions.map((item) => String(item.id)),
-      totalSessions: group.sessions.length,
-      unreadCount: group.unreadCount,
-    }));
+    const latestOf = (items: Session[]) =>
+      items.reduce((latest, item) =>
+        sessionActivityTime(item) > sessionActivityTime(latest) ? item : latest
+      );
+
+    const prefersAnonymous = Boolean(anonymousStartMode);
+    const rows = Array.from(groups.values()).map((group) => {
+      const matchingPrivacySessions = group.sessions.filter(
+        (item) => isAnonymousSessionFlag(item.is_anonymous) === prefersAnonymous
+      );
+      const displaySessions = matchingPrivacySessions.length > 0
+        ? matchingPrivacySessions
+        : group.sessions;
+      const displayUnreadCount = displaySessions.reduce(
+        (sum, item) => sum + Math.max(0, Number(item.unread_count || 0)),
+        0
+      );
+
+      return {
+        supportId: group.supportId,
+        counselorId: group.counselorId,
+        supportRole: group.supportRole,
+        session: latestOf(displaySessions),
+        sessionIds: group.sessions.map((item) => String(item.id)),
+        totalSessions: displaySessions.length,
+        unreadCount: displayUnreadCount,
+      };
+    });
 
     // Most recently active counselors first.
     rows.sort(
@@ -298,7 +310,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     );
 
     return rows;
-  }, [isPeerSupportSession, sessionActivityTime, supportPersonId, supportPersonName, visibleSessions]);
+  }, [anonymousStartMode, isPeerSupportSession, sessionActivityTime, supportPersonId, supportPersonName, visibleSessions]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRecentSupportRows = useMemo(() => {
@@ -320,12 +332,24 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     });
   }, [recentSupportRows, normalizedQuery, conversationFilter, archivedSessionIds, pinnedSessionIds, supportPersonName]);
 
+  const recentDirectCounselorIds = useMemo(() => {
+    return new Set(
+      recentSupportRows
+        .filter((row) => row.supportRole === "counselor")
+        .map((row) => Number(row.counselorId || row.supportId || 0))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    );
+  }, [recentSupportRows]);
+
   const filteredCounselors = useMemo(() => {
     return counselors.filter((c) =>
-      normalizedQuery === "" ||
-      String(c?.profile?.full_name || "Counselor").toLowerCase().includes(normalizedQuery)
+      !recentDirectCounselorIds.has(Number(c?.id || 0)) &&
+      (
+        normalizedQuery === "" ||
+        String(c?.profile?.full_name || "Counselor").toLowerCase().includes(normalizedQuery)
+      )
     );
-  }, [counselors, normalizedQuery]);
+  }, [counselors, normalizedQuery, recentDirectCounselorIds]);
 
   const counselorSkeletons = Array.from({ length: 4 }, (_, idx) => idx);
   const hasRecentSupport = filteredRecentSupportRows.length > 0;
