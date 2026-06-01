@@ -394,18 +394,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
         <div
           className={cn(
-            "mt-4 flex items-center justify-between rounded-2xl border p-3 shadow-sm transition-colors",
+            "mt-4 flex items-center justify-between rounded-2xl border p-3 shadow-sm transition-colors relative z-10",
             anonymousStartMode
               ? "border-rose-700 bg-slate-950 text-white shadow-[inset_0_0_0_1px_rgba(190,24,93,0.4)]"
               : "border-emerald-200/80 bg-emerald-50/70"
           )}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <Shield className={cn("h-4 w-4 shrink-0", anonymousStartMode ? "text-red-500" : "text-primary")} />
             <Label
               htmlFor="anon-mode"
               className={cn(
-                "cursor-pointer text-xs font-bold uppercase tracking-wider",
+                "cursor-pointer text-xs font-bold uppercase tracking-wider truncate",
                 anonymousStartMode ? "text-white" : ""
               )}
             >
@@ -417,6 +417,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             checked={anonymousStartMode} 
             onCheckedChange={onToggleAnonymous}
             disabled={anonymousToggleDisabled}
+            className="flex-shrink-0"
           />
         </div>
       </div>
@@ -659,7 +660,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 filteredCounselors.map((counselor) => {
                   const name = counselor.profile?.full_name || "Counselor";
                   return (
-                    <div key={counselor.id} className="group rounded-2xl border border-slate-200/70 bg-white/85 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white">
+                    <div key={counselor.id} className="group rounded-2xl border border-slate-200/70 bg-white/85 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white relative z-0">
                       <div className="flex items-center gap-3">
                         <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-xs text-white ${getUserColor(name)}`}>
                           {getInitials(name)}
@@ -667,14 +668,14 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                         <div className="flex-1 min-w-0">
                           <p className="font-bold truncate text-sm">{name}</p>
                           <div className="flex items-center gap-1.5">
-                            <span className={`h-1.5 w-1.5 rounded-full ${counselor.is_online ? "bg-success animate-pulse" : "bg-muted"}`} />
+                            <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${counselor.is_online ? "bg-success animate-pulse" : "bg-muted"}`} />
                             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{counselor.is_online ? "Online" : "Offline"}</span>
                           </div>
                         </div>
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-8 w-8 rounded-full bg-emerald-100/80 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all"
+                          className="h-8 w-8 rounded-full bg-emerald-100/80 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all flex-shrink-0"
                           onClick={() => onStartSession(counselor.id, anonymousStartMode)}
                           aria-label={`Start session with ${counselor.profile?.full_name || "counselor"}`}
                         >

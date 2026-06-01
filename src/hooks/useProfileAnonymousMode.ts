@@ -40,7 +40,8 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
 
   const toggleProfileAnonymousMode = useCallback(
     async (nextChecked: boolean) => {
-      if (!user?.id || isSaving) return false;
+      if (!user?.id) return false;
+      if (isSaving) return false;
 
       const current = isProfileAnonymousMode(user.profile?.anonymous_mode);
       if (current === nextChecked) return true;
@@ -51,23 +52,29 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
       }
 
       setIsSaving(true);
+      const timeoutId = setTimeout(() => {
+        setIsSaving(false);
+      }, 30000); // 30 second safety timeout
+
       try {
         await api.updateProfile({ anonymous_mode: nextChecked });
+        clearTimeout(timeoutId);
         await refreshUser();
         dispatchChatAnonymitySync();
         toast.success(getProfileAnonymousModeSuccessTitle(nextChecked), {
           description: PROFILE_ANON_MODE_TOAST_DESCRIPTION,
         });
+        setIsSaving(false);
         return true;
       } catch (error: unknown) {
+        clearTimeout(timeoutId);
         const message = getApiErrorMessage(error, "Failed to update anonymous mode");
         toast.error(message || PROFILE_ANON_MODE_UPDATE_ERROR);
-        return false;
-      } finally {
         setIsSaving(false);
+        return false;
       }
     },
-    [confirm, isSaving, refreshUser, user?.id, user?.profile?.anonymous_mode],
+    [confirm, refreshUser, user?.id, user?.profile?.anonymous_mode],
   );
 
   return {
