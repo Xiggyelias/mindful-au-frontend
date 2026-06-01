@@ -453,19 +453,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
-                  // Anonymous rows must always open a brand-new chat session so
-                  // an old anonymous thread is never silently resumed (which
-                  // would re-link the student's previous anonymous identity to
-                  // the counselor for a longer window than expected).
-                  if (isAnon && counselorId > 0 && onStartFreshAnonymousSession) {
+                  if (isAnonymousIntent && counselorId > 0 && onStartFreshAnonymousSession) {
                     onStartFreshAnonymousSession(counselorId);
                     return;
                   }
-                  if (isAnon && counselorId > 0) {
+                  if (isAnonymousIntent && counselorId > 0) {
                     // Fallback: if the parent didn't supply a fresh-start
-                    // callback, still avoid resuming the existing anonymous
-                    // thread by going through the regular start flow with
-                    // anonymity flagged on.
+                    // callback, still create/open an anonymous chat.
                     onStartSession(counselorId, true);
                     return;
                   }
