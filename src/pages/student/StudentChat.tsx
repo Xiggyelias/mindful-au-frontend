@@ -649,7 +649,12 @@ const StudentChat = () => {
 
     try {
       setIsSavingChatAnonymity(true);
-      await api.updateSessionChatAnonymity(sessionId, checked);
+      const updatedSession = await api.updateSessionChatAnonymity(sessionId, checked);
+      selectSession({
+        ...activeSession,
+        ...updatedSession,
+        is_anonymous: checked,
+      });
       await refreshUser();
       await refreshSessions(true, { force: true });
       dispatchChatAnonymitySync();
@@ -664,7 +669,7 @@ const StudentChat = () => {
     } finally {
       setIsSavingChatAnonymity(false);
     }
-  }, [activeSession, confirm, messages.length, refreshSessions, refreshUser, sessionId]);
+  }, [activeSession, confirm, messages.length, refreshSessions, refreshUser, selectSession, sessionId]);
 
   const sidebarAnonymousChecked = activeSession
     ? isAnonymousSessionFlag(activeSession.is_anonymous)

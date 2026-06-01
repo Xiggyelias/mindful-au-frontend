@@ -233,9 +233,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     []
   );
 
-  // Deduplicate "Recent Support" by the active support person. Peer-assigned
-  // case rooms lead with the peer counselor, while the supervising counselor
-  // stays visible in the subtitle and participant chips.
+  // Deduplicate "Recent Support" by support person and privacy mode. A named
+  // chat and an anonymous chat with the same counselor are separate identities.
   const visibleSessions = useMemo(() => sessions.filter(s => !isSessionExpired(String(s.id))), [sessions]);
 
   const recentSupportRows = useMemo(() => {
@@ -256,9 +255,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       const activeSupportName = supportPersonName(session);
       const counselorId = Number(session.counselor_id || 0);
       const supportRole = isPeerSupportSession(session) ? "peer" : "counselor";
+      const privacyKey = isAnonymousSessionFlag(session.is_anonymous) ? "anonymous" : "named";
       const groupKey = activeSupportId !== 0
-        ? `${supportRole}:id:${activeSupportId}`
-        : `${supportRole}:name:${activeSupportName}`;
+        ? `${supportRole}:${privacyKey}:id:${activeSupportId}`
+        : `${supportRole}:${privacyKey}:name:${activeSupportName}`;
 
       const existing = groups.get(groupKey);
       if (!existing) {
@@ -440,6 +440,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 const supportSubtitle = supportSubtitleParts.filter(Boolean).join(" / ");
 
                 const handleRowClick = () => {
+                  if (anonymousStartMode && !isAnon && counselorId > 0 && onStartFreshAnonymousSession) {
+                    onStartFreshAnonymousSession(counselorId);
+                    return;
+                  }
                   // Anonymous rows must always open a brand-new chat session so
                   // an old anonymous thread is never silently resumed (which
                   // would re-link the student's previous anonymous identity to
