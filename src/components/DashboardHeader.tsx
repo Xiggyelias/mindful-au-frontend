@@ -113,6 +113,14 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       return `${basePath}/appointments`;
     }
 
+    const emergencyRequestId = Number((meta as { emergency_request_id?: unknown }).emergency_request_id);
+    if (Number.isFinite(emergencyRequestId) && emergencyRequestId > 0) {
+      if (basePath === "/admin" || role === "admin") return `/admin/alerts?emergency=${emergencyRequestId}`;
+      if (basePath === "/peer" || role === "peer_counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
+      if (basePath === "/counselor" || role === "counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
+      return "/student/dashboard";
+    }
+
     const looksLikeEmergency =
       notification.type === "panic" ||
       title.includes("panic") ||
@@ -125,7 +133,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     if (looksLikeEmergency) {
       if (basePath === "/admin" || role === "admin") return "/admin/alerts";
       if (basePath === "/peer" || role === "peer_counselor") return "/peer/escalations";
-      if (basePath === "/counselor" || role === "counselor") return "/counselor/students";
+      if (basePath === "/counselor" || role === "counselor") return "/counselor/alerts";
       return "/student/chat";
     }
 
