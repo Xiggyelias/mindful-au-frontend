@@ -1044,7 +1044,11 @@ const StudentAppointments = () => {
                               {day.label}
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {[...day.morning, { id: `lunch-${day.date}` } as any, ...day.afternoon].map((slot: CounselorSlot | any) => {
+                              {[
+                                ...day.morning,
+                                ...(day.morning.length > 0 && day.afternoon.length > 0 ? [{ id: `lunch-${day.date}` } as any] : []),
+                                ...day.afternoon,
+                              ].map((slot: CounselorSlot | any) => {
                                 if (String(slot.id).startsWith("lunch-")) {
                                   return (
                                     <button

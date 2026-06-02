@@ -226,7 +226,7 @@ const CounselorAppointments = () => {
           day_of_week: Number(schedule.day_of_week),
           is_working_day: Boolean(schedule.is_working_day),
           start_time: timeInputValue(schedule.start_time) || "08:00",
-          end_time: timeInputValue(schedule.end_time) || "16:30",
+          end_time: timeInputValue(schedule.end_time) || "16:00",
           break_start: timeInputValue(schedule.break_start) || null,
           break_end: timeInputValue(schedule.break_end) || null,
           slot_duration_minutes: Number(schedule.slot_duration_minutes) || 30,
@@ -552,7 +552,7 @@ const CounselorAppointments = () => {
               <DialogHeader>
                 <DialogTitle>Slot schedule</DialogTitle>
                 <DialogDescription>
-                  Working hours generate 30-minute bookable slots. Lunch is locked out of student booking.
+                  Working hours generate up to six 30-minute bookable slots before the 4 PM close. Lunch is locked out of student booking.
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
