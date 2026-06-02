@@ -446,11 +446,21 @@ const CounselorVideo = () => {
 
   const handleEndCall = async () => {
     const sessionIdToEnd = activeSessionId;
+    const activeRow = upcomingSessions.find((item) => String(item.id) === sessionIdToEnd);
+    const studentId = Number(activeRow?.student_id);
+
     endCall();
     setIsMuted(false);
     setPendingSessionStartId(null);
     setPendingCallMode("video");
     setAuthorizedDurationMinutes(null);
+
+    if (studentId && Number.isFinite(studentId) && studentId > 0 && sessionIdToEnd) {
+      signalIncomingCallWake(studentId, {
+        appointment_id: Number(sessionIdToEnd),
+        status: "cancelled",
+      });
+    }
 
     if (sessionIdToEnd) {
       await finalizeEndedSession(sessionIdToEnd);
@@ -527,6 +537,7 @@ const CounselorVideo = () => {
             appointment_id: Number(activeSessionId),
             call_type: callType,
             caller_role: "counselor",
+            status: "pending",
           });
         }
 

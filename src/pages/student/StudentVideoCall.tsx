@@ -563,6 +563,7 @@ const StudentVideoCall = () => {
             appointment_id: Number(activeAppointmentId),
             call_type: effectiveMode,
             caller_role: "student",
+            status: "pending",
           });
         }
 
@@ -609,11 +610,20 @@ const StudentVideoCall = () => {
 
   const handleEndCall = async () => {
     const appointmentIdToEnd = activeAppointmentId;
+    const activeRow = upcomingAppointments.find((item) => String(item.id) === appointmentIdToEnd);
+    const counselorId = Number(activeRow?.counselor_id);
 
     endCall();
     setIsMuted(false);
     setIsStartingMode(null);
     setAuthorizedDurationMinutes(null);
+
+    if (counselorId && Number.isFinite(counselorId) && counselorId > 0 && appointmentIdToEnd) {
+      signalIncomingCallWake(counselorId, {
+        appointment_id: Number(appointmentIdToEnd),
+        status: "cancelled",
+      });
+    }
 
     if (appointmentIdToEnd) {
       await finalizeEndedAppointment(appointmentIdToEnd);

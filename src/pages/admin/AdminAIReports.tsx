@@ -8,7 +8,7 @@ import {
   RefreshCcw,
   Loader2,
   FileText,
-  Brain,
+  BrainCircuit,
 } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -294,7 +294,7 @@ const AdminAIReports = () => {
           <Card variant="glass">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Brain className="h-5 w-5 text-primary" />
+                <BrainCircuit className="h-5 w-5 text-primary" />
                 AI System Summary
               </CardTitle>
             </CardHeader>

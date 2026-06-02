@@ -48,10 +48,13 @@ export function CounselorIncomingCallBanner({
     enabled,
     fetchCalls,
     onActiveChange,
-    buildNotification: (call) => ({
-      title: effectiveWebRtcCallMode(call) === "video" ? "Incoming video call" : "Incoming audio call",
-      body: `${call.student_name} is calling you`,
-    }),
+    buildNotification: (call) => {
+      const displayName = isAnonymousSessionFlag(call.is_anonymous) ? "Anonymous Student" : call.student_name;
+      return {
+        title: effectiveWebRtcCallMode(call) === "video" ? "Incoming video call" : "Incoming audio call",
+        body: `${displayName} is calling you`,
+      };
+    },
     onAutoDismissCall: async (call) => {
       try {
         await api.updateCounselorIncomingCall(call.id, "declined");
@@ -61,8 +64,12 @@ export function CounselorIncomingCallBanner({
     },
   });
 
-  useIncomingCallWakeSubscription(user?.id, enabled, () => {
-    void fetchIncoming({ urgent: true });
+  useIncomingCallWakeSubscription(user?.id, enabled, (payload) => {
+    if (payload.status === "cancelled" || payload.status === "declined") {
+      removeCallLocal(payload.appointment_id);
+    } else {
+      void fetchIncoming({ urgent: true });
+    }
   });
 
   const handleAccept = async (call: IncomingCallItem) => {
@@ -169,7 +176,7 @@ export function CounselorIncomingCallBanner({
                     Incoming session call
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="truncate text-lg font-semibold leading-tight">{call.student_name}</p>
+                    <p className="truncate text-lg font-semibold leading-tight">{callAnonymous ? "Anonymous Student" : call.student_name}</p>
                     {callAnonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                   </div>
                   <div

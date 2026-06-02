@@ -229,7 +229,7 @@ const CounselorAppointments = () => {
           end_time: timeInputValue(schedule.end_time) || "16:00",
           break_start: timeInputValue(schedule.break_start) || null,
           break_end: timeInputValue(schedule.break_end) || null,
-          slot_duration_minutes: Number(schedule.slot_duration_minutes) || 30,
+          slot_duration_minutes: Number(schedule.slot_duration_minutes) || 60,
         })),
       });
       setSchedules(Array.isArray(payload?.data) ? payload.data : schedules);
@@ -552,7 +552,7 @@ const CounselorAppointments = () => {
               <DialogHeader>
                 <DialogTitle>Slot schedule</DialogTitle>
                 <DialogDescription>
-                  Working hours generate up to six 30-minute bookable slots before the 4 PM close. Lunch is locked out of student booking.
+                  Working hours generate bookable slots (default 60 minutes) before the 4 PM close. Lunch is locked out of student booking.
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
@@ -611,7 +611,7 @@ const CounselorAppointments = () => {
                           type="number"
                           min={30}
                           max={360}
-                          value={Number(schedule.slot_duration_minutes) || 30}
+                          value={Number(schedule.slot_duration_minutes) || 60}
                           onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "slot_duration_minutes", Number(event.target.value))}
                         />
                       </div>

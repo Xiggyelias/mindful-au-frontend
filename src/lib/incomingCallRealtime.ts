@@ -6,6 +6,7 @@ export type IncomingCallWakePayload = {
   appointment_id: number;
   call_type?: string;
   caller_role?: "student" | "counselor";
+  status?: string;
 };
 
 export const incomingCallWakeChannelName = (userId: number | string) =>

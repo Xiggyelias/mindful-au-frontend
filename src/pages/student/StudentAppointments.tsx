@@ -99,7 +99,7 @@ const StudentAppointments = () => {
     scheduled_at: "",
     mode: "online",
     online_media: "video" as "video" | "audio",
-    duration_minutes: 30,
+    duration_minutes: 60,
     is_anonymous: false,
   });
   const appointmentsRequestInFlightRef = useRef<Promise<void> | null>(null);
@@ -491,7 +491,7 @@ const StudentAppointments = () => {
           }));
         } else {
           setSelectedSlotId(null);
-          setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 30 }));
+          setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 60 }));
         }
         preselectedSlotIdRef.current = null;
       } catch (err: unknown) {
@@ -646,7 +646,7 @@ const StudentAppointments = () => {
         scheduled_at: "",
         mode: "online",
         online_media: "video",
-        duration_minutes: 30,
+        duration_minutes: 60,
         is_anonymous: profileAnonymousMode,
       });
       setSelectedSlotId(null);
@@ -799,16 +799,6 @@ const StudentAppointments = () => {
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <h2 className="text-xl font-semibold">Scheduled Sessions</h2>
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="destructive"
-                className="gap-2"
-                onClick={() => void handleEmergencyRequest()}
-                disabled={isEmergencySubmitting}
-              >
-                {isEmergencySubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-                Emergency Appointment
-              </Button>
               <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                 <DialogTrigger asChild>
                   <Button variant="hero" className="gap-2">
@@ -852,7 +842,7 @@ const StudentAppointments = () => {
                                 ...prev,
                                 counselor_id: String(match.id),
                                 scheduled_at: "",
-                                duration_minutes: 30,
+                                duration_minutes: 60,
                               }));
                             }}
                           >
@@ -887,7 +877,7 @@ const StudentAppointments = () => {
                       onValueChange={(val) => {
                         setSelectedSlotId(null);
                         setSlots([]);
-                        setForm({ ...form, counselor_id: val, scheduled_at: "", duration_minutes: 30 });
+                        setForm({ ...form, counselor_id: val, scheduled_at: "", duration_minutes: 60 });
                       }}
                       disabled={availableCounselors.length === 0}
                     >
@@ -1135,6 +1125,16 @@ const StudentAppointments = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+              <Button
+                type="button"
+                variant="destructive"
+                className="gap-2"
+                onClick={() => void handleEmergencyRequest()}
+                disabled={isEmergencySubmitting}
+              >
+                {isEmergencySubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                Emergency Appointment
+              </Button>
             </div>
           </div>
 

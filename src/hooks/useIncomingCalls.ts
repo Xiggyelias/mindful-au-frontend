@@ -5,7 +5,7 @@ import {
   stopCallRingtone,
   warmCallRingtone,
 } from "@/lib/sounds/notificationSoundManager";
-import { subscribeIncomingCallWake } from "@/lib/incomingCallRealtime";
+import { subscribeIncomingCallWake, type IncomingCallWakePayload } from "@/lib/incomingCallRealtime";
 
 const POLL_ACTIVE_MS = 30_000;
 const POLL_HIDDEN_MS = 90_000;
@@ -477,14 +477,14 @@ export function useIncomingCalls<T extends IncomingCallBase>({
 export function useIncomingCallWakeSubscription(
   userId: number | undefined,
   enabled: boolean,
-  onWake: () => void
+  onWake: (payload: IncomingCallWakePayload) => void
 ) {
   useEffect(() => {
     if (!enabled || !userId) {
       return;
     }
-    return subscribeIncomingCallWake(userId, () => {
-      onWake();
+    return subscribeIncomingCallWake(userId, (payload) => {
+      onWake(payload);
     });
   }, [enabled, onWake, userId]);
 }
