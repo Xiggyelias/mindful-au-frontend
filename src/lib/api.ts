@@ -856,6 +856,11 @@ class ApiClient {
     return response.data as { ok: boolean; web_push_enabled: boolean };
   }
 
+  async setEmailNotificationPreference(enabled: boolean) {
+    const response = await this.client.patch('/notifications/preferences', { email_enabled: enabled });
+    return response.data as { ok: boolean; email_notifications_enabled: boolean };
+  }
+
   async getAuthSessions() {
     const response = await this.client.get('/auth/sessions');
     return (response.data?.sessions ?? []) as AuthDeviceSession[];
