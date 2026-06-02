@@ -609,8 +609,8 @@ const CounselorAppointments = () => {
                         <Label className="text-[10px] uppercase tracking-wider">Slot mins</Label>
                         <Input
                           type="number"
-                          min={15}
-                          max={120}
+                          min={30}
+                          max={360}
                           value={Number(schedule.slot_duration_minutes) || 30}
                           onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "slot_duration_minutes", Number(event.target.value))}
                         />

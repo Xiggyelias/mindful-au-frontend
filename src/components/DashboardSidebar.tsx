@@ -159,16 +159,36 @@ const isSecureChatPath = (path: string) =>
                       prefetchRoute(() => import("@/pages/student/StudentHistory"));
                     } else if (item.path === "/student/wellness") {
                       prefetchRoute(() => import("@/pages/student/StudentWellness"));
+                    } else if (item.path === "/student/diagnostic-assessment") {
+                      prefetchRoute(() => import("@/pages/student/StudentDiagnosticAssessment"));
                     } else if (item.path === "/counselor/dashboard") {
                       prefetchRoute(() => import("@/pages/counselor/CounselorDashboard"));
                     } else if (item.path === "/counselor/messages") {
                       prefetchRoute(() => import("@/pages/counselor/CounselorMessages"));
                     } else if (item.path === "/counselor/appointments") {
                       prefetchRoute(() => import("@/pages/counselor/CounselorAppointments"));
+                    } else if (item.path === "/counselor/students") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorStudents"));
+                    } else if (item.path === "/counselor/ai-insights") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorAIInsights"));
+                    } else if (item.path === "/counselor/video") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorVideo"));
+                    } else if (item.path === "/counselor/notes") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorNotes"));
+                    } else if (item.path === "/counselor/wellness") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorWellness"));
+                    } else if (item.path === "/counselor/alerts") {
+                      prefetchRoute(() => import("@/pages/counselor/CounselorAlerts"));
                     } else if (item.path === "/peer/dashboard") {
                       prefetchRoute(() => import("@/pages/peer/PeerDashboard"));
                     } else if (item.path === "/peer/chats") {
                       prefetchRoute(() => import("@/pages/counselor/CounselorMessages"));
+                    } else if (item.path === "/peer/escalations") {
+                      prefetchRoute(() => import("@/pages/peer/PeerEscalatedCases"));
+                    } else if (item.path === "/peer/ethics") {
+                      prefetchRoute(() => import("@/pages/peer/PeerEthics"));
+                    } else if (item.path === "/peer/profile") {
+                      prefetchRoute(() => import("@/pages/peer/PeerProfile"));
                     }
                   }}
                   className={cn(

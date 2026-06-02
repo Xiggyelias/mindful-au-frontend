@@ -169,7 +169,7 @@ function envelopeGain(
  */
 function playMessageSynthesized(variant: MessageVariant, peakGain: number): boolean {
   const ctx = getAudioContext();
-  if (!ctx) {
+  if (!ctx || ctx.state === "suspended") {
     return false;
   }
   void ctx.resume().catch(() => undefined);
@@ -207,7 +207,7 @@ function playMessageSynthesized(variant: MessageVariant, peakGain: number): bool
 /** Gentle session reminder: warm two-note chime, lower than ringtone priority. */
 function playReminderSynthesized(peakGain: number): boolean {
   const ctx = getAudioContext();
-  if (!ctx) {
+  if (!ctx || ctx.state === "suspended") {
     return false;
   }
   void ctx.resume().catch(() => undefined);
@@ -255,7 +255,7 @@ function playEmergencyPulse(ctx: AudioContext, start: number, peak: number) {
 
 function playEmergencySynthesized(peakGain: number): boolean {
   const ctx = getAudioContext();
-  if (!ctx) {
+  if (!ctx || ctx.state === "suspended") {
     return false;
   }
   void ctx.resume().catch(() => undefined);
@@ -333,7 +333,7 @@ function clearRingStopTimer() {
 
 function ensureRingGain(el: HTMLAudioElement): GainNode | null {
   const ctx = getAudioContext();
-  if (!ctx) {
+  if (!ctx || ctx.state === "suspended") {
     return null;
   }
   const gain = ringGainByEl.get(el);
@@ -528,25 +528,12 @@ function messageEffectiveVolume(): number {
 function playMessageMp3Fallback(peakedVolume: number) {
   const url = SOUND_URLS.message;
   const a = new Audio(url);
-  a.volume = 0;
   const target = duckForShortCue(peakedVolume);
+  a.volume = target;
   if (settingsCache.messageVariant === "soft") {
     a.playbackRate = 0.96;
   }
-  void a
-    .play()
-    .then(() => {
-      const steps = 8;
-      let i = 0;
-      const id = window.setInterval(() => {
-        i += 1;
-        a.volume = target * (i / steps);
-        if (i >= steps) {
-          window.clearInterval(id);
-        }
-      }, 18);
-    })
-    .catch(() => undefined);
+  void a.play().catch(() => undefined);
 }
 
 /**
@@ -638,14 +625,16 @@ export function primeNotificationAudioFromUserGesture() {
   primeUrl(SOUND_URLS.message);
   primeUrl(SOUND_URLS.audioCall);
   primeUrl(SOUND_URLS.videoCall);
+  primeUrl(SOUND_URLS.reminder);
+  primeUrl(SOUND_URLS.emergency);
 }
 
 if (typeof document !== "undefined") {
-  document.addEventListener(
-    "pointerdown",
-    () => {
-      primeNotificationAudioFromUserGesture();
-    },
-    { once: true, passive: true }
-  );
+  const prime = () => {
+    primeNotificationAudioFromUserGesture();
+  };
+  const interactionEvents = ["click", "keydown", "touchstart", "mousedown", "pointerdown"];
+  interactionEvents.forEach((evt) => {
+    document.addEventListener(evt, prime, { once: true, passive: true });
+  });
 }
