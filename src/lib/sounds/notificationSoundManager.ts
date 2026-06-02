@@ -299,6 +299,9 @@ function playCallPulseFallback(kind: "audio" | "video") {
 
 const audioCallPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
 const videoCallPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
+const messagePlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
+const reminderPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
+const emergencyPlayer = typeof Audio !== "undefined" ? new Audio() : (null as unknown as HTMLAudioElement);
 
 let ringtoneWarmed = false;
 
@@ -319,6 +322,22 @@ export function warmCallRingtone(): void {
   }
   void audioCallPlayer.load();
   void videoCallPlayer.load();
+
+  if (messagePlayer) {
+    messagePlayer.preload = "auto";
+    if (!messagePlayer.src) messagePlayer.src = SOUND_URLS.message;
+    void messagePlayer.load();
+  }
+  if (reminderPlayer) {
+    reminderPlayer.preload = "auto";
+    if (!reminderPlayer.src) reminderPlayer.src = SOUND_URLS.reminder;
+    void reminderPlayer.load();
+  }
+  if (emergencyPlayer) {
+    emergencyPlayer.preload = "auto";
+    if (!emergencyPlayer.src) emergencyPlayer.src = SOUND_URLS.emergency;
+    void emergencyPlayer.load();
+  }
 }
 
 const ringGainByEl = new WeakMap<HTMLAudioElement, GainNode>();
@@ -526,14 +545,18 @@ function messageEffectiveVolume(): number {
 }
 
 function playMessageMp3Fallback(peakedVolume: number) {
-  const url = SOUND_URLS.message;
-  const a = new Audio(url);
+  if (!messagePlayer) return;
   const target = duckForShortCue(peakedVolume);
-  a.volume = target;
+  messagePlayer.volume = target;
   if (settingsCache.messageVariant === "soft") {
-    a.playbackRate = 0.96;
+    messagePlayer.playbackRate = 0.96;
+  } else {
+    messagePlayer.playbackRate = 1.0;
   }
-  void a.play().catch(() => undefined);
+  if (!messagePlayer.src) {
+    messagePlayer.src = SOUND_URLS.message;
+  }
+  void messagePlayer.play().catch(() => undefined);
 }
 
 /**
@@ -575,9 +598,12 @@ export function playSessionReminderSound() {
     return;
   }
   if (!playReminderSynthesized(vol)) {
-    const a = new Audio(SOUND_URLS.reminder);
-    a.volume = duckForShortCue(vol);
-    void a.play().catch(() => undefined);
+    if (!reminderPlayer) return;
+    reminderPlayer.volume = duckForShortCue(vol);
+    if (!reminderPlayer.src) {
+      reminderPlayer.src = SOUND_URLS.reminder;
+    }
+    void reminderPlayer.play().catch(() => undefined);
   }
 }
 
@@ -597,9 +623,12 @@ export function playEmergencyAlertSound() {
   stopCallRingtone();
 
   if (!playEmergencySynthesized(vol)) {
-    const a = new Audio(SOUND_URLS.emergency);
-    a.volume = vol;
-    void a.play().catch(() => undefined);
+    if (!emergencyPlayer) return;
+    emergencyPlayer.volume = vol;
+    if (!emergencyPlayer.src) {
+      emergencyPlayer.src = SOUND_URLS.emergency;
+    }
+    void emergencyPlayer.play().catch(() => undefined);
   }
 }
 
@@ -607,26 +636,29 @@ export function primeNotificationAudioFromUserGesture() {
   const ctx = getAudioContext();
   void ctx?.resume().catch(() => undefined);
 
-  const primeUrl = (url: string) => {
+  const primeEl = (el: HTMLAudioElement | null, url: string) => {
+    if (!el) return;
     try {
-      const a = new Audio(url);
-      a.volume = 0;
-      void a
+      if (!el.src) {
+        el.src = url;
+      }
+      el.volume = 0;
+      void el
         .play()
         .then(() => {
-          a.pause();
-          a.currentTime = 0;
+          el.pause();
+          el.currentTime = 0;
         })
         .catch(() => undefined);
     } catch {
       /* ignore */
     }
   };
-  primeUrl(SOUND_URLS.message);
-  primeUrl(SOUND_URLS.audioCall);
-  primeUrl(SOUND_URLS.videoCall);
-  primeUrl(SOUND_URLS.reminder);
-  primeUrl(SOUND_URLS.emergency);
+  primeEl(messagePlayer, SOUND_URLS.message);
+  primeEl(audioCallPlayer, SOUND_URLS.audioCall);
+  primeEl(videoCallPlayer, SOUND_URLS.videoCall);
+  primeEl(reminderPlayer, SOUND_URLS.reminder);
+  primeEl(emergencyPlayer, SOUND_URLS.emergency);
 }
 
 if (typeof document !== "undefined") {

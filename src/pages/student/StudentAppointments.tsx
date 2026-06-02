@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
@@ -112,6 +112,8 @@ const StudentAppointments = () => {
 
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const preselectedSlotIdRef = useRef<number | null>(null);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
   const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
 
@@ -147,6 +149,26 @@ const StudentAppointments = () => {
       return { ...prev, online_media: "audio" };
     });
   }, [form.mode, form.is_anonymous, form.online_media]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const book = params.get("book");
+    const cId = params.get("counselor_id");
+    const sId = params.get("slot_id");
+
+    if (book === "1" && cId) {
+      if (sId) {
+        preselectedSlotIdRef.current = Number(sId);
+      }
+      setForm((prev) => ({
+        ...prev,
+        counselor_id: cId,
+      }));
+      setOpenDialog(true);
+      
+      navigate("/student/appointments", { replace: true });
+    }
+  }, [location.search, navigate]);
 
   const loadAppointments = useCallback(
     async (showErrorToast = true, options?: { force?: boolean }) => {
@@ -453,20 +475,25 @@ const StudentAppointments = () => {
         const nextSlots = Array.isArray(payload?.data) ? (payload.data as CounselorSlot[]) : [];
         setSlots(nextSlots);
 
-        const firstAvailable = nextSlots.find(
+        const preselectedSlot = preselectedSlotIdRef.current
+          ? nextSlots.find((s) => Number(s.id) === preselectedSlotIdRef.current)
+          : null;
+
+        const targetSlot = preselectedSlot || nextSlots.find(
           (slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now()
         );
-        if (firstAvailable) {
-          setSelectedSlotId(Number(firstAvailable.id));
+        if (targetSlot) {
+          setSelectedSlotId(Number(targetSlot.id));
           setForm((prev) => ({
             ...prev,
-            scheduled_at: firstAvailable.start_time,
-            duration_minutes: minutesBetween(firstAvailable.start_time, firstAvailable.end_time),
+            scheduled_at: targetSlot.start_time,
+            duration_minutes: minutesBetween(targetSlot.start_time, targetSlot.end_time),
           }));
         } else {
           setSelectedSlotId(null);
           setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 30 }));
         }
+        preselectedSlotIdRef.current = null;
       } catch (err: unknown) {
         if (import.meta.env.DEV) console.error("Failed to load counselor slots", err);
         setSlots([]);
@@ -780,7 +807,7 @@ const StudentAppointments = () => {
                 disabled={isEmergencySubmitting}
               >
                 {isEmergencySubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-                Emergency Support
+                Emergency Appointment
               </Button>
               <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                 <DialogTrigger asChild>

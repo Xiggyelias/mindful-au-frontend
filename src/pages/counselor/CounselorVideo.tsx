@@ -90,6 +90,11 @@ const CounselorVideo = () => {
   const [rejoinSecondsLeft, setRejoinSecondsLeft] = useState<number | null>(null);
   const [isRejoining, setIsRejoining] = useState(false);
   const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
+  const [counselingSessionId, setCounselingSessionId] = useState<number | null>(null);
+  const [noteText, setNoteText] = useState<string>("");
+  const [lastSavedText, setLastSavedText] = useState<string>("");
+  const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
+  const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const requestedAppointmentId = useMemo(() => {
@@ -301,6 +306,61 @@ const CounselorVideo = () => {
     return activeSession ? effectiveWebRtcCallMode(activeSession) : "video";
   }, [searchParams, activeSession]);
 
+  const loadActiveSessionNote = useCallback(async () => {
+    if (!activeSession) return;
+    try {
+      const payload = await api.getSessions({ status: 'active', limit: 50 });
+      const sessionsList = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
+      const matched = sessionsList.find(
+        (s: any) =>
+          s.session_type === 'video' &&
+          Number(s.student_id) === Number(activeSession.student_id) &&
+          Number(s.counselor_id) === Number(activeSession.counselor_id)
+      );
+      if (matched) {
+        const sId = Number(matched.id);
+        setCounselingSessionId(sId);
+        const initialNotes = typeof matched.notes === 'string' ? matched.notes : '';
+        setNoteText(initialNotes);
+        setLastSavedText(initialNotes);
+      }
+    } catch (err) {
+      console.error("Failed to load active session notes:", err);
+    }
+  }, [activeSession]);
+
+  useEffect(() => {
+    if (isConnected && activeSession) {
+      void loadActiveSessionNote();
+    } else {
+      setCounselingSessionId(null);
+      setNoteText("");
+      setLastSavedText("");
+    }
+  }, [isConnected, activeSession, loadActiveSessionNote]);
+
+  useEffect(() => {
+    if (counselingSessionId === null) return;
+    if (noteText === lastSavedText) return;
+
+    const delay = 1500;
+    const timer = setTimeout(async () => {
+      try {
+        setIsSavingNote(true);
+        setNoteSaveError(null);
+        await api.updateSessionNote(counselingSessionId, noteText);
+        setLastSavedText(noteText);
+      } catch (err) {
+        console.error("Failed to auto-save notes:", err);
+        setNoteSaveError("Failed to save note");
+      } finally {
+        setIsSavingNote(false);
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [noteText, lastSavedText, counselingSessionId]);
+
   useEffect(() => {
     if (upcomingSessions.length === 0) {
       if (activeSessionId !== null) {
@@ -458,6 +518,9 @@ const CounselorVideo = () => {
         setAuthorizedDurationMinutes(
           Number.isFinite(serverDuration) ? serverDuration : null
         );
+        if (authorization?.session_id) {
+          setCounselingSessionId(Number(authorization.session_id));
+        }
 
         if (!cancelled && Number.isFinite(studentId) && studentId > 0) {
           signalIncomingCallWake(studentId, {
@@ -1060,11 +1123,28 @@ const CounselorVideo = () => {
                   <div className="space-y-2 flex-1 flex flex-col">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                       Session Notes
-                      <span className="normal-case font-normal text-muted-foreground/60">Auto-saving...</span>
+                      <span className="normal-case font-normal text-muted-foreground/60">
+                        {isSavingNote ? (
+                          <span className="flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                            Auto-saving...
+                          </span>
+                        ) : noteSaveError ? (
+                          <span className="text-destructive">{noteSaveError}</span>
+                        ) : noteText !== lastSavedText && noteText !== "" ? (
+                          <span>Unsaved changes...</span>
+                        ) : noteText === "" && lastSavedText === "" ? (
+                          <span>Ready</span>
+                        ) : (
+                          <span className="text-emerald-500 font-semibold">Auto-saved</span>
+                        )}
+                      </span>
                     </p>
                     <textarea 
                       className="w-full flex-1 min-h-[200px] p-4 rounded-2xl bg-secondary/20 border border-border/40 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                       placeholder="Type your session observations here..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
                     />
                   </div>
                   
