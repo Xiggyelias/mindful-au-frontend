@@ -315,6 +315,22 @@ const StudentAISupport = () => {
     if (error) toast.error(error);
   }, [error]);
 
+  // Show toast when supportSignal indicates crisis and counselor is automatically alerted
+  const alertedRef = useRef(false);
+  useEffect(() => {
+    if (supportSignal?.requiresImmediateHelp) {
+      if (!alertedRef.current) {
+        toast.error("Emergency Alert Sent Automatically", {
+          description: "Your counselor has been notified immediately. Please stay safe.",
+          duration: 10000,
+        });
+        alertedRef.current = true;
+      }
+    } else {
+      alertedRef.current = false;
+    }
+  }, [supportSignal?.requiresImmediateHelp]);
+
   const handleSendMessage = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!message.trim() || isLoading) return;
@@ -556,9 +572,9 @@ const StudentAISupport = () => {
                             <AlertTriangle className="h-4 w-4 text-rose-400" />
                           </div>
                           <div>
-                            <p className="font-semibold text-rose-400 text-sm">Immediate help recommended</p>
+                            <p className="font-semibold text-rose-400 text-sm">Emergency alert sent automatically</p>
                             <p className="text-sm text-foreground mt-1">
-                              Move toward another person or a safer place now. Use the emergency alert if you need a counselor response quickly.
+                              We have automatically notified your counselor of this alert. Please stay safe, and move toward another person or a safer place now.
                             </p>
                             {supportSignal.crisisHotline && (
                               <p className="text-xs text-muted-foreground mt-2">Crisis contact: {supportSignal.crisisHotline}</p>

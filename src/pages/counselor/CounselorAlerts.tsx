@@ -696,6 +696,102 @@ const CounselorAlerts = () => {
             </CardContent>
           </Card>
 
+          {/* Recent Alert Notifications */}
+          <Card variant="glass">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bell className="h-5 w-5 text-warning" />
+                Recent Alert Notifications
+                {!isLoading && unreadAlertNotifs.length > 0 && (
+                  <Badge variant="outline" className="ml-1 bg-warning/20 text-warning border-warning/30 text-xs">
+                    {unreadAlertNotifs.length} unread
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </div>
+              )}
+              {!isLoading && allAlertNotifs.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No alert notifications yet.
+                </p>
+              )}
+              <div className="space-y-3">
+                {!isLoading &&
+                  allAlertNotifs.map((notif) => {
+                    const isPanic = notif.type === "panic";
+                    const isWarning = notif.type === "warning";
+                    return (
+                      <div
+                        key={notif.id}
+                        className={`rounded-xl border-l-4 p-4 ${
+                          isPanic
+                            ? "border-l-destructive bg-destructive/10"
+                            : isWarning
+                            ? "border-l-orange-500 bg-orange-500/10"
+                            : "border-l-muted bg-secondary/20"
+                        } ${notif.read ? "opacity-70" : ""}`}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-foreground text-sm">{notif.title}</p>
+                              {!notif.read && (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isPanic
+                                      ? "bg-destructive/20 text-destructive border-destructive/30 text-xs"
+                                      : isWarning
+                                      ? "bg-orange-500/20 text-orange-500 border-orange-500/30 text-xs"
+                                      : "bg-primary/20 text-primary border-primary/30 text-xs"
+                                  }
+                                >
+                                  {isPanic ? "urgent" : isWarning ? "warning" : "new"}
+                                </Badge>
+                              )}
+                              {notif.read && (
+                                <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-muted/30 text-xs">
+                                  read
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground break-words">{notif.message}</p>
+                            <p className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                              <Clock className="h-3 w-3" />
+                              {formatTimeAgo(notif.created_at)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!notif.read && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7"
+                                onClick={() => void handleMarkRead(notif.id)}
+                                disabled={markingId === notif.id}
+                              >
+                                {markingId === notif.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Mark Read"
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+
         </main>
       </div>
     </div>

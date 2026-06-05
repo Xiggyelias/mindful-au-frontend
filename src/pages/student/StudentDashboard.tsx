@@ -198,9 +198,9 @@ const StudentDashboard = () => {
   };
 
   const handleCallNow = () => {
-    // Open phone dialer with crisis hotline number
-    window.location.href = 'tel:988'; // National Suicide Prevention Lifeline
-    toast.info("Connecting to crisis hotline...");
+    // Open phone dialer with school counselor number
+    window.location.href = 'tel:+263774068265';
+    toast.info("Connecting to school counselor...");
   };
 
   const handleMoodSelection = async (mood: StudentMood) => {
@@ -595,7 +595,7 @@ const StudentDashboard = () => {
                   onClick={handleCallNow}
                 >
                   <Phone className="h-6 w-6 text-primary" />
-                  24/7 Hotline
+                  Call Counselor
                 </Button>
                 <Button 
                   variant="destructive" 
