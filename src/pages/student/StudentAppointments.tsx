@@ -45,6 +45,32 @@ type CounselorSlot = {
   end_time: string;
   status: "available" | "booked" | "unavailable" | string;
 };
+type EmergencyRequestStatus = "queued" | "assigned" | "resolved" | "cancelled";
+type EmergencyRequest = {
+  id: number;
+  student_id: number;
+  counselor_id?: number | null;
+  assigned_to?: number | null;
+  counselor_slot_id?: number | null;
+  requested_at?: string | null;
+  status: EmergencyRequestStatus | string;
+  reason?: string | null;
+  slot?: CounselorSlot | null;
+  counselor?: {
+    id: number;
+    email?: string | null;
+    profile?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+  assignee?: {
+    id: number;
+    email?: string | null;
+    profile?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+};
 
 const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
@@ -82,14 +108,19 @@ const StudentAppointments = () => {
   const [appointmentTotalItems, setAppointmentTotalItems] = useState(0);
   const [counselors, setCounselors] = useState<any[]>([]);
   const [counselorMatches, setCounselorMatches] = useState<any[]>([]);
+  const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [isLoadingEmergencyRequests, setIsLoadingEmergencyRequests] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
+  const [emergencyDialogOpen, setEmergencyDialogOpen] = useState(false);
   const [slots, setSlots] = useState<CounselorSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
   const [isEmergencySubmitting, setIsEmergencySubmitting] = useState(false);
+  const [emergencyReason, setEmergencyReason] = useState("");
+  const [emergencyCounselorId, setEmergencyCounselorId] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
@@ -130,6 +161,10 @@ const StudentAppointments = () => {
     setIsLoading(false);
     setAppointments([]);
     setCounselors([]);
+    setEmergencyRequests([]);
+    setEmergencyReason("");
+    setEmergencyCounselorId("");
+    setEmergencyDialogOpen(false);
     setSlots([]);
     setSelectedSlotId(null);
   }, [user?.id]);
@@ -307,12 +342,45 @@ const StudentAppointments = () => {
     [toast] // Add toast dependency
   );
 
+  const loadEmergencyRequests = useCallback(
+    async (showErrorToast = false) => {
+      if (!user?.id) {
+        setEmergencyRequests([]);
+        return;
+      }
+
+      try {
+        setIsLoadingEmergencyRequests(true);
+        const payload = await api.getEmergencyRequests({ timeout_ms: 12000 });
+        const normalized = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+        setEmergencyRequests(normalized as EmergencyRequest[]);
+      } catch (err: unknown) {
+        if (import.meta.env.DEV) console.error("Failed to load emergency requests", err);
+        if (showErrorToast) {
+          toast({
+            title: "Could not load emergency request status",
+            description: getApiErrorMessage(err, "Please try again."),
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setIsLoadingEmergencyRequests(false);
+      }
+    },
+    [toast, user?.id]
+  );
+
   useEffect(() => {
     if (!user?.id || hasInitiallyLoadedRef.current) return;
     hasInitiallyLoadedRef.current = true;
     void loadAppointments(true, { force: true });
     void loadCounselors(true, { force: true });
-  }, [loadAppointments, loadCounselors, user?.id]);
+    void loadEmergencyRequests(false);
+  }, [loadAppointments, loadCounselors, loadEmergencyRequests, user?.id]);
 
   // Reload when user navigates to a different page via pagination
   useEffect(() => {
@@ -328,6 +396,7 @@ const StudentAppointments = () => {
       if (document.visibilityState !== "visible") return;
       void loadAppointments(false, { force: true });
       void loadCounselors(false);
+      void loadEmergencyRequests(false);
     };
 
     const onAnonymityChanged = () => {
@@ -340,6 +409,7 @@ const StudentAppointments = () => {
       if (document.visibilityState !== "visible") return;
       void loadAppointments(false);
       void loadCounselors(false);
+      void loadEmergencyRequests(false);
     }, 60000); // 60 seconds instead of 30
 
     window.addEventListener("focus", retryLoad);
@@ -354,7 +424,7 @@ const StudentAppointments = () => {
       window.removeEventListener(API_RECOVERED_EVENT, retryLoad as EventListener);
       window.removeEventListener(CHAT_ANONYMITY_SYNC_EVENT, onAnonymityChanged);
     };
-  }, [loadAppointments, loadCounselors, user?.id]);
+  }, [loadAppointments, loadCounselors, loadEmergencyRequests, user?.id]);
 
   const availableCounselors = useMemo(() => {
     const merged = new Map<string, any>();
@@ -538,13 +608,11 @@ const StudentAppointments = () => {
           month: "short",
           day: "numeric",
         }),
-        morning: daySlots
-          .filter((slot) => new Date(slot.start_time).getHours() < 13)
+        slots: daySlots
+          .filter((slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now())
           .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-        afternoon: daySlots
-          .filter((slot) => new Date(slot.start_time).getHours() >= 14)
-          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-      }));
+      }))
+      .filter((day) => day.slots.length > 0);
   }, [slots]);
 
   const chooseSlot = useCallback((slot: CounselorSlot) => {
@@ -557,18 +625,112 @@ const StudentAppointments = () => {
     }));
   }, []);
 
+  const activeEmergencyRequest = useMemo(() => {
+    return emergencyRequests.find((request) => {
+      const status = String(request.status || "").toLowerCase();
+      return status === "queued" || status === "assigned";
+    }) ?? null;
+  }, [emergencyRequests]);
+
+  const activeEmergencyStatus = String(activeEmergencyRequest?.status || "").toLowerCase();
+  const activeEmergencySlotId = Number(activeEmergencyRequest?.counselor_slot_id || activeEmergencyRequest?.slot?.id || 0);
+  const activeEmergencyAppointmentId = Number(activeEmergencyRequest?.slot?.appointment_id || 0);
+  const isEmergencyRequestQueued = activeEmergencyStatus === "queued";
+  const isEmergencySlotReady =
+    activeEmergencyStatus === "assigned" &&
+    Number.isFinite(activeEmergencySlotId) &&
+    activeEmergencySlotId > 0 &&
+    (!Number.isFinite(activeEmergencyAppointmentId) || activeEmergencyAppointmentId <= 0);
+  const isEmergencyAppointmentScheduled =
+    activeEmergencyStatus === "assigned" &&
+    Number.isFinite(activeEmergencyAppointmentId) &&
+    activeEmergencyAppointmentId > 0;
+  const emergencyResponderName =
+    activeEmergencyRequest?.assignee?.profile?.full_name ||
+    activeEmergencyRequest?.assignee?.email ||
+    activeEmergencyRequest?.counselor?.profile?.full_name ||
+    activeEmergencyRequest?.counselor?.email ||
+    "a counselor";
+  const emergencyButtonLabel = isEmergencySlotReady
+    ? "Book Emergency Slot"
+    : isEmergencyRequestQueued
+      ? "Emergency Request Queued"
+      : isEmergencyAppointmentScheduled
+        ? "Emergency Appointment Active"
+        : "Emergency Appointment";
+
+  const openEmergencyBooking = useCallback(
+    (request: EmergencyRequest) => {
+      const counselorId = Number(request.assigned_to || request.counselor_id || request.slot?.counselor_id || 0);
+      const slotId = Number(request.counselor_slot_id || request.slot?.id || 0);
+      if (!Number.isFinite(counselorId) || counselorId <= 0 || !Number.isFinite(slotId) || slotId <= 0) {
+        toast({
+          title: "Emergency slot is not ready",
+          description: "Please refresh in a moment or check your notifications for the booking link.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      preselectedSlotIdRef.current = slotId;
+      setForm((prev) => ({
+        ...prev,
+        counselor_id: String(counselorId),
+        scheduled_at: request.slot?.start_time || "",
+        duration_minutes: request.slot?.start_time && request.slot?.end_time
+          ? minutesBetween(request.slot.start_time, request.slot.end_time)
+          : prev.duration_minutes,
+        mode: "online",
+        online_media: prev.is_anonymous ? "audio" : "video",
+      }));
+      setEmergencyDialogOpen(false);
+      setOpenDialog(true);
+    },
+    [toast]
+  );
+
   const handleEmergencyRequest = useCallback(async () => {
+    if (activeEmergencyRequest) {
+      if (isEmergencySlotReady) {
+        openEmergencyBooking(activeEmergencyRequest);
+        return;
+      }
+
+      toast({
+        title: isEmergencyAppointmentScheduled ? "Emergency appointment is active" : "Emergency request already queued",
+        description: isEmergencyAppointmentScheduled
+          ? "Your emergency appointment is already on your schedule."
+          : "Counselors have already been alerted. Please wait for a responder to accept the request.",
+      });
+      setEmergencyDialogOpen(false);
+      return;
+    }
+
     try {
       setIsEmergencySubmitting(true);
-      await api.createEmergencyRequest({
-        counselor_id: Number(form.counselor_id) || undefined,
+      const preferredCounselorId = Number(emergencyCounselorId || 0);
+      const response = await api.createEmergencyRequest({
+        counselor_id: Number.isFinite(preferredCounselorId) && preferredCounselorId > 0 ? preferredCounselorId : undefined,
         requested_at: new Date().toISOString(),
-        reason: "Emergency support requested from appointment booking.",
+        reason: emergencyReason.trim() || "Emergency support requested from appointment booking.",
       });
+      const createdRequest = response?.emergency_request as EmergencyRequest | undefined;
+      if (createdRequest?.id) {
+        setEmergencyRequests((prev) => [
+          createdRequest,
+          ...prev.filter((request) => Number(request.id) !== Number(createdRequest.id)),
+        ]);
+      }
+      const recipientsNotified = Number(response?.recipients_notified || 0);
       toast({
         title: "Emergency request sent",
-        description: "Your request is now in the priority counselor queue.",
+        description: recipientsNotified > 0
+          ? `Your request is in the priority queue and ${recipientsNotified} responder${recipientsNotified === 1 ? " has" : "s have"} been notified.`
+          : "Your request is now in the priority counselor queue.",
       });
+      setEmergencyDialogOpen(false);
+      setEmergencyReason("");
+      await loadEmergencyRequests(false);
     } catch (err: unknown) {
       toast({
         title: "Emergency request failed",
@@ -578,7 +740,16 @@ const StudentAppointments = () => {
     } finally {
       setIsEmergencySubmitting(false);
     }
-  }, [form.counselor_id, toast]);
+  }, [
+    activeEmergencyRequest,
+    emergencyCounselorId,
+    emergencyReason,
+    isEmergencyAppointmentScheduled,
+    isEmergencySlotReady,
+    loadEmergencyRequests,
+    openEmergencyBooking,
+    toast,
+  ]);
 
   const handleSubmit = async () => {
     if (!form.counselor_id || !selectedSlot) {
@@ -652,6 +823,7 @@ const StudentAppointments = () => {
       setSelectedSlotId(null);
       setSlots([]);
       await loadAppointments(false, { force: true });
+      await loadEmergencyRequests(false);
     } catch (err: unknown) {
       if (import.meta.env.DEV) {
         console.error("Create appointment error", err);
@@ -1053,7 +1225,7 @@ const StudentAppointments = () => {
                       ) : isLoadingSlots ? (
                         <p className="text-sm text-muted-foreground">Preparing this week&apos;s calendar.</p>
                       ) : slotDays.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No generated slots are available for this counselor yet.</p>
+                        <p className="text-sm text-muted-foreground">No available slots are open for this counselor yet.</p>
                       ) : (
                         slotDays.map((day) => (
                           <div key={day.date} className="space-y-2">
@@ -1061,24 +1233,7 @@ const StudentAppointments = () => {
                               {day.label}
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {[
-                                ...day.morning,
-                                ...(day.morning.length > 0 && day.afternoon.length > 0 ? [{ id: `lunch-${day.date}` } as any] : []),
-                                ...day.afternoon,
-                              ].map((slot: CounselorSlot | any) => {
-                                if (String(slot.id).startsWith("lunch-")) {
-                                  return (
-                                    <button
-                                      key={slot.id}
-                                      type="button"
-                                      disabled
-                                      className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-medium text-slate-500"
-                                    >
-                                      13:00-14:00
-                                      <span className="block text-[10px] font-normal">Lunch locked</span>
-                                    </button>
-                                  );
-                                }
+                              {day.slots.map((slot: CounselorSlot) => {
                                 const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now();
                                 const isSelected = Number(slot.id) === Number(selectedSlotId);
                                 return (
@@ -1129,14 +1284,190 @@ const StudentAppointments = () => {
                 type="button"
                 variant="destructive"
                 className="gap-2"
-                onClick={() => void handleEmergencyRequest()}
+                onClick={() => {
+                  if (isEmergencySlotReady && activeEmergencyRequest) {
+                    openEmergencyBooking(activeEmergencyRequest);
+                    return;
+                  }
+                  setEmergencyDialogOpen(true);
+                }}
                 disabled={isEmergencySubmitting}
               >
                 {isEmergencySubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-                Emergency Appointment
+                {emergencyButtonLabel}
               </Button>
+              <Dialog open={emergencyDialogOpen} onOpenChange={setEmergencyDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Emergency appointment</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {activeEmergencyRequest ? (
+                      <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                            <p className="text-sm font-semibold text-foreground">
+                              {isEmergencyAppointmentScheduled
+                                ? "Emergency appointment scheduled"
+                                : isEmergencySlotReady
+                                  ? "Emergency slot ready"
+                                  : "Emergency request queued"}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="border-destructive/40 text-destructive">
+                            {String(activeEmergencyRequest.status || "queued")}
+                          </Badge>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {isEmergencyAppointmentScheduled
+                            ? "Your accepted emergency request is already connected to an appointment on your schedule."
+                            : isEmergencySlotReady
+                              ? `${emergencyResponderName} accepted your request. Confirm the priority slot to place it on your schedule.`
+                              : "Counselors and responders have been alerted. This request will update when someone accepts it."}
+                        </p>
+                        {activeEmergencyRequest.requested_at && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Requested {new Date(activeEmergencyRequest.requested_at).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">Priority counselor request</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                This alerts available counselors and admins for urgent support. If a counselor accepts, a priority slot appears here.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Preferred counselor</Label>
+                          <Select
+                            value={emergencyCounselorId || "any"}
+                            onValueChange={(value) => setEmergencyCounselorId(value === "any" ? "" : value)}
+                            disabled={availableCounselors.length === 0}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Any available counselor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">Any available counselor</SelectItem>
+                              {availableCounselors.map((c: any) => (
+                                <SelectItem key={c.id} value={String(c.id)}>
+                                  {c.profile?.full_name || c.email}
+                                  {c.is_online ? " (Online)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="emergency-reason">What is happening?</Label>
+                          <Textarea
+                            id="emergency-reason"
+                            value={emergencyReason}
+                            onChange={(event) => setEmergencyReason(event.target.value)}
+                            placeholder="Briefly describe what support you need right now"
+                            rows={4}
+                            maxLength={2000}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmergencyDialogOpen(false)}>
+                      Close
+                    </Button>
+                    {activeEmergencyRequest ? (
+                      isEmergencySlotReady ? (
+                        <Button variant="destructive" onClick={() => openEmergencyBooking(activeEmergencyRequest)}>
+                          Book priority slot
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          onClick={() => void loadEmergencyRequests(true)}
+                          disabled={isLoadingEmergencyRequests}
+                        >
+                          {isLoadingEmergencyRequests ? "Refreshing..." : "Refresh status"}
+                        </Button>
+                      )
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        onClick={() => void handleEmergencyRequest()}
+                        disabled={isEmergencySubmitting}
+                      >
+                        {isEmergencySubmitting ? "Sending..." : "Send emergency request"}
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
+
+          {activeEmergencyRequest && (
+            <Card variant="glass" className="border-destructive/25 bg-destructive/5">
+              <CardContent className="p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/15">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-foreground">
+                          {isEmergencyAppointmentScheduled
+                            ? "Emergency appointment scheduled"
+                            : isEmergencySlotReady
+                              ? "Emergency slot ready"
+                              : "Emergency request in progress"}
+                        </p>
+                        <Badge variant="outline" className="border-destructive/40 text-destructive">
+                          {String(activeEmergencyRequest.status || "queued")}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {isEmergencyAppointmentScheduled
+                          ? "Your accepted emergency request is already on your appointment list."
+                          : isEmergencySlotReady
+                            ? `${emergencyResponderName} accepted your request. Confirm the priority slot to finish booking.`
+                            : "Counselors have been alerted. You can refresh the status while you wait."}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 md:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadEmergencyRequests(true)}
+                      disabled={isLoadingEmergencyRequests}
+                    >
+                      {isLoadingEmergencyRequests ? "Refreshing..." : "Refresh"}
+                    </Button>
+                    {isEmergencySlotReady && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => openEmergencyBooking(activeEmergencyRequest)}
+                      >
+                        Book slot
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
             <span>

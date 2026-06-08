@@ -119,7 +119,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       if (basePath === "/admin" || role === "admin") return `/admin/alerts?emergency=${emergencyRequestId}`;
       if (basePath === "/peer" || role === "peer_counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
       if (basePath === "/counselor" || role === "counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
-      return "/student/dashboard";
+      return "/student/appointments";
     }
 
     const looksLikeEmergency =

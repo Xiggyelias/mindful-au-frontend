@@ -279,7 +279,7 @@ const CounselorDashboard = () => {
   };
 
   const handleViewAlerts = () => {
-    navigate("/counselor/ai-insights");
+    navigate("/counselor/alerts");
   };
 
   const handleViewStudents = () => {
