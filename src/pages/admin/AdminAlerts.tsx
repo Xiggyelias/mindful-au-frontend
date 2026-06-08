@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Clock, RefreshCcw, Loader2, AlertTriangle, Brain } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -115,7 +115,9 @@ const AdminAlerts = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Admin";
+  const highlightedEmergencyId = Number(searchParams.get("emergency") || 0);
 
   const [alerts, setAlerts] = useState<PanicAlert[]>([]);
   const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
@@ -454,125 +456,130 @@ const AdminAlerts = () => {
                 )}
 
                 {!isLoading &&
-                  allAlerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      className={`p-4 rounded-xl border-l-4 ${
-                        isAlertActive(alert)
-                          ? alert.type === "panic" || alert.type === "emergency"
-                            ? "bg-destructive/10 border-destructive"
-                            : "bg-warning/10 border-warning"
-                          : "bg-secondary/30 border-muted"
-                      }`}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          {getAlertIcon(alert.type)}
-                          <div>
-                            <p className="font-medium text-foreground">{alert.title}</p>
-                            <p className="text-sm text-muted-foreground">{alert.message}</p>
-                            {(alert.type === "panic" || alert.type === "emergency") && alert.student_detail_line ? (
-                              <p className="text-xs text-foreground/90 mt-1 font-mono bg-secondary/40 rounded-md px-2 py-1 inline-block max-w-full break-all">
-                                {alert.student_detail_line}
+                  allAlerts.map((alert) => {
+                    const isHighlighted =
+                      alert.type === "emergency" && highlightedEmergencyId === alert.id;
+
+                    return (
+                      <div
+                        key={alert.id}
+                        className={`p-4 rounded-xl border-l-4 ${
+                          isAlertActive(alert)
+                            ? alert.type === "panic" || alert.type === "emergency"
+                              ? "bg-destructive/10 border-destructive"
+                              : "bg-warning/10 border-warning"
+                            : "bg-secondary/30 border-muted"
+                        } ${isHighlighted ? "ring-2 ring-destructive/50" : ""}`}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            {getAlertIcon(alert.type)}
+                            <div>
+                              <p className="font-medium text-foreground">{alert.title}</p>
+                              <p className="text-sm text-muted-foreground">{alert.message}</p>
+                              {(alert.type === "panic" || alert.type === "emergency") && alert.student_detail_line ? (
+                                <p className="text-xs text-foreground/90 mt-1 font-mono bg-secondary/40 rounded-md px-2 py-1 inline-block max-w-full break-all">
+                                  {alert.student_detail_line}
+                                </p>
+                              ) : null}
+                              {alert.type === "emergency" && alert.reason ? (
+                                <p className="text-sm text-foreground/90 mt-1">Reason: {alert.reason}</p>
+                              ) : null}
+                              {alert.type === "emergency" && alert.assignee_name ? (
+                                <p className="text-xs text-muted-foreground mt-1">Assigned to {alert.assignee_name}</p>
+                              ) : null}
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                <Clock className="h-3 w-3" />
+                                {formatTimeAgo(alert.created_at)}
                               </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                isAlertActive(alert)
+                                  ? alert.type === "panic" || alert.type === "emergency"
+                                    ? "bg-destructive/20 text-destructive"
+                                    : "bg-warning/20 text-warning"
+                                  : "bg-success/20 text-success"
+                              }`}
+                            >
+                              {alert.status}
+                            </span>
+
+                            {(alert.type === "panic" || alert.type === "emergency") && alert.student_id ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7"
+                                onClick={() =>
+                                  navigate(`/admin/students?open=${encodeURIComponent(String(alert.student_id))}`)
+                                }
+                              >
+                                Student Profile
+                              </Button>
                             ) : null}
-                            {alert.type === "emergency" && alert.reason ? (
-                              <p className="text-sm text-foreground/90 mt-1">Reason: {alert.reason}</p>
-                            ) : null}
-                            {alert.type === "emergency" && alert.assignee_name ? (
-                              <p className="text-xs text-muted-foreground mt-1">Assigned to {alert.assignee_name}</p>
-                            ) : null}
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                              <Clock className="h-3 w-3" />
-                              {formatTimeAgo(alert.created_at)}
-                            </p>
+
+                            {alert.type === "panic" && (alert.map_query || extractLatLngFromLocation(alert.raw_location)) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7"
+                                onClick={() => {
+                                  const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
+                                  window.open(
+                                    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
+                                    "_blank",
+                                  );
+                                }}
+                              >
+                                View on Maps
+                              </Button>
+                            )}
+
+                            {alert.type === "emergency" && alert.status === "queued" && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => void handleTakeEmergency(alert)}
+                                disabled={isTakingId === alert.id}
+                              >
+                                {isTakingId === alert.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Assigning
+                                  </>
+                                ) : (
+                                  "Take Case"
+                                )}
+                              </Button>
+                            )}
+
+                            {isAlertActive(alert) && (
+                              <Button
+                                size="sm"
+                                variant={alert.type === "risk" ? "outline" : "default"}
+                                onClick={() => void handleRespond(alert)}
+                                disabled={alert.type !== "risk" && isRespondingId === alert.id}
+                              >
+                                {alert.type === "risk" ? (
+                                  "View Reports"
+                                ) : isRespondingId === alert.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Resolving
+                                  </>
+                                ) : (
+                                  "Mark Resolved"
+                                )}
+                              </Button>
+                            )}
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              isAlertActive(alert)
-                                ? alert.type === "panic" || alert.type === "emergency"
-                                  ? "bg-destructive/20 text-destructive"
-                                  : "bg-warning/20 text-warning"
-                                : "bg-success/20 text-success"
-                            }`}
-                          >
-                            {alert.status}
-                          </span>
-
-                          {(alert.type === "panic" || alert.type === "emergency") && alert.student_id ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7"
-                              onClick={() =>
-                                navigate(`/admin/students?open=${encodeURIComponent(String(alert.student_id))}`)
-                              }
-                            >
-                              Student Profile
-                            </Button>
-                          ) : null}
-
-                          {alert.type === "panic" && (alert.map_query || extractLatLngFromLocation(alert.raw_location)) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7"
-                              onClick={() => {
-                                const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
-                                  "_blank",
-                                );
-                              }}
-                            >
-                              View on Maps
-                            </Button>
-                          )}
-
-                          {alert.type === "emergency" && alert.status === "queued" && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => void handleTakeEmergency(alert)}
-                              disabled={isTakingId === alert.id}
-                            >
-                              {isTakingId === alert.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Assigning
-                                </>
-                              ) : (
-                                "Take Case"
-                              )}
-                            </Button>
-                          )}
-
-                          {isAlertActive(alert) && (
-                            <Button
-                              size="sm"
-                              variant={alert.type === "risk" ? "outline" : "default"}
-                              onClick={() => void handleRespond(alert)}
-                              disabled={alert.type !== "risk" && isRespondingId === alert.id}
-                            >
-                              {alert.type === "risk" ? (
-                                "View Reports"
-                              ) : isRespondingId === alert.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Resolving
-                                </>
-                              ) : (
-                                "Mark Resolved"
-                              )}
-                            </Button>
-                          )}
-                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </CardContent>
           </Card>

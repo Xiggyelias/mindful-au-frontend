@@ -62,6 +62,7 @@ type EmergencyRequestAlert = {
   student_id?: number;
   student_detail_line?: string;
   assigned_to?: number | null;
+  counselor_slot_id?: number | null;
   assignee_name?: string | null;
 };
 
@@ -235,6 +236,7 @@ const CounselorAlerts = () => {
           student_id: student.studentId > 0 ? student.studentId : undefined,
           student_detail_line: student.detailLine || undefined,
           assigned_to: row.assigned_to ? Number(row.assigned_to) : null,
+          counselor_slot_id: row.counselor_slot_id ? Number(row.counselor_slot_id) : null,
           assignee_name: assigneeName,
         };
       });
@@ -495,6 +497,10 @@ const CounselorAlerts = () => {
                   emergencyRequests.map((alert) => {
                     const isActive = alert.status === "queued" || alert.status === "assigned";
                     const isHighlighted = highlightedEmergencyId === alert.id;
+                    const isAssignedWithoutSlot =
+                      alert.status === "assigned" &&
+                      !alert.counselor_slot_id &&
+                      (!alert.assigned_to || Number(alert.assigned_to) === Number(user?.id));
 
                     return (
                       <div
@@ -557,6 +563,17 @@ const CounselorAlerts = () => {
                                 disabled={updatingEmergencyId === alert.id}
                               >
                                 {updatingEmergencyId === alert.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Take Case"}
+                              </Button>
+                            )}
+                            {isAssignedWithoutSlot && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="text-xs h-7"
+                                onClick={() => void handleTakeEmergency(alert.id)}
+                                disabled={updatingEmergencyId === alert.id}
+                              >
+                                {updatingEmergencyId === alert.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Prepare Slot"}
                               </Button>
                             )}
                             {isActive && (

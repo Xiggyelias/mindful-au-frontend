@@ -97,6 +97,14 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       return "/student/chat";
     };
 
+    const emergencyRequestId = Number((meta as { emergency_request_id?: unknown }).emergency_request_id);
+    if (Number.isFinite(emergencyRequestId) && emergencyRequestId > 0) {
+      if (basePath === "/admin" || role === "admin") return `/admin/alerts?emergency=${emergencyRequestId}`;
+      if (basePath === "/peer" || role === "peer_counselor") return "/peer/escalations";
+      if (basePath === "/counselor" || role === "counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
+      return "/student/appointments";
+    }
+
     const metaPath = String((meta as { path?: unknown }).path || "").trim();
     if (metaPath.startsWith("/")) {
       return metaPath;
@@ -112,14 +120,6 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
       if (basePath === "/admin") return "/admin/alerts";
       if (basePath === "/peer") return "/peer/dashboard";
       return `${basePath}/appointments`;
-    }
-
-    const emergencyRequestId = Number((meta as { emergency_request_id?: unknown }).emergency_request_id);
-    if (Number.isFinite(emergencyRequestId) && emergencyRequestId > 0) {
-      if (basePath === "/admin" || role === "admin") return `/admin/alerts?emergency=${emergencyRequestId}`;
-      if (basePath === "/peer" || role === "peer_counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
-      if (basePath === "/counselor" || role === "counselor") return `/counselor/alerts?emergency=${emergencyRequestId}`;
-      return "/student/appointments";
     }
 
     const looksLikeEmergency =
