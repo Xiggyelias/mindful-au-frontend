@@ -521,24 +521,8 @@ export const useChatSession = (userId: number | undefined) => {
     try {
       const shouldBeAnonymous = Boolean(options?.isAnonymous);
 
-      const existing = sessions.find((s) => directCounselorSessionMatches(s, counselorId));
-      if (existing) {
-        const nextSession = isAnonymousSessionFlag(existing.is_anonymous) === shouldBeAnonymous
-          ? existing
-          : await api.updateSessionChatAnonymity(existing.id, shouldBeAnonymous);
-
-        setSessions((prev) => {
-          const next = prev.some((session) => Number(session.id) === Number(nextSession.id))
-            ? prev.map((session) => (Number(session.id) === Number(nextSession.id) ? nextSession : session))
-            : [nextSession, ...prev];
-          return dedupeChatSessions(next);
-        });
-        activeSessionIdRef.current = String(nextSession.id);
-        setActiveSession(nextSession);
-        return nextSession;
-      }
-
-      // Create new session - set loading to show activity but don't block UI
+      // Always consult the backend to get or create the session.
+      // This avoids reusing locally cached sessions that have expired on the server.
       setIsLoading(true);
       const newSession = await api.createSession({
         counselor_id: counselorId,
