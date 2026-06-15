@@ -76,7 +76,7 @@ jobs:
 
       - name: Run backend test suite
         working-directory: mindful-au-backend
-        run: php artisan test
+        run: composer test
 
       - name: Install frontend dependencies
         working-directory: mindful-au-frontend
