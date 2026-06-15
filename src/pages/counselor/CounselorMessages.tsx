@@ -1,23 +1,15 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  LayoutDashboard,
   MessageSquare,
-  Calendar,
-  Users,
   Brain,
-  Video,
-  FileText,
-  Heart,
   Search,
   Shield,
-  ShieldCheck,
   ArrowUpCircle,
   Loader2,
   AlertTriangle,
   X,
   User,
-  UserCircle2,
   Menu,
   MoreHorizontal,
   Pin,
@@ -52,7 +44,6 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
 import {
   formatInDisplayZone,
-  isThisYearInDisplayZone,
   isTodayInDisplayZone,
   isYesterdayInDisplayZone,
 } from "@/lib/displayTimezone";
@@ -61,7 +52,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -75,11 +65,6 @@ import {
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
 import { canDeleteMessageForEveryone } from "@/lib/chatDeletion";
-
-const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
-  const t = s.trim();
-  return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
-};
 
 const SESSION_POLL_INTERVAL_MS = 12_000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
@@ -324,7 +309,7 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [isSwitchingChat, setIsSwitchingChat] = useState(false);
+  const [_isSwitchingChat, setIsSwitchingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -500,7 +485,7 @@ const CounselorMessages = () => {
 
   // Voice recording functionality
   const {
-    isRecording,
+    isRecording: _isRecording,
     isPaused,
     recording,
     recordingTime,
@@ -1452,7 +1437,7 @@ const CounselorMessages = () => {
     }
   };
 
-  const handleSwitchToDirectChat = async () => {
+  const _handleSwitchToDirectChat = async () => {
     if (selectedChat?.isPeerAssigned && selectedSessionId) {
       toast.info("You are already in this shared case room. The peer counselor remains assigned.");
       return;
@@ -1594,7 +1579,7 @@ const CounselorMessages = () => {
   const selectedChatIsSharedPeerCase = Boolean(activePeerParticipant);
 
   useEffect(() => {
-    if (!showSupervisionColumn || !selectedChat) return;
+    if (!showSupervisionColumn || !selectedChat?.id) return;
     setSidebarLane(selectedChatIsSharedPeerCase ? "supervision" : "direct");
   }, [selectedChat?.id, selectedChatIsSharedPeerCase, showSupervisionColumn]);
 

@@ -591,8 +591,10 @@ const StudentVideoCall = () => {
       activeAppointmentId,
       isOnline,
       isSignalingReady,
+      loadUpcomingVideoAppointments,
       startAudioCall,
       startCall,
+      user?.profile?.anonymous_mode,
     ]
   );
 

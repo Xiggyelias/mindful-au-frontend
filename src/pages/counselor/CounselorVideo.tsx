@@ -2,14 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  LayoutDashboard,
-  MessageSquare,
-  Calendar,
   Users,
-  Brain,
-  Video,
   FileText,
-  Heart,
   Clock,
   MapPin,
   Mic,

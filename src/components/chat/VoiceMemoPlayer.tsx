@@ -64,7 +64,7 @@ export function VoiceMemoPlayer({
   bubbleRole,
   className,
   isUploading = false,
-  uploadProgress = 0,
+  uploadProgress: _uploadProgress = 0,
   uploadFailed = false,
   isDeleting = false,
   onRetry,
@@ -241,7 +241,7 @@ export function VoiceMemoPlayer({
       // Force load to override browser lazy-loading optimizations on hidden media elements
       try {
         el.load();
-      } catch (e) {
+      } catch {
         // ignore
       }
     }

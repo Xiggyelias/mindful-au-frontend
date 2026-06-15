@@ -2,22 +2,14 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
-  LayoutDashboard,
-  MessageSquare,
   Calendar,
   CalendarPlus,
-  Users,
-  Brain,
-  Video,
-  FileText,
-  Heart,
   Clock,
   Check,
   X,
   Search,
   Filter,
   FilterX,
-  AlertTriangle,
   Loader2,
   Settings,
 } from "lucide-react";

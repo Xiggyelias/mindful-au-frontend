@@ -2,13 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
-  LayoutDashboard,
   MessageSquare,
   Calendar,
   Users,
   Brain,
-  Video,
-  FileText,
   Heart,
   Bell,
   TrendingUp,
@@ -35,7 +32,6 @@ import { CounselorSessionReminderBanner } from "@/components/counselor/Counselor
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
   isAnonymousSessionFlag,
-  isAnonymousIdentityMaskedFromViewer,
   resolveCounselorStudentDisplayName,
 } from "@/lib/anonymousMode";
 
