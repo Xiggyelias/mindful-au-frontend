@@ -921,7 +921,7 @@ const StudentChat = () => {
     : "Confidential support conversation";
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
+    <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
       <DashboardSidebar
         items={[...studentNavItems]}
         userType="student"
@@ -935,7 +935,7 @@ const StudentChat = () => {
         }}
       />
 
-      <div className="flex h-full min-w-0 flex-col overflow-hidden lg:pl-72 pl-0">
+      <div className="flex h-full min-w-0 flex-col overflow-hidden pl-0 lg:pl-72">
         {!activeSession && (
           <DashboardHeader
             title="Clinical Support"
@@ -947,7 +947,7 @@ const StudentChat = () => {
           title="Something went wrong"
           description="The clinical chat encountered an unexpected error. This might be due to a connection or session sync issue."
         >
-          <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:p-4 lg:gap-4">
+          <div className="flex min-h-0 flex-1 overflow-hidden p-0 lg:gap-4 lg:p-4">
             {/* Chat Sidebar */}
             <div className="hidden w-80 shrink-0 lg:flex lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40 lg:backdrop-blur">
               <ChatSidebar
@@ -994,8 +994,8 @@ const StudentChat = () => {
 
               {activeSession ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-background/80 p-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:p-3 lg:px-4">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className="relative z-10 flex shrink-0 flex-col gap-2 border-b border-border/60 bg-background/80 p-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:flex-row sm:items-center sm:justify-between sm:p-3 lg:px-4">
+                    <div className="flex w-full min-w-0 flex-1 items-center gap-2 sm:w-auto">
                       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 xl:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
                         <Menu className="h-4 w-4" />
                       </Button>
@@ -1025,8 +1025,8 @@ const StudentChat = () => {
                           </span>
                           <span className="hidden truncate text-[10px] font-semibold text-muted-foreground/80 2xl:inline">Secure support channel</span>
                         </div>
-                        <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1.5">
-                          <span className="max-w-full truncate rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
+                        <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1.5 max-[380px]:hidden">
+                          <span className="hidden max-w-full truncate rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 min-[420px]:inline-flex">
                             Student: You
                           </span>
                           {activePeerParticipant && (
@@ -1042,13 +1042,13 @@ const StudentChat = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="ml-auto flex max-w-full shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+                    <div className="flex w-full min-w-0 shrink-0 items-center justify-between gap-1.5 sm:ml-auto sm:w-auto sm:justify-end sm:gap-2">
                       <AnonymousModeToggle
                         id="active-chat-anonymous"
                         checked={isAnonymousSessionFlag(activeSession.is_anonymous)}
                         onCheckedChange={(v) => void handleActiveChatAnonymityToggle(v)}
                         disabled={activeAnonymousToggleDisabled}
-                        className="max-w-[11.5rem] shrink-0"
+                        className="min-w-0 flex-1 sm:max-w-[11.5rem] sm:flex-none"
                       />
                       <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600 2xl:flex">
                         <Shield className="h-3 w-3" />
