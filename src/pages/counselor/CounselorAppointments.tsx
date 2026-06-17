@@ -544,7 +544,7 @@ const CounselorAppointments = () => {
               <DialogHeader>
                 <DialogTitle>Slot schedule</DialogTitle>
                 <DialogDescription>
-                  Working hours generate bookable slots (default 60 minutes) before the 4 PM close. Lunch is locked out of student booking.
+                  Working hours generate 60-minute bookable slots before the 4 PM close. Lunch is locked out of student booking.
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
@@ -598,7 +598,7 @@ const CounselorAppointments = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wider">Slot mins</Label>
+                        <Label className="text-[10px] uppercase tracking-wider">Interval mins</Label>
                         <Input
                           type="number"
                           min={30}
