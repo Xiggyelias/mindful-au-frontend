@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { formatInDisplayZone } from "@/lib/displayTimezone";
 import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
@@ -92,7 +93,7 @@ function minutesBetween(start: string, end: string): number {
 function formatSlotTime(value: string): string {
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatInDisplayZone(d, "hh:mm a");
 }
 
 function formatSlotRange(start: string, end: string): string {
@@ -1273,7 +1274,7 @@ const StudentAppointments = () => {
                     </div>
                     {selectedSlot && (
                       <p className="text-xs text-muted-foreground">
-                        Selected: {new Date(selectedSlot.start_time).toLocaleDateString()},{" "}
+                        Selected: {formatInDisplayZone(new Date(selectedSlot.start_time), "M/d/yyyy")},{" "}
                         {formatSlotRange(selectedSlot.start_time, selectedSlot.end_time)} (
                         {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} minutes).
                       </p>
