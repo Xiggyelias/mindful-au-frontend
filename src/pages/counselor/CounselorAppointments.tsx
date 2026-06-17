@@ -506,33 +506,30 @@ const CounselorAppointments = () => {
             </Card>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 gap-2"
+              className="h-12 rounded-2xl px-4 text-sm font-bold gap-2 whitespace-nowrap"
               onClick={() => void generateWeeklySlots()}
               disabled={isGeneratingSlots}
             >
-              {isGeneratingSlots ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+              {isGeneratingSlots ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
               Generate Weekly Slots
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 gap-2"
+              className="h-12 rounded-2xl px-4 text-sm font-bold gap-2 whitespace-nowrap"
               onClick={() => setScheduleOpen(true)}
             >
-              <Settings className="h-3.5 w-3.5" />
+              <Settings className="h-4 w-4" />
               Edit Schedule
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
+              className="h-12 rounded-2xl px-4 text-sm font-bold border-destructive/40 text-destructive hover:bg-destructive/10 whitespace-nowrap"
               onClick={openBulkCancelModal}
             >
               Cancel All Sessions
