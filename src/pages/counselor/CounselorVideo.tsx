@@ -8,6 +8,7 @@ import {
   MapPin,
   Mic,
   MicOff,
+  Video,
   VideoOff,
   Phone,
   PhoneIncoming,
