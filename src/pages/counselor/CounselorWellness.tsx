@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Brain,
   Coffee,
+  Heart,
   Sun,
   Loader2,
   CheckCircle2,
