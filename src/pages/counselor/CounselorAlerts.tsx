@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
+  Users,
+  Brain,
+  Video,
+  FileText,
+  Heart,
   AlertTriangle,
   TrendingDown,
   Bell,
@@ -9,6 +17,7 @@ import {
   CheckCheck,
   Clock,
   ShieldAlert,
+  Activity,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";

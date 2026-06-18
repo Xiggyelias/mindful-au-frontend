@@ -54,7 +54,6 @@ const StudentDashboard = () => {
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [, setStatsLoading] = useState(false);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -424,11 +423,6 @@ const StudentDashboard = () => {
                         });
                         setUpcomingAppointments(upcomingApts);
                         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
-                        if (moodData?.log?.mood) {
-                          setDailyMood(moodData.log.mood as StudentMood);
-                        } else {
-                          setDailyMood(null);
-                        }
                       } catch (error) {
                         const errorMessage = error instanceof Error ? error.message : "Failed to reload statistics";
                         setStatsError(errorMessage);

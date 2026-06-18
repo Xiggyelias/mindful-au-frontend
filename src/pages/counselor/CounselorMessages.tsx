@@ -309,7 +309,6 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [_isSwitchingChat, setIsSwitchingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -485,7 +484,6 @@ const CounselorMessages = () => {
 
   // Voice recording functionality
   const {
-    isRecording: _isRecording,
     isPaused,
     recording,
     recordingTime,
@@ -1437,46 +1435,6 @@ const CounselorMessages = () => {
     }
   };
 
-  const _handleSwitchToDirectChat = async () => {
-    if (selectedChat?.isPeerAssigned && selectedSessionId) {
-      toast.info("You are already in this shared case room. The peer counselor remains assigned.");
-      return;
-    }
-
-    if (!selectedChat?.studentId) {
-      toast.error("Cannot resolve student details for this chat.");
-      return;
-    }
-    const studentId = selectedChat.studentId;
-    setIsSwitchingChat(true);
-    try {
-      const existingDirect = chats.find(
-        (c) =>
-          c.studentId === studentId &&
-          !c.isPeerAssigned &&
-          c.status !== "completed" &&
-          c.status !== "cancelled"
-      );
-
-      if (existingDirect) {
-        selectConversationById(existingDirect.id);
-        toast.info("Switched to your direct counselor chat.");
-      } else {
-        const newSession = await api.createSessionAsCounselor({
-          student_id: studentId,
-          session_type: "chat",
-        });
-        toast.success("Created a new direct counselor conversation.");
-        await loadSessions(false);
-        selectConversationById(newSession.id);
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to switch to direct chat.");
-    } finally {
-      setIsSwitchingChat(false);
-    }
-  };
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1579,7 +1537,7 @@ const CounselorMessages = () => {
   const selectedChatIsSharedPeerCase = Boolean(activePeerParticipant);
 
   useEffect(() => {
-    if (!showSupervisionColumn || !selectedChat?.id) return;
+    if (!showSupervisionColumn || !selectedChat) return;
     setSidebarLane(selectedChatIsSharedPeerCase ? "supervision" : "direct");
   }, [selectedChat?.id, selectedChatIsSharedPeerCase, showSupervisionColumn]);
 
@@ -1765,7 +1723,7 @@ const CounselorMessages = () => {
   }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic, handleDeleteMessage, deletingMessageIds, canModerateChat]);
 
   return (
-    <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
       <DashboardSidebar
         items={[...navItems]}
         userType={isPeerCounselor ? "peer" : "counselor"}
@@ -1774,7 +1732,7 @@ const CounselorMessages = () => {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex h-full min-w-0 flex-col overflow-hidden pl-0 lg:pl-72">
+      <div className="lg:pl-72 pl-0">
         {!selectedSessionId && (
           <DashboardHeader
             title={isPeerCounselor ? "Peer Support Messages" : "Messages"}
@@ -1782,13 +1740,13 @@ const CounselorMessages = () => {
           />
         )}
 
-        <main className="min-h-0 flex-1 overflow-hidden p-0 lg:p-4">
-          <div className="flex h-full min-h-0 gap-0">
+        <main className="h-full overflow-hidden p-0 lg:p-4">
+          <div className={`flex min-h-0 gap-0 ${selectedSessionId ? "h-[100dvh] lg:h-screen" : "h-[calc(100dvh-64px)] sm:h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)]"}`}>
             <Card
               variant="glass"
               className={cn(
                 "shrink-0 hidden lg:flex lg:flex-col lg:rounded-2xl lg:border lg:border-slate-200/80 lg:bg-background/95 lg:shadow-lg lg:shadow-slate-200/40",
-                "min-h-0 lg:h-full lg:w-96",
+                "lg:w-96",
                 selectedSessionId ? "hidden lg:flex" : "flex flex-col"
               )}
             >
@@ -1909,7 +1867,7 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                <ScrollArea className="min-h-0 flex-1">
+                <ScrollArea className="h-[calc(100vh-220px)]">
                   <div
                     key={showSupervisionColumn ? sidebarLane : "all"}
                     className="animate-fade-in"
@@ -1949,13 +1907,13 @@ const CounselorMessages = () => {
               variant="glass"
               className={`flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden lg:ml-4 lg:rounded-2xl lg:border lg:border-slate-200/80 lg:shadow-lg lg:shadow-slate-200/35 ${!selectedSessionId ? "hidden lg:flex" : "flex"}`}
             >
-              <CardHeader className="shrink-0 space-y-0 border-b border-border/60 bg-background/80 px-3 py-3 backdrop-blur-xl sm:px-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex w-full min-w-0 flex-1 items-start gap-2 sm:w-auto sm:gap-3">
-                    <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 lg:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
+              <CardHeader className="shrink-0 space-y-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={() => setSidebarOpen(true)}>
                       <Menu className="h-5 w-5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 lg:hidden" onClick={closeSelectedChat} aria-label="Close chat">
+                    <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={closeSelectedChat} aria-label="Close chat">
                       <X className="h-5 w-5" />
                     </Button>
                     <div
@@ -1972,7 +1930,7 @@ const CounselorMessages = () => {
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="max-w-full truncate text-sm font-semibold leading-tight sm:text-base">
+                        <p className="truncate text-base font-semibold leading-tight">
                           {selectedChat?.studentName || "Select a conversation"}
                         </p>
                         {selectedChat?.isAnonymous && (
@@ -2006,8 +1964,8 @@ const CounselorMessages = () => {
                         </p>
                       </div>
                       {selectedChat && (
-                        <div className="flex max-w-full flex-wrap items-center gap-1.5 pt-1 max-[380px]:hidden">
-                          <span className="hidden rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 min-[420px]:inline-flex">
+                        <div className="flex max-w-full flex-wrap items-center gap-1.5 pt-1">
+                          <span className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200">
                             Student: {selectedChat.studentName}
                           </span>
                           {activePeerParticipant && (
@@ -2023,7 +1981,7 @@ const CounselorMessages = () => {
                     </div>
                   </div>
                   {selectedSessionId && (
-                    <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                       {!isPeerCounselor && selectedChat?.studentId && (
                         <Button
                           variant={briefOpen ? "secondary" : "outline"}

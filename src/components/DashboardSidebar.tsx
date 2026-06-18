@@ -80,7 +80,7 @@ const isSecureChatPath = (path: string) =>
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-[100dvh] max-h-[100dvh] w-72 border-r border-sidebar-border bg-sidebar transition-transform duration-300 lg:translate-x-0",
+          "fixed left-0 top-0 h-full w-72 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300 lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
           className
         )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { CHAT_ANONYMITY_SYNC_EVENT, CHAT_INCOMING_DIGEST_EVENT } from "@/lib/chatRealtimeEvents";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 
 export const expiredSessionIds = new Set<string>();
 
@@ -130,6 +131,16 @@ const getHttpStatus = (error: unknown) =>
       (error as { status?: unknown })?.status ??
       0
   );
+const directCounselorSessionMatches = (
+  session: Session,
+  counselorId: number
+) =>
+  session.counselor_id === counselorId &&
+  session.session_type === "chat" &&
+  isOpenChatSession(session) &&
+  Number(session.peer_counselor_id || 0) <= 0 &&
+  (session.assigned_role == null || session.assigned_role === "counselor");
+
 const sessionActivityTime = (session: Session): number => {
   const timestamp = new Date(session.updated_at || session.created_at || 0).getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;

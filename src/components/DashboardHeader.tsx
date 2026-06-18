@@ -266,23 +266,22 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
           );
         })()
       )}
-      <header className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-background/80 px-3 py-3 backdrop-blur-lg sm:gap-4 sm:p-4 lg:p-6">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+      <header className="flex items-center justify-between gap-4 p-4 lg:p-6 bg-background/80 backdrop-blur-lg border-b border-border">
+        <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 lg:hidden"
+            className="lg:hidden"
             onClick={onMenuClick}
-            aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <h1 className="min-w-0 truncate text-lg font-display font-bold text-foreground sm:text-xl lg:text-2xl">
+          <h1 className="text-xl lg:text-2xl font-display font-bold text-foreground">
             {title}
           </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:gap-3">
+        <div className="flex items-center gap-3">
           <Button
             variant="destructive"
             size="sm"
@@ -296,7 +295,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
             variant="destructive"
             size="icon"
             onClick={handleQuickExit}
-            className="h-9 w-9 sm:hidden"
+            className="sm:hidden"
             aria-label="Quick exit"
           >
             <ShieldX className="h-4 w-4" />
@@ -309,7 +308,6 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9"
                 aria-label="Sound settings"
                 onClick={() => primeNotificationAudioFromUserGesture()}
               >
@@ -327,7 +325,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
             }
           }}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9">
+              <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
                   <span className="absolute top-1 right-1 min-w-[0.95rem] h-[0.95rem] px-1 rounded-full bg-primary text-[9px] leading-none text-primary-foreground flex items-center justify-center">
@@ -336,7 +334,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[calc(100vw-1rem)] max-w-[22rem] p-0">
+            <DropdownMenuContent align="end" className="w-[22rem] p-0">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
                 <p className="text-sm font-semibold">Notifications</p>
                 <Button

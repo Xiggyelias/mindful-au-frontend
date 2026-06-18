@@ -2,13 +2,18 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
   Users,
+  Brain,
+  Video,
   FileText,
+  Heart,
   Clock,
   MapPin,
   Mic,
   MicOff,
-  Video,
   VideoOff,
   Phone,
   PhoneIncoming,
@@ -762,7 +767,7 @@ const CounselorVideo = () => {
   );
 
   return (
-    <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
+    <div className="min-h-screen bg-background">
       <DashboardSidebar
         items={[...counselorNavItems]}
         userType="counselor"
@@ -773,7 +778,7 @@ const CounselorVideo = () => {
       />
 
       <div className={cn(
-        "h-full min-w-0 transition-all duration-500",
+        "transition-all duration-500",
         isConnected ? "lg:pl-0" : "lg:pl-72 pl-0"
       )}>
         {!isConnected && (
@@ -785,7 +790,7 @@ const CounselorVideo = () => {
 
         <main className={cn(
           "transition-all duration-500",
-          isConnected ? "h-full p-0" : "mx-auto h-[calc(100dvh-64px)] max-w-full p-3 sm:h-[calc(100dvh-80px)] sm:p-4 lg:p-6"
+          isConnected ? "p-0 h-screen" : "p-3 sm:p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-64px)] sm:h-[calc(100vh-80px)]"
         )}>
           <div className={cn(
             "grid grid-cols-1 gap-6 transition-all duration-500",
@@ -799,7 +804,7 @@ const CounselorVideo = () => {
               variant="glass"
               className={cn(
                 "overflow-hidden transition-all duration-500",
-                isConnected ? "h-full border-primary/20 shadow-2xl" : "min-h-[50svh] sm:min-h-[60svh] xl:h-[calc(100dvh-160px)]"
+                isConnected ? "h-full border-primary/20 shadow-2xl" : "min-h-[50vh] sm:min-h-[60vh] xl:h-[calc(100vh-160px)]"
               )}
             >
               <CardContent className="flex h-full flex-col gap-4 p-4">
