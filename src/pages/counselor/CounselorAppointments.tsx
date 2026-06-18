@@ -2,22 +2,14 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
-  LayoutDashboard,
-  MessageSquare,
   Calendar,
   CalendarPlus,
-  Users,
-  Brain,
-  Video,
-  FileText,
-  Heart,
   Clock,
   Check,
   X,
   Search,
   Filter,
   FilterX,
-  AlertTriangle,
   Loader2,
   Settings,
 } from "lucide-react";
@@ -514,33 +506,30 @@ const CounselorAppointments = () => {
             </Card>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 gap-2"
+              className="h-12 rounded-2xl px-4 text-sm font-bold gap-2 whitespace-nowrap"
               onClick={() => void generateWeeklySlots()}
               disabled={isGeneratingSlots}
             >
-              {isGeneratingSlots ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+              {isGeneratingSlots ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
               Generate Weekly Slots
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 gap-2"
+              className="h-12 rounded-2xl px-4 text-sm font-bold gap-2 whitespace-nowrap"
               onClick={() => setScheduleOpen(true)}
             >
-              <Settings className="h-3.5 w-3.5" />
+              <Settings className="h-4 w-4" />
               Edit Schedule
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="rounded-xl h-9 border-destructive/40 text-destructive hover:bg-destructive/10"
+              className="h-12 rounded-2xl px-4 text-sm font-bold border-destructive/40 text-destructive hover:bg-destructive/10 whitespace-nowrap"
               onClick={openBulkCancelModal}
             >
               Cancel All Sessions
@@ -552,7 +541,7 @@ const CounselorAppointments = () => {
               <DialogHeader>
                 <DialogTitle>Slot schedule</DialogTitle>
                 <DialogDescription>
-                  Working hours generate bookable slots (default 60 minutes) before the 4 PM close. Lunch is locked out of student booking.
+                  Working hours generate 60-minute bookable slots before the 4 PM close. Lunch is locked out of student booking.
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
@@ -606,7 +595,7 @@ const CounselorAppointments = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wider">Slot mins</Label>
+                        <Label className="text-[10px] uppercase tracking-wider">Interval mins</Label>
                         <Input
                           type="number"
                           min={30}

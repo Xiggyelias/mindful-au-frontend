@@ -76,6 +76,30 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
+const safeSessionStorage = (action: (storage: Storage) => void | string | null): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return action(window.sessionStorage) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const safeLocalStorage = (action: (storage: Storage) => void | string | null): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return action(window.localStorage) ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const isLikelyViteDevOrigin = (): boolean => {
   if (typeof window === 'undefined') {
     return false;
@@ -283,6 +307,7 @@ class ApiClient {
   private readonly responseCache = new Map<string, { savedAt: number; data: unknown }>();
   private wasApiUnreachable = false;
   private refreshPromise: Promise<unknown> | null = null;
+  private volatileDeviceId: string | null = null;
 
   constructor() {
     this.activeBaseUrl = API_BASE_URL;
@@ -580,20 +605,16 @@ class ApiClient {
   }
 
   private loadPersistedToken(): string | null {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    const sessionToken = window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    const sessionToken = safeSessionStorage((storage) => storage.getItem(AUTH_TOKEN_STORAGE_KEY));
     if (sessionToken) {
       return sessionToken;
     }
 
     // Legacy migration path: move long-lived localStorage token into session storage.
-    const legacyToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    const legacyToken = safeLocalStorage((storage) => storage.getItem(AUTH_TOKEN_STORAGE_KEY));
     if (legacyToken) {
-      window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacyToken);
-      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      safeSessionStorage((storage) => storage.setItem(AUTH_TOKEN_STORAGE_KEY, legacyToken));
+      safeLocalStorage((storage) => storage.removeItem(AUTH_TOKEN_STORAGE_KEY));
       return legacyToken;
     }
 
@@ -601,11 +622,7 @@ class ApiClient {
   }
 
   private loadPersistedTokenExpiry(): number | null {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    const raw = window.sessionStorage.getItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY);
+    const raw = safeSessionStorage((storage) => storage.getItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY));
     if (!raw) {
       return null;
     }
@@ -622,16 +639,12 @@ class ApiClient {
     }
 
     this.tokenExpiresAt = Date.now() + Math.floor(seconds * 1000);
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY, String(this.tokenExpiresAt));
-    }
+    safeSessionStorage((storage) => storage.setItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY, String(this.tokenExpiresAt)));
   }
 
   private clearPersistedTokenExpiry(): void {
     this.tokenExpiresAt = null;
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY);
-    }
+    safeSessionStorage((storage) => storage.removeItem(AUTH_TOKEN_EXPIRES_AT_STORAGE_KEY));
   }
 
   private getOrCreateDeviceId(): string {
@@ -639,16 +652,21 @@ class ApiClient {
       return '';
     }
 
-    const existing = window.localStorage.getItem(AUTH_DEVICE_ID_STORAGE_KEY);
+    const existing = safeLocalStorage((storage) => storage.getItem(AUTH_DEVICE_ID_STORAGE_KEY));
     if (existing && existing.trim() !== '') {
       return existing;
+    }
+
+    if (this.volatileDeviceId) {
+      return this.volatileDeviceId;
     }
 
     const generated = typeof window.crypto?.randomUUID === 'function'
       ? window.crypto.randomUUID()
       : `web-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 
-    window.localStorage.setItem(AUTH_DEVICE_ID_STORAGE_KEY, generated);
+    this.volatileDeviceId = generated;
+    safeLocalStorage((storage) => storage.setItem(AUTH_DEVICE_ID_STORAGE_KEY, generated));
     return generated;
   }
 
@@ -693,19 +711,15 @@ class ApiClient {
 
   setToken(token: string) {
     this.token = token;
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    }
+    safeSessionStorage((storage) => storage.setItem(AUTH_TOKEN_STORAGE_KEY, token));
+    safeLocalStorage((storage) => storage.removeItem(AUTH_TOKEN_STORAGE_KEY));
     this.client.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
 
   clearToken() {
     this.token = null;
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    }
+    safeSessionStorage((storage) => storage.removeItem(AUTH_TOKEN_STORAGE_KEY));
+    safeLocalStorage((storage) => storage.removeItem(AUTH_TOKEN_STORAGE_KEY));
     this.clearPersistedTokenExpiry();
     delete this.client.defaults.headers.common['Authorization'];
   }

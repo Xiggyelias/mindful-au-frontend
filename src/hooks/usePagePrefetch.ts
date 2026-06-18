@@ -5,8 +5,7 @@
  * Uses Intersection Observer for viewport-based prefetching.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRef, useCallback } from 'react';
 
 // Track which chunks have been prefetched to avoid duplicate requests
 const prefetchedChunks = new Set<string>();

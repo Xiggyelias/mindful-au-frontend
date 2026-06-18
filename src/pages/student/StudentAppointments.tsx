@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
+import { formatInDisplayZone } from "@/lib/displayTimezone";
 import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
@@ -92,7 +93,14 @@ function minutesBetween(start: string, end: string): number {
 function formatSlotTime(value: string): string {
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatInDisplayZone(d, "hh:mm a");
+}
+
+function formatSlotRange(start: string, end: string): string {
+  const startLabel = formatSlotTime(start);
+  const endLabel = formatSlotTime(end);
+  if (!startLabel) return "";
+  return endLabel ? `${startLabel}-${endLabel}` : startLabel;
 }
 
 function isHttpServerError(error: unknown): boolean {
@@ -1250,7 +1258,9 @@ const StudentAppointments = () => {
                                           : "border-border bg-muted text-muted-foreground opacity-70"
                                     }`}
                                   >
-                                    {formatSlotTime(slot.start_time)}
+                                    <span className="block whitespace-nowrap text-[11px] font-semibold tabular-nums sm:text-xs">
+                                      {formatSlotRange(slot.start_time, slot.end_time)}
+                                    </span>
                                     <span className="block text-[10px] font-medium">
                                       {isAvailable ? "Available" : "Booked"}
                                     </span>
@@ -1264,8 +1274,9 @@ const StudentAppointments = () => {
                     </div>
                     {selectedSlot && (
                       <p className="text-xs text-muted-foreground">
-                        Selected: {new Date(selectedSlot.start_time).toLocaleDateString()} at{" "}
-                        {formatSlotTime(selectedSlot.start_time)} for {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} minutes.
+                        Selected: {formatInDisplayZone(new Date(selectedSlot.start_time), "M/d/yyyy")},{" "}
+                        {formatSlotRange(selectedSlot.start_time, selectedSlot.end_time)} (
+                        {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} minutes).
                       </p>
                     )}
                   </div>

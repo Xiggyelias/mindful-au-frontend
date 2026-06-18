@@ -75,9 +75,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     message,
     isSending,
     isUploading,
-    uploadProgress,
-    isVoiceMode,
-    recording,
+    uploadProgress: _uploadProgress,
+    isVoiceMode: _isVoiceMode,
+    recording: _recording,
     recordingTime,
     isPaused,
     selectedFile,
@@ -109,6 +109,13 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const CANCEL_LEFT_PX = 60;
     const TAP_TO_LOCK_MS = 220;
 
+    const resetMicGesture = () => {
+      holdStartYRef.current = null;
+      holdStartXRef.current = null;
+      holdPointerIdRef.current = null;
+      holdStartedAtRef.current = 0;
+    };
+
     // The bars to render: live levels while recording, else idle fallback
     const displayBars: number[] =
       audioLevels && audioLevels.length >= NUM_BARS
@@ -127,9 +134,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
         await onVoiceStart();
       } catch (err) {
         setMicState("idle");
-        holdStartYRef.current = null;
-        holdStartXRef.current = null;
-        holdPointerIdRef.current = null;
+        resetMicGesture();
         onVoiceError?.(err instanceof Error ? err : new Error("Could not access microphone."));
       }
     };
@@ -150,8 +155,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       if (micState === "locked") return;
       if (micState === "recording" && holdDurationMs <= TAP_TO_LOCK_MS) {
         setMicState("locked");
-        holdStartYRef.current = null;
-        holdStartXRef.current = null;
+        resetMicGesture();
         return;
       }
       if (micState === "cancelling") {
@@ -163,18 +167,27 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       } else {
         setMicState("idle");
       }
-      holdStartYRef.current = null;
-      holdStartXRef.current = null;
+      resetMicGesture();
+    };
+
+    const handleMicPointerCancel = () => {
+      if (micState === "recording" || micState === "cancelling") {
+        onVoiceCancel();
+      }
+      setMicState("idle");
+      resetMicGesture();
     };
 
     const handleLockedSend = async () => {
       setMicState("idle");
+      resetMicGesture();
       await Promise.resolve(onVoiceSendNow?.());
     };
 
     const handleLockedCancel = () => {
       onVoiceCancel();
       setMicState("idle");
+      resetMicGesture();
     };
 
     const isLocked = micState === "locked";
@@ -214,7 +227,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
           )}
 
           {/* ── Main row ─────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
 
             {/* Left side — changes per state */}
             {isLocked ? (
@@ -223,7 +236,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-11 w-11 shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-150"
+                  className="h-10 w-10 shrink-0 rounded-full text-muted-foreground transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive sm:h-11 sm:w-11"
                 onClick={handleLockedCancel}
                 aria-label="Discard voice note"
               >
@@ -237,7 +250,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               <div className="flex shrink-0 items-center">
                 <Button
                   type="button" variant="ghost" size="icon"
-                  className="h-10 w-10 rounded-full text-muted-foreground/70 hover:text-primary hover:bg-primary/8"
+                  className="h-9 w-9 rounded-full text-muted-foreground/70 hover:bg-primary/8 hover:text-primary sm:h-10 sm:w-10"
                   onClick={onAttachClick} aria-label="Attach file"
                 >
                   <Paperclip className="h-5 w-5" />
@@ -255,7 +268,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             <div
               className={cn(
                 "relative flex flex-1 items-center overflow-hidden rounded-full transition-all duration-200",
-                "h-11 border",
+                "h-10 border sm:h-11",
                 isActiveRecording
                   ? isCancelling
                     ? "border-destructive/40 bg-destructive/5"
@@ -267,7 +280,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             >
               {isActiveRecording ? (
                 /* ── Recording pill content ────────────────────────────── */
-                <div className="flex w-full items-center gap-2 px-4">
+                <div className="flex w-full items-center gap-1.5 px-3 sm:gap-2 sm:px-4">
 
                   {/* Pulsing red dot */}
                   <span
@@ -290,7 +303,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                   </span>
 
                   {/* Waveform bars */}
-                  <div className="flex flex-1 items-end justify-start overflow-hidden gap-[2px] h-7">
+                  <div className="flex h-7 flex-1 items-end justify-start gap-[1.5px] overflow-hidden sm:gap-[2px]">
                     {displayBars.map((level, i) => (
                       <span
                         key={i}
@@ -315,7 +328,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
 
                   {/* Right content varies by state */}
                   {isCancelling ? (
-                    <span className="shrink-0 text-[11px] font-semibold text-destructive whitespace-nowrap">
+                    <span className="hidden shrink-0 whitespace-nowrap text-[11px] font-semibold text-destructive min-[420px]:inline">
                       Release to cancel
                     </span>
                   ) : isLocked ? (
@@ -337,7 +350,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                     </div>
                   ) : (
                     /* Hold recording: slide-to-cancel hint */
-                    <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground/60 whitespace-nowrap">
+                    <span className="hidden shrink-0 items-center gap-0.5 whitespace-nowrap text-[11px] text-muted-foreground/60 min-[420px]:flex">
                       <ChevronLeft className="h-3 w-3" />
                       Slide to cancel
                     </span>
@@ -350,7 +363,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                     <PopoverTrigger asChild>
                       <Button
                         type="button" variant="ghost" size="icon"
-                        className="h-10 w-10 shrink-0 rounded-full text-muted-foreground/60 hover:text-primary hover:bg-transparent"
+                        className="h-9 w-9 shrink-0 rounded-full text-muted-foreground/60 hover:bg-transparent hover:text-primary sm:h-10 sm:w-10"
                         aria-label="Emoji"
                       >
                         <Smile className="h-5 w-5" />
@@ -382,7 +395,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               <Button
                 type="button"
                 size="icon"
-                className="h-11 w-11 shrink-0 rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25 transition-transform duration-150 active:scale-95 hover:bg-primary/90"
+                    className="h-10 w-10 shrink-0 rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25 transition-transform duration-150 hover:bg-primary/90 active:scale-95 sm:h-11 sm:w-11"
                 onClick={() => void handleLockedSend()}
                 aria-label="Send voice note"
               >
@@ -394,7 +407,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                 type="submit"
                 size="icon"
                 className={cn(
-                  "h-11 w-11 shrink-0 rounded-full shadow-md transition-transform duration-150 active:scale-95",
+                  "h-10 w-10 shrink-0 rounded-full shadow-md transition-transform duration-150 active:scale-95 sm:h-11 sm:w-11",
                   "bg-primary text-primary-foreground shadow-primary/25 hover:bg-primary/90",
                   "disabled:opacity-40 disabled:cursor-not-allowed"
                 )}
@@ -423,7 +436,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-11 w-11 shrink-0 select-none rounded-full transition-all duration-150 motion-reduce:transition-none",
+                    "h-10 w-10 shrink-0 select-none rounded-full transition-all duration-150 motion-reduce:transition-none sm:h-11 sm:w-11",
                     isRecordingHold
                       ? "scale-110 bg-red-500 text-white shadow-lg shadow-red-500/35 hover:bg-red-500"
                       : isCancelling
@@ -433,6 +446,12 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                   onPointerDown={(e) => void handleMicPointerDown(e)}
                   onPointerMove={handleMicPointerMove}
                   onPointerUp={(e) => void handleMicPointerUp(e)}
+                  onPointerCancel={handleMicPointerCancel}
+                  onLostPointerCapture={() => {
+                    if (holdPointerIdRef.current !== null) {
+                      handleMicPointerCancel();
+                    }
+                  }}
                   disabled={isSending}
                   aria-label={
                     isRecordingHold

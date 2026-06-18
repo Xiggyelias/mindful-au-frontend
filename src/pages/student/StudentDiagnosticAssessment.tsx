@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { WellnessCheckInIntro } from "@/components/assessment/WellnessCheckInIntro";
 import { WellnessCheckInQuestion } from "@/components/assessment/WellnessCheckInQuestion";
@@ -295,7 +294,7 @@ const StudentDiagnosticAssessment = () => {
     }
 
     loadQuestionnaire();
-  }, [user?.id, user?.needs_assessment]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.needs_assessment]);
 
   useEffect(() => {
     if (step === "results") {
