@@ -587,9 +587,9 @@ const StudentVideoCall = () => {
       activeAppointmentId,
       isOnline,
       isSignalingReady,
-      loadUpcomingVideoAppointments,
       startAudioCall,
       startCall,
+      loadUpcomingVideoAppointments,
       user?.profile?.anonymous_mode,
     ]
   );
@@ -764,7 +764,7 @@ const StudentVideoCall = () => {
     Boolean(localStream && activeAppointmentId && activeAppointmentId !== appointmentId);
 
   return (
-    <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
+    <div className="h-screen bg-background overflow-hidden">
       <DashboardSidebar
         items={[...studentNavItems]}
         userType="student"
@@ -775,7 +775,7 @@ const StudentVideoCall = () => {
       />
 
       <div className={cn(
-        "h-full min-w-0 transition-all duration-500",
+        "transition-all duration-500",
         isConnected ? "lg:pl-0" : "lg:pl-72"
       )}>
         {!isConnected && (
@@ -787,7 +787,7 @@ const StudentVideoCall = () => {
 
         <main className={cn(
           "transition-all duration-500",
-          isConnected ? "h-full p-0" : "mx-auto h-[calc(100dvh-64px)] max-w-full p-3 sm:h-[calc(100dvh-80px)] sm:p-4 lg:p-6"
+          isConnected ? "p-0 h-screen" : "p-4 lg:p-6 max-w-full mx-auto h-[calc(100vh-80px)]"
         )}>
           <div className={cn(
             "grid gap-6 transition-all duration-500 h-full",
@@ -801,7 +801,7 @@ const StudentVideoCall = () => {
               variant="glass"
               className={cn(
                 "overflow-hidden transition-all duration-500 border-none",
-                isConnected ? "h-full rounded-none shadow-2xl sm:rounded-3xl" : "min-h-[60svh] sm:min-h-[72svh] xl:h-[calc(100dvh-160px)]"
+                isConnected ? "h-full rounded-none sm:rounded-3xl shadow-2xl" : "min-h-[72vh] xl:h-[calc(100vh-160px)]"
               )}
             >
               <CardContent className={cn(

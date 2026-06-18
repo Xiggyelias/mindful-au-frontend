@@ -19,15 +19,11 @@ jobs:
           path: mindful-au-frontend
 
       - name: Checkout backend
-        env:
-          CMS_BACKEND_REPOSITORY: ${{ vars.CMS_BACKEND_REPOSITORY || format('{0}/mindful-au-backend', github.repository_owner) }}
-          CMS_BACKEND_REPO_TOKEN: ${{ secrets.CMS_BACKEND_REPO_TOKEN }}
-        run: |
-          if [ -n "${CMS_BACKEND_REPO_TOKEN}" ]; then
-            git clone --depth 1 "https://x-access-token:${CMS_BACKEND_REPO_TOKEN}@github.com/${CMS_BACKEND_REPOSITORY}.git" mindful-au-backend
-          else
-            git clone --depth 1 "https://github.com/${CMS_BACKEND_REPOSITORY}.git" mindful-au-backend
-          fi
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.CMS_BACKEND_REPOSITORY || format('{0}/mindful-au-backend', github.repository_owner) }}
+          token: ${{ secrets.CMS_BACKEND_REPO_TOKEN || github.token }}
+          path: mindful-au-backend
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -39,7 +35,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: mindful-au-frontend/package-lock.json
 
@@ -76,7 +72,7 @@ jobs:
 
       - name: Run backend test suite
         working-directory: mindful-au-backend
-        run: composer test
+        run: php artisan test
 
       - name: Install frontend dependencies
         working-directory: mindful-au-frontend

@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  LayoutDashboard,
   MessageSquare,
   Calendar,
   Users,
   Brain,
+  Video,
   FileText,
   Heart,
   Search,

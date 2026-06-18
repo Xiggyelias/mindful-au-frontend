@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  LayoutDashboard,
   MessageSquare,
   Calendar,
+  Users,
+  Brain,
   Video,
   FileText,
+  Heart,
   Loader2,
   CheckCircle2,
   Trash2,
   Search,
   Mic,
   SlidersHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { format, formatDistanceToNow } from "date-fns";
@@ -100,6 +105,7 @@ function formatRelativeUpdated(value: unknown): string {
 function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const id = String(s.id ?? "");
   const student = s.student;
+  const isAnon = isAnonymousSessionFlag(s.is_anonymous);
   const isMasked = isAnonymousIdentityMaskedFromViewer(s as any);
 
   let studentLabel = "Student";

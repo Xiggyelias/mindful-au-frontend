@@ -12,16 +12,11 @@ type LazyEmojiPickerProps = {
 export const LazyEmojiPicker: React.FC<LazyEmojiPickerProps> = ({ onEmojiClick }) => (
   <Suspense
     fallback={
-      <div className="flex h-[22rem] w-[min(21rem,calc(100vw-1rem))] items-center justify-center rounded-2xl border border-border/50 bg-background shadow-xl">
+      <div className="flex h-[22rem] w-[21rem] items-center justify-center rounded-2xl border border-border/50 bg-background shadow-xl">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     }
   >
-    <EmojiPicker
-      onEmojiClick={onEmojiClick}
-      theme={AUTO_THEME}
-      lazyLoadEmojis
-      width="min(21rem, calc(100vw - 1rem))"
-    />
+    <EmojiPicker onEmojiClick={onEmojiClick} theme={AUTO_THEME} lazyLoadEmojis />
   </Suspense>
 );

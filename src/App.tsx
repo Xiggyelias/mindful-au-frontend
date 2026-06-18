@@ -20,12 +20,8 @@ import { lazyWithRetry, clearLazyRetryGuard } from "@/lib/lazyWithRetry";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 
-// Preload critical pages after initial render for instant navigation
-// This runs after the app mounts and doesn't block the initial render
 const preloadCriticalPages = () => {
-  // Use requestIdleCallback to not block the main thread
   const doPreload = () => {
-    // Preload the most visited pages
     const preloaders = [
       () => import("./pages/student/StudentDashboard"),
       () => import("./pages/student/StudentChat"),
@@ -58,10 +54,6 @@ const StudentVideoCall = lazyWithRetry(() => import("./pages/student/StudentVide
 const StudentHistory = lazyWithRetry(() => import("./pages/student/StudentHistory"));
 const StudentWellness = lazyWithRetry(() => import("./pages/student/StudentWellness"));
 const StudentDiagnosticAssessment = lazyWithRetry(() => import("./pages/student/StudentDiagnosticAssessment"));
-// Dev-only OpenRouter chat tester. Tree-shaken out of production builds.
-const ChatTestPage = import.meta.env.DEV
-  ? lazyWithRetry(() => import("./pages/ChatTestPage").then((mod) => ({ default: mod.ChatTestPage })))
-  : null;
 
 const CounselorLogin = lazyWithRetry(() => import("./pages/counselor/CounselorLogin"));
 const CounselorRegister = lazyWithRetry(() => import("./pages/counselor/CounselorRegister"));
@@ -106,7 +98,6 @@ const queryClient = new QueryClient({
 const RouteLoader = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
     <div className="flex flex-col items-center gap-3">
-      {/* Faster spinner - use CSS animation instead of border trick */}
       <div className="relative h-10 w-10">
         <div className="absolute inset-0 rounded-full border-3 border-primary/20" />
         <div className="absolute inset-0 rounded-full border-3 border-primary border-t-transparent animate-spin" />
@@ -137,7 +128,6 @@ const LazyRouteErrorFallback = () => (
 );
 
 const App = () => {
-  // Trigger critical pages preload after initial render
   useEffect(() => {
     preloadCriticalPages();
   }, []);
@@ -433,9 +423,6 @@ const App = () => {
                     </ProtectedRoute>
                   }
                 />
-                {import.meta.env.DEV && ChatTestPage && (
-                  <Route path="/chat-test" element={<ChatTestPage />} />
-                )}
                 <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>

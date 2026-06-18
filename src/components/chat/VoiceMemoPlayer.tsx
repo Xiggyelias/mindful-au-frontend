@@ -64,7 +64,7 @@ export function VoiceMemoPlayer({
   bubbleRole,
   className,
   isUploading = false,
-  uploadProgress: _uploadProgress = 0,
+  uploadProgress = 0,
   uploadFailed = false,
   isDeleting = false,
   onRetry,
@@ -77,7 +77,6 @@ export function VoiceMemoPlayer({
   const [speed, setSpeed] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [preloadMode, setPreloadMode] = useState<"metadata" | "none">("metadata");
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
 
   // Web Audio API for live frequency visualisation during playback
@@ -180,7 +179,6 @@ export function VoiceMemoPlayer({
     setCurrent(0);
     setDuration(0);
     setSpeed(1);
-    setPlaybackError(null);
     // Tear down Web Audio so it's re-created on next play (new src = new stream)
     teardownAnalyser();
   }, [src, teardownAnalyser]);
@@ -228,17 +226,11 @@ export function VoiceMemoPlayer({
       el.currentTime = 0;
       stopLevelLoop();
     };
-    const onAudioError = () => {
-      setPlaying(false);
-      stopLevelLoop();
-      setPlaybackError("Audio unavailable");
-    };
 
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onDur);
     el.addEventListener("durationchange", onDur);
     el.addEventListener("ended", onEnd);
-    el.addEventListener("error", onAudioError);
 
     // If the audio metadata is already loaded (cached/local blob), set duration immediately
     if (Number.isFinite(el.duration) && el.duration > 0) {
@@ -249,7 +241,7 @@ export function VoiceMemoPlayer({
       // Force load to override browser lazy-loading optimizations on hidden media elements
       try {
         el.load();
-      } catch {
+      } catch (e) {
         // ignore
       }
     }
@@ -259,24 +251,18 @@ export function VoiceMemoPlayer({
       el.removeEventListener("loadedmetadata", onDur);
       el.removeEventListener("durationchange", onDur);
       el.removeEventListener("ended", onEnd);
-      el.removeEventListener("error", onAudioError);
     };
   }, [src, isDragging, stopLevelLoop]);
 
   const togglePlay = useCallback(async () => {
     const el = audioRef.current;
     if (!el || isUploading || uploadFailed) return;
-    if (!src.trim()) {
-      setPlaybackError("Audio unavailable");
-      return;
-    }
     if (playing) {
       el.pause();
       setPlaying(false);
       stopLevelLoop();
       return;
     }
-    setPlaybackError(null);
     // Wire up analyser on first play (requires user gesture)
     setupAnalyser();
     // Resume suspended AudioContext (browser autoplay policy)
@@ -290,9 +276,8 @@ export function VoiceMemoPlayer({
     } catch {
       setPlaying(false);
       stopLevelLoop();
-      setPlaybackError("Could not play audio");
     }
-  }, [playing, isUploading, uploadFailed, setupAnalyser, src, startLevelLoop, stopLevelLoop]);
+  }, [playing, isUploading, uploadFailed, setupAnalyser, startLevelLoop, stopLevelLoop]);
 
   const seekTo = useCallback((clientX: number) => {
     const el = audioRef.current;
@@ -512,18 +497,11 @@ export function VoiceMemoPlayer({
 
         {/* Time + speed + optional delete */}
         <div className="flex items-center justify-between gap-1">
-          {playbackError ? (
-            <span className={cn("inline-flex min-w-0 items-center gap-1 truncate text-[11px] font-semibold leading-none", isOutgoing ? "text-primary-foreground/90" : "text-destructive")}>
-              <AlertTriangle className="h-3 w-3 shrink-0" />
-              {playbackError}
-            </span>
-          ) : (
-            <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
-              {playing || current > 0
-                ? formatPlayTime(current)
-                : duration > 0 ? formatPlayTime(duration) : "—:——"}
-            </span>
-          )}
+          <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>
+            {playing || current > 0
+              ? formatPlayTime(current)
+              : duration > 0 ? formatPlayTime(duration) : "—:——"}
+          </span>
           <div className="flex items-center gap-1">
             <button
               type="button"

@@ -22,22 +22,6 @@ export const clearLazyRetryGuard = (): void => {
   }
 };
 
-const clearStaleAppCaches = async (): Promise<void> => {
-  try {
-    const cacheNames = await caches.keys();
-    await Promise.all(cacheNames.map((name) => caches.delete(name)));
-  } catch {
-    /* best effort */
-  }
-
-  try {
-    const registrations = await navigator.serviceWorker?.getRegistrations?.();
-    await Promise.all((registrations ?? []).map((registration) => registration.unregister()));
-  } catch {
-    /* best effort */
-  }
-};
-
 /**
  * React.lazy wrapper for Vite code-split routes.
  * On stale chunk errors (common after deploy), reload once then surface the error
@@ -71,8 +55,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
         } catch {
           /* ignore */
         }
-        await clearStaleAppCaches();
-        window.location.replace(window.location.href);
+        window.location.reload();
       }
 
       // Never return a promise that never resolves — that leaves Suspense on "Loading page..." forever.

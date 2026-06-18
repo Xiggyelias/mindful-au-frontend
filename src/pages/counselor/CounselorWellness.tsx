@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
+  Users,
   Brain,
-  Coffee,
+  Video,
+  FileText,
   Heart,
+  Coffee,
   Sun,
   Loader2,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";

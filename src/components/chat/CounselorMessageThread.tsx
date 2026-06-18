@@ -119,14 +119,7 @@ const CounselorMessageRow = React.memo(
           </div>
         )}
 
-        <div
-          className={cn(
-            "group flex min-w-0 flex-col gap-0.5",
-            isMine
-              ? "max-w-[min(92%,36rem)] max-[380px]:max-w-[calc(100%-0.25rem)] items-end"
-              : "max-w-[calc(100%-3rem)] items-start sm:max-w-[min(92%,36rem)]"
-          )}
-        >
+        <div className={`group flex min-w-0 max-w-[min(92%,36rem)] flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
           {showAvatar && (
             <div className={cn("mb-0.5 flex max-w-full items-center gap-1.5 px-1", isMine ? "justify-end" : "justify-start")}>
               <span className="truncate text-[11px] font-semibold text-foreground/80">{senderName}</span>

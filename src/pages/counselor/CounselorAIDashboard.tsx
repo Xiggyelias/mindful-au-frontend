@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import {
+  LayoutDashboard,
+  MessageSquare,
+  Calendar,
+  Users,
+  Brain,
+  Video,
+  FileText,
+  Heart,
   AlertTriangle,
   TrendingUp,
   Loader2,
