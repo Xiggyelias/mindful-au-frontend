@@ -27,8 +27,10 @@ export default defineConfig({
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("@tanstack/react-query")) return "react-query";
           if (id.includes("recharts")) return "charts";
+          if (id.includes("framer-motion")) return "framer-motion";
           // Keep lucide with consuming chunks — a separate icons-lucide chunk caused
           // ReferenceError (e.g. Heart is not defined) on lazy-loaded routes.
+          if (id.includes("lucide-react")) return;
           if (id.includes("date-fns")) return "date-fns";
           if (id.includes("axios")) return "axios";
           return "vendor";

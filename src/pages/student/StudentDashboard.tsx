@@ -54,7 +54,6 @@ const StudentDashboard = () => {
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -92,10 +91,9 @@ const StudentDashboard = () => {
       if (!isMounted) return;
       
       try {
-        setStatsLoading(true);
         setStatsError(null);
         
-        const [sessions, appointments, summary, moodData] = await Promise.all([
+        const [sessions, appointments, summary, moodResponse] = await Promise.all([
           api.getSessions({ lightweight: true }),
           api.getAppointments(),
           api.getStudentWellnessSummary().catch(() => null),
@@ -131,8 +129,8 @@ const StudentDashboard = () => {
         });
         setUpcomingAppointments(upcomingApts);
         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
-        if (moodData?.log?.mood) {
-          setDailyMood(moodData.log.mood as StudentMood);
+        if (moodResponse?.log?.mood) {
+          setDailyMood(moodResponse.log.mood as StudentMood);
         } else {
           setDailyMood(null);
         }
@@ -142,10 +140,6 @@ const StudentDashboard = () => {
         setStatsError(errorMessage);
         if (import.meta.env.DEV) {
           console.error('Failed to load stats:', error);
-        }
-      } finally {
-        if (isMounted) {
-          setStatsLoading(false);
         }
       }
     };
@@ -394,10 +388,9 @@ const StudentDashboard = () => {
                   if (user) {
                     const loadStats = async () => {
                       try {
-                        setStatsLoading(true);
                         setStatsError(null);
                         
-                        const [sessions, appointments, summary, moodData] = await Promise.all([
+                        const [sessions, appointments, summary] = await Promise.all([
                           api.getSessions({ lightweight: true }),
                           api.getAppointments(),
                           api.getStudentWellnessSummary().catch(() => null),
@@ -433,8 +426,6 @@ const StudentDashboard = () => {
                       } catch (error) {
                         const errorMessage = error instanceof Error ? error.message : "Failed to reload statistics";
                         setStatsError(errorMessage);
-                      } finally {
-                        setStatsLoading(false);
                       }
                     };
                     loadStats();

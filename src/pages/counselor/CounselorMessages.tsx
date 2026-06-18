@@ -1,23 +1,15 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  LayoutDashboard,
   MessageSquare,
-  Calendar,
-  Users,
   Brain,
-  Video,
-  FileText,
-  Heart,
   Search,
   Shield,
-  ShieldCheck,
   ArrowUpCircle,
   Loader2,
   AlertTriangle,
   X,
   User,
-  UserCircle2,
   Menu,
   MoreHorizontal,
   Pin,
@@ -52,7 +44,6 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { detectCrisisTermsInText, isE2EHandshakeEnvelopeContent } from "@/lib/crisisTerms";
 import {
   formatInDisplayZone,
-  isThisYearInDisplayZone,
   isTodayInDisplayZone,
   isYesterdayInDisplayZone,
 } from "@/lib/displayTimezone";
@@ -61,7 +52,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -75,11 +65,6 @@ import {
   isCounselorChatListableStudentSession,
 } from "@/lib/anonymousMode";
 import { canDeleteMessageForEveryone } from "@/lib/chatDeletion";
-
-const LOOKS_LIKE_E2E_CIPHER = (s: string): boolean => {
-  const t = s.trim();
-  return t.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(t);
-};
 
 const SESSION_POLL_INTERVAL_MS = 12_000;
 const CHAT_LIST_TIMEOUT_MS = 30000;
@@ -324,7 +309,6 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [isSwitchingChat, setIsSwitchingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -500,7 +484,6 @@ const CounselorMessages = () => {
 
   // Voice recording functionality
   const {
-    isRecording,
     isPaused,
     recording,
     recordingTime,
@@ -1449,46 +1432,6 @@ const CounselorMessages = () => {
       toast.error(getApiErrorMessage(error, "Failed to reveal identity."));
     } finally {
       setIsRevealingIdentity(false);
-    }
-  };
-
-  const handleSwitchToDirectChat = async () => {
-    if (selectedChat?.isPeerAssigned && selectedSessionId) {
-      toast.info("You are already in this shared case room. The peer counselor remains assigned.");
-      return;
-    }
-
-    if (!selectedChat?.studentId) {
-      toast.error("Cannot resolve student details for this chat.");
-      return;
-    }
-    const studentId = selectedChat.studentId;
-    setIsSwitchingChat(true);
-    try {
-      const existingDirect = chats.find(
-        (c) =>
-          c.studentId === studentId &&
-          !c.isPeerAssigned &&
-          c.status !== "completed" &&
-          c.status !== "cancelled"
-      );
-
-      if (existingDirect) {
-        selectConversationById(existingDirect.id);
-        toast.info("Switched to your direct counselor chat.");
-      } else {
-        const newSession = await api.createSessionAsCounselor({
-          student_id: studentId,
-          session_type: "chat",
-        });
-        toast.success("Created a new direct counselor conversation.");
-        await loadSessions(false);
-        selectConversationById(newSession.id);
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to switch to direct chat.");
-    } finally {
-      setIsSwitchingChat(false);
     }
   };
 
