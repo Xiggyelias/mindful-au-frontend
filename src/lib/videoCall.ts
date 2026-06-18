@@ -1,5 +1,3 @@
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
-
 export const VIDEO_CALL_LIMITS = {
   minDurationMinutes: 15,
   maxDurationMinutes: 120,
@@ -147,18 +145,13 @@ export const prefersAudioOnlyOnlineCall = (notes?: string | null): boolean => {
 };
 
 /**
- * Audio-only WebRTC for this appointment: explicit `call_type` audio, legacy "Online audio" notes,
- * or **anonymous online** bookings (matches Laravel: anonymous + non-physical ⇒ audio-only).
- * Anonymous **in-person** rows are not forced to audio here.
+ * Audio-only WebRTC for this appointment: explicit `call_type` audio, legacy "Online audio" notes.
  */
 export const isAppointmentAudioOnly = (
   apt?: { is_anonymous?: boolean; call_type?: string | null; notes?: string | null } | null
 ): boolean => {
   if (!apt) {
     return false;
-  }
-  if (isAnonymousSessionFlag(apt.is_anonymous) && isVideoEnabledAppointment(apt.notes)) {
-    return true;
   }
   if (String(apt.call_type || "").toLowerCase() === "audio") {
     return true;

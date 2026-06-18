@@ -130,7 +130,7 @@ export function IncomingCallOverlay({
       : null;
 
   const callerInitial = (call.callerName?.[0] ?? "?").toUpperCase();
-  const callerDisplayName = isAnonymous ? "Anonymous User" : call.callerName;
+  const callerDisplayName = call.callerName || (isAnonymous ? "Anonymous User" : "User");
 
   // Countdown progress 1 → 0 over AUTO_DISMISS_MS
   const startAtRef = useRef(Date.now());

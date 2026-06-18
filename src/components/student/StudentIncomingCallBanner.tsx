@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
-import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { effectiveWebRtcCallMode } from "@/lib/videoCall";
 import { toast } from "sonner";
@@ -49,7 +48,7 @@ export function StudentIncomingCallBanner({
     fetchCalls,
     onActiveChange,
     buildNotification: (call) => {
-      const displayName = isAnonymousSessionFlag(call.is_anonymous) ? "Your Counselor" : call.counselor_name;
+      const displayName = call.counselor_name || "Your Counselor";
       return {
         title: effectiveWebRtcCallMode(call) === "video" ? "Incoming video call" : "Incoming audio call",
         body: `${displayName} is calling you`,
@@ -115,8 +114,8 @@ export function StudentIncomingCallBanner({
     const overlayCall: IncomingCallOverlayCall = {
       id: call.id,
       appointment_id: call.appointment_id,
-      callerName: call.counselor_name,
-      is_anonymous: call.is_anonymous,
+      callerName: call.counselor_name || "Your Counselor",
+      is_anonymous: false, // Don't mask counselor from student
       call_type: call.call_type,
       scheduled_at: call.scheduled_at,
     };
@@ -179,8 +178,7 @@ export function StudentIncomingCallBanner({
                     Incoming session call
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="truncate text-lg font-semibold leading-tight">{callAnonymous ? "Your Counselor" : call.counselor_name}</p>
-                    {callAnonymous && <AnonymousModeIndicator variant="badge" audience="student" />}
+                    <p className="truncate text-lg font-semibold leading-tight">{call.counselor_name || "Your Counselor"}</p>
                   </div>
                   <div
                     className={cn(
