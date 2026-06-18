@@ -39,7 +39,6 @@ import {
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
-  isAnonymousIdentityMaskedFromViewer,
   isAnonymousBookingForParticipant,
   isProfileAnonymousMode,
 } from "@/lib/anonymousMode";
@@ -317,9 +316,6 @@ const StudentVideoCall = () => {
   }, [activeAppointment]);
 
   const remoteParticipantName = useMemo(() => {
-    if (activeAppointment && isAnonymousIdentityMaskedFromViewer(activeAppointment)) {
-      return "Counselor (Private Session)";
-    }
     return getParticipantName(activeAppointment?.counselor, "Counselor");
   }, [activeAppointment]);
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
@@ -593,6 +589,8 @@ const StudentVideoCall = () => {
       isSignalingReady,
       startAudioCall,
       startCall,
+      loadUpcomingVideoAppointments,
+      user?.profile?.anonymous_mode,
     ]
   );
 
@@ -946,15 +944,9 @@ const StudentVideoCall = () => {
                                 <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
                               </div>
                             )}
-                            {activeAppointment && isAnonymousIdentityMaskedFromViewer(activeAppointment) && (
+                            {activeAppointment && isAnonymousBookingForParticipant(activeAppointment) && (
                               <div className="flex flex-wrap gap-2 pt-1">
                                 <AnonymousModeIndicator variant="badge" />
-                                <Badge
-                                  variant="outline"
-                                  className="border-red-600/80 bg-black/50 text-[10px] font-medium text-white"
-                                >
-                                  Audio only
-                                </Badge>
                               </div>
                             )}
                           </div>
@@ -1167,11 +1159,6 @@ const StudentVideoCall = () => {
                   <p className="text-sm text-muted-foreground line-clamp-2">
                     Pick the session you want to open. The main panel updates like a live call room.
                   </p>
-                  {activeAppointment && activeAppointmentAnonymousBooking && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400/90">
-                      Anonymous online bookings are audio-only (no video). Your profile default does not change this session.
-                    </p>
-                  )}
                 </CardHeader>
                 <CardContent className="space-y-3 p-4 pt-0">
                   {isLoading ? (
