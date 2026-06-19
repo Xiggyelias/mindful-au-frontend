@@ -617,7 +617,6 @@ const CounselorMessages = () => {
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
-    sessions: filteredChats,
   });
 
   const {

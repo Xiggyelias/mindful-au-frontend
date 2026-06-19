@@ -160,7 +160,7 @@ export const isAppointmentAudioOnly = (
 };
 
 export type AppointmentCallMediaInput = {
-  is_anonymous?: unknown;
+  is_anonymous?: boolean;
   call_type?: string | null;
   notes?: string | null;
 };

@@ -54,7 +54,7 @@ self.onmessage = async (e: MessageEvent<Inbound>) => {
       }
       key = await crypto.subtle.importKey(
         "raw",
-        keyBytes,
+        keyBytes as any,
         { name: ALGO, length: 256 },
         false,
         ["decrypt"]
@@ -69,7 +69,7 @@ self.onmessage = async (e: MessageEvent<Inbound>) => {
 
     const iv = combined.slice(0, 12);
     const ciphertext = combined.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: ALGO, iv }, key, ciphertext);
+    const decrypted = await crypto.subtle.decrypt({ name: ALGO, iv } as any, key, ciphertext);
     const plaintext = new TextDecoder().decode(decrypted);
     const res: OutboundOk = { id, ok: true, plaintext };
     self.postMessage(res);

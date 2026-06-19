@@ -21,7 +21,8 @@ export function subscribeIncomingCallWake(
 ): () => void {
   const channel = supabase.channel(incomingCallWakeChannelName(userId));
 
-  channel.on("broadcast", { event: INCOMING_CALL_WAKE_BROADCAST }, ({ payload }) => {
+  channel.on("broadcast", { event: INCOMING_CALL_WAKE_BROADCAST }, (env: any) => {
+    const payload = env.payload;
     const row = payload as IncomingCallWakePayload | undefined;
     if (!row || typeof row.appointment_id !== "number") {
       onWake({ appointment_id: 0 });
@@ -30,7 +31,11 @@ export function subscribeIncomingCallWake(
     onWake(row);
   });
 
-  channel.subscribe();
+  channel.subscribe((status: any) => {
+    if (status !== 'SUBSCRIBED') {
+      console.warn(`Incoming call channel subscription status for ${userId}: ${status}`);
+    }
+  });
 
   return () => {
     void channel.unsubscribe();

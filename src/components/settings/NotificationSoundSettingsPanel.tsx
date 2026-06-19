@@ -17,7 +17,12 @@ import {
 export function NotificationSoundSettingsPanel() {
   const [s, setS] = useState(getNotificationSoundSettings);
 
-  useEffect(() => subscribeNotificationSoundSettings(() => setS(getNotificationSoundSettings())), []);
+  useEffect(() => {
+    const unsubscribe = subscribeNotificationSoundSettings(() => setS(getNotificationSoundSettings()));
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
 
   const volumePct = Math.round(s.masterVolume * 100);
 

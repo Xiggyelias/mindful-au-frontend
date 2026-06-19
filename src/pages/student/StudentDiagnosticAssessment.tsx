@@ -548,8 +548,8 @@ const StudentDiagnosticAssessment = () => {
       <DashboardSidebar
         items={
           user?.needs_assessment
-            ? studentNavItems.filter((item) => item.path === "/student/diagnostic-assessment")
-            : studentNavItems
+            ? [...studentNavItems].filter((item) => item.path === "/student/diagnostic-assessment")
+            : [...studentNavItems]
         }
         userType="student"
         userName={userName}
