@@ -25,7 +25,7 @@ import {
   isAppointmentAudioOnly,
   prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
-import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 
 type PagedMeta = {
@@ -154,7 +154,6 @@ const StudentAppointments = () => {
   const location = useLocation();
   const preselectedSlotIdRef = useRef<number | null>(null);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
-  const profileAnonymousMode = isProfileAnonymousMode(user?.profile?.anonymous_mode);
 
   useEffect(() => {
     setAppointmentPage(1);
@@ -175,14 +174,15 @@ const StudentAppointments = () => {
     setEmergencyDialogOpen(false);
     setSlots([]);
     setSelectedSlotId(null);
+    setForm({
+      counselor_id: "",
+      scheduled_at: "",
+      mode: "online",
+      online_media: "video",
+      duration_minutes: 60,
+      is_anonymous: false,
+    });
   }, [user?.id]);
-
-  useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      is_anonymous: profileAnonymousMode,
-    }));
-  }, [profileAnonymousMode]);
 
   useEffect(() => {
     setForm((prev) => {
@@ -826,7 +826,7 @@ const StudentAppointments = () => {
         mode: "online",
         online_media: "video",
         duration_minutes: 60,
-        is_anonymous: profileAnonymousMode,
+        is_anonymous: false,
       });
       setSelectedSlotId(null);
       setSlots([]);
