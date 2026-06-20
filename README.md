@@ -93,16 +93,16 @@ When hosting frontend and backend, set these values explicitly to avoid `Network
 Frontend (`.env` from `.env.example`):
 
 ```env
-VITE_API_URL=https://your-api-domain.com/api
+VITE_API_URL=https://mindfulapi.africau.co.zw/api
 VITE_API_TIMEOUT_MS=45000
 ```
 
 Backend (`../mindful-au-backend/.env` from `../mindful-au-backend/.env.example`):
 
 ```env
-APP_URL=https://your-api-domain.com
-FRONTEND_URL=https://your-frontend-domain.com
-CORS_ALLOWED_ORIGINS=https://your-frontend-domain.com
+APP_URL=https://mindfulapi.africau.co.zw
+FRONTEND_URL=https://counseling.africau.edu
+CORS_ALLOWED_ORIGINS=https://counseling.africau.edu,https://www.counseling.africau.edu
 CORS_SUPPORTS_CREDENTIALS=false
 ```
 

@@ -3,6 +3,7 @@ const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, "");
 const LOCAL_HOST_PATTERN = /^(localhost|127\.0\.0\.1|::1)$/i;
 const VITE_DEV_SERVER_PORTS = new Set(["5173", "4173"]);
 const LOCAL_DEV_API_BASE_URL = "http://127.0.0.1:8000/api";
+const PRODUCTION_API_BASE_URL = "https://mindfulapi.africau.co.zw/api";
 
 const isLoopbackApiUrl = (value: string): boolean => {
   try {
@@ -28,7 +29,6 @@ export const resolveApiBaseUrl = (): string => {
   }
 
   if (typeof window !== "undefined") {
-    const origin = trimTrailingSlash(window.location.origin);
     const hostname = window.location.hostname;
     const port = window.location.port;
 
@@ -37,8 +37,9 @@ export const resolveApiBaseUrl = (): string => {
       return LOCAL_DEV_API_BASE_URL;
     }
 
-    // Production default: frontend and backend share the same host.
-    return `${origin}/api`;
+    // Production default for the deployed AU counseling app. Builds can still
+    // override this with VITE_API_URL for forks, staging, or same-host setups.
+    return PRODUCTION_API_BASE_URL;
   }
 
   return "http://127.0.0.1:8000/api";

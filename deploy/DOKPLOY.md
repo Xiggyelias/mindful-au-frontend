@@ -17,7 +17,7 @@ Set these in Dokploy **Build Arguments** or **Environment Variables** (do not co
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `VITE_API_URL` | Backend API base URL | `https://api.yourdomain.com/api` |
+| `VITE_API_URL` | Backend API base URL | `https://mindfulapi.africau.co.zw/api` |
 | `VITE_API_TIMEOUT_MS` | API request timeout (ms) | `45000` |
 | `VITE_SUPABASE_URL` | Supabase project URL | `https://xxx.supabase.co` |
 | `VITE_SUPABASE_PROJECT_ID` | Supabase project ID | `xxx` |

@@ -13,7 +13,7 @@ RUN npm ci
 COPY . .
 
 # Build args for production env (set at build time in Dokploy)
-ARG VITE_API_URL
+ARG VITE_API_URL=https://mindfulapi.africau.co.zw/api
 ARG VITE_API_TIMEOUT_MS=45000
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PROJECT_ID
