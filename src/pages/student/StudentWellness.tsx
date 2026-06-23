@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TrendingUp, Loader2, Sparkles, Bot } from "lucide-react";
+import { TrendingUp, Loader2, Sparkles, Bot, Heart } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { studentMoodOptions, type StudentMood, studentMoodLabel } from "@/config/studentMoodOptions";
 import { DashboardSidebar } from "@/components/DashboardSidebar";

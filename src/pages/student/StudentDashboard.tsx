@@ -54,7 +54,6 @@ const StudentDashboard = () => {
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [, setStatsLoading] = useState(false);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -391,7 +390,7 @@ const StudentDashboard = () => {
                       try {
                         setStatsError(null);
                         
-                        const [sessions, appointments, summary] = await Promise.all([
+                        const [sessions, appointments, summary, moodData] = await Promise.all([
                           api.getSessions({ lightweight: true }),
                           api.getAppointments(),
                           api.getStudentWellnessSummary().catch(() => null),
@@ -497,8 +496,8 @@ const StudentDashboard = () => {
                       </Button>
                     </div>
                   ) : (
-                    upcomingAppointments.map((apt) => (
-                      <div key={apt.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300">
+                    upcomingAppointments.map((apt, index) => (
+                      <div key={apt.id || index} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300">
                         <div className="h-14 w-14 rounded-2xl bg-primary/10 flex flex-col items-center justify-center text-primary border border-primary/20">
                           {apt.scheduled_at ? (() => {
                             try {

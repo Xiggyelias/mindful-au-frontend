@@ -150,11 +150,11 @@ export function WellnessCheckInResults({
             <p className="mt-3 text-sm text-slate-500">Loading…</p>
           ) : (
             <div className="mt-3 space-y-2">
-              {history.slice(0, 5).map((item) => {
+              {history.slice(0, 5).map((item, index) => {
                 const rs = riskStyle(item.risk_level);
                 return (
                   <div
-                    key={item.id}
+                    key={item.id || index}
                     className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5"
                   >
                     <div>

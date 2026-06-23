@@ -76,25 +76,27 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
-const safeSessionStorage = (action: (storage: Storage) => void | string | null): string | null => {
+const safeSessionStorage = (action: (storage: Storage) => any): string | null => {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return action(window.sessionStorage) ?? null;
+    const res = action(window.sessionStorage);
+    return typeof res === 'string' ? res : null;
   } catch {
     return null;
   }
 };
 
-const safeLocalStorage = (action: (storage: Storage) => void | string | null): string | null => {
+const safeLocalStorage = (action: (storage: Storage) => any): string | null => {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return action(window.localStorage) ?? null;
+    const res = action(window.localStorage);
+    return typeof res === 'string' ? res : null;
   } catch {
     return null;
   }

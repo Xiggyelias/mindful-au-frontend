@@ -98,7 +98,7 @@ export async function registerPushSubscriptionWithServer(): Promise<{ ok: boolea
   try {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapid.publicKey),
+      applicationServerKey: urlBase64ToUint8Array(vapid.publicKey) as any,
     });
     logWebPushDebug("subscribed", subscription.endpoint?.slice(0, 48) + "…");
   } catch (err) {

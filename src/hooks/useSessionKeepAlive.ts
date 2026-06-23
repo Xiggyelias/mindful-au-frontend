@@ -115,14 +115,14 @@ export const useSessionKeepAlive = ({
       try {
         const response = await api.touchSession(currentSessionKey, { timeout_ms: 5000 });
 
-        if (response.data?.ok) {
+        if (response?.ok) {
           const touchedAt = Date.now();
           lastTouchTimeRef.current = touchedAt;
           lastTouchBySessionRef.current.set(currentSessionKey, touchedAt);
           backoffUntilBySessionRef.current.delete(currentSessionKey);
           onSuccessRef.current?.();
         } else {
-          onErrorRef.current?.(new Error(`Keep-alive failed: ${response.data?.message || 'Unknown error'}`));
+          onErrorRef.current?.(new Error(`Keep-alive failed: Unknown error`));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

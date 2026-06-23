@@ -1,5 +1,3 @@
-import type { ChatMessage } from "@/hooks/useEncryptedChat";
-
 export const normalizeChatRole = (role?: string | null) => {
   const value = String(role || "").trim();
   if (value === "peer_counselor" || value === "counselor" || value === "student" || value === "admin") {
@@ -47,7 +45,7 @@ export const chatAvatarClass = (role?: string | null) => {
   }
 };
 
-export const chatSenderDisplayName = (message: ChatMessage, fallback = "Participant") => {
+export const chatSenderDisplayName = (message: any, fallback = "Participant") => {
   const sender = message.sender as { name?: string } | undefined;
   const name = String(
     message.sender_display_name ||
