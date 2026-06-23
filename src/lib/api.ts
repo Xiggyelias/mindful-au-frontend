@@ -1428,6 +1428,7 @@ class ApiClient {
   async updateEmergencyRequest(id: number | string, data: {
     status?: 'queued' | 'assigned' | 'resolved' | 'cancelled';
     assigned_to?: number | null;
+    prepare_slot?: boolean;
   }) {
     const response = await this.client.patch(`/emergency-requests/${id}`, data);
     return response.data;

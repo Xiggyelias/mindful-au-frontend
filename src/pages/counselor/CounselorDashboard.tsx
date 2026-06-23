@@ -50,6 +50,73 @@ const toList = <T,>(payload: unknown): T[] => {
   return [];
 };
 
+type RiskCounts = {
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+};
+
+type DashboardDiagnosticsSummary = {
+  students_observed: number;
+  high_or_critical: number;
+  worsening_trend: number;
+  by_risk_level: RiskCounts;
+};
+
+const emptyRiskCounts = (): RiskCounts => ({
+  low: 0,
+  medium: 0,
+  high: 0,
+  critical: 0,
+});
+
+const normalizeRiskLevel = (value: unknown): keyof RiskCounts | null => {
+  const level = String(value || "").toLowerCase();
+  return level === "low" || level === "medium" || level === "high" || level === "critical"
+    ? level
+    : null;
+};
+
+const normalizeDiagnosticsSummary = (payload: unknown): DashboardDiagnosticsSummary => {
+  const source = payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
+  const summary = source.summary && typeof source.summary === "object" ? source.summary : {};
+  const byRisk = emptyRiskCounts();
+
+  const byRiskLevel = source.by_risk_level && typeof source.by_risk_level === "object" ? source.by_risk_level : {};
+  Object.entries(byRiskLevel).forEach(([level, count]) => {
+    const normalized = normalizeRiskLevel(level);
+    if (normalized) {
+      byRisk[normalized] = Number(count) || 0;
+    }
+  });
+
+  const distribution = Array.isArray(source.risk_distribution) ? source.risk_distribution : [];
+  distribution.forEach((item) => {
+    const normalized = normalizeRiskLevel(item?.risk_level);
+    if (normalized) {
+      byRisk[normalized] = Number(item?.count) || 0;
+    }
+  });
+
+  const observations = Array.isArray(source.student_observations) ? source.student_observations : [];
+  if (!distribution.length && !Object.keys(byRiskLevel).length && observations.length) {
+    observations.forEach((item) => {
+      const normalized = normalizeRiskLevel(item?.risk_level);
+      if (normalized) {
+        byRisk[normalized] += 1;
+      }
+    });
+  }
+
+  return {
+    students_observed: Number(summary.students_observed ?? source.students_observed ?? observations.length) || 0,
+    high_or_critical: Number(summary.high_or_critical ?? source.high_or_critical ?? byRisk.high + byRisk.critical) || 0,
+    worsening_trend: Number(summary.worsening_trend ?? source.worsening_trend ?? 0) || 0,
+    by_risk_level: byRisk,
+  };
+};
+
 const CounselorDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -118,7 +185,7 @@ const CounselorDashboard = () => {
 
         const [wellnessResult, summaryResult, sessionsResult] = await Promise.allSettled([
           api.getCounselorWellnessSummary(),
-          api.getAIDiagnosticsSummary({ days: 30 }),
+          api.getCounselorDiagnosticDashboard().catch(() => api.getAIDiagnosticsSummary({ days: 30 })),
           loadSessionSnapshot(),
         ]);
 
@@ -131,7 +198,7 @@ const CounselorDashboard = () => {
         }
 
         if (summaryResult.status === "fulfilled") {
-          setDiagnosticsSummary(summaryResult.value || null);
+          setDiagnosticsSummary(normalizeDiagnosticsSummary(summaryResult.value));
         }
 
         const sessionRows =

@@ -345,6 +345,19 @@ const CounselorAlerts = () => {
     }
   };
 
+  const handlePrepareEmergencySlot = async (alertId: number) => {
+    try {
+      setUpdatingEmergencyId(alertId);
+      await api.updateEmergencyRequest(alertId, { prepare_slot: true });
+      toast.success("Emergency slot prepared for the student.");
+      await loadAlerts();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Could not prepare emergency slot.");
+    } finally {
+      setUpdatingEmergencyId(null);
+    }
+  };
+
   const handleResolveEmergency = async (alertId: number) => {
     try {
       setUpdatingEmergencyId(alertId);
@@ -561,7 +574,7 @@ const CounselorAlerts = () => {
                                 size="sm"
                                 variant="default"
                                 className="text-xs h-7"
-                                onClick={() => void handleTakeEmergency(alert.id)}
+                                onClick={() => void handlePrepareEmergencySlot(alert.id)}
                                 disabled={updatingEmergencyId === alert.id}
                               >
                                 {updatingEmergencyId === alert.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Prepare Slot"}
