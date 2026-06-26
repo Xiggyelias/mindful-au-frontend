@@ -30,6 +30,7 @@ import {
   isAnonymousIdentityMaskedFromViewer
 } from "@/lib/anonymousMode";
 import { useAuth } from "@/hooks/useAuth";
+import { useConfirm } from "@/hooks/useConfirm";
 import { toast } from "sonner";
 
 type ApiStudent = {
@@ -143,6 +144,7 @@ function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
 }
 
 const CounselorNotes = () => {
+  const { confirm } = useConfirm();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<CounselorSessionNoteRow[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -250,7 +252,13 @@ const CounselorNotes = () => {
 
   const deleteNote = async (sessionId: string) => {
     if (!canEditNotes) return;
-    if (!confirm("Clear this session's clinical notes?")) return;
+    const confirmed = await confirm({
+      title: "Clear clinical notes?",
+      description: "This will permanently delete the notes for this session. This action cannot be undone.",
+      confirmLabel: "Clear notes",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       setIsDeleting(true);
       await api.deleteSessionNote(sessionId);

@@ -21,7 +21,7 @@ import {
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 
 interface DiagnosticData {
   id: number;
@@ -192,6 +192,16 @@ const CounselorAIDashboard = () => {
     if (!user?.id) return;
     void loadDashboardData();
   }, [user?.id, loadDashboardData]);
+
+  const safeFormatDate = (dateStr: string | null | undefined, fmt = "MMM d, yyyy h:mm a"): string => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      return isValid(d) ? format(d, fmt) : "—";
+    } catch {
+      return "—";
+    }
+  };
 
   const getRiskColor = (riskLevel: string) => {
     return {
@@ -439,7 +449,7 @@ const CounselorAIDashboard = () => {
                               {isMasked && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                             </div>
                             <p className="text-xs text-muted-foreground tabular-nums">
-                              {format(new Date(diagnostic.created_at), "MMM d, yyyy h:mm a")}
+                              {safeFormatDate(diagnostic.created_at)}
                             </p>
                           </div>
                           <div className="flex flex-col gap-2 md:items-end">
@@ -492,7 +502,7 @@ const CounselorAIDashboard = () => {
                         );
                       })()}
                       <p className="text-sm text-muted-foreground mt-1">
-                        Assessment Date: {format(new Date(selectedDiagnostic.created_at), "MMM d, yyyy h:mm a")}
+                        Assessment Date: {safeFormatDate(selectedDiagnostic.created_at)}
                       </p>
                     </div>
 

@@ -260,9 +260,9 @@ const CounselorAppointments = () => {
     void loadSchedules();
   }, [loadSchedules, scheduleOpen]);
 
-  // Reload when user navigates to a different page via pagination
+  // Reload when user navigates via pagination, including back to page 1
   useEffect(() => {
-    if (!user?.id || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
+    if (!user?.id || !hasInitiallyLoadedRef.current) return;
     appointmentPageRef.current = appointmentPage;
     void loadAppointments(true, { force: true });
   }, [appointmentPage, loadAppointments, user?.id]);

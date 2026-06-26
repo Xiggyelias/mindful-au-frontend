@@ -349,7 +349,7 @@ const CounselorStudents = () => {
       }
     };
 
-    createAndNavigate();
+    void createAndNavigate();
   };
 
   const peerCounselorNameById = useMemo(() => {
@@ -756,7 +756,7 @@ const CounselorStudents = () => {
                             size="sm"
                             className="gap-1.5 text-xs"
                             onClick={() => handleMessage(student.id)}
-                            disabled={messagingStudentId !== null}
+                            disabled={messagingStudentId === student.id}
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
                             {messagingStudentId === student.id ? "Opening..." : "Message"}

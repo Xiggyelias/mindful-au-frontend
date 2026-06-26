@@ -142,6 +142,7 @@ const CounselorWellness = () => {
   }, []);
 
   useEffect(() => {
+    if (!user?.id) return;
     void loadWellnessData();
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
@@ -411,7 +412,7 @@ const CounselorWellness = () => {
               </CardHeader>
               <CardContent className="space-y-4">
               {hasCheckedInToday && !showOverrideCheckIn ? (
-                <CardContent className="space-y-6 flex flex-col items-center justify-center py-6 text-center">
+                <div className="space-y-6 flex flex-col items-center justify-center py-6 text-center">
                   <div className="relative flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-10 w-10 animate-bounce" />
                     <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20 animate-ping animate-duration-1000" />
@@ -479,9 +480,9 @@ const CounselorWellness = () => {
                       {todayCheckInLog?.created_at ? `Submitted at ${new Date(todayCheckInLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ""}
                     </p>
                   </div>
-                </CardContent>
+                </div>
               ) : (
-                <CardContent className="space-y-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>Completion</span>
@@ -563,7 +564,7 @@ const CounselorWellness = () => {
                       )}
                     </Button>
                   </div>
-                </CardContent>
+                </div>
               )}
               </CardContent>
             </Card>
