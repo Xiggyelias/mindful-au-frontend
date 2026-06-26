@@ -167,20 +167,29 @@ const StudentDashboard = () => {
     setIsPanicLoading(true);
     try {
       let location: string | undefined;
-      
-      // Try to get location
+
+      // Get location with a hard 2.5-second cap so the alert is never delayed
+      // waiting for GPS. Accept a cached fix up to 60 s old — it is accurate
+      // enough to within a few metres and returns instantly on most devices.
       if (navigator.geolocation) {
         try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          const positionPromise = new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0,
+              timeout: 3000,
+              maximumAge: 60000,
             });
           });
-          location = `${position.coords.latitude},${position.coords.longitude}`;
+          // Race: send the alert after 2.5 s regardless — do not block the user.
+          const position = await Promise.race([
+            positionPromise,
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+          ]);
+          if (position) {
+            location = `${position.coords.latitude},${position.coords.longitude}`;
+          }
         } catch {
-          toast.warning("Location unavailable - we'll send your alert without location data.");
+          // GPS failed — alert goes out immediately without location.
         }
       }
 
