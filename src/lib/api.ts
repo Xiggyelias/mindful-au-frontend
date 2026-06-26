@@ -1513,6 +1513,7 @@ class ApiClient {
     notes?: string;
     is_anonymous?: boolean;
     call_type?: 'audio' | 'video';
+    emergency_request_id?: number;
   }) {
     const response = await this.client.post('/appointments', data);
     return response.data;

@@ -769,17 +769,25 @@ const StudentAppointments = () => {
         return;
       }
 
+      if (isEmergencyAssigned) {
+        // Counselor accepted — open the slot picker directly instead of a dead-end toast.
+        openBookingForAssignedCounselor(activeEmergencyRequest);
+        return;
+      }
+
+      if (isEmergencyAppointmentScheduled) {
+        toast({
+          title: "Emergency appointment is active",
+          description: "Your emergency appointment is already on your schedule.",
+        });
+        setEmergencyDialogOpen(false);
+        return;
+      }
+
+      // Queued — just close the dialog; the banner already shows status.
       toast({
-        title: isEmergencyAppointmentScheduled
-          ? "Emergency appointment is active"
-          : isEmergencyAssigned
-            ? "Emergency request accepted"
-            : "Emergency request already queued",
-        description: isEmergencyAppointmentScheduled
-          ? "Your emergency appointment is already on your schedule."
-          : isEmergencyAssigned
-            ? `${emergencyResponderName} accepted your request. You can pick any available slot now.`
-            : "Counselors have already been alerted. Please wait for a responder to accept the request.",
+        title: "Emergency request already queued",
+        description: "Counselors have already been alerted. Please wait for a responder to accept the request.",
       });
       setEmergencyDialogOpen(false);
       return;
@@ -879,7 +887,15 @@ const StudentAppointments = () => {
       const callTypeForApi =
         form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
       const durationMinutes = minutesBetween(selectedSlot.start_time, selectedSlot.end_time);
-      const basePayload = {
+      const basePayload: {
+        counselor_id: number;
+        counselor_slot_id: number;
+        scheduled_at: string;
+        duration_minutes: number;
+        notes: string;
+        is_anonymous: boolean;
+        emergency_request_id?: number;
+      } = {
         counselor_id: Number(form.counselor_id),
         counselor_slot_id: Number(selectedSlot.id),
         scheduled_at: scheduledAt,
@@ -887,6 +903,11 @@ const StudentAppointments = () => {
         notes: sessionNotes,
         is_anonymous: form.is_anonymous,
       };
+
+      // Link to the emergency request so the backend resolves it automatically.
+      if (isEmergencyBookingMode && activeEmergencyRequest?.id) {
+        basePayload.emergency_request_id = Number(activeEmergencyRequest.id);
+      }
       let created: any;
       try {
         created = await api.createAppointment({
@@ -908,9 +929,20 @@ const StudentAppointments = () => {
           title: "Emergency request queued",
           description: created.message || "This request has been sent to the priority queue.",
         });
+      } else if (isEmergencyBookingMode) {
+        toast({
+          title: "Emergency appointment confirmed!",
+          description: `Your session with ${emergencyResponderName} has been booked.`,
+        });
       } else {
         toast({ title: "Appointment booked!" });
       }
+
+      // Clear emergency booking mode before closing the dialog — setOpenDialog(false)
+      // called from code does NOT trigger onOpenChange, so we must clear here too.
+      pinnedCounselorIdRef.current = null;
+      setIsEmergencyBookingMode(false);
+
       setOpenDialog(false);
       setForm({
         counselor_id: "",
