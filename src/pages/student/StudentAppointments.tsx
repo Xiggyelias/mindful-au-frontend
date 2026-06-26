@@ -153,6 +153,9 @@ const StudentAppointments = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const preselectedSlotIdRef = useRef<number | null>(null);
+  // Holds the counselor ID pinned by openBookingForAssignedCounselor so the
+  // auto-select effect cannot override it when counselorMatches arrives later.
+  const pinnedCounselorIdRef = useRef<string | null>(null);
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
   useEffect(() => {
@@ -515,6 +518,18 @@ const StudentAppointments = () => {
     if (availableCounselors.length === 0) return;
 
     setForm((prev) => {
+      // If openBookingForAssignedCounselor pinned a specific counselor, always
+      // restore that counselor — never let the ML match auto-select override it.
+      const pinned = pinnedCounselorIdRef.current;
+      if (pinned) {
+        const pinnedExists = availableCounselors.some((c: any) => String(c.id) === pinned);
+        if (pinnedExists && prev.counselor_id !== pinned) {
+          return { ...prev, counselor_id: pinned };
+        }
+        // Pinned counselor found and already set — keep it.
+        if (pinnedExists) return prev;
+      }
+
       const selectedExists = availableCounselors.some((c: any) => String(c.id) === prev.counselor_id);
       if (selectedExists) return prev;
       return { ...prev, counselor_id: String(availableCounselors[0].id) };
@@ -705,6 +720,8 @@ const StudentAppointments = () => {
 
   const openBookingForAssignedCounselor = useCallback(
     (request: EmergencyRequest) => {
+      // Prefer the user who accepted the request (assigned_to); fall back to
+      // the counselor originally associated with the session (counselor_id).
       const counselorId = Number(request.assigned_to || request.counselor_id || 0);
       if (!Number.isFinite(counselorId) || counselorId <= 0) {
         toast({
@@ -714,6 +731,9 @@ const StudentAppointments = () => {
         });
         return;
       }
+      // Pin the counselor so the ML auto-select effect cannot override it when
+      // counselorMatches arrives asynchronously after the dialog opens.
+      pinnedCounselorIdRef.current = String(counselorId);
       setSelectedSlotId(null);
       setSlots([]);
       setForm((prev) => ({
@@ -1039,7 +1059,10 @@ const StudentAppointments = () => {
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <h2 className="text-xl font-semibold">Scheduled Sessions</h2>
             <div className="flex flex-wrap gap-2">
-              <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+              <Dialog open={openDialog} onOpenChange={(open) => {
+                if (!open) pinnedCounselorIdRef.current = null;
+                setOpenDialog(open);
+              }}>
                 <DialogTrigger asChild>
                   <Button variant="hero" className="gap-2">
                     <Plus className="h-4 w-4" />
@@ -1049,6 +1072,11 @@ const StudentAppointments = () => {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Book an appointment</DialogTitle>
+                  {pinnedCounselorIdRef.current && emergencyResponderName !== "a counselor" && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Pick any available slot with <span className="font-semibold text-foreground">{emergencyResponderName}</span>
+                    </p>
+                  )}
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
