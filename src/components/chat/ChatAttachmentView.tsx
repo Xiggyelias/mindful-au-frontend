@@ -29,6 +29,8 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [previewUrl, setPreviewUrl] = useState("");
   // Authenticated blob URL used in place of the raw public file_url for voice memos.
   const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
+  const [voiceBlobLoading, setVoiceBlobLoading] = useState(false);
+  const [voiceBlobFailed, setVoiceBlobFailed] = useState(false);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
   const resolved = resolveMessageAttachment(msg);
@@ -51,6 +53,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     setPreviewUrl("");
     refreshingPreviewRef.current = false;
     attemptedPreviewRefreshRef.current = false;
+    setVoiceBlobFailed(false);
   }, [resolvedUrl]);
   // Pass message_type so voice notes are always routed to the audio player even
   // when PHP finfo returns video/webm or audio/x-matroska instead of audio/webm.
@@ -72,6 +75,8 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     let objectUrl: string | null = null;
 
     const fetchBlob = async () => {
+      setVoiceBlobLoading(true);
+      setVoiceBlobFailed(false);
       try {
         const blob = await api.streamVoiceNoteBlob(messageId);
         if (!cancelled) {
@@ -79,8 +84,17 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
           setVoiceAuthBlobUrl(objectUrl);
         }
       } catch {
-        // Fall back to resolvedUrl (public URL) if the stream endpoint fails
-        // (e.g. legacy file that has already been removed from private storage).
+        if (!cancelled) {
+          // Only fall back to resolvedUrl when it's a real HTTP URL (not private://)
+          const isPublicUrl = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://") || resolvedUrl.startsWith("blob:");
+          if (!isPublicUrl) {
+            setVoiceBlobFailed(true);
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setVoiceBlobLoading(false);
+        }
       }
     };
 
@@ -92,8 +106,9 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         URL.revokeObjectURL(objectUrl);
       }
       setVoiceAuthBlobUrl(null);
+      setVoiceBlobLoading(false);
     };
-  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl]);
+  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, resolvedUrl]);
 
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
@@ -283,8 +298,17 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     // Priority order for playback src:
     // 1. Local blob URL (in-flight upload — immediate feedback, no round-trip needed)
     // 2. Authenticated object URL fetched via the stream endpoint (persisted voice memos)
-    // 3. Raw resolvedUrl as last-resort fallback (legacy files / stream endpoint unavailable)
-    const playbackSrc = (msg.localBlobUrl || voiceAuthBlobUrl || resolvedUrl).trim();
+    // 3. Raw resolvedUrl as last-resort fallback ONLY when it's a real HTTP/blob URL
+    const isPublicFallback =
+      resolvedUrl.startsWith("http://") ||
+      resolvedUrl.startsWith("https://") ||
+      resolvedUrl.startsWith("blob:");
+    const playbackSrc = (
+      msg.localBlobUrl ||
+      voiceAuthBlobUrl ||
+      (isPublicFallback ? resolvedUrl : "")
+    ).trim();
+
     return (
       <VoiceMemoPlayer
         src={playbackSrc}
@@ -293,8 +317,9 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         fileSizeBytes={hasSize ? Number(att.file_size) : undefined}
         bubbleRole={isOutgoing ? "outgoing" : "incoming"}
         isUploading={msg.isUploading}
+        isLoadingAudio={voiceBlobLoading && !msg.localBlobUrl}
         uploadProgress={uploadProgress}
-        uploadFailed={msg.uploadFailed}
+        uploadFailed={msg.uploadFailed || (voiceBlobFailed && !playbackSrc)}
         isDeleting={isDeleting}
         onRetry={onRetry}
         onDelete={onDelete}

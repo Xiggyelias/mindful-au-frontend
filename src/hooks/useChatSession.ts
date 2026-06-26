@@ -185,8 +185,9 @@ export const dedupeChatSessions = (items: Session[]): Session[] => {
 };
 
 const logStudentSessionDebug = (event: string, payload: Record<string, unknown>) => {
-  // Keep this visible enough for field debugging without interrupting the UI.
-  console.debug(`[StudentChatSession] ${event}`, payload);
+  if (import.meta.env.DEV) {
+    console.debug(`[StudentChatSession] ${event}`, payload);
+  }
 };
 
 

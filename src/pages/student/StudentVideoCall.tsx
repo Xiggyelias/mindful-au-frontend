@@ -9,7 +9,7 @@ import {
   Mic,
   MicOff,
   Phone,
-  PhoneIncoming,
+
   RefreshCw,
   Video,
   VideoOff,
@@ -81,6 +81,8 @@ const StudentVideoCall = () => {
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
   const [isStartingMode, setIsStartingMode] = useState<CallMode | null>(null);
   const [videoFit, setVideoFit] = useState<"cover" | "fit">("cover");
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimerRef = useRef<number | null>(null);
 
   const [isOnline, setIsOnline] = useState(
     () => (typeof navigator === "undefined" ? true : navigator.onLine)
@@ -606,6 +608,24 @@ const StudentVideoCall = () => {
     await beginCall("audio");
   }, [beginCall]);
 
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = window.setTimeout(() => setControlsVisible(false), 4000);
+  }, []);
+
+  useEffect(() => {
+    if (isConnected && localStream) {
+      showControls();
+    } else {
+      setControlsVisible(true);
+      if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+    }
+    return () => {
+      if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+    };
+  }, [isConnected, localStream, showControls]);
+
   const handleEndCall = async () => {
     const appointmentIdToEnd = activeAppointmentId;
     const activeRow = upcomingAppointments.find((item) => String(item.id) === appointmentIdToEnd);
@@ -818,21 +838,6 @@ const StudentVideoCall = () => {
                   </Alert>
                 )}
 
-                {isIncomingCall && (
-                  <Alert className="border-emerald-500/40 bg-emerald-500/5 text-foreground">
-                    <PhoneIncoming className="h-4 w-4 text-emerald-500" />
-                    <AlertTitle>Incoming {incomingAudioOnly ? "audio" : "video"} call</AlertTitle>
-                    <AlertDescription className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button size="sm" onClick={handleAcceptIncomingCall}>
-                        Accept
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleRejectIncomingCall}>
-                        Reject
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
                 {error && isOnline && (
                   <Alert className={cn(
                     isRelayError 
@@ -897,7 +902,7 @@ const StudentVideoCall = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="relative flex h-full min-h-[inherit] flex-col">
+                    <div className="relative flex h-full min-h-[inherit] flex-col" onClick={showControls}>
                       <div
                         className={cn(
                           "relative flex-1 overflow-hidden",
@@ -927,51 +932,57 @@ const StudentVideoCall = () => {
                         <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-black/45 via-black/15 to-transparent" />
                         <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
 
-                        <div className="absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-4">
-                          <div className="max-w-[60%] space-y-2">
-                            <div className="w-fit rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
+                        <div
+                          className={cn(
+                            "absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-3 transition-opacity duration-500",
+                            isConnected && !controlsVisible ? "opacity-0" : "opacity-100"
+                          )}
+                        >
+                          <div className="space-y-1.5">
+                            <div className="w-fit rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
                               {remoteParticipantName}
-                              {remoteSpeaking ? " • speaking" : ""}
+                              {remoteSpeaking ? " · speaking" : ""}
                             </div>
-                            {activeAppointment?.scheduled_at && (
+                            {!isConnected && activeAppointment?.scheduled_at && (
                               <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
                                 {formatScheduleLabel(activeAppointment.scheduled_at)}
                               </div>
                             )}
-                            {activeAppointment && (
+                            {!isConnected && activeAppointment && (
                               <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
                                 <MapPin className="h-3.5 w-3.5 shrink-0 opacity-90" />
                                 <span className="truncate">{getAppointmentWhereLabel(activeAppointment.notes)}</span>
                               </div>
                             )}
                             {activeAppointment && isAnonymousBookingForParticipant(activeAppointment) && (
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                <AnonymousModeIndicator variant="badge" />
-                              </div>
+                              <AnonymousModeIndicator variant="badge" />
                             )}
                           </div>
 
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="rounded-full border border-white/10 bg-black/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
-                              {callStateLabel}
-                            </div>
-                            <div className={connectionPillClassName}>{connectionPillLabel}</div>
-                            {isConnected && remainingSeconds !== null && (
-                              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
+                          <div className="flex flex-col items-end gap-1.5">
+                            {isConnected && remainingSeconds !== null ? (
+                              <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
                                 <Clock className="mr-1.5 inline h-3.5 w-3.5" />
                                 {formatCallDuration(remainingSeconds)}
                               </div>
-                            )}
+                            ) : !isConnected ? (
+                              <>
+                                <div className="rounded-full border border-white/10 bg-black/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+                                  {callStateLabel}
+                                </div>
+                                <div className={connectionPillClassName}>{connectionPillLabel}</div>
+                              </>
+                            ) : null}
                           </div>
                         </div>
 
-                        <div className="absolute right-4 top-24 z-20 w-32 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-44">
+                        <div className="absolute bottom-28 right-4 z-20 w-28 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-36">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
                             {activeAppointmentAnonymousBooking ? "You (Anonymous)" : "You"}
                             {localSpeaking ? " • speaking" : ""}
                           </div>
 
-                          <div className="aspect-[3/4] overflow-hidden rounded-[20px] bg-[#111b21] sm:aspect-video">
+                          <div className="aspect-video overflow-hidden rounded-[20px] bg-[#111b21]">
                             {localStream && !isVideoOff && !isAudioOnly ? (
                               <video
                                 ref={localVideoRef}
@@ -1036,7 +1047,12 @@ const StudentVideoCall = () => {
                           </div>
                         )}
 
-                        <div className="absolute inset-x-0 bottom-0 z-30 p-4 sm:p-6">
+                        <div
+                          className={cn(
+                            "absolute inset-x-0 bottom-0 z-30 p-4 sm:p-6 transition-opacity duration-500",
+                            isConnected && !controlsVisible ? "opacity-0 pointer-events-none" : "opacity-100"
+                          )}
+                        >
                           <div className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-center gap-3 rounded-[30px] border border-white/10 bg-black/45 px-4 py-3 backdrop-blur-2xl shadow-[0_24px_70px_-24px_rgba(0,0,0,0.9)]">
                             {localStream ? (
                               <>

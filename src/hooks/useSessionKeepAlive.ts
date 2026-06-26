@@ -126,7 +126,7 @@ export const useSessionKeepAlive = ({
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.debug('[SessionKeepAlive] Touch failed:', message);
+        if (import.meta.env.DEV) console.debug('[SessionKeepAlive] Touch failed:', message);
 
         const status = getErrorStatus(error);
         if (status === 410 || status === 404) {

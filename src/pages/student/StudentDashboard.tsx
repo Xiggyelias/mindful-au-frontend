@@ -172,9 +172,13 @@ const StudentDashboard = () => {
       if (navigator.geolocation) {
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+            });
           });
-          location = `${position.coords.latitude}, ${position.coords.longitude}`;
+          location = `${position.coords.latitude},${position.coords.longitude}`;
         } catch {
           toast.warning("Location unavailable - we'll send your alert without location data.");
         }

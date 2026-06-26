@@ -57,9 +57,13 @@ type AlertItem = PanicAlert | RiskAlert | EmergencyRequestAlert;
 
 function extractLatLngFromLocation(raw: string | null | undefined): string | null {
   if (raw == null || typeof raw !== "string") return null;
-  const m = raw.match(/-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?/);
-  if (!m?.[0]) return null;
-  return m[0].replace(/\s*,\s*/, ", ");
+  const m = raw.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return `${m[1]},${m[2]}`;
 }
 
 function buildPanicStudentSummary(log: {
@@ -529,7 +533,7 @@ const AdminAlerts = () => {
                                 onClick={() => {
                                   const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
                                   window.open(
-                                    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
+                                    `https://maps.google.com/?q=${q}`,
                                     "_blank",
                                   );
                                 }}

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
@@ -653,6 +653,10 @@ const StudentAppointments = () => {
     activeEmergencyStatus === "assigned" &&
     Number.isFinite(activeEmergencyAppointmentId) &&
     activeEmergencyAppointmentId > 0;
+  const isEmergencyAssigned =
+    activeEmergencyStatus === "assigned" &&
+    !isEmergencySlotReady &&
+    !isEmergencyAppointmentScheduled;
   const emergencyResponderName =
     activeEmergencyRequest?.assignee?.profile?.full_name ||
     activeEmergencyRequest?.assignee?.email ||
@@ -665,7 +669,9 @@ const StudentAppointments = () => {
       ? "Emergency Request Queued"
       : isEmergencyAppointmentScheduled
         ? "Emergency Appointment Active"
-        : "Emergency Appointment";
+        : isEmergencyAssigned
+          ? "Emergency Request Assigned"
+          : "Emergency Appointment";
 
   const openEmergencyBooking = useCallback(
     (request: EmergencyRequest) => {
@@ -697,6 +703,33 @@ const StudentAppointments = () => {
     [toast]
   );
 
+  const openBookingForAssignedCounselor = useCallback(
+    (request: EmergencyRequest) => {
+      const counselorId = Number(request.assigned_to || request.counselor_id || 0);
+      if (!Number.isFinite(counselorId) || counselorId <= 0) {
+        toast({
+          title: "Counselor not yet assigned",
+          description: "Please refresh in a moment.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedSlotId(null);
+      setSlots([]);
+      setForm((prev) => ({
+        ...prev,
+        counselor_id: String(counselorId),
+        scheduled_at: "",
+        duration_minutes: 60,
+        mode: "online",
+        online_media: prev.is_anonymous ? "audio" : "video",
+      }));
+      setEmergencyDialogOpen(false);
+      setOpenDialog(true);
+    },
+    [toast]
+  );
+
   const handleEmergencyRequest = useCallback(async () => {
     if (activeEmergencyRequest) {
       if (isEmergencySlotReady) {
@@ -705,10 +738,16 @@ const StudentAppointments = () => {
       }
 
       toast({
-        title: isEmergencyAppointmentScheduled ? "Emergency appointment is active" : "Emergency request already queued",
+        title: isEmergencyAppointmentScheduled
+          ? "Emergency appointment is active"
+          : isEmergencyAssigned
+            ? "Emergency request accepted"
+            : "Emergency request already queued",
         description: isEmergencyAppointmentScheduled
           ? "Your emergency appointment is already on your schedule."
-          : "Counselors have already been alerted. Please wait for a responder to accept the request.",
+          : isEmergencyAssigned
+            ? `${emergencyResponderName} accepted your request. You can pick any available slot now.`
+            : "Counselors have already been alerted. Please wait for a responder to accept the request.",
       });
       setEmergencyDialogOpen(false);
       return;
@@ -716,11 +755,29 @@ const StudentAppointments = () => {
 
     try {
       setIsEmergencySubmitting(true);
+
+      let emergencyLocation: string | undefined;
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+            });
+          });
+          emergencyLocation = `${position.coords.latitude},${position.coords.longitude}`;
+        } catch {
+          // no-op: location is optional for emergency requests
+        }
+      }
+
       const preferredCounselorId = Number(emergencyCounselorId || 0);
       const response = await api.createEmergencyRequest({
         counselor_id: Number.isFinite(preferredCounselorId) && preferredCounselorId > 0 ? preferredCounselorId : undefined,
         requested_at: new Date().toISOString(),
         reason: emergencyReason.trim() || "Emergency support requested from appointment booking.",
+        location: emergencyLocation,
       });
       const createdRequest = response?.emergency_request as EmergencyRequest | undefined;
       if (createdRequest?.id) {
@@ -752,9 +809,12 @@ const StudentAppointments = () => {
     activeEmergencyRequest,
     emergencyCounselorId,
     emergencyReason,
+    emergencyResponderName,
     isEmergencyAppointmentScheduled,
+    isEmergencyAssigned,
     isEmergencySlotReady,
     loadEmergencyRequests,
+    openBookingForAssignedCounselor,
     openEmergencyBooking,
     toast,
   ]);
@@ -1120,56 +1180,13 @@ const StudentAppointments = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  {form.mode === "online" && (
-                    <div className="space-y-2">
-                      <Label>Session format</Label>
-                      <RadioGroup
-                        value={form.online_media}
-                        onValueChange={(value) =>
-                          setForm((previous) => ({
-                            ...previous,
-                            online_media: value as "video" | "audio",
-                          }))
-                        }
-                        className="grid gap-2 sm:grid-cols-2"
-                      >
-                        <label
-                          htmlFor="book-online-video"
-                          className={`flex flex-col gap-2 rounded-2xl border p-3 transition-colors ${
-                            form.is_anonymous ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-                          } ${
-                            form.online_media === "video"
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-secondary/20 hover:border-primary/25"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <RadioGroupItem value="video" id="book-online-video" disabled={form.is_anonymous} />
-                            <Video className="h-4 w-4 text-muted-foreground" aria-hidden />
-                            <span className="text-sm font-medium">Video</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground pl-6">
-                            Camera and microphone (default for online sessions).
-                          </p>
-                        </label>
-                        <label
-                          htmlFor="book-online-audio"
-                          className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-3 transition-colors ${
-                            form.online_media === "audio"
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-secondary/20 hover:border-primary/25"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <RadioGroupItem value="audio" id="book-online-audio" />
-                            <Mic className="h-4 w-4 text-muted-foreground" aria-hidden />
-                            <span className="text-sm font-medium">Audio only</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground pl-6">
-                            Voice only—no camera required.
-                          </p>
-                        </label>
-                      </RadioGroup>
+                  {form.mode === "online" && form.is_anonymous && (
+                    <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/20 px-3 py-2.5">
+                      <Mic className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <div>
+                        <span className="text-sm font-medium">Audio only</span>
+                        <p className="text-xs text-muted-foreground">Voice only — no camera required for anonymous sessions.</p>
+                      </div>
                     </div>
                   )}
                   <div
@@ -1300,6 +1317,10 @@ const StudentAppointments = () => {
                     openEmergencyBooking(activeEmergencyRequest);
                     return;
                   }
+                  if (isEmergencyAssigned && activeEmergencyRequest) {
+                    openBookingForAssignedCounselor(activeEmergencyRequest);
+                    return;
+                  }
                   setEmergencyDialogOpen(true);
                 }}
                 disabled={isEmergencySubmitting}
@@ -1323,7 +1344,9 @@ const StudentAppointments = () => {
                                 ? "Emergency appointment scheduled"
                                 : isEmergencySlotReady
                                   ? "Emergency slot ready"
-                                  : "Emergency request queued"}
+                                  : isEmergencyAssigned
+                                    ? "Emergency request assigned"
+                                    : "Emergency request queued"}
                             </p>
                           </div>
                           <Badge variant="outline" className="border-destructive/40 text-destructive">
@@ -1335,7 +1358,9 @@ const StudentAppointments = () => {
                             ? "Your accepted emergency request is already connected to an appointment on your schedule."
                             : isEmergencySlotReady
                               ? `${emergencyResponderName} accepted your request. Confirm the priority slot to place it on your schedule.`
-                              : "Counselors and responders have been alerted. This request will update when someone accepts it."}
+                              : isEmergencyAssigned
+                                ? `${emergencyResponderName} accepted your request. You can pick any available slot now or wait for a priority slot to be prepared.`
+                                : "Counselors and responders have been alerted. This request will update when someone accepts it."}
                         </p>
                         {activeEmergencyRequest.requested_at && (
                           <p className="mt-2 text-xs text-muted-foreground">
@@ -1400,6 +1425,22 @@ const StudentAppointments = () => {
                         <Button variant="destructive" onClick={() => openEmergencyBooking(activeEmergencyRequest)}>
                           Book priority slot
                         </Button>
+                      ) : isEmergencyAssigned ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => void loadEmergencyRequests(true)}
+                            disabled={isLoadingEmergencyRequests}
+                          >
+                            {isLoadingEmergencyRequests ? "Refreshing..." : "Refresh status"}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => openBookingForAssignedCounselor(activeEmergencyRequest)}
+                          >
+                            Pick a slot now
+                          </Button>
+                        </>
                       ) : (
                         <Button
                           variant="outline"
@@ -1439,7 +1480,9 @@ const StudentAppointments = () => {
                             ? "Emergency appointment scheduled"
                             : isEmergencySlotReady
                               ? "Emergency slot ready"
-                              : "Emergency request in progress"}
+                              : isEmergencyAssigned
+                                ? "Emergency request assigned"
+                                : "Emergency request in progress"}
                         </p>
                         <Badge variant="outline" className="border-destructive/40 text-destructive">
                           {String(activeEmergencyRequest.status || "queued")}
@@ -1450,7 +1493,9 @@ const StudentAppointments = () => {
                           ? "Your accepted emergency request is already on your appointment list."
                           : isEmergencySlotReady
                             ? `${emergencyResponderName} accepted your request. Confirm the priority slot to finish booking.`
-                            : "Counselors have been alerted. You can refresh the status while you wait."}
+                            : isEmergencyAssigned
+                              ? `${emergencyResponderName} accepted your request. You can pick any available slot now or wait for a priority slot to be prepared.`
+                              : "Counselors have been alerted. You can refresh the status while you wait."}
                       </p>
                     </div>
                   </div>
@@ -1464,6 +1509,16 @@ const StudentAppointments = () => {
                     >
                       {isLoadingEmergencyRequests ? "Refreshing..." : "Refresh"}
                     </Button>
+                    {isEmergencyAssigned && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => openBookingForAssignedCounselor(activeEmergencyRequest)}
+                      >
+                        Pick a slot
+                      </Button>
+                    )}
                     {isEmergencySlotReady && (
                       <Button
                         type="button"

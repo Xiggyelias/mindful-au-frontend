@@ -70,9 +70,13 @@ function formatTimeAgo(dateString?: string): string {
 
 function extractLatLngFromLocation(raw: string | null | undefined): string | null {
   if (raw == null || typeof raw !== "string") return null;
-  const match = raw.match(/-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?/);
-  if (!match?.[0]) return null;
-  return match[0].replace(/\s*,\s*/, ", ");
+  const match = raw.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return `${match[1]},${match[2]}`;
 }
 
 function buildPanicStudentSummary(log: {
@@ -686,7 +690,7 @@ const CounselorAlerts = () => {
                               onClick={() => {
                                 const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
                                 window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
+                                  `https://maps.google.com/?q=${q}`,
                                   "_blank",
                                 );
                               }}

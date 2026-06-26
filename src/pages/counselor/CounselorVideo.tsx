@@ -11,7 +11,7 @@ import {
   Video,
   VideoOff,
   Phone,
-  PhoneIncoming,
+
   RefreshCw,
   Loader2,
   WifiOff,
@@ -813,21 +813,6 @@ const CounselorVideo = () => {
                   </Alert>
                 )}
 
-                {isIncomingCall && (
-                  <Alert className="border-emerald-500/40 bg-emerald-500/5 text-foreground">
-                    <PhoneIncoming className="h-4 w-4 text-emerald-500" />
-                    <AlertTitle>Incoming {incomingAudioOnly ? "audio" : "video"} call</AlertTitle>
-                    <AlertDescription className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button size="sm" onClick={handleAcceptIncomingCall}>
-                        Accept
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleRejectIncomingCall}>
-                        Reject
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
                 {error && isOnline && (
                   <Alert className={cn(
                     isRelayError 
@@ -1006,7 +991,7 @@ const CounselorVideo = () => {
                           )}
                         </div>
 
-                        <div className="absolute bottom-3 right-3 w-20 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-28 md:w-40 lg:w-52">
+                        <div className="absolute bottom-4 right-4 w-24 overflow-hidden rounded-[20px] border border-white/25 bg-slate-950/80 shadow-2xl shadow-slate-950/40 sm:w-32 md:w-40 lg:w-48">
                           <div className="pointer-events-none absolute left-2 top-2 z-10">
                             <Badge
                               variant="secondary"
@@ -1017,7 +1002,7 @@ const CounselorVideo = () => {
                             </Badge>
                           </div>
 
-                          <div className="aspect-[3/4] w-full sm:aspect-video">
+                          <div className="aspect-video w-full">
                             {localStream && !isVideoOff && !isAudioOnly ? (
                               <video
                                 ref={localVideoRef}

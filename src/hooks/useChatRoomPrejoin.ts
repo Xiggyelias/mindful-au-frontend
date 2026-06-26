@@ -252,9 +252,7 @@ export function useChatRoomPrejoin(params: {
     const clearAll = () => {
       for (const [sessionId, channel] of channelsRef.current.entries()) {
         try {
-          console.debug("[StudentChatSession] socket-unsubscribe", {
-            socketChannelId: `chat-sync:${sessionId}`,
-          });
+          if (import.meta.env.DEV) console.debug("[StudentChatSession] socket-unsubscribe", { socketChannelId: `chat-sync:${sessionId}` });
           channel.unsubscribe?.();
         } catch {
           // best effort cleanup
@@ -300,9 +298,7 @@ export function useChatRoomPrejoin(params: {
       for (const [sessionId, channel] of channelsRef.current.entries()) {
         if (targetSet.has(sessionId)) continue;
         try {
-          console.debug("[StudentChatSession] socket-unsubscribe", {
-            socketChannelId: `chat-sync:${sessionId}`,
-          });
+          if (import.meta.env.DEV) console.debug("[StudentChatSession] socket-unsubscribe", { socketChannelId: `chat-sync:${sessionId}` });
           channel.unsubscribe?.();
         } catch {
           // best effort cleanup
@@ -313,10 +309,7 @@ export function useChatRoomPrejoin(params: {
       for (const sessionId of targetIds) {
         if (channelsRef.current.has(sessionId)) continue;
         const channel = client.channel(`chat-sync:${sessionId}`);
-        console.debug("[StudentChatSession] socket-subscribe", {
-          selectedSessionId: normalizedActiveId || null,
-          socketChannelId: `chat-sync:${sessionId}`,
-        });
+        if (import.meta.env.DEV) console.debug("[StudentChatSession] socket-subscribe", { selectedSessionId: normalizedActiveId || null, socketChannelId: `chat-sync:${sessionId}` });
         channel.subscribe();
         channelsRef.current.set(sessionId, channel);
       }

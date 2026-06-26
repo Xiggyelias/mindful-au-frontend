@@ -129,8 +129,8 @@ export function IncomingCallOverlay({
       ? formatInDisplayZone(new Date(call.scheduled_at), "EEE, MMM d · h:mm a")
       : null;
 
-  const callerInitial = (call.callerName?.[0] ?? "?").toUpperCase();
-  const callerDisplayName = call.callerName || (isAnonymous ? "Anonymous User" : "User");
+  const callerDisplayName = isAnonymous ? "Anonymous Student" : (call.callerName || "User");
+  const callerInitial = isAnonymous ? "?" : (call.callerName?.[0] ?? "?").toUpperCase();
 
   // Countdown progress 1 → 0 over AUTO_DISMISS_MS
   const startAtRef = useRef(Date.now());

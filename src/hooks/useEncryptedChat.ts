@@ -51,8 +51,8 @@ interface UseEncryptedChatProps {
 }
 
 const MESSAGE_POLL_TIMEOUT_MS = 5000;
-const OLDER_MESSAGE_BATCH_LIMIT = 20;
-const MESSAGE_BATCH_LIMIT = 20;
+const OLDER_MESSAGE_BATCH_LIMIT = 40;
+const MESSAGE_BATCH_LIMIT = 30;
 const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 10_000;
 const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 45_000;
 const TYPING_POLL_INTERVAL_ACTIVE_MS = 20_000;
@@ -399,25 +399,35 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
       if (loadInFlightRef.current) return;
       loadInFlightRef.current = true;
       try {
+        // Use incremental polling (after_id) for lightweight polls so we only
+        // fetch genuinely new messages instead of re-downloading the last N rows
+        // on every tick. Full-hydration passes (every 5th poll and initial load)
+        // omit after_id so the server reconciles the full latest window, which
+        // catches remote deletions and server-side edits.
+        const afterId =
+          !fullHydration && lastMessageIdRef.current > 0
+            ? lastMessageIdRef.current
+            : undefined;
         const queryParams = {
           limit: fullHydration ? 50 : MESSAGE_BATCH_LIMIT,
           mark_read: true,
           timeout_ms: MESSAGE_POLL_TIMEOUT_MS,
           signal,
-          // Always reconcile the latest page. Incremental-only polling misses
-          // server-side tombstones because the message id does not change.
-          after_id: undefined,
+          after_id: afterId,
         };
 
         const rawMessages = await api.getMessages(sessionId, queryParams);
         if (signal?.aborted || !isCurrentSession(sessionId)) return;
 
-        console.debug('[StudentChatSession] messages-loaded', {
-          loadedConversationId: sessionId,
-          selectedSessionId: sessionIdRef.current,
-          messageCount: Array.isArray(rawMessages) ? rawMessages.length : 0,
-          fullHydration,
-        });
+        if (import.meta.env.DEV) {
+          console.debug('[StudentChatSession] messages-loaded', {
+            loadedConversationId: sessionId,
+            selectedSessionId: sessionIdRef.current,
+            messageCount: Array.isArray(rawMessages) ? rawMessages.length : 0,
+            fullHydration,
+            afterId,
+          });
+        }
 
         if (Array.isArray(rawMessages) && rawMessages.length > 0) {
           const visibleMessages = filterVisibleMessages(rawMessages);
@@ -620,10 +630,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         : [];
       if (!ids.includes(String(sessionId))) return;
 
-      console.debug('[StudentChatSession] digest-refresh', {
-        selectedSessionId: sessionId,
-        loadedConversationId: sessionId,
-      });
+      if (import.meta.env.DEV) {
+        console.debug('[StudentChatSession] digest-refresh', {
+          selectedSessionId: sessionId,
+          loadedConversationId: sessionId,
+        });
+      }
       void loadMessages(false);
       void refreshPeerTypingStatus();
     };

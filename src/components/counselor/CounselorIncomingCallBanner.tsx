@@ -109,10 +109,11 @@ export function CounselorIncomingCallBanner({
 
   if (calls.length === 1) {
     const call = calls[0];
+    const callIsAnonymous = isAnonymousSessionFlag(call.is_anonymous);
     const overlayCall: IncomingCallOverlayCall = {
       id: call.id,
       appointment_id: call.appointment_id,
-      callerName: call.student_name,
+      callerName: callIsAnonymous ? "" : call.student_name,
       is_anonymous: call.is_anonymous,
       call_type: call.call_type,
       scheduled_at: call.scheduled_at,

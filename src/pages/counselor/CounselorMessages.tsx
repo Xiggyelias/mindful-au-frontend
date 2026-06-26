@@ -617,7 +617,6 @@ const CounselorMessages = () => {
   } = useEncryptedChat({
     sessionId: selectedSessionId,
     userId: String(user?.id || ""),
-    sessions: filteredChats,
   });
 
   const {
@@ -636,8 +635,11 @@ const CounselorMessages = () => {
     intervalMs: 30 * 60 * 1000, // 30 minutes
     enabled: Boolean(selectedSessionId),
     onError: (error) => {
-      // Session has truly expired (410 error)
-      if (error.message.includes('410')) {
+      const status = Number(
+        (error as { response?: { status?: unknown } })?.response?.status ??
+        (error.message.match(/\b(410)\b/)?.[1] ?? 0)
+      );
+      if (status === 410) {
         toast.error('Chat session has expired.');
         setSelectedChatId(null);
       }
@@ -1161,12 +1163,19 @@ const CounselorMessages = () => {
     setChats((prev) => prev.map((chat) => withIdentityMaskedForViewer(chat)));
   }, [withIdentityMaskedForViewer]);
 
-  const prevMessagesLoadingRef = useRef(false);
+  // Refresh the session list once after the initial message load finishes so the
+  // sidebar preview and unread count reflect the opened conversation.  Subsequent
+  // polling cycles are handled by the 12-second interval in the loadSessions effect.
+  const initialMessagesLoadedRef = useRef(false);
   useEffect(() => {
-    if (prevMessagesLoadingRef.current && !messagesLoading && selectedSessionId) {
+    if (!selectedSessionId) {
+      initialMessagesLoadedRef.current = false;
+      return;
+    }
+    if (!initialMessagesLoadedRef.current && !messagesLoading) {
+      initialMessagesLoadedRef.current = true;
       void loadSessions(true);
     }
-    prevMessagesLoadingRef.current = messagesLoading;
   }, [messagesLoading, selectedSessionId, loadSessions]);
 
   useEffect(() => {
@@ -1525,6 +1534,12 @@ const CounselorMessages = () => {
 
 
   
+  // Reload sessions when the counselor navigates to a different page
+  useEffect(() => {
+    if (!user?.id || chatPage === 1) return;
+    void loadSessions(false);
+  }, [chatPage, loadSessions, user?.id]);
+
   const canGoToPrevPage = chatPage > 1;
   const canGoToNextPage = chatPage < chatTotalPages;
   const selectedChatIsOnline = resolveChatOnline(selectedChat);
@@ -2233,95 +2248,61 @@ const CounselorMessages = () => {
                       onAtBottomChange={handleCounselorThreadAtBottomChange}
                       showScrollToBottom={showThreadScrollToBottom}
                       scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                      onRetryLoad={() => {}}
+                      onRetryLoad={() => void loadSessions(false)}
                     />
                   )}
                 </div>
 
-                {role === "counselor" && selectedChatIsSharedPeerCase ? (
-                  <>
-                    <div className="border-t border-slate-200/80 bg-slate-50/50 p-3 sm:p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
-                      <div className="mx-auto flex max-w-3xl flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm sm:flex-row sm:items-center dark:border-blue-900/30 dark:bg-blue-950/20">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 rounded-lg bg-blue-500/10 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-                            <Shield className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                              Joined shared case room
-                            </h4>
-                            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                              You can message in this shared thread without changing the peer counselor assignment or rewriting history.
-                            </p>
-                          </div>
+                {role === "counselor" && selectedChatIsSharedPeerCase && (
+                  <div className="border-t border-slate-200/80 bg-slate-50/50 p-3 sm:p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
+                    <div className="mx-auto flex max-w-3xl flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm sm:flex-row sm:items-center dark:border-blue-900/30 dark:bg-blue-950/20">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 rounded-lg bg-blue-500/10 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                          <Shield className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            Joined shared case room
+                          </h4>
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                            You can message in this shared thread without changing the peer counselor assignment or rewriting history.
+                          </p>
                         </div>
                       </div>
                     </div>
-                    <ChatInput
-                      message={message}
-                      isSending={isSending}
-                      isUploading={isUploading}
-                      uploadProgress={uploadProgress}
-                      isVoiceMode={true}
-                      recording={recording}
-                      recordingTime={recordingTime}
-                      isPaused={isPaused}
-                      selectedFile={selectedFile}
-                      allowAttachments={!isPeerCounselor}
-                      audioLevels={audioLevels}
-                      onMessageChange={(val) => {
-                        setMessage(val);
-                        notifyTyping(val.trim().length > 0);
-                      }}
-                      onTypingChange={(isTyping) => notifyTyping(isTyping)}
-                      onSubmit={handleSendMessage}
-                      onFileSelect={handleFileSelect}
-                      onAttachClick={handleAttachClick}
-                      onVoiceStart={startRecording}
-                      onVoiceStopAndSend={sendVoiceNow}
-                      onVoiceSendNow={sendVoiceNow}
-                      onVoicePause={pauseRecording}
-                      onVoiceResume={resumeRecording}
-                      onVoiceCancel={handleVoiceCancel}
-                      onVoiceError={(err) => toast.error(err.message)}
-                      onRemoveFile={removeSelectedFile}
-                      onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
-                      fileInputRef={fileInputRef}
-                    />
-                  </>
-                ) : (
-                  <ChatInput
-                    message={message}
-                    isSending={isSending}
-                    isUploading={isUploading}
-                    uploadProgress={uploadProgress}
-                    isVoiceMode={true}
-                    recording={recording}
-                    recordingTime={recordingTime}
-                    isPaused={isPaused}
-                    selectedFile={selectedFile}
-                    allowAttachments={!isPeerCounselor}
-                    audioLevels={audioLevels}
-                    onMessageChange={(val) => {
-                      setMessage(val);
-                      notifyTyping(val.trim().length > 0);
-                    }}
-                    onTypingChange={(isTyping) => notifyTyping(isTyping)}
-                    onSubmit={handleSendMessage}
-                    onFileSelect={handleFileSelect}
-                    onAttachClick={handleAttachClick}
-                    onVoiceStart={startRecording}
-                    onVoiceStopAndSend={sendVoiceNow}
-                    onVoiceSendNow={sendVoiceNow}
-                    onVoicePause={pauseRecording}
-                    onVoiceResume={resumeRecording}
-                    onVoiceCancel={handleVoiceCancel}
-                    onVoiceError={(err) => toast.error(err.message)}
-                    onRemoveFile={removeSelectedFile}
-                    onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
-                    fileInputRef={fileInputRef}
-                  />
+                  </div>
                 )}
+                <ChatInput
+                  message={message}
+                  isSending={isSending}
+                  isUploading={isUploading}
+                  uploadProgress={uploadProgress}
+                  isVoiceMode={true}
+                  recording={recording}
+                  recordingTime={recordingTime}
+                  isPaused={isPaused}
+                  selectedFile={selectedFile}
+                  allowAttachments={!isPeerCounselor}
+                  audioLevels={audioLevels}
+                  onMessageChange={(val) => {
+                    setMessage(val);
+                    notifyTyping(val.trim().length > 0);
+                  }}
+                  onTypingChange={(isTyping) => notifyTyping(isTyping)}
+                  onSubmit={handleSendMessage}
+                  onFileSelect={handleFileSelect}
+                  onAttachClick={handleAttachClick}
+                  onVoiceStart={startRecording}
+                  onVoiceStopAndSend={sendVoiceNow}
+                  onVoiceSendNow={sendVoiceNow}
+                  onVoicePause={pauseRecording}
+                  onVoiceResume={resumeRecording}
+                  onVoiceCancel={handleVoiceCancel}
+                  onVoiceError={(err) => toast.error(err.message)}
+                  onRemoveFile={removeSelectedFile}
+                  onEmojiClick={(emojiData) => setMessage((prev) => prev + emojiData.emoji)}
+                  fileInputRef={fileInputRef}
+                />
                 </>
               </CardContent>
             </Card>

@@ -48,6 +48,8 @@ export interface VoiceMemoPlayerProps {
   bubbleRole: VoiceMemoBubbleRole;
   className?: string;
   isUploading?: boolean;
+  /** True while the authenticated audio blob is being fetched (distinct from uploading). */
+  isLoadingAudio?: boolean;
   uploadProgress?: number;
   uploadFailed?: boolean;
   /** True while a delete request is in-flight. */
@@ -64,6 +66,7 @@ export function VoiceMemoPlayer({
   bubbleRole,
   className,
   isUploading = false,
+  isLoadingAudio = false,
   uploadProgress: _uploadProgress = 0,
   uploadFailed = false,
   isDeleting = false,
@@ -229,6 +232,10 @@ export function VoiceMemoPlayer({
       stopLevelLoop();
     };
     const onAudioError = () => {
+      if (!el.src || el.src === window.location.href) {
+        // Empty src — not a real error, just no audio yet
+        return;
+      }
       setPlaying(false);
       stopLevelLoop();
       setPlaybackError("Audio unavailable");
@@ -245,8 +252,9 @@ export function VoiceMemoPlayer({
       setDuration(el.duration);
     } else if (el.duration === Infinity) {
       onDur();
-    } else {
-      // Force load to override browser lazy-loading optimizations on hidden media elements
+    } else if (el.src && el.src !== window.location.href) {
+      // Force load to override browser lazy-loading optimizations on hidden media elements.
+      // Skip when src is empty — that would trigger a spurious error event.
       try {
         el.load();
       } catch {
@@ -387,8 +395,8 @@ export function VoiceMemoPlayer({
     );
   }
 
-  // ── Uploading state ───────────────────────────────────────────────────────
-  if (isUploading) {
+  // ── Loading / Uploading state ──────────────────────────────────────────────
+  if (isUploading || isLoadingAudio) {
     return (
       <div className={cn(
         "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl px-3.5 py-2.5",
@@ -417,7 +425,7 @@ export function VoiceMemoPlayer({
             ))}
           </div>
           <span className={cn("block text-[11px] font-medium leading-none", timeCls)}>
-            Sending…
+            {isLoadingAudio ? "Loading…" : "Sending…"}
           </span>
         </div>
       </div>

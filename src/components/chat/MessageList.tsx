@@ -24,7 +24,26 @@ const formatTimeLabel = (dateString: string): string => {
   try {
     const d = new Date(dateString);
     if (Number.isNaN(d.getTime())) return "";
-    return formatInDisplayZone(d, "h:mm a");
+    const today = new Date();
+    const isToday = d.toDateString() === today.toDateString();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    if (isToday) return formatInDisplayZone(d, "h:mm a");
+    if (isYesterday) return `Yesterday · ${formatInDisplayZone(d, "h:mm a")}`;
+    return formatInDisplayZone(d, "MMM d · h:mm a");
+  } catch {
+    return "";
+  }
+};
+
+/** Key used for time-header grouping — includes the date so same-time messages
+ *  on different days each get their own header. */
+const makeTimeGroupKey = (dateString: string): string => {
+  try {
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return "";
+    return formatInDisplayZone(d, "yyyy-MM-dd h:mm a");
   } catch {
     return "";
   }
@@ -168,8 +187,9 @@ const MessageBubble = React.memo(
               {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           )}
-          {/* For attachment-first messages, show a delete overlay button */}
-          {messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && !isDeletedMessage && (
+          {/* For non-voice attachment messages (images, files) show an outer
+              delete button. Voice notes render their own inside VoiceMemoPlayer. */}
+          {messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && !isDeletedMessage && msg.message_type !== "voice" && (
             <Button
               variant="ghost"
               size="icon"
@@ -210,7 +230,7 @@ const MessageBubble = React.memo(
             <div className="flex items-center gap-1.5 px-0.5">
               <span
                 className={cn(
-                  "inline-flex items-center text-[0px]",
+                  "inline-flex items-center",
                   msg.delivery_status === "failed"
                     ? "text-destructive"
                     : msg.seen_at || msg.delivery_status === "read"
@@ -229,7 +249,6 @@ const MessageBubble = React.memo(
                 ) : (
                   <Check className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
-                {msg.seen_at ? "✓✓" : "✓"}
               </span>
             </div>
           </div>
@@ -255,6 +274,7 @@ const MessageBubble = React.memo(
     prev.msg.isUploading === next.msg.isUploading &&
     prev.msg.uploadFailed === next.msg.uploadFailed &&
     prev.msg.delivery_status === next.msg.delivery_status &&
+    prev.msg.is_deleted === next.msg.is_deleted &&
     prev.isMe === next.isMe &&
     prev.showTime === next.showTime &&
     prev.timeLabel === next.timeLabel &&
@@ -555,7 +575,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             const prev = idx > 0 ? messages[idx - 1] ?? null : null;
             const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
             const timeLabel = formatTimeLabel(msg.created_at);
-            const showTime = idx === 0 || !prev || formatTimeLabel(prev.created_at) !== timeLabel;
+            const showTime = idx === 0 || !prev || makeTimeGroupKey(prev.created_at) !== makeTimeGroupKey(msg.created_at);
             const isDeleting = deletingMessageIds.has(msg.id);
             return (
               <div
@@ -675,7 +695,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
           const timeLabel = formatTimeLabel(msg.created_at);
           const showTime =
-            dataIndex === 0 || !prev || formatTimeLabel(prev.created_at) !== timeLabel;
+            dataIndex === 0 || !prev || makeTimeGroupKey(prev.created_at) !== makeTimeGroupKey(msg.created_at);
           const isDeleting = deletingMessageIds.has(msg.id);
 
           return (
