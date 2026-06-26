@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -116,7 +116,7 @@ const PeerDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...peerCounselorNavItems]}
+        items={peerCounselorNavItems}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

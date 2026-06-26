@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Download,
   Calendar,
@@ -258,7 +258,7 @@ const AdminAIReports = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+﻿import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   MessageSquare,
@@ -334,7 +334,7 @@ const CounselorMessages = () => {
     () => readIdentityRevealGrants()
   );
 
-  // ── selectedChat must be derived BEFORE the useEffects below that reference
+  // â”€â”€ selectedChat must be derived BEFORE the useEffects below that reference
   // it in their dependency arrays.  Declaring it after those useEffect calls
   // puts it in the temporal dead zone (TDZ) and throws a ReferenceError on
   // every render, which the ErrorBoundary catches as "Something went wrong".
@@ -345,7 +345,7 @@ const CounselorMessages = () => {
     return chats.find((chat) => chat.id === selectedChatId) || chats[0];
   }, [chats, selectedChatId]);
 
-  // ── Session Prep briefing panel ──────────────────────────────────────────
+  // â”€â”€ Session Prep briefing panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefData, setBriefData] = useState<{
@@ -392,7 +392,7 @@ const CounselorMessages = () => {
     ]).then(([diagResult, wellnessResult]) => {
       if (cancelled) return;
 
-      // ── AI Diagnostic ──
+      // â”€â”€ AI Diagnostic â”€â”€
       let riskLevel: string | null = null;
       let aiRecommendation: string | null = null;
       let focusAreas: string[] = [];
@@ -417,7 +417,7 @@ const CounselorMessages = () => {
         }
       }
 
-      // ── Wellness Summary ──
+      // â”€â”€ Wellness Summary â”€â”€
       // The /student-wellness/summary endpoint returns:
       //   { scores: { wellness_score, stress_level, burnout_risk }, labels: { risk }, ... }
       let moodScore: number | null = null;
@@ -442,7 +442,7 @@ const CounselorMessages = () => {
             typeof scores.burnout_risk === "number" ? scores.burnout_risk :
             typeof scores.burnout_index === "number" ? scores.burnout_index : null;
         } else if (flat) {
-          // Older/different API shape — field names directly on the object
+          // Older/different API shape â€” field names directly on the object
           moodScore =
             typeof flat.wellness_score === "number" ? flat.wellness_score :
             typeof flat.mood_score === "number" ? flat.mood_score : null;
@@ -1363,7 +1363,7 @@ const CounselorMessages = () => {
     const reason = await prompt({
       title: "Flag urgent concern",
       description: "Describe the urgent concern (required). This will hand the case off to a counselor immediately.",
-      inputPlaceholder: "Describe the concern…",
+      inputPlaceholder: "Describe the concernâ€¦",
       confirmLabel: "Flag urgent",
       variant: "destructive",
     });
@@ -1782,7 +1782,7 @@ const CounselorMessages = () => {
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
       <DashboardSidebar
-        items={[...navItems]}
+        items={navItems}
         userType={isPeerCounselor ? "peer" : "counselor"}
         userName={userName}
         isOpen={sidebarOpen}
@@ -2104,13 +2104,13 @@ const CounselorMessages = () => {
                 </div>
               </CardHeader>
 
-              {/* ── Session Prep Briefing Panel ──────────────────────────── */}
+              {/* â”€â”€ Session Prep Briefing Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               {briefOpen && !isPeerCounselor && selectedChat?.studentId && (
                 <div className="shrink-0 border-b border-border/60 bg-gradient-to-r from-sky-50/80 via-background to-emerald-50/50 px-4 py-3 animate-in slide-in-from-top-1 duration-200">
                   {briefLoading && !briefData ? (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Loading student brief…</span>
+                      <span>Loading student briefâ€¦</span>
                     </div>
                   ) : briefData ? (
                     <div className="space-y-2.5">
@@ -2127,7 +2127,7 @@ const CounselorMessages = () => {
                           <p className="flex-1 text-xs text-muted-foreground leading-relaxed min-w-0">
                             <span className="font-semibold text-foreground">AI rec: </span>
                             {briefData.aiRecommendation.length > 160
-                              ? briefData.aiRecommendation.slice(0, 160) + "…"
+                              ? briefData.aiRecommendation.slice(0, 160) + "â€¦"
                               : briefData.aiRecommendation}
                           </p>
                         )}

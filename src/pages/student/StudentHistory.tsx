@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, Clock, FileText, History, MessageSquare, Video } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -227,7 +227,7 @@ const StudentHistory = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -380,14 +380,14 @@ const StudentHistory = () => {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Status</span>
-                <span className="font-medium capitalize">{selectedSession.status || "—"}</span>
+                <span className="font-medium capitalize">{selectedSession.status || "â€”"}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Date</span>
                 <span className="font-medium">
                   {selectedSession.created_at
                     ? new Date(selectedSession.created_at).toLocaleString()
-                    : "—"}
+                    : "â€”"}
                 </span>
               </div>
               <div className="flex justify-between gap-4">
@@ -395,7 +395,7 @@ const StudentHistory = () => {
                 <span className="font-medium">
                   {selectedSession.duration_minutes
                     ? `${selectedSession.duration_minutes} minutes`
-                    : "—"}
+                    : "â€”"}
                 </span>
               </div>
               {selectedSession.notes && (

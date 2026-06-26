@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
+﻿import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
 
 import {
   Send, Sparkles, Loader2, AlertTriangle, Phone,
@@ -427,7 +427,7 @@ const StudentAISupport = () => {
     <div className="min-h-screen bg-background relative overflow-hidden">
       <AmbientCanvas />
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

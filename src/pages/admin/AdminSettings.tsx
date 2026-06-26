@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   Bell,
   Shield,
@@ -324,7 +324,7 @@ const AdminSettings = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

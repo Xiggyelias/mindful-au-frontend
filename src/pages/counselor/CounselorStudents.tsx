@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   MessageSquare,
@@ -57,18 +57,51 @@ const readChatListResult = (result: PromiseSettledResult<any>) => {
   return [];
 };
 
-const getSessionStudentId = (session: any) =>
+type StudentRow = {
+  id: number;
+  name: string;
+  isAnonymous: boolean;
+  sessions: number;
+  lastSession: string;
+  riskLevel: "low" | "medium" | "high";
+  isOnline: boolean;
+  activeChatSessionId: number | null;
+  peerChatSessionId: number | null;
+  assignedPeerCounselorId: number | null;
+};
+
+type RawApiSession = {
+  id: number;
+  student_id?: number | null;
+  chat_peer_student_id?: number | null;
+  counselor_id?: number | null;
+  peer_counselor_id?: number | null;
+  assigned_role?: string | null;
+  session_type?: string | null;
+  status?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+  student?: { id?: number | null } | null;
+};
+
+type RawPeerCounselor = {
+  id: number;
+  email?: string | null;
+  profile?: { full_name?: string | null } | null;
+};
+
+const getSessionStudentId = (session: RawApiSession) =>
   Number(session?.chat_peer_student_id || session?.student_id || session?.student?.id || 0);
 
 const CounselorStudents = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [messagingStudentId, setMessagingStudentId] = useState<number | null>(null);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [peerCounselors, setPeerCounselors] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<RawApiSession[]>([]);
+  const [peerCounselors, setPeerCounselors] = useState<RawPeerCounselor[]>([]);
   const [selectedPeerByStudent, setSelectedPeerByStudent] = useState<Record<number, string>>({});
   const [assigningStudentId, setAssigningStudentId] = useState<number | null>(null);
   const [assigningAssessmentStudentId, setAssigningAssessmentStudentId] = useState<number | null>(null);
@@ -90,12 +123,12 @@ const CounselorStudents = () => {
     sessionsData,
     chatSessionsData,
   }: {
-    studentData: any[];
-    appointmentData: any[];
-    diagnosticsData: any[];
-    sessionsData: any[];
-    chatSessionsData: any[];
-  }) => {
+    studentData: Record<string, unknown>[];
+    appointmentData: Record<string, unknown>[];
+    diagnosticsData: Record<string, unknown>[];
+    sessionsData: RawApiSession[];
+    chatSessionsData: RawApiSession[];
+  }): StudentRow[] => {
     const latestRiskByStudent = new Map<number, { riskLevel: string; timestamp: number }>();
     diagnosticsData.forEach((diagnostic: any) => {
       const studentId = Number(diagnostic.student_id);
@@ -583,7 +616,7 @@ const CounselorStudents = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}
@@ -685,7 +718,7 @@ const CounselorStudents = () => {
                             : "border-border/50 hover:border-border hover:shadow-sm"
                         }`}
                       >
-                        {/* ── Header Row: Student Info + Status Badges ── */}
+                        {/* â”€â”€ Header Row: Student Info + Status Badges â”€â”€ */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold ${
@@ -708,7 +741,7 @@ const CounselorStudents = () => {
                                 <p className="font-semibold text-foreground truncate">{student.name}</p>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} · Last active {student.lastSession}
+                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} Â· Last active {student.lastSession}
                               </p>
                             </div>
                           </div>
@@ -741,7 +774,7 @@ const CounselorStudents = () => {
                           </div>
                         </div>
 
-                        {/* ── Actions Row ── */}
+                        {/* â”€â”€ Actions Row â”€â”€ */}
                         <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
                           <Button
                             size="sm"
@@ -773,7 +806,7 @@ const CounselorStudents = () => {
                           </Button>
                         </div>
 
-                        {/* ── Peer Counselor Section (only for low-risk or already assigned) ── */}
+                        {/* â”€â”€ Peer Counselor Section (only for low-risk or already assigned) â”€â”€ */}
                         {showPeerSection && (peerOptions.length > 0 || hasAssignedPeer) && (
                           <div className="border-t border-border/40 bg-muted/20 px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -825,7 +858,7 @@ const CounselorStudents = () => {
                                   ? "Assigning..."
                                   : hasAssignedPeer
                                   ? isAssignedToSelectedPeer
-                                    ? "Assigned ✓"
+                                    ? "Assigned âœ“"
                                     : "Reassign"
                                   : "Assign"}
                               </Button>
@@ -883,7 +916,7 @@ const CounselorStudents = () => {
         </main>
       </div>
 
-      {/* ───── Student Profile Dialog ───── */}
+      {/* â”€â”€â”€â”€â”€ Student Profile Dialog â”€â”€â”€â”€â”€ */}
       <Dialog
         open={selectedStudentForProfile !== null}
         onOpenChange={(open) => {
@@ -923,7 +956,7 @@ const CounselorStudents = () => {
               <TabsTrigger value="actions">Actions</TabsTrigger>
             </TabsList>
 
-            {/* ── Overview Tab ── */}
+            {/* â”€â”€ Overview Tab â”€â”€ */}
             <TabsContent value="overview" className="mt-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-xl bg-secondary/40 p-4 space-y-1">
@@ -986,7 +1019,7 @@ const CounselorStudents = () => {
               )}
             </TabsContent>
 
-            {/* ── Wellness Tab ── */}
+            {/* â”€â”€ Wellness Tab â”€â”€ */}
             <TabsContent value="wellness" className="mt-4 space-y-4">
               {isLoadingWellness ? (
                 <div className="flex items-center justify-center py-12">
@@ -1120,7 +1153,7 @@ const CounselorStudents = () => {
               )}
             </TabsContent>
 
-            {/* ── Actions Tab ── */}
+            {/* â”€â”€ Actions Tab â”€â”€ */}
             <TabsContent value="actions" className="mt-4 space-y-3">
               <Button
                 className="w-full justify-start gap-3"

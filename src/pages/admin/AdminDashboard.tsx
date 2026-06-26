@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Shield,
@@ -223,7 +223,7 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

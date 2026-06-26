@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
@@ -370,7 +370,7 @@ const CounselorDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}
@@ -461,9 +461,9 @@ const CounselorDashboard = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })
-                                    : "—";
+                                    : "â€”";
                                 })()
-                              : "—"}
+                              : "â€”"}
                           </p>
                         </div>
                         <div className="flex-1">

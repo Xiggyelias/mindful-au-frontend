@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingUp, Loader2, Sparkles, Bot, Heart } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { studentMoodOptions, type StudentMood, studentMoodLabel } from "@/config/studentMoodOptions";
@@ -121,7 +121,7 @@ const StudentWellness = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

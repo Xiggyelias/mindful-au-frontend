@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Search, FilterX } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -223,7 +223,7 @@ const AdminCounselors = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

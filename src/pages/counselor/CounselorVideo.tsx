@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -764,7 +764,7 @@ const CounselorVideo = () => {
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}
@@ -976,7 +976,7 @@ const CounselorVideo = () => {
 
                         <div className="absolute left-3 top-3 flex items-center gap-2">
                           <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
-                            {remoteParticipantName}{remoteSpeaking ? " • speaking" : ""}
+                            {remoteParticipantName}{remoteSpeaking ? " â€¢ speaking" : ""}
                           </Badge>
                           {isConnected && showRemoteVideo && (
                             <Button 
@@ -998,7 +998,7 @@ const CounselorVideo = () => {
                               className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
                             >
                               You
-                              {localSpeaking ? " • speaking" : ""}
+                              {localSpeaking ? " â€¢ speaking" : ""}
                             </Badge>
                           </div>
 
@@ -1221,7 +1221,7 @@ const CounselorVideo = () => {
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <AnonymousModeIndicator variant="badge" audience="counselor" />
                                   <span className="text-[10px] font-medium text-muted-foreground">
-                                    Audio only · identity hidden
+                                    Audio only Â· identity hidden
                                   </span>
                                 </div>
                               )}

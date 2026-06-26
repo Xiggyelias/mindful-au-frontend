@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Download, RefreshCcw } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -217,7 +217,7 @@ const AdminLogs = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}

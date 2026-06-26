@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ const PeerProfile = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...peerCounselorNavItems]}
+        items={peerCounselorNavItems}
         userType="peer"
         userName={userName}
         isOpen={sidebarOpen}

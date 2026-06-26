@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -540,7 +540,7 @@ const AdminStudents = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...adminNavItems]}
+        items={adminNavItems}
         userType="admin"
         userName={userName}
         isOpen={sidebarOpen}
@@ -930,7 +930,7 @@ const AdminStudents = () => {
                                   "text-[10px] pl-1 font-medium",
                                   student.isOnline ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
                                 )}>
-                                  ● {student.isOnline ? "Online" : "Offline"}
+                                  â— {student.isOnline ? "Online" : "Offline"}
                                 </span>
                               </div>
                             </TableCell>
@@ -1012,7 +1012,7 @@ const AdminStudents = () => {
                                           `#${student.assignedPeerCounselorId}`}
                                       </span>
                                       {student.riskLevel !== "low" && (
-                                        <span className="text-[10px] text-amber-500 font-bold" title="Risk has elevated! Review peer supervisor assignment!">⚠️</span>
+                                        <span className="text-[10px] text-amber-500 font-bold" title="Risk has elevated! Review peer supervisor assignment!">âš ï¸</span>
                                       )}
                                     </div>
                                   ) : (
@@ -1051,7 +1051,7 @@ const AdminStudents = () => {
                                     >
                                       {assigningStudentId === student.id &&
                                       peerAssignmentAction === "assign"
-                                        ? "…"
+                                        ? "â€¦"
                                         : hasPeer
                                         ? "Reassign"
                                         : "Assign"}
@@ -1066,14 +1066,14 @@ const AdminStudents = () => {
                                       >
                                         {assigningStudentId === student.id &&
                                         peerAssignmentAction === "unassign"
-                                          ? "…"
+                                          ? "â€¦"
                                           : "Remove"}
                                       </Button>
                                     )}
                                   </div>
                                   {student.riskLevel !== "low" && hasPeer && (
                                     <p className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-none">
-                                      ⚠️ Risk elevated - professional follow-up advised
+                                      âš ï¸ Risk elevated - professional follow-up advised
                                     </p>
                                   )}
                                 </div>
@@ -1114,7 +1114,7 @@ const AdminStudents = () => {
                                 >
                                   <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
                                   {assigningAssessmentStudentId === student.id
-                                    ? "…"
+                                    ? "â€¦"
                                     : "Check-in"}
                                 </Button>
                               </div>
@@ -1186,25 +1186,25 @@ const AdminStudents = () => {
               </div>
 
               {isSummaryLoading ? (
-                <p className="text-sm text-muted-foreground">Loading wellness summary…</p>
+                <p className="text-sm text-muted-foreground">Loading wellness summaryâ€¦</p>
               ) : studentSummary ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Wellness</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.wellness_score ?? "—"}
+                      {studentSummary?.scores?.wellness_score ?? "â€”"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Stress</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.stress_level ?? "—"}
+                      {studentSummary?.scores?.stress_level ?? "â€”"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Burnout</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.burnout_risk ?? "—"}
+                      {studentSummary?.scores?.burnout_risk ?? "â€”"}
                     </p>
                   </div>
                   {studentSummary?.mood?.recorded_at && (

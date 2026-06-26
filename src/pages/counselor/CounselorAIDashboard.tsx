@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   TrendingUp,
@@ -194,12 +194,12 @@ const CounselorAIDashboard = () => {
   }, [user?.id, loadDashboardData]);
 
   const safeFormatDate = (dateStr: string | null | undefined, fmt = "MMM d, yyyy h:mm a"): string => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "â€”";
     try {
       const d = new Date(dateStr);
-      return isValid(d) ? format(d, fmt) : "—";
+      return isValid(d) ? format(d, fmt) : "â€”";
     } catch {
-      return "—";
+      return "â€”";
     }
   };
 
@@ -231,7 +231,7 @@ const CounselorAIDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}
@@ -496,7 +496,7 @@ const CounselorAIDashboard = () => {
                               {isMasked && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                             </div>
                             {!isMasked && (
-                              <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "—"}</p>
+                              <p className="text-sm text-muted-foreground">{selectedDiagnostic.student?.email ?? "â€”"}</p>
                             )}
                           </>
                         );

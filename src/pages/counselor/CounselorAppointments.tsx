@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
@@ -474,7 +474,7 @@ const CounselorAppointments = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}
@@ -654,7 +654,7 @@ const CounselorAppointments = () => {
                   onClick={() => setBulkCancelOpen(false)}
                   disabled={bulkCancelSubmitting}
                 >
-                  ✖ No, Go Back
+                  âœ– No, Go Back
                 </Button>
                 <Button
                   type="button"
@@ -663,7 +663,7 @@ const CounselorAppointments = () => {
                   onClick={() => void handleBulkCancelConfirm()}
                   disabled={bulkCancelSubmitting}
                 >
-                  ✔ Yes, Cancel
+                  âœ” Yes, Cancel
                 </Button>
               </DialogFooter>
             </DialogContent>

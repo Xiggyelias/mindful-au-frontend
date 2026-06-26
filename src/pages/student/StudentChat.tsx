@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
+﻿import { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Shield,
@@ -485,7 +485,7 @@ const StudentChat = () => {
   const failedVoiceFilesRef = useRef<Map<number, File>>(new Map());
   const currentUploadTempIdRef = useRef<number | null>(null);
 
-  /** Core: upload a voice file optimistically — used by both tap-hold-release and locked send. */
+  /** Core: upload a voice file optimistically â€” used by both tap-hold-release and locked send. */
   const sendVoiceInternal = useCallback(async (file: File) => {
     if (!sessionId) return;
     const localBlobUrl = URL.createObjectURL(file);
@@ -923,7 +923,7 @@ const StudentChat = () => {
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-gradient-to-br from-slate-100/70 via-background to-emerald-100/40">
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}

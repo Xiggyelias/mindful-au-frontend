@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -145,8 +145,11 @@ const CounselorAlerts = () => {
   const [updatingEmergencyId, setUpdatingEmergencyId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const highlightedEmergencyId = Number(searchParams.get("emergency") || 0);
+  const loadAlertsInFlightRef = useRef(false);
 
   const loadAlerts = useCallback(async (showRefreshSpinner = false) => {
+    if (loadAlertsInFlightRef.current) return;
+    loadAlertsInFlightRef.current = true;
     try {
       if (showRefreshSpinner) setIsRefreshing(true);
       setLoadError(null);
@@ -165,7 +168,7 @@ const CounselorAlerts = () => {
         });
       }
 
-      // ── Notifications ──────────────────────────────────────────────────────
+      // â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const rawNotifs: AppNotification[] = (
         Array.isArray(notifData) ? notifData : Array.isArray(notifData?.data) ? notifData.data : []
       ).map((n: any) => ({
@@ -241,6 +244,7 @@ const CounselorAlerts = () => {
       setLoadError(msg);
       toast.error(msg);
     } finally {
+      loadAlertsInFlightRef.current = false;
       setIsLoading(false);
       setIsRefreshing(false);
     }
@@ -382,7 +386,7 @@ const CounselorAlerts = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={[...counselorNavItems]}
+        items={counselorNavItems}
         userType="counselor"
         userName={userName}
         isOpen={sidebarOpen}

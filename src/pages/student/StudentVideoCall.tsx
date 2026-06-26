@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -422,7 +422,7 @@ const StudentVideoCall = () => {
       : "Preview live"
     : isStartingMode
     ? isStartingMode === "audio"
-      ? "Preparing audio…"
+      ? "Preparing audioâ€¦"
       : "Opening camera"
     : "Preview appears here";
   const emptyStageMessage = activeAppointment
@@ -786,7 +786,7 @@ const StudentVideoCall = () => {
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
       <DashboardSidebar
-        items={[...studentNavItems]}
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -941,7 +941,7 @@ const StudentVideoCall = () => {
                           <div className="space-y-1.5">
                             <div className="w-fit rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
                               {remoteParticipantName}
-                              {remoteSpeaking ? " · speaking" : ""}
+                              {remoteSpeaking ? " Â· speaking" : ""}
                             </div>
                             {!isConnected && activeAppointment?.scheduled_at && (
                               <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
@@ -979,7 +979,7 @@ const StudentVideoCall = () => {
                         <div className="absolute bottom-28 right-4 z-20 w-28 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-36">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
                             {activeAppointmentAnonymousBooking ? "You (Anonymous)" : "You"}
-                            {localSpeaking ? " • speaking" : ""}
+                            {localSpeaking ? " â€¢ speaking" : ""}
                           </div>
 
                           <div className="aspect-video overflow-hidden rounded-[20px] bg-[#111b21]">

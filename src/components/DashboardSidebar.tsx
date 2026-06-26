@@ -15,7 +15,7 @@ interface NavItem {
 }
 
 interface DashboardSidebarProps {
-  items: NavItem[];
+  items: readonly NavItem[];
   userType: "student" | "counselor" | "admin" | "peer";
   userName?: string;
   isOpen?: boolean;
