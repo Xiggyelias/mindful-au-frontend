@@ -77,6 +77,7 @@ const APPOINTMENTS_PAGE_SIZE = 10;
 const APPOINTMENTS_REFRESH_MIN_GAP_MS = 5000;
 const COUNSELORS_REFRESH_MIN_GAP_MS = 10000;
 const SLOT_LOOKAHEAD_DAYS = 7;
+const EMERGENCY_SLOT_LOOKAHEAD_DAYS = 14;
 
 function toDateOnly(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -123,6 +124,8 @@ const StudentAppointments = () => {
   const [isLoadingEmergencyRequests, setIsLoadingEmergencyRequests] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [emergencyDialogOpen, setEmergencyDialogOpen] = useState(false);
+  // True when the booking dialog is opened from the emergency "pick a slot" flow
+  const [isEmergencyBookingMode, setIsEmergencyBookingMode] = useState(false);
   const [slots, setSlots] = useState<CounselorSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
@@ -557,7 +560,9 @@ const StudentAppointments = () => {
         setIsLoadingSlots(true);
         const from = new Date();
         const to = new Date();
-        to.setDate(to.getDate() + SLOT_LOOKAHEAD_DAYS);
+        // Use a wider window for emergency bookings so the student can pick
+        // from more available times rather than being limited to 7 days.
+        to.setDate(to.getDate() + (pinnedCounselorIdRef.current ? EMERGENCY_SLOT_LOOKAHEAD_DAYS : SLOT_LOOKAHEAD_DAYS));
         const payload = await api.getCounselorSlots({
           counselor_id: numericCounselorId,
           from: toDateOnly(from),
@@ -572,8 +577,14 @@ const StudentAppointments = () => {
           ? nextSlots.find((s) => Number(s.id) === preselectedSlotIdRef.current)
           : null;
 
-        const targetSlot = preselectedSlot || nextSlots.find(
-          (slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now()
+        // In emergency booking mode the student is choosing their own time —
+        // don't auto-select any slot so they have to make a conscious choice.
+        const targetSlot = preselectedSlot || (
+          pinnedCounselorIdRef.current
+            ? null
+            : nextSlots.find(
+                (slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now()
+              )
         );
         if (targetSlot) {
           setSelectedSlotId(Number(targetSlot.id));
@@ -734,6 +745,7 @@ const StudentAppointments = () => {
       // Pin the counselor so the ML auto-select effect cannot override it when
       // counselorMatches arrives asynchronously after the dialog opens.
       pinnedCounselorIdRef.current = String(counselorId);
+      setIsEmergencyBookingMode(true);
       setSelectedSlotId(null);
       setSlots([]);
       setForm((prev) => ({
@@ -1060,7 +1072,10 @@ const StudentAppointments = () => {
             <h2 className="text-xl font-semibold">Scheduled Sessions</h2>
             <div className="flex flex-wrap gap-2">
               <Dialog open={openDialog} onOpenChange={(open) => {
-                if (!open) pinnedCounselorIdRef.current = null;
+                if (!open) {
+                  pinnedCounselorIdRef.current = null;
+                  setIsEmergencyBookingMode(false);
+                }
                 setOpenDialog(open);
               }}>
                 <DialogTrigger asChild>
@@ -1071,14 +1086,90 @@ const StudentAppointments = () => {
                 </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Book an appointment</DialogTitle>
-                  {pinnedCounselorIdRef.current && emergencyResponderName !== "a counselor" && (
+                  <DialogTitle>
+                    {isEmergencyBookingMode ? "Pick Your Appointment Time" : "Book an appointment"}
+                  </DialogTitle>
+                  {isEmergencyBookingMode && (
                     <p className="text-sm text-muted-foreground mt-1">
-                      Pick any available slot with <span className="font-semibold text-foreground">{emergencyResponderName}</span>
+                      Booking with <span className="font-semibold text-foreground">{emergencyResponderName}</span>
+                      {" "}· Online · Pick any available time below
                     </p>
                   )}
                 </DialogHeader>
-                <div className="space-y-4">
+
+                {/* Emergency mode: streamlined slot-picker only */}
+                {isEmergencyBookingMode && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-destructive uppercase tracking-wide">Emergency — assigned counselor</p>
+                        <p className="truncate text-sm font-medium text-foreground">{emergencyResponderName}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>Select any available time</Label>
+                        {isLoadingSlots && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" />Loading
+                          </span>
+                        )}
+                      </div>
+                      <div className="max-h-[400px] space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-secondary/10 p-3">
+                        {isLoadingSlots ? (
+                          <p className="text-sm text-muted-foreground">Loading available times…</p>
+                        ) : slotDays.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No available slots in the next {EMERGENCY_SLOT_LOOKAHEAD_DAYS} days.
+                          </p>
+                        ) : (
+                          slotDays.map((day) => (
+                            <div key={day.date} className="space-y-2">
+                              <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{day.label}</div>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {day.slots.map((slot: CounselorSlot) => {
+                                  const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now();
+                                  const isSelected = Number(slot.id) === Number(selectedSlotId);
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      type="button"
+                                      disabled={!isAvailable}
+                                      onClick={() => chooseSlot(slot)}
+                                      className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                                        isSelected
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : isAvailable
+                                            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400"
+                                            : "border-border bg-muted text-muted-foreground opacity-70"
+                                      }`}
+                                    >
+                                      <span className="block whitespace-nowrap text-[11px] font-semibold tabular-nums sm:text-xs">
+                                        {formatSlotRange(slot.start_time, slot.end_time)}
+                                      </span>
+                                      <span className="block text-[10px] font-medium">{isAvailable ? "Available" : "Booked"}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {selectedSlot && (
+                        <p className="text-xs text-muted-foreground">
+                          Selected: {formatInDisplayZone(new Date(selectedSlot.start_time), "M/d/yyyy")},{" "}
+                          {formatSlotRange(selectedSlot.start_time, selectedSlot.end_time)} (
+                          {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} min).
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Normal booking form — hidden in emergency mode */}
+                {!isEmergencyBookingMode && <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Recommended counselors</Label>
@@ -1325,13 +1416,24 @@ const StudentAppointments = () => {
                       </p>
                     )}
                   </div>
-                </div>
+                </div>}
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setOpenDialog(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleSubmit} disabled={isSubmitting || availableCounselors.length === 0 || !selectedSlot}>
-                    {isSubmitting ? "Booking..." : "Book"}
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={
+                      isSubmitting ||
+                      !selectedSlot ||
+                      (!isEmergencyBookingMode && availableCounselors.length === 0)
+                    }
+                  >
+                    {isSubmitting
+                      ? "Booking..."
+                      : isEmergencyBookingMode
+                        ? "Confirm Emergency Appointment"
+                        : "Book"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
