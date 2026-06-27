@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   MessageSquare,
@@ -741,7 +741,7 @@ const CounselorStudents = () => {
                                 <p className="font-semibold text-foreground truncate">{student.name}</p>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} Â· Last active {student.lastSession}
+                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} · Last active {student.lastSession}
                               </p>
                             </div>
                           </div>

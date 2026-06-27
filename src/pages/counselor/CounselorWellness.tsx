@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Brain,
   Coffee,
@@ -435,26 +435,26 @@ const CounselorWellness = () => {
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
                         <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Mood</span>
                         <span className="text-lg font-bold text-success">
-                          {todayCheckInLog?.mood_score != null ? `${todayCheckInLog.mood_score}%` : "â€”"}
+                          {todayCheckInLog?.mood_score != null ? `${todayCheckInLog.mood_score}%` : "—"}
                         </span>
                       </div>
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
                         <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Stress</span>
                         <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.stress_level, 40, 70)}`}>
-                          {todayCheckInLog?.stress_level != null ? `${todayCheckInLog.stress_level}%` : "â€”"}
+                          {todayCheckInLog?.stress_level != null ? `${todayCheckInLog.stress_level}%` : "—"}
                         </span>
                       </div>
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
                         <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Burnout</span>
                         <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.burnout_index, 30, 60)}`}>
-                          {todayCheckInLog?.burnout_index != null ? `${todayCheckInLog.burnout_index}%` : "â€”"}
+                          {todayCheckInLog?.burnout_index != null ? `${todayCheckInLog.burnout_index}%` : "—"}
                         </span>
                       </div>
                     </div>
 
                     {todayCheckInLog?.notes && (
                       <div className="p-3 rounded-lg bg-secondary/15 border border-border/40 text-xs italic text-muted-foreground mt-2">
-                        â€œ{todayCheckInLog.notes}â€
+                        “{todayCheckInLog.notes}”
                       </div>
                     )}
                   </div>

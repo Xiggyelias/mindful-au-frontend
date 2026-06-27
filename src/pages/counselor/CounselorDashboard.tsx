@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import {
@@ -461,9 +461,9 @@ const CounselorDashboard = () => {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })
-                                    : "â€”";
+                                    : "—";
                                 })()
-                              : "â€”"}
+                              : "—"}
                           </p>
                         </div>
                         <div className="flex-1">

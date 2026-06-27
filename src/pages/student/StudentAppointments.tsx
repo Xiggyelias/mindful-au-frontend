@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
 import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar } from "lucide-react";
@@ -422,7 +422,7 @@ const StudentAppointments = () => {
     };
 
     const onAnonymityChanged = () => {
-      // Anonymous mode was toggled â€” force reload so labels update immediately
+      // Anonymous mode was toggled — force reload so labels update immediately
       // without waiting for the 60s poll or page focus.
       void loadAppointments(false, { force: true });
     };
@@ -1302,7 +1302,7 @@ const StudentAppointments = () => {
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                   Match score {Number(match.score ?? 0)}/100
-                                  {match.is_online ? " â€¢ online now" : ""}
+                                  {match.is_online ? " • online now" : ""}
                                 </p>
                               </div>
                               <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -1341,7 +1341,7 @@ const StudentAppointments = () => {
                         ) : availableCounselors.map((c: any) => (
                           <SelectItem key={c.id} value={String(c.id)}>
                             {c.profile?.full_name || c.email}
-                            {c.ml_match?.score ? ` â€¢ ${c.ml_match.score}/100` : ""}
+                            {c.ml_match?.score ? ` • ${c.ml_match.score}/100` : ""}
                             {c.is_online ? " (Online)" : ""}
                           </SelectItem>
                         ))}
@@ -1394,7 +1394,7 @@ const StudentAppointments = () => {
                       <Mic className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       <div>
                         <span className="text-sm font-medium">Audio only</span>
-                        <p className="text-xs text-muted-foreground">Voice only â€” no camera required for anonymous sessions.</p>
+                        <p className="text-xs text-muted-foreground">Voice only — no camera required for anonymous sessions.</p>
                       </div>
                     </div>
                   )}
@@ -1884,9 +1884,9 @@ const StudentAppointments = () => {
                             {isPhysical
                               ? "Physical"
                               : prefersAudioOnlyOnlineCall(apt.notes) || isAppointmentAudioOnly(apt)
-                                ? "Online â€¢ Audio only"
-                                : "Online â€¢ Video"}
-                            {isAnonymous ? " â€¢ Anonymous" : ""}
+                                ? "Online • Audio only"
+                                : "Online • Video"}
+                            {isAnonymous ? " • Anonymous" : ""}
                           </p>
                           {isAnonymous && !isPhysical && (
                             <div className="mt-2 flex flex-wrap gap-2">

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -11,7 +11,7 @@ import {
   Video,
   VideoOff,
   Phone,
-
+  FlipHorizontal,
   RefreshCw,
   Loader2,
   WifiOff,
@@ -66,6 +66,11 @@ const getInitials = (value: string) =>
 
 const formatScheduleLabel = (scheduledAt?: string | null) =>
   scheduledAt ? format(new Date(scheduledAt), "MMM d, yyyy h:mm a") : "TBD";
+
+const isMobileOrTablet = () =>
+  typeof navigator !== "undefined" &&
+  (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
 
 const CounselorVideo = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -125,9 +130,12 @@ const CounselorVideo = () => {
     rejoinCall,
     toggleMute,
     toggleVideo,
+    flipCamera,
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
+
+  const isMobile = isMobileOrTablet();
 
   const incomingRingVibratedRef = useRef(false);
 
@@ -994,18 +1002,31 @@ const CounselorVideo = () => {
 
                         <div className="absolute left-3 top-3 flex items-center gap-2">
                           <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
-                            {remoteParticipantName}{remoteSpeaking ? " â€¢ speaking" : ""}
+                            {remoteParticipantName}{remoteSpeaking ? " • speaking" : ""}
                           </Badge>
                           {isConnected && showRemoteVideo && (
-                            <Button 
-                              size="icon" 
-                              variant="secondary" 
-                              className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
-                              onClick={() => setVideoFit(prev => prev === "cover" ? "contain" : "cover")}
-                              title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
-                            >
-                              <RefreshCw className={cn("h-3.5 w-3.5", videoFit === "contain" && "rotate-45")} />
-                            </Button>
+                            isMobile ? (
+                              <Button
+                                size="icon"
+                                variant="secondary"
+                                className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
+                                onClick={() => void flipCamera()}
+                                disabled={isAudioOnly}
+                                title="Flip camera"
+                              >
+                                <FlipHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="secondary"
+                                className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
+                                onClick={() => setVideoFit(prev => prev === "cover" ? "contain" : "cover")}
+                                title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                              >
+                                <RefreshCw className={cn("h-3.5 w-3.5", videoFit === "contain" && "rotate-45")} />
+                              </Button>
+                            )
                           )}
                         </div>
 
@@ -1016,7 +1037,7 @@ const CounselorVideo = () => {
                               className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] text-white"
                             >
                               You
-                              {localSpeaking ? " â€¢ speaking" : ""}
+                              {localSpeaking ? " • speaking" : ""}
                             </Badge>
                           </div>
 
@@ -1239,7 +1260,7 @@ const CounselorVideo = () => {
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <AnonymousModeIndicator variant="badge" audience="counselor" />
                                   <span className="text-[10px] font-medium text-muted-foreground">
-                                    Audio only Â· identity hidden
+                                    Audio only · identity hidden
                                   </span>
                                 </div>
                               )}

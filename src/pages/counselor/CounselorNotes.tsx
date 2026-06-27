@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MessageSquare,
   Calendar,
@@ -84,17 +84,17 @@ function coerceString(value: unknown): string {
 
 function formatSessionTimestamp(value: unknown): string {
   const raw = coerceString(value);
-  if (!raw) return "â€”";
+  if (!raw) return "—";
   const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return "â€”";
-  return format(d, "MMM d, yyyy â€¢ h:mm a");
+  if (!Number.isFinite(d.getTime())) return "—";
+  return format(d, "MMM d, yyyy • h:mm a");
 }
 
 function formatRelativeUpdated(value: unknown): string {
   const raw = coerceString(value);
-  if (!raw) return "â€”";
+  if (!raw) return "—";
   const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return "â€”";
+  if (!Number.isFinite(d.getTime())) return "—";
   return formatDistanceToNow(d, { addSuffix: true });
 }
 
@@ -126,7 +126,7 @@ function sessionRowFromApi(s: ApiSessionBlob): CounselorSessionNoteRow {
   const timing =
     coerceString(whenSource) !== ""
       ? formatSessionTimestamp(whenSource)
-      : `${formatSessionTimestamp(s.created_at)} Â· not started`;
+      : `${formatSessionTimestamp(s.created_at)} · not started`;
 
   const updatedIso = coerceString(s.updated_at) || coerceString(s.created_at) || "";
 
@@ -403,7 +403,7 @@ const CounselorNotes = () => {
               <AlertDescription>
                 {role === "admin"
                   ? "Administrators can review session metadata here; only the assigned counselor can add or change clinical notes (API policy)."
-                  : "Only assigned counselors can edit session notes. If you are a peer counselor, open the session in Messages for contextâ€”note edits are limited to the lead counselor."}
+                  : "Only assigned counselors can edit session notes. If you are a peer counselor, open the session in Messages for context—note edits are limited to the lead counselor."}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -510,7 +510,7 @@ const CounselorNotes = () => {
                       Note editor
                     </CardTitle>
                     <Badge variant="secondary" className="bg-background/80 w-fit">
-                      Session #{selectedSessionId ?? "â€”"}
+                      Session #{selectedSessionId ?? "—"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -612,7 +612,7 @@ const CounselorNotes = () => {
                         />
                         <p className="text-[11px] text-muted-foreground">
                           Backend stores this in the session <code className="text-xs">notes</code> field. System lines
-                          like &quot;Video appointment #123&quot; are still notesâ€”add your clinical summary below them or
+                          like &quot;Video appointment #123&quot; are still notes—add your clinical summary below them or
                           replace when appropriate.
                         </p>
                       </div>

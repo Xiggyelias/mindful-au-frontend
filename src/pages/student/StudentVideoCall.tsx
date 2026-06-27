@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -9,7 +9,7 @@ import {
   Mic,
   MicOff,
   Phone,
-
+  FlipHorizontal,
   RefreshCw,
   Video,
   VideoOff,
@@ -50,6 +50,11 @@ import { studentNavItems } from "@/config/studentNavItems";
 import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 
 type CallMode = "video" | "audio";
+
+const isMobileOrTablet = () =>
+  typeof navigator !== "undefined" &&
+  (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
 
 const getParticipantName = (
   participant: { profile?: { full_name?: string }; email?: string } | null | undefined,
@@ -137,9 +142,12 @@ const StudentVideoCall = () => {
     rejoinCall,
     toggleMute,
     toggleVideo,
+    flipCamera,
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
+
+  const isMobile = isMobileOrTablet();
 
   const incomingRingVibratedRef = useRef(false);
 
@@ -423,7 +431,7 @@ const StudentVideoCall = () => {
       : "Preview live"
     : isStartingMode
     ? isStartingMode === "audio"
-      ? "Preparing audioâ€¦"
+      ? "Preparing audio…"
       : "Opening camera"
     : "Preview appears here";
   const emptyStageMessage = activeAppointment
@@ -960,7 +968,7 @@ const StudentVideoCall = () => {
                           <div className="space-y-1.5">
                             <div className="w-fit rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm font-semibold text-white backdrop-blur-xl shadow-lg">
                               {remoteParticipantName}
-                              {remoteSpeaking ? " Â· speaking" : ""}
+                              {remoteSpeaking ? " · speaking" : ""}
                             </div>
                             {!isConnected && activeAppointment?.scheduled_at && (
                               <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
@@ -998,7 +1006,7 @@ const StudentVideoCall = () => {
                         <div className="absolute bottom-28 right-4 z-20 w-28 overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-1.5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:w-36">
                           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">
                             {activeAppointmentAnonymousBooking ? "You (Anonymous)" : "You"}
-                            {localSpeaking ? " â€¢ speaking" : ""}
+                            {localSpeaking ? " • speaking" : ""}
                           </div>
 
                           <div className="aspect-video overflow-hidden rounded-[20px] bg-[#111b21]">
@@ -1104,15 +1112,28 @@ const StudentVideoCall = () => {
                                   {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
                                 </Button>
 
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
-                                  onClick={() => setVideoFit(videoFit === "cover" ? "fit" : "cover")}
-                                  title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
-                                >
-                                  <RefreshCw className={cn("h-6 w-6 transition-transform duration-500", videoFit === "fit" && "rotate-180")} />
-                                </Button>
+                                {isMobile ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
+                                    onClick={() => void flipCamera()}
+                                    disabled={!localStream || isAudioOnly}
+                                    title="Flip camera"
+                                  >
+                                    <FlipHorizontal className="h-6 w-6" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
+                                    onClick={() => setVideoFit(videoFit === "cover" ? "fit" : "cover")}
+                                    title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                                  >
+                                    <RefreshCw className={cn("h-6 w-6 transition-transform duration-500", videoFit === "fit" && "rotate-180")} />
+                                  </Button>
+                                )}
 
                                 <Button
                                   variant="destructive"

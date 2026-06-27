@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Clock, RefreshCcw, Loader2, AlertTriangle, Brain } from "lucide-react";
 import { adminNavItems } from "@/config/adminNavItems";
@@ -111,7 +111,7 @@ function buildPanicStudentSummary(log: {
     displayName,
     email,
     idNumber,
-    detailLine: parts.join(" Â· "),
+    detailLine: parts.join(" · "),
   };
 }
 

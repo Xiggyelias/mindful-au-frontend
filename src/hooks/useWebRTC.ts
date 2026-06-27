@@ -125,6 +125,7 @@ type WebRTCEngine = {
 
   reconnectDeadlineMs: number | null;
   reconnectIntervalId: number | null;
+  currentFacingMode: "user" | "environment";
 };
 
 const DEFAULT_ENGINE_STATE: WebRTCState = {
@@ -183,6 +184,7 @@ const engine: WebRTCEngine = {
 
   reconnectDeadlineMs: null,
   reconnectIntervalId: null,
+  currentFacingMode: "user",
 };
 
 const ACTIVE_CALL_STORAGE_KEY = "mindful.activeCall";
@@ -1762,6 +1764,80 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     return startCall({ audioOnly: true });
   }, [startCall]);
 
+  const flipCamera = useCallback(async (): Promise<boolean> => {
+    const stream = engine.localStream;
+    if (!stream) return false;
+
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length === 0) return false;
+
+    const nextFacingMode = engine.currentFacingMode === "user" ? "environment" : "user";
+
+    try {
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: nextFacingMode },
+            width: { ideal: engine.lowBandwidthMode ? 640 : 1280 },
+            height: { ideal: engine.lowBandwidthMode ? 360 : 720 },
+            frameRate: { ideal: engine.lowBandwidthMode ? 15 : 24, max: engine.lowBandwidthMode ? 20 : 30 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Exact facingMode failed (some devices don't report it) — try with ideal
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacingMode },
+          audio: false,
+        });
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        newStream.getTracks().forEach((t) => t.stop());
+        return false;
+      }
+
+      // Stop and remove old video tracks from the shared stream
+      videoTracks.forEach((t) => {
+        t.stop();
+        stream.removeTrack(t);
+      });
+      stream.addTrack(newVideoTrack);
+
+      // Replace the sender track in the peer connection without renegotiating
+      const pc = engine.peerConnection;
+      if (pc) {
+        for (const sender of pc.getSenders()) {
+          if (sender.track?.kind === "video") {
+            await sender.replaceTrack(newVideoTrack);
+            break;
+          }
+        }
+      }
+
+      // Re-bind local video elements to the updated stream
+      for (const el of engine.localVideoElements) {
+        el.srcObject = stream;
+        playMediaElement(el, true);
+      }
+
+      engine.currentFacingMode = nextFacingMode;
+      setEngineState((prev) => ({
+        ...prev,
+        localStream: stream,
+        isAudioOnly: false,
+        isLocalVideoEnabled: true,
+      }));
+
+      return true;
+    } catch (error) {
+      logWebRTC("[WebRTC] Failed to flip camera:", error);
+      return false;
+    }
+  }, []);
+
   const endCall = useCallback(() => {
     cleanupEngineCall(true);
   }, []);
@@ -2045,6 +2121,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     rejoinCall,
     toggleMute,
     toggleVideo,
+    flipCamera,
+    currentFacingMode: engine.currentFacingMode,
     acceptIncomingCall,
     rejectIncomingCall,
   };

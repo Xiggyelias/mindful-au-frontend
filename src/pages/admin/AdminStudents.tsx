@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -1051,7 +1051,7 @@ const AdminStudents = () => {
                                     >
                                       {assigningStudentId === student.id &&
                                       peerAssignmentAction === "assign"
-                                        ? "â€¦"
+                                        ? "…"
                                         : hasPeer
                                         ? "Reassign"
                                         : "Assign"}
@@ -1066,7 +1066,7 @@ const AdminStudents = () => {
                                       >
                                         {assigningStudentId === student.id &&
                                         peerAssignmentAction === "unassign"
-                                          ? "â€¦"
+                                          ? "…"
                                           : "Remove"}
                                       </Button>
                                     )}
@@ -1114,7 +1114,7 @@ const AdminStudents = () => {
                                 >
                                   <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
                                   {assigningAssessmentStudentId === student.id
-                                    ? "â€¦"
+                                    ? "…"
                                     : "Check-in"}
                                 </Button>
                               </div>
@@ -1186,25 +1186,25 @@ const AdminStudents = () => {
               </div>
 
               {isSummaryLoading ? (
-                <p className="text-sm text-muted-foreground">Loading wellness summaryâ€¦</p>
+                <p className="text-sm text-muted-foreground">Loading wellness summary…</p>
               ) : studentSummary ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Wellness</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.wellness_score ?? "â€”"}
+                      {studentSummary?.scores?.wellness_score ?? "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Stress</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.stress_level ?? "â€”"}
+                      {studentSummary?.scores?.stress_level ?? "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Burnout</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.burnout_risk ?? "â€”"}
+                      {studentSummary?.scores?.burnout_risk ?? "—"}
                     </p>
                   </div>
                   {studentSummary?.mood?.recorded_at && (

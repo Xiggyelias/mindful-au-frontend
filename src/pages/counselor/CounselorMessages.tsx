@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   MessageSquare,
@@ -442,7 +442,7 @@ const CounselorMessages = () => {
             typeof scores.burnout_risk === "number" ? scores.burnout_risk :
             typeof scores.burnout_index === "number" ? scores.burnout_index : null;
         } else if (flat) {
-          // Older/different API shape â€” field names directly on the object
+          // Older/different API shape — field names directly on the object
           moodScore =
             typeof flat.wellness_score === "number" ? flat.wellness_score :
             typeof flat.mood_score === "number" ? flat.mood_score : null;
@@ -1363,7 +1363,7 @@ const CounselorMessages = () => {
     const reason = await prompt({
       title: "Flag urgent concern",
       description: "Describe the urgent concern (required). This will hand the case off to a counselor immediately.",
-      inputPlaceholder: "Describe the concernâ€¦",
+      inputPlaceholder: "Describe the concern…",
       confirmLabel: "Flag urgent",
       variant: "destructive",
     });
@@ -2110,7 +2110,7 @@ const CounselorMessages = () => {
                   {briefLoading && !briefData ? (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Loading student briefâ€¦</span>
+                      <span>Loading student brief…</span>
                     </div>
                   ) : briefData ? (
                     <div className="space-y-2.5">
@@ -2127,7 +2127,7 @@ const CounselorMessages = () => {
                           <p className="flex-1 text-xs text-muted-foreground leading-relaxed min-w-0">
                             <span className="font-semibold text-foreground">AI rec: </span>
                             {briefData.aiRecommendation.length > 160
-                              ? briefData.aiRecommendation.slice(0, 160) + "â€¦"
+                              ? briefData.aiRecommendation.slice(0, 160) + "…"
                               : briefData.aiRecommendation}
                           </p>
                         )}
