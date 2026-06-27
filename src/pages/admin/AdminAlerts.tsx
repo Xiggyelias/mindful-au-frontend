@@ -533,7 +533,7 @@ const AdminAlerts = () => {
                                 onClick={() => {
                                   const q = alert.map_query ?? extractLatLngFromLocation(alert.raw_location) ?? "";
                                   window.open(
-                                    `https://maps.google.com/?q=${q}`,
+                                    `https://maps.google.com/?q=${q}&z=18`,
                                     "_blank",
                                   );
                                 }}

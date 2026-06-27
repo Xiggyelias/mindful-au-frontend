@@ -104,6 +104,12 @@ function formatSlotRange(start: string, end: string): string {
   return endLabel ? `${startLabel}-${endLabel}` : startLabel;
 }
 
+function getMinDatetimeLocal(): string {
+  const now = new Date(Date.now() + 2 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
 function isHttpServerError(error: unknown): boolean {
   const status = Number((error as { response?: { status?: unknown } })?.response?.status ?? 0);
   return Number.isFinite(status) && status >= 500;
@@ -132,6 +138,7 @@ const StudentAppointments = () => {
   const [isEmergencySubmitting, setIsEmergencySubmitting] = useState(false);
   const [emergencyReason, setEmergencyReason] = useState("");
   const [emergencyCounselorId, setEmergencyCounselorId] = useState("");
+  const [emergencyCustomTime, setEmergencyCustomTime] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
@@ -180,6 +187,7 @@ const StudentAppointments = () => {
     setEmergencyDialogOpen(false);
     setSlots([]);
     setSelectedSlotId(null);
+    setEmergencyCustomTime("");
     setForm({
       counselor_id: "",
       scheduled_at: "",
@@ -652,6 +660,7 @@ const StudentAppointments = () => {
   const chooseSlot = useCallback((slot: CounselorSlot) => {
     if (slot.status !== "available") return;
     setSelectedSlotId(Number(slot.id));
+    setEmergencyCustomTime("");
     setForm((prev) => ({
       ...prev,
       scheduled_at: slot.start_time,
@@ -747,6 +756,7 @@ const StudentAppointments = () => {
       pinnedCounselorIdRef.current = String(counselorId);
       setIsEmergencyBookingMode(true);
       setSelectedSlotId(null);
+      setEmergencyCustomTime("");
       setSlots([]);
       setForm((prev) => ({
         ...prev,
@@ -799,16 +809,23 @@ const StudentAppointments = () => {
       let emergencyLocation: string | undefined;
       if (navigator.geolocation) {
         try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          const positionPromise = new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0,
+              timeout: 3000,
+              maximumAge: 60000,
             });
           });
-          emergencyLocation = `${position.coords.latitude},${position.coords.longitude}`;
+          // Cap at 2.5 s — never delay an emergency alert waiting for GPS.
+          const position = await Promise.race([
+            positionPromise,
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+          ]);
+          if (position) {
+            emergencyLocation = `${position.coords.latitude},${position.coords.longitude}`;
+          }
         } catch {
-          // no-op: location is optional for emergency requests
+          // GPS failed — emergency request goes out without location.
         }
       }
 
@@ -860,13 +877,16 @@ const StudentAppointments = () => {
   ]);
 
   const handleSubmit = async () => {
-    if (!form.counselor_id || !selectedSlot) {
+    // In emergency mode a custom time is valid even without a pre-existing slot.
+    const hasValidTime = Boolean(selectedSlot) || (isEmergencyBookingMode && Boolean(form.scheduled_at));
+    if (!form.counselor_id || !hasValidTime) {
       toast({ title: "Please select counselor and an available slot" });
       return;
     }
     try {
       setIsSubmitting(true);
-      const parsedScheduledAt = new Date(selectedSlot.start_time);
+      const rawScheduledAt = selectedSlot?.start_time ?? form.scheduled_at;
+      const parsedScheduledAt = new Date(rawScheduledAt);
       if (!Number.isFinite(parsedScheduledAt.getTime())) {
         toast({
           title: "Invalid date/time",
@@ -886,10 +906,12 @@ const StudentAppointments = () => {
 
       const callTypeForApi =
         form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
-      const durationMinutes = minutesBetween(selectedSlot.start_time, selectedSlot.end_time);
+      const durationMinutes = selectedSlot
+        ? minutesBetween(selectedSlot.start_time, selectedSlot.end_time)
+        : form.duration_minutes;
       const basePayload: {
         counselor_id: number;
-        counselor_slot_id: number;
+        counselor_slot_id?: number;
         scheduled_at: string;
         duration_minutes: number;
         notes: string;
@@ -897,7 +919,7 @@ const StudentAppointments = () => {
         emergency_request_id?: number;
       } = {
         counselor_id: Number(form.counselor_id),
-        counselor_slot_id: Number(selectedSlot.id),
+        ...(selectedSlot ? { counselor_slot_id: Number(selectedSlot.id) } : {}),
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         notes: sessionNotes,
@@ -942,6 +964,7 @@ const StudentAppointments = () => {
       // called from code does NOT trigger onOpenChange, so we must clear here too.
       pinnedCounselorIdRef.current = null;
       setIsEmergencyBookingMode(false);
+      setEmergencyCustomTime("");
 
       setOpenDialog(false);
       setForm({
@@ -1107,6 +1130,7 @@ const StudentAppointments = () => {
                 if (!open) {
                   pinnedCounselorIdRef.current = null;
                   setIsEmergencyBookingMode(false);
+                  setEmergencyCustomTime("");
                 }
                 setOpenDialog(open);
               }}>
@@ -1194,6 +1218,40 @@ const StudentAppointments = () => {
                           Selected: {formatInDisplayZone(new Date(selectedSlot.start_time), "M/d/yyyy")},{" "}
                           {formatSlotRange(selectedSlot.start_time, selectedSlot.end_time)} (
                           {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} min).
+                        </p>
+                      )}
+                    </div>
+                    <div className="border-t border-border/50 pt-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center">— or pick any time —</p>
+                      <input
+                        type="datetime-local"
+                        value={emergencyCustomTime}
+                        min={getMinDatetimeLocal()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEmergencyCustomTime(val);
+                          if (val) {
+                            setSelectedSlotId(null);
+                            const d = new Date(val);
+                            setForm((prev) => ({
+                              ...prev,
+                              scheduled_at: Number.isFinite(d.getTime()) ? d.toISOString() : "",
+                              duration_minutes: 60,
+                            }));
+                          } else {
+                            setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 60 }));
+                          }
+                        }}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      {emergencyCustomTime && !selectedSlot && form.scheduled_at && (
+                        <p className="text-xs text-muted-foreground">
+                          Custom time:{" "}
+                          {new Date(form.scheduled_at).toLocaleString([], {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}{" "}
+                          (60 min)
                         </p>
                       )}
                     </div>
@@ -1457,8 +1515,10 @@ const StudentAppointments = () => {
                     onClick={handleSubmit}
                     disabled={
                       isSubmitting ||
-                      !selectedSlot ||
-                      (!isEmergencyBookingMode && availableCounselors.length === 0)
+                      !form.counselor_id ||
+                      (isEmergencyBookingMode
+                        ? !selectedSlot && !form.scheduled_at
+                        : !selectedSlot || availableCounselors.length === 0)
                     }
                   >
                     {isSubmitting
