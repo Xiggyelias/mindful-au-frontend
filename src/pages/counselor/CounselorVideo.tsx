@@ -48,6 +48,7 @@ import { format } from "date-fns";
 import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
 import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
 import { CHAT_INCOMING_DIGEST_EVENT, CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
+import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 
 const getParticipantName = (participant: any, fallback: string) =>
   (participant as { profile?: { full_name?: string }, full_name?: string, email?: string })?.profile?.full_name ||
@@ -763,6 +764,23 @@ const CounselorVideo = () => {
 
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
+      {/* Render incoming call overlay directly on the call page so Accept goes
+          through acceptIncomingCall() rather than the simultaneous-call path. */}
+      {isIncomingCall && activeSession && (
+        <IncomingCallOverlay
+          call={{
+            id: Number(activeSessionId),
+            appointment_id: Number(activeSessionId),
+            callerName: remoteParticipantName,
+            is_anonymous: false,
+            call_type: incomingAudioOnly ? "audio" : "video",
+            scheduled_at: activeSession.scheduled_at ?? null,
+          }}
+          busy={false}
+          onAccept={handleAcceptIncomingCall}
+          onDecline={handleRejectIncomingCall}
+        />
+      )}
       <DashboardSidebar
         items={counselorNavItems}
         userType="counselor"

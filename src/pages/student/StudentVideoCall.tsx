@@ -47,6 +47,7 @@ import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
 import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
 import { studentNavItems } from "@/config/studentNavItems";
+import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 
 type CallMode = "video" | "audio";
 
@@ -785,6 +786,24 @@ const StudentVideoCall = () => {
 
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-background">
+      {/* Show the incoming call overlay directly on the call page so the student
+          accepts via acceptIncomingCall() instead of "Start Video", which would
+          create a simultaneous-call collision and leave the counselor with no video. */}
+      {isIncomingCall && activeAppointment && (
+        <IncomingCallOverlay
+          call={{
+            id: Number(activeAppointmentId),
+            appointment_id: Number(activeAppointmentId),
+            callerName: remoteParticipantName,
+            is_anonymous: false,
+            call_type: incomingAudioOnly ? "audio" : "video",
+            scheduled_at: activeAppointment.scheduled_at ?? null,
+          }}
+          busy={false}
+          onAccept={handleAcceptIncomingCall}
+          onDecline={handleRejectIncomingCall}
+        />
+      )}
       <DashboardSidebar
         items={studentNavItems}
         userType="student"
