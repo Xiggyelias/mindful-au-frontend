@@ -815,6 +815,10 @@ const CounselorStudents = () => {
                       const peerId = Number(peer?.id || 0);
                       return peerId > 0 && peerId !== Number(student.id) && peerId !== Number(user?.id || 0);
                     });
+                    const selectedPeerObj = selectedPeerIdForStudent
+                      ? peerCounselors.find((p: any) => Number(p.id) === selectedPeerIdForStudent)
+                      : null;
+                    const selectedPeerUnavailable = selectedPeerObj && selectedPeerObj.is_available === false;
 
                     return (
                       <div
@@ -996,6 +1000,12 @@ const CounselorStudents = () => {
                               <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
                                 Student risk level changed since peer assignment. Consider reassigning to a professional counselor.
+                              </p>
+                            )}
+                            {selectedPeerUnavailable && (
+                              <p className="text-[11px] text-orange-600 dark:text-orange-400 mt-1.5 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                This peer counselor has set themselves as unavailable. Assigning will be blocked by the server.
                               </p>
                             )}
                           </div>
