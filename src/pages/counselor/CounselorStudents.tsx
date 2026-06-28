@@ -92,6 +92,8 @@ type RawApiSession = {
 type RawPeerCounselor = {
   id: number;
   email?: string | null;
+  is_online?: boolean | null;
+  last_seen_at?: string | null;
   profile?: { full_name?: string | null } | null;
 };
 
@@ -925,17 +927,11 @@ const CounselorStudents = () => {
                           <div className="border-t border-border/40 bg-muted/20 px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                                Peer Counselor:
+                                {hasAssignedPeer ? "Assigned peer:" : "Peer Counselor:"}
                               </span>
 
-                              {hasAssignedPeer && (
-                                <span className="text-xs font-medium text-foreground">
-                                  {peerCounselorNameById.get(Number(student.assignedPeerCounselorId)) || `#${student.assignedPeerCounselorId}`}
-                                </span>
-                              )}
-
                               <select
-                                className="h-8 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-[160px] max-w-[240px]"
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-[160px] max-w-[260px]"
                                 value={
                                   selectedPeerByStudent[student.id] ??
                                   (student.assignedPeerCounselorId ? String(student.assignedPeerCounselorId) : "")
@@ -949,11 +945,15 @@ const CounselorStudents = () => {
                                 disabled={assigningStudentId !== null}
                               >
                                 <option value="">Select peer counselor</option>
-                                {peerOptions.map((peer: any) => (
-                                  <option key={peer.id} value={String(peer.id)}>
-                                    {peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`}
-                                  </option>
-                                ))}
+                                {peerOptions.map((peer: any) => {
+                                  const label = peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`;
+                                  const online = Boolean(peer?.is_online);
+                                  return (
+                                    <option key={peer.id} value={String(peer.id)}>
+                                      {online ? "● " : "○ "}{label}
+                                    </option>
+                                  );
+                                })}
                               </select>
 
                               <Button
