@@ -858,8 +858,8 @@ const CounselorStudents = () => {
                                   ? "Assigning..."
                                   : hasAssignedPeer
                                   ? isAssignedToSelectedPeer
-                                    ? “Assigned ✓”
-                                    : “Reassign”
+                                    ? "Assigned"
+                                    : "Reassign"
                                   : "Assign"}
                               </Button>
 
