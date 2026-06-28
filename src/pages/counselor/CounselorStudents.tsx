@@ -21,6 +21,7 @@ import {
   CalendarDays,
   FileSpreadsheet,
   Check,
+  UserPlus,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -519,6 +520,31 @@ const CounselorStudents = () => {
     }
   };
 
+  const handleAssignAsCounselor = async (studentId: number) => {
+    const existing = sessions.find(
+      (s: any) =>
+        Number(s.student_id) === studentId &&
+        s.session_type === "chat" &&
+        s.assigned_role !== "peer_counselor" &&
+        s.status !== "completed" &&
+        s.status !== "cancelled"
+    );
+    if (existing) {
+      toast.info("An active counseling session already exists with this student.");
+      return;
+    }
+    try {
+      setMessagingStudentId(studentId);
+      await api.createSessionAsCounselor({ student_id: studentId, session_type: "chat" });
+      toast.success("Counseling session created. The student can now message you.");
+      setReloadToken((prev) => prev + 1);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create session.");
+    } finally {
+      setMessagingStudentId(null);
+    }
+  };
+
   const handleUnassignPeerCounselor = async (student: any) => {
     const delegatedSession = sessions.find(
       (session: any) =>
@@ -797,12 +823,12 @@ const CounselorStudents = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/45 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
-                            onClick={() => handleAssignAssessment(student.id, student.name || `Student #${student.id}`)}
-                            disabled={assigningAssessmentStudentId === student.id}
+                            className="gap-1.5 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/45 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            onClick={() => void handleAssignAsCounselor(student.id)}
+                            disabled={messagingStudentId === student.id}
                           >
-                            <FileSpreadsheet className="h-3.5 w-3.5" />
-                            {assigningAssessmentStudentId === student.id ? "Assigning..." : "Assign Assessment"}
+                            <UserPlus className="h-3.5 w-3.5" />
+                            {messagingStudentId === student.id ? "Assigning..." : "Assign to Me"}
                           </Button>
                         </div>
 
