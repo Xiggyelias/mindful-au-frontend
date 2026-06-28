@@ -22,6 +22,7 @@ import {
   FileSpreadsheet,
   Check,
   UserPlus,
+  ClipboardList,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -32,10 +33,13 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -545,6 +549,81 @@ const CounselorStudents = () => {
     }
   };
 
+  // ── Pre-Session Assessment ──────────────────────────────────────────────────
+  const [preSessionStudent, setPreSessionStudent] = useState<StudentRow | null>(null);
+  const [preSessionWellness, setPreSessionWellness] = useState<any>(null);
+  const [isLoadingPreSession, setIsLoadingPreSession] = useState(false);
+  const [isStartingPreSession, setIsStartingPreSession] = useState(false);
+  const [preSessionForm, setPreSessionForm] = useState({
+    presenting_concern: "",
+    observed_risk: "low",
+    consent_confirmed: false,
+    safety_assessed: false,
+    session_objective: "",
+  });
+
+  const openPreSession = async (student: StudentRow) => {
+    setPreSessionStudent(student);
+    setPreSessionWellness(null);
+    setPreSessionForm({
+      presenting_concern: "",
+      observed_risk: student.riskLevel || "low",
+      consent_confirmed: false,
+      safety_assessed: false,
+      session_objective: "",
+    });
+    setIsLoadingPreSession(true);
+    try {
+      const summary = await api.getStudentWellnessSummary(student.id);
+      setPreSessionWellness(summary);
+    } catch {
+      // wellness data optional — proceed without it
+    } finally {
+      setIsLoadingPreSession(false);
+    }
+  };
+
+  const handleStartWithPreSession = async () => {
+    if (!preSessionStudent) return;
+    const lines: string[] = [];
+    if (preSessionForm.presenting_concern.trim())
+      lines.push(`Presenting concern: ${preSessionForm.presenting_concern.trim()}`);
+    lines.push(`Observed risk: ${preSessionForm.observed_risk}`);
+    if (preSessionForm.consent_confirmed) lines.push("Consent: Confirmed");
+    if (preSessionForm.safety_assessed) lines.push("Safety check: Completed");
+    if (preSessionForm.session_objective.trim())
+      lines.push(`Session objective: ${preSessionForm.session_objective.trim()}`);
+    const notes = lines.join("\n");
+
+    try {
+      setIsStartingPreSession(true);
+      const existing = sessions.find(
+        (s: any) =>
+          Number(s.student_id) === preSessionStudent.id &&
+          s.session_type === "chat" &&
+          s.assigned_role !== "peer_counselor" &&
+          s.status !== "completed" &&
+          s.status !== "cancelled"
+      );
+      const session = existing
+        ? existing
+        : await api.createSessionAsCounselor({
+            student_id: preSessionStudent.id,
+            session_type: "chat",
+          });
+      if (notes) {
+        const sessionId = String(session?.id ?? "");
+        if (sessionId) await api.updateSessionNote(sessionId, notes);
+      }
+      setPreSessionStudent(null);
+      navigate(`/counselor/messages?session=${session.id}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to start session.");
+    } finally {
+      setIsStartingPreSession(false);
+    }
+  };
+
   const handleUnassignPeerCounselor = async (student: any) => {
     const delegatedSession = sessions.find(
       (session: any) =>
@@ -819,6 +898,15 @@ const CounselorStudents = () => {
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
                             {messagingStudentId === student.id ? "Opening..." : "Message"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 text-xs"
+                            onClick={() => void openPreSession(student)}
+                          >
+                            <ClipboardList className="h-3.5 w-3.5" />
+                            Pre-Session
                           </Button>
                           <Button
                             size="sm"
@@ -1251,6 +1339,120 @@ const CounselorStudents = () => {
               </Button>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+      {/* ── Pre-Session Assessment Dialog ────────────────────────────────── */}
+      <Dialog open={preSessionStudent !== null} onOpenChange={(open) => { if (!open) setPreSessionStudent(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              Pre-Session Assessment
+            </DialogTitle>
+            <DialogDescription>
+              {preSessionStudent?.name} · Complete this brief before opening the session.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Student wellness snapshot */}
+          {isLoadingPreSession ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading student data…
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-secondary/20 p-3 text-center text-sm">
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Wellness</p>
+                <p className="font-semibold">{preSessionWellness?.scores?.wellness_score != null ? `${preSessionWellness.scores.wellness_score}%` : "--"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Stress</p>
+                <p className="font-semibold">{preSessionWellness?.scores?.stress_level != null ? `${preSessionWellness.scores.stress_level}%` : "--"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">AI Risk</p>
+                <p className={`font-semibold capitalize ${
+                  preSessionStudent?.riskLevel === "high" || preSessionStudent?.riskLevel === "critical"
+                    ? "text-destructive"
+                    : preSessionStudent?.riskLevel === "medium"
+                    ? "text-warning"
+                    : "text-success"
+                }`}>{preSessionStudent?.riskLevel || "low"}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Presenting concern</Label>
+              <Textarea
+                placeholder="Brief note on what the student brings to this session…"
+                value={preSessionForm.presenting_concern}
+                onChange={(e) => setPreSessionForm((prev) => ({ ...prev, presenting_concern: e.target.value }))}
+                rows={2}
+                maxLength={500}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observed / reported risk level</Label>
+              <select
+                value={preSessionForm.observed_risk}
+                onChange={(e) => setPreSessionForm((prev) => ({ ...prev, observed_risk: e.target.value }))}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={preSessionForm.consent_confirmed}
+                  onChange={(e) => setPreSessionForm((prev) => ({ ...prev, consent_confirmed: e.target.checked }))}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Informed consent confirmed
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={preSessionForm.safety_assessed}
+                  onChange={(e) => setPreSessionForm((prev) => ({ ...prev, safety_assessed: e.target.checked }))}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Safety check completed
+              </label>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Session objective</Label>
+              <Input
+                placeholder="Primary goal for today's session…"
+                value={preSessionForm.session_objective}
+                onChange={(e) => setPreSessionForm((prev) => ({ ...prev, session_objective: e.target.value }))}
+                maxLength={200}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-1">
+            <Button variant="outline" onClick={() => setPreSessionStudent(null)} disabled={isStartingPreSession}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleStartWithPreSession()} disabled={isStartingPreSession}>
+              {isStartingPreSession ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Starting…</>
+              ) : (
+                <>Start Session</>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
