@@ -224,8 +224,8 @@ const CounselorAlerts = () => {
         return {
           id: Number(row.id),
           title: row.status === "assigned" ? "Emergency Request Assigned" : "Emergency Support Request",
-          message: `${student.displayName} requested emergency support for ${
-            requestedAt ? new Date(requestedAt).toLocaleString() : "now"
+          message: `${student.displayName} requested emergency support${
+            requestedAt ? ` on ${new Date(requestedAt).toLocaleDateString()}` : ""
           }.`,
           requested_at: requestedAt,
           created_at: String(row.created_at || requestedAt),
