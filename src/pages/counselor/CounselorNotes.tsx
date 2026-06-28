@@ -325,7 +325,7 @@ const CounselorNotes = () => {
             <div className="space-y-1">
               <h2 className="text-2xl font-bold tracking-tight">Session notes</h2>
               <p className="text-sm text-muted-foreground">
-                Read and edit encrypted clinical notes tied to each counseling session (same field as Messages / video
+                Read and edit clinical notes tied to each counseling session (same field as Messages / video
                 session metadata).
               </p>
             </div>
@@ -599,7 +599,12 @@ const CounselorNotes = () => {
                       <div className="space-y-1.5 relative">
                         <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between gap-2">
                           <span>Clinical notes</span>
-                          <span className="font-normal text-muted-foreground">
+                          <span className={cn(
+                            "font-normal",
+                            noteText.length > 5000 ? "text-destructive font-semibold" :
+                            noteText.length > 4500 ? "text-amber-600" :
+                            "text-muted-foreground"
+                          )}>
                             {noteText.length} / 5000
                           </span>
                         </label>
@@ -608,6 +613,7 @@ const CounselorNotes = () => {
                           className="min-h-[420px] sm:min-h-[520px] bg-background/30 border-border/40 focus:bg-background/60 transition-all text-base leading-relaxed resize-y p-4"
                           value={noteText}
                           disabled={!canEditNotes}
+                          maxLength={5000}
                           onChange={(e) => setNoteText(e.target.value)}
                         />
                         <p className="text-[11px] text-muted-foreground">
