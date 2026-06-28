@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { getStudentHomePath } from "@/lib/studentRoutes";
+import { resolveInstitutionEmailDomain } from "@/lib/runtimeConfig";
+
+const INSTITUTION_EMAIL_DOMAIN = resolveInstitutionEmailDomain();
 
 const StudentLogin = () => {
   const navigate = useNavigate();
@@ -102,7 +105,7 @@ const StudentLogin = () => {
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                Only institutional accounts are allowed (for example: <code>@africau.edu</code>).
+                Only institutional accounts are allowed (for example: <code>@{INSTITUTION_EMAIL_DOMAIN}</code>).
               </p>
             </CardContent>
           </Card>

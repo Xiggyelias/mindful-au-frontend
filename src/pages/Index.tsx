@@ -4,7 +4,9 @@ import { Logo } from "@/components/Logo";
 import { PortalCard } from "@/components/PortalCard";
 import { BackgroundEffects } from "@/components/BackgroundEffects";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { resolveCrisisHotlineTelHref } from "@/lib/runtimeConfig";
+import { resolveCrisisHotlineTelHref, resolveInstitutionName } from "@/lib/runtimeConfig";
+
+const INSTITUTION_NAME = resolveInstitutionName();
 
 /** Institutional default when `VITE_CRISIS_HOTLINE_*` is not set (Africa University / campus short code). */
 const DEFAULT_CRISIS_TEL_HREF = "tel:393";
@@ -128,7 +130,7 @@ const Index = () => {
         {/* Footer */}
         <footer className="p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Africa University. All rights reserved.
+            © {new Date().getFullYear()} {INSTITUTION_NAME}. All rights reserved.
           </p>
         </footer>
       </div>

@@ -59,3 +59,29 @@ export const resolveCrisisHotlineTelHref = (): string | null => {
   }
   return `tel:${raw.replace(/\s+/g, "")}`;
 };
+
+/**
+ * Institution display name used in copyright notices, login help text, and email examples.
+ * Override with VITE_INSTITUTION_NAME for forks / rebranding.
+ */
+export const resolveInstitutionName = (): string =>
+  String(import.meta.env.VITE_INSTITUTION_NAME ?? "").trim() || "Africa University";
+
+/**
+ * Primary email domain shown as example on login pages and help text.
+ * Override with VITE_INSTITUTION_EMAIL_DOMAIN.
+ */
+export const resolveInstitutionEmailDomain = (): string =>
+  String(import.meta.env.VITE_INSTITUTION_EMAIL_DOMAIN ?? "").trim() || "africau.edu";
+
+/**
+ * Emergency / on-call counselor telephone number shown on the student dashboard.
+ * Set VITE_COUNSELOR_PHONE to override (E.164 or any tel: value).
+ * Returns null when not configured — caller should hide the "Call Now" button.
+ */
+export const resolveCounselorPhone = (): string | null => {
+  const raw = String(import.meta.env.VITE_COUNSELOR_PHONE ?? "").trim();
+  if (raw === "") return null;
+  if (raw.toLowerCase().startsWith("tel:")) return raw;
+  return `tel:${raw.replace(/\s+/g, "")}`;
+};

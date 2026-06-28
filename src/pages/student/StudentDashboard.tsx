@@ -21,8 +21,11 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
+import { resolveCounselorPhone } from "@/lib/runtimeConfig";
 import { toast } from "sonner";
 import { format } from "date-fns";
+
+const COUNSELOR_PHONE = resolveCounselorPhone() ?? "tel:+263774068265";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
@@ -254,8 +257,7 @@ const StudentDashboard = () => {
   };
 
   const handleCallNow = () => {
-    // Open phone dialer with school counselor number
-    window.location.href = 'tel:+263774068265';
+    window.location.href = COUNSELOR_PHONE;
     toast.info("Connecting to school counselor...");
   };
 
