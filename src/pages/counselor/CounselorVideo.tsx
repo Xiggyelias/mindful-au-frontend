@@ -329,7 +329,7 @@ const CounselorVideo = () => {
         setLastSavedText(initialNotes);
       }
     } catch (err) {
-      console.error("Failed to load active session notes:", err);
+      if (import.meta.env.DEV) console.error("Failed to load active session notes:", err);
     }
   }, [activeSession]);
 
@@ -355,7 +355,7 @@ const CounselorVideo = () => {
         await api.updateSessionNote(counselingSessionId, noteText);
         setLastSavedText(noteText);
       } catch (err) {
-        console.error("Failed to auto-save notes:", err);
+        if (import.meta.env.DEV) console.error("Failed to auto-save notes:", err);
         setNoteSaveError("Failed to save note");
       } finally {
         setIsSavingNote(false);

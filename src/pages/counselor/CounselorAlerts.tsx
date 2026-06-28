@@ -122,7 +122,7 @@ function buildPanicStudentSummary(log: {
   return {
     studentId: Number.isFinite(studentId) ? studentId : 0,
     displayName,
-    detailLine: parts.join(" - "),
+    detailLine: parts.join(" · "),
   };
 }
 

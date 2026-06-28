@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
 import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { markSessionAsExpired } from '@/hooks/useChatSession';
+import { useDecryptWorker } from '@/hooks/useDecryptWorker';
+import { loadPersistedSessionKey } from '@/lib/chatSessionKeys';
 import type { ChatAttachment } from '@/lib/chatAttachments';
 import {
   CHAT_INCOMING_DIGEST_EVENT,
@@ -66,6 +68,7 @@ const TYPING_WRITE_MIN_GAP_ACTIVE_MS = 6_000;
 const TYPING_WRITE_MIN_GAP_IDLE_MS = 2_000;
 const FULL_RECONCILE_EVERY_POLLS = 5;
 const DELETED_MESSAGE_TEXT = 'This message was deleted.';
+export const ENCRYPTED_FALLBACK = '[Encrypted message]';
 
 const getJitter = () => Math.floor(Math.random() * POLL_JITTER_MAX_MS);
 
@@ -150,7 +153,7 @@ const filterVisibleMessages = <T extends { content?: unknown }>(msgs: T[]): T[] 
 
 const formatServerMessage = (msg: any): ChatMessage => ({
   ...msg,
-  decryptedContent: msg.content,
+  decryptedContent: msg.is_encrypted ? ENCRYPTED_FALLBACK : msg.content,
   e2eVisual: 'plain' as const,
   delivery_status: msg.seen_at ? 'read' : 'delivered',
 });
@@ -194,6 +197,8 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     (targetSessionId: string) => String(sessionIdRef.current || '') === String(targetSessionId || ''),
     []
   );
+
+  const { decryptAsync } = useDecryptWorker();
 
   const numericUserId = Number(userId);
   const hasValidUserId = Number.isFinite(numericUserId) && numericUserId > 0;
@@ -302,6 +307,37 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  // Decrypt messages that arrived with is_encrypted=true using the Web Worker.
+  // Falls back to ENCRYPTED_FALLBACK when no session key is available.
+  useEffect(() => {
+    const pending = messages.filter(
+      (m) => m.is_encrypted && m.decryptedContent === ENCRYPTED_FALLBACK
+    );
+    if (pending.length === 0) return;
+
+    const key = loadPersistedSessionKey(sessionId);
+    if (!key) return;
+
+    let cancelled = false;
+    for (const msg of pending) {
+      decryptAsync(msg.id, msg.content, key)
+        .then((plaintext) => {
+          if (cancelled) return;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msg.id && m.decryptedContent === ENCRYPTED_FALLBACK
+                ? { ...m, decryptedContent: plaintext }
+                : m
+            )
+          );
+        })
+        .catch(() => {
+          // Leave as ENCRYPTED_FALLBACK — wrong key or corrupt payload.
+        });
+    }
+    return () => { cancelled = true; };
+  }, [messages, sessionId, decryptAsync]);
 
   // When the session changes (user switches chat) or the component unmounts while
   // the user was typing, immediately clear our typing state on the old session so
@@ -510,7 +546,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         const visibleMessages = filterVisibleMessages(rawMessages);
         const formatted = visibleMessages.map((msg: any) => ({
           ...msg,
-          decryptedContent: msg.content,
+          decryptedContent: msg.is_encrypted ? ENCRYPTED_FALLBACK : msg.content,
           e2eVisual: 'plain' as const,
         }));
 
@@ -974,6 +1010,6 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     removeOptimisticMessage,
     getKeyForSharing: async () => null,
     getEncryptionKey: () => null,
-    refreshMessages: () => {},
+    refreshMessages: useCallback(() => { void loadMessages(true); }, [loadMessages]),
   };
 };

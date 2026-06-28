@@ -25,9 +25,12 @@ interface ChatInputProps {
   message: string;
   isSending: boolean;
   isUploading: boolean;
-  uploadProgress: number;
-  isVoiceMode: boolean;
-  recording: { blob: File; url: string } | null;
+  /** @deprecated Component manages its own recording UI state via pointer events. */
+  uploadProgress?: number;
+  /** @deprecated Component manages its own recording UI state via pointer events. */
+  isVoiceMode?: boolean;
+  /** @deprecated Component manages its own recording UI state via pointer events. */
+  recording?: { blob: File; url: string } | null;
   recordingTime: number;
   isPaused: boolean;
   selectedFile: File | null;

@@ -44,6 +44,41 @@ const moodOptions = [
 
 type StudentMood = (typeof moodOptions)[number]["value"];
 
+const MOOD_STREAK_KEY = "mindful:mood_streak_v1";
+type MoodStreakData = { lastDate: string; streak: number };
+
+function getMoodStreakData(): MoodStreakData {
+  try {
+    const raw = localStorage.getItem(MOOD_STREAK_KEY);
+    if (!raw) return { lastDate: "", streak: 0 };
+    return JSON.parse(raw) as MoodStreakData;
+  } catch { return { lastDate: "", streak: 0 }; }
+}
+
+function todayIso(): string { return new Date().toISOString().slice(0, 10); }
+function yesterdayIso(): string { return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10); }
+
+function readCurrentStreak(): number {
+  const { lastDate, streak } = getMoodStreakData();
+  return lastDate === todayIso() || lastDate === yesterdayIso() ? streak : 0;
+}
+
+function bumpStreak(): number {
+  const today = todayIso();
+  const { lastDate, streak } = getMoodStreakData();
+  const next = lastDate === today ? streak : lastDate === yesterdayIso() ? streak + 1 : 1;
+  try { localStorage.setItem(MOOD_STREAK_KEY, JSON.stringify({ lastDate: today, streak: next })); } catch {}
+  return next;
+}
+
+function hoursUntilMidnight(): number {
+  const now = new Date();
+  const midnight = new Date(now); midnight.setHours(24, 0, 0, 0);
+  return Math.max(1, Math.ceil((midnight.getTime() - now.getTime()) / 3_600_000));
+}
+
+const CELEBRATION_SPARKS = ["✨", "🎉", "⭐", "💪", "🌟", "💚", "🎊"];
+
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,6 +88,12 @@ const StudentDashboard = () => {
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const [dailyMood, setDailyMood] = useState<StudentMood | null>(null);
   const [isRecordingMood, setIsRecordingMood] = useState(false);
+  const [moodStreak, setMoodStreak] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [wellnessContext, setWellnessContext] = useState<{
+    trend: 'improving' | 'stable' | 'worsening' | null;
+    label: string | null;
+  }>({ trend: null, label: null });
   const [statsError, setStatsError] = useState<string | null>(null);
   const [, setStatsLoading] = useState(false);
   const { user } = useAuth();
@@ -66,6 +107,8 @@ const StudentDashboard = () => {
   } = useDailyTip();
 
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
+
+  useEffect(() => { setMoodStreak(readCurrentStreak()); }, []);
 
   const openVideoCallRoom = (appointment: any) => {
     if (!appointment?.id) {
@@ -130,6 +173,11 @@ const StudentDashboard = () => {
         });
         setUpcomingAppointments(upcomingApts);
         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+        const trendRaw = summary?.ml_insights?.trend?.label ?? null;
+        setWellnessContext({
+          trend: trendRaw === 'improving' || trendRaw === 'worsening' || trendRaw === 'stable' ? trendRaw : null,
+          label: typeof summary?.labels?.wellness === 'string' ? summary.labels.wellness : null,
+        });
         if (moodResponse?.log?.mood) {
           setDailyMood(moodResponse.log.mood as StudentMood);
         } else {
@@ -228,8 +276,12 @@ const StudentDashboard = () => {
       const result = await api.recordStudentMood(mood);
       const recorded = (result?.log?.mood ?? mood) as StudentMood;
       setDailyMood(recorded);
+      const newStreak = bumpStreak();
+      setMoodStreak(newStreak);
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 1500);
       const recordedLabel = moodOptions.find((item) => item.value === recorded)?.label.toLowerCase() ?? recorded;
-      toast.success(`Mood saved: ${recordedLabel}.`);
+      toast.success(`Mood saved: ${recordedLabel}${newStreak > 1 ? ` — ${newStreak} day streak! 🔥` : ""}`);
     } catch (error: any) {
       const message = error?.response?.data?.message;
       if (typeof message === "string" && message.toLowerCase().includes("already recorded")) {
@@ -286,30 +338,68 @@ const StudentDashboard = () => {
                 <p className="text-lg text-muted-foreground max-w-xl">
                   Take a deep breath. We're here to support your journey today. How are you feeling right now?
                 </p>
-                <div className="flex flex-wrap gap-2 pt-4">
-                  {moodOptions.map((moodOption) => (
-                    <Button
-                      key={moodOption.value}
-                      variant="glass"
-                      size="sm"
-                      className={`rounded-full transition-all duration-300 ${
-                        dailyMood === moodOption.value
-                          ? "bg-primary/20 border border-primary/30"
-                          : "bg-background/50 hover:bg-primary/20"
-                      }`}
-                      onClick={() => handleMoodSelection(moodOption.value)}
-                      disabled={Boolean(dailyMood) || isRecordingMood}
-                    >
-                      {moodOption.display}
-                    </Button>
-                  ))}
+                <div className="relative pt-4">
+                  {/* Confetti burst on pick */}
+                  {showCelebration && (
+                    <div className="pointer-events-none absolute -top-2 left-0 flex gap-1 z-10" aria-hidden>
+                      {CELEBRATION_SPARKS.map((spark, i) => (
+                        <span
+                          key={i}
+                          className="text-lg animate-bounce"
+                          style={{ animationDelay: `${i * 60}ms`, animationDuration: "500ms" }}
+                        >
+                          {spark}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Streak / nudge badge */}
+                  <div className="mb-3">
+                    {!dailyMood ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary animate-bounce">
+                        {moodStreak > 0
+                          ? `🔥 ${moodStreak}-day streak — keep it going!`
+                          : "✨ Tap how you're feeling today"}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {moodStreak > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 dark:bg-orange-900/30 px-3 py-1 text-xs font-semibold text-orange-600 dark:text-orange-300">
+                            🔥 {moodStreak} day streak!
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          Next check-in in {hoursUntilMidnight()}h 💚
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mood buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {moodOptions.map((moodOption, i) => (
+                      <Button
+                        key={moodOption.value}
+                        variant="glass"
+                        size="sm"
+                        className={`rounded-full transition-all duration-500 animate-in slide-in-from-bottom-2 ${
+                          dailyMood === moodOption.value
+                            ? "scale-110 bg-primary/20 border-2 border-primary/40 ring-2 ring-primary/20"
+                            : dailyMood
+                            ? "opacity-40 scale-95 cursor-default"
+                            : "bg-background/50 hover:bg-primary/20 hover:scale-105"
+                        }`}
+                        style={{ animationDelay: `${i * 55}ms` }}
+                        onClick={() => handleMoodSelection(moodOption.value)}
+                        disabled={Boolean(dailyMood) || isRecordingMood}
+                      >
+                        {moodOption.display}
+                        {dailyMood === moodOption.value && " ✓"}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-                {dailyMood && (
-                  <p className="text-xs text-muted-foreground">
-                    Mood recorded for today: {moodOptions.find((item) => item.value === dailyMood)?.display ?? dailyMood}.
-                    New selection unlocks tomorrow.
-                  </p>
-                )}
               </div>
               <div className="hidden md:block">
                 <div className="h-32 w-32 rounded-full bg-primary/10 flex items-center justify-center animate-pulse">
@@ -404,7 +494,7 @@ const StudentDashboard = () => {
                       try {
                         setStatsError(null);
                         
-                        const [sessions, appointments, summary] = await Promise.all([
+                        const [sessions, appointments, summary, moodData] = await Promise.all([
                           api.getSessions({ lightweight: true }),
                           api.getAppointments(),
                           api.getStudentWellnessSummary().catch(() => null),
@@ -437,6 +527,11 @@ const StudentDashboard = () => {
                         });
                         setUpcomingAppointments(upcomingApts);
                         setDiagnostics(summary?.latest_ai_diagnostic ?? summary?.latest_diagnostic ?? null);
+                        const retryTrendRaw = summary?.ml_insights?.trend?.label ?? null;
+                        setWellnessContext({
+                          trend: retryTrendRaw === 'improving' || retryTrendRaw === 'worsening' || retryTrendRaw === 'stable' ? retryTrendRaw : null,
+                          label: typeof summary?.labels?.wellness === 'string' ? summary.labels.wellness : null,
+                        });
                         if (moodData?.log?.mood) {
                           setDailyMood(moodData.log.mood as StudentMood);
                         } else {
@@ -466,8 +561,21 @@ const StudentDashboard = () => {
             <StatsCard
               title="Wellness Score"
               value={stats.wellness !== null ? `${stats.wellness}%` : "--"}
-              change={diagnostics?.mood || (stats.wellness !== null ? "Check in today" : "No data yet")}
-              trend={stats.wellness !== null && stats.wellness >= 70 ? "up" : "neutral"}
+              change={(() => {
+                if (wellnessContext.trend === 'improving') return 'Improving';
+                if (wellnessContext.trend === 'worsening') return 'Needs attention';
+                if (wellnessContext.trend === 'stable') return 'Stable';
+                if (wellnessContext.label) return wellnessContext.label;
+                const mood = diagnostics?.mood;
+                if (mood) return String(mood).charAt(0).toUpperCase() + String(mood).slice(1);
+                return stats.wellness !== null ? '--' : 'No data yet';
+              })()}
+              trend={
+                wellnessContext.trend === 'improving' ? 'up'
+                : wellnessContext.trend === 'worsening' ? 'down'
+                : stats.wellness !== null && stats.wellness >= 70 ? 'up'
+                : 'neutral'
+              }
               icon={Heart}
             />
             <StatsCard

@@ -565,9 +565,7 @@ const handleEngineConnectionFailure = () => {
   let errorMessage = "Connection failed. Please try again on a stable network.";
   if (!HAS_RELAY_ICE_SERVER) {
     errorMessage += " TURN relay servers are also required for some mobile and office networks.";
-    console.warn(
-      "WebRTC relay (TURN) servers are not configured. Calls may fail on carrier, office, or NAT-restricted networks."
-    );
+    logWebRTC("[WebRTC] TURN relay servers are not configured. Calls may fail on carrier, office, or NAT-restricted networks.");
   }
 
   setEngineConnectionError(errorMessage, !HAS_RELAY_ICE_SERVER);
@@ -590,7 +588,7 @@ const createEnginePeerConnection = () => {
   };
 
   connection.onicecandidateerror = (event) => {
-    console.warn("ICE candidate error:", event);
+    logWebRTC("[WebRTC] ICE candidate error:", event);
   };
 
   connection.ontrack = (event) => {

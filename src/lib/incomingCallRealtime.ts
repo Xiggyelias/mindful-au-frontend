@@ -24,7 +24,6 @@ export function subscribeIncomingCallWake(
   channel.on("broadcast", { event: INCOMING_CALL_WAKE_BROADCAST }, ({ payload }) => {
     const row = payload as IncomingCallWakePayload | undefined;
     if (!row || typeof row.appointment_id !== "number") {
-      onWake({ appointment_id: 0 });
       return;
     }
     onWake(row);

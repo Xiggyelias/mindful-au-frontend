@@ -15,7 +15,7 @@ import {
   chatSenderDisplayName,
   normalizeChatRole,
 } from "@/lib/chatIdentity";
-import { ChatMessage } from "@/hooks/useEncryptedChat";
+import { ChatMessage, ENCRYPTED_FALLBACK } from "@/hooks/useEncryptedChat";
 import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
 import { Session } from "@/hooks/useChatSession";
 
@@ -120,10 +120,10 @@ const MessageBubble = React.memo(
           />
         );
       }
-      if (msg.is_encrypted && !msg.decryptedContent) {
+      if (msg.is_encrypted && (!msg.decryptedContent || msg.decryptedContent === ENCRYPTED_FALLBACK)) {
         return (
           <p className="text-xs italic text-muted-foreground">
-            [This older message cannot be displayed]
+            [Encrypted message — key unavailable]
           </p>
         );
       }

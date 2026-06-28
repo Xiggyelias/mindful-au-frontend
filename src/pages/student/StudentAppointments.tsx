@@ -866,7 +866,6 @@ const StudentAppointments = () => {
     activeEmergencyRequest,
     emergencyCounselorId,
     emergencyReason,
-    emergencyResponderName,
     isEmergencyAppointmentScheduled,
     isEmergencyAssigned,
     isEmergencySlotReady,

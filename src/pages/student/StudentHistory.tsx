@@ -53,6 +53,14 @@ const formatSessionType = (type?: string | null) => {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 };
 
+// Booking metadata stored in notes — not meaningful to show students.
+const BOOKING_NOTES_RE = /^(online|physical|audio|video)\b/i;
+
+const isUserFacingNote = (notes: string | null | undefined): boolean => {
+  const raw = String(notes ?? "").trim();
+  return raw.length > 0 && !BOOKING_NOTES_RE.test(raw);
+};
+
 const StudentHistory = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -213,11 +221,13 @@ const StudentHistory = () => {
 
   const openSessionFollowUp = (session: SessionItem) => {
     const type = String(session.session_type || "").toLowerCase();
+    const status = String(session.status || "").toLowerCase();
     if (type === "chat") {
       navigate(`/student/chat?session=${session.id}`);
       return;
     }
-    if (type === "video" || type === "voice") {
+    // Only active/pending video sessions can still be joined; completed ones go to appointments.
+    if ((type === "video" || type === "voice") && (status === "active" || status === "pending")) {
       navigate("/student/video-call");
       return;
     }
@@ -285,8 +295,8 @@ const StudentHistory = () => {
                           )}
                           <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {session.created_at
-                              ? new Date(session.created_at).toLocaleDateString()
+                            {(session.scheduled_at || session.created_at)
+                              ? new Date(session.scheduled_at || session.created_at!).toLocaleDateString()
                               : "Date TBD"}
                           </span>
                           <span className="flex items-center gap-1">
@@ -297,12 +307,12 @@ const StudentHistory = () => {
                           </span>
                         </div>
                       </div>
-                      {session.notes && (
-                        <p className="text-sm text-muted-foreground pl-13 line-clamp-2">
+                      {isUserFacingNote(session.notes) && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
                           {session.notes}
                         </p>
                       )}
-                      <div className="flex gap-2 pl-13 flex-wrap">
+                      <div className="flex gap-2 flex-wrap">
                         <Button
                           variant="outline"
                           size="sm"
@@ -385,8 +395,8 @@ const StudentHistory = () => {
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Date</span>
                 <span className="font-medium">
-                  {selectedSession.created_at
-                    ? new Date(selectedSession.created_at).toLocaleString()
+                  {(selectedSession.scheduled_at || selectedSession.created_at)
+                    ? new Date(selectedSession.scheduled_at || selectedSession.created_at!).toLocaleString()
                     : "—"}
                 </span>
               </div>
@@ -398,7 +408,7 @@ const StudentHistory = () => {
                     : "—"}
                 </span>
               </div>
-              {selectedSession.notes && (
+              {isUserFacingNote(selectedSession.notes) && (
                 <div className="rounded-lg bg-secondary/40 p-3">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Notes</p>
                   <p className="text-foreground">{selectedSession.notes}</p>

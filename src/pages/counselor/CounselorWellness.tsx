@@ -323,9 +323,14 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Overall Wellness ({moodScore ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress 
-                  value={typeof moodScore === "number" ? moodScore : 0} 
-                  className="h-2 mt-3" 
+                <Progress
+                  value={typeof moodScore === "number" ? moodScore : 0}
+                  className="h-2 mt-3"
+                  indicatorClassName={
+                    typeof moodScore !== "number" ? "" :
+                    moodScore >= 70 ? "bg-emerald-500" :
+                    moodScore >= 50 ? "bg-amber-400" : "bg-destructive"
+                  }
                 />
               </CardContent>
             </Card>
@@ -340,9 +345,14 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Stress Level ({stressLevel ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress 
-                  value={typeof stressLevel === "number" ? stressLevel : 0} 
-                  className="h-2 mt-3" 
+                <Progress
+                  value={typeof stressLevel === "number" ? stressLevel : 0}
+                  className="h-2 mt-3"
+                  indicatorClassName={
+                    typeof stressLevel !== "number" ? "" :
+                    stressLevel < 40 ? "bg-emerald-500" :
+                    stressLevel < 70 ? "bg-amber-400" : "bg-destructive"
+                  }
                 />
               </CardContent>
             </Card>
@@ -357,9 +367,14 @@ const CounselorWellness = () => {
                     <p className="text-muted-foreground">Burnout Risk ({burnoutIndex ?? "--"}%)</p>
                   </div>
                 </div>
-                <Progress 
-                  value={typeof burnoutIndex === "number" ? burnoutIndex : 0} 
-                  className="h-2 mt-3" 
+                <Progress
+                  value={typeof burnoutIndex === "number" ? burnoutIndex : 0}
+                  className="h-2 mt-3"
+                  indicatorClassName={
+                    typeof burnoutIndex !== "number" ? "" :
+                    burnoutIndex < 30 ? "bg-emerald-500" :
+                    burnoutIndex < 60 ? "bg-amber-400" : "bg-destructive"
+                  }
                 />
               </CardContent>
             </Card>
@@ -415,7 +430,7 @@ const CounselorWellness = () => {
                 <div className="space-y-6 flex flex-col items-center justify-center py-6 text-center">
                   <div className="relative flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-10 w-10 animate-bounce" />
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20 animate-ping animate-duration-1000" />
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20 animate-ping" />
                   </div>
 
                   <div className="space-y-2">
@@ -474,7 +489,7 @@ const CounselorWellness = () => {
                       }}
                       className="w-full text-xs font-medium"
                     >
-                      Update Check-In Answers
+                      Re-submit Check-In
                     </Button>
                     <p className="text-[10px] text-muted-foreground text-center">
                       {todayCheckInLog?.created_at ? `Submitted at ${new Date(todayCheckInLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ""}
@@ -519,15 +534,22 @@ const CounselorWellness = () => {
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
+                    maxLength={2000}
                   />
 
                   {checkInPreview && (
                     <div className="p-3 rounded-lg border bg-secondary/20">
                       <p className="text-sm font-semibold mb-2">Score preview</p>
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <span>Mood: {checkInPreview.mood_score}%</span>
-                        <span>Stress: {checkInPreview.stress_level}%</span>
-                        <span>Burnout: {checkInPreview.burnout_index}%</span>
+                      <div className="flex flex-wrap gap-3 text-sm font-medium">
+                        <span className={checkInPreview.mood_score >= 70 ? "text-success" : checkInPreview.mood_score >= 50 ? "text-warning" : "text-destructive"}>
+                          Mood: {checkInPreview.mood_score}%
+                        </span>
+                        <span className={checkInPreview.stress_level < 40 ? "text-success" : checkInPreview.stress_level < 70 ? "text-warning" : "text-destructive"}>
+                          Stress: {checkInPreview.stress_level}%
+                        </span>
+                        <span className={checkInPreview.burnout_index < 30 ? "text-success" : checkInPreview.burnout_index < 60 ? "text-warning" : "text-destructive"}>
+                          Burnout: {checkInPreview.burnout_index}%
+                        </span>
                       </div>
                     </div>
                   )}

@@ -305,12 +305,14 @@ const StudentChat = () => {
     resolveOptimisticMessage,
     failOptimisticMessage,
     removeOptimisticMessage,
+    refreshMessages,
   } = useEncryptedChat({
     sessionId: sessionId || "",
     userId: user?.id?.toString() || "",
   });
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     console.debug("[StudentChatSession] active", {
       selectedSessionId: sessionId,
       counselorId: activeSession?.counselor_id ?? null,
@@ -800,7 +802,7 @@ const StudentChat = () => {
       })
       .catch((error) => {
         openingSessionRef.current = null;
-        console.error("Failed to start session:", error);
+        if (import.meta.env.DEV) console.error("Failed to start session:", error);
         toast.error("Failed to start chat session. Please try again.");
       });
   }, [navigateToChatSession, startSessionWithCounselor]);
@@ -861,8 +863,8 @@ const StudentChat = () => {
           : "Your profile name is visible in chat again.",
       );
     } catch (error: unknown) {
-      const message = getApiErrorMessage(error, "Could not update anonymity");
-      toast.error(message || "Could not update anonymity.");
+      const errMsg = getApiErrorMessage(error, "Could not update anonymity");
+      toast.error(errMsg || "Could not update anonymity.");
     } finally {
       setIsSavingChatAnonymity(false);
     }
@@ -1088,7 +1090,7 @@ const StudentChat = () => {
                         scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                         messageScrollAreaRef={messageScrollAreaRef}
                         scrollRef={scrollRef}
-                        onRetryLoad={() => {}}
+                        onRetryLoad={refreshMessages}
                         onRetryUpload={handleRetryVoiceUpload}
                         onDeleteOptimistic={handleDeleteOptimistic}
                         uploadingTempId={currentUploadTempIdRef.current ?? undefined}
@@ -1116,6 +1118,7 @@ const StudentChat = () => {
                       const file = e.target.files?.[0];
                       if (file) {
                         setSelectedFile(file);
+                        e.target.value = "";
                       }
                     }}
                     onAttachClick={() => {
@@ -1195,7 +1198,7 @@ const StudentChat = () => {
                         variant="outline"
                         size="sm"
                         className="rounded-xl border-slate-300 bg-white/80"
-                        onClick={() => window.location.reload()}
+                        onClick={() => void refreshSessions(true, { force: true })}
                       >
                         Refresh Conversations
                       </Button>

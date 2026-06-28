@@ -488,7 +488,12 @@ export function startCallRingtone(kind: "audio" | "video") {
 
   activeRingKind = kind;
   el.loop = true;
-  el.src = kind === "video" ? SOUND_URLS.videoCall : SOUND_URLS.audioCall;
+  // Only reassign src when necessary — overwriting a preloaded src causes the
+  // browser to discard the buffered audio and reload from the network.
+  const targetSrc = kind === "video" ? SOUND_URLS.videoCall : SOUND_URLS.audioCall;
+  if (!el.src || !el.src.endsWith(targetSrc)) {
+    el.src = targetSrc;
+  }
 
   if (gain && ctx) {
     const t = ctx.currentTime;

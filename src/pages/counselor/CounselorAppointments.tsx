@@ -221,7 +221,7 @@ const CounselorAppointments = () => {
           end_time: timeInputValue(schedule.end_time) || "16:00",
           break_start: timeInputValue(schedule.break_start) || null,
           break_end: timeInputValue(schedule.break_end) || null,
-          slot_duration_minutes: Number(schedule.slot_duration_minutes) || 60,
+          slot_duration_minutes: Math.min(360, Math.max(30, Number(schedule.slot_duration_minutes) || 60)),
         })),
       });
       setSchedules(Array.isArray(payload?.data) ? payload.data : schedules);
@@ -600,8 +600,16 @@ const CounselorAppointments = () => {
                           type="number"
                           min={30}
                           max={360}
+                          step={15}
                           value={Number(schedule.slot_duration_minutes) || 60}
-                          onChange={(event) => updateScheduleField(Number(schedule.day_of_week), "slot_duration_minutes", Number(event.target.value))}
+                          onChange={(event) => {
+                            const raw = Number(event.target.value);
+                            updateScheduleField(
+                              Number(schedule.day_of_week),
+                              "slot_duration_minutes",
+                              Number.isFinite(raw) && raw >= 30 ? Math.min(360, raw) : 60
+                            );
+                          }}
                         />
                       </div>
                     </div>
@@ -654,7 +662,7 @@ const CounselorAppointments = () => {
                   onClick={() => setBulkCancelOpen(false)}
                   disabled={bulkCancelSubmitting}
                 >
-                  âœ– No, Go Back
+                  No, Go Back
                 </Button>
                 <Button
                   type="button"
@@ -663,7 +671,7 @@ const CounselorAppointments = () => {
                   onClick={() => void handleBulkCancelConfirm()}
                   disabled={bulkCancelSubmitting}
                 >
-                  âœ” Yes, Cancel
+                  Yes, Cancel All
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -790,7 +798,7 @@ const CounselorAppointments = () => {
                       (apt as any).session_type === 'physical' ||
                       (apt as any).location_type === 'physical' ||
                       (apt as any).type === 'in_person' ||
-                      (apt.notes ?? '').toLowerCase().includes('physical');
+                      (apt.notes ?? '').trim().toLowerCase().startsWith('physical');
                     const isUpdating = String(activeActionId) === String(apt.id);
                     const status = String(apt.status || "").toLowerCase();
                     const videoWindow = !isPhysical

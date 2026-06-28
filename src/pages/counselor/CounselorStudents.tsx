@@ -858,8 +858,8 @@ const CounselorStudents = () => {
                                   ? "Assigning..."
                                   : hasAssignedPeer
                                   ? isAssignedToSelectedPeer
-                                    ? "Assigned âœ“"
-                                    : "Reassign"
+                                    ? “Assigned ✓”
+                                    : “Reassign”
                                   : "Assign"}
                               </Button>
 
@@ -1037,61 +1037,52 @@ const CounselorStudents = () => {
                 </div>
               ) : profileWellnessSummary ? (
                 (() => {
-                  const riskFactors = Array.isArray(profileWellnessSummary.risk_factors)
-                    ? profileWellnessSummary.risk_factors
-                    : typeof profileWellnessSummary.risk_factors === "string" && profileWellnessSummary.risk_factors.trim()
-                    ? [profileWellnessSummary.risk_factors]
+                  // API shape: { scores: { wellness_score }, insights, recommendations,
+                  //              labels: { wellness }, ml_insights: { risk_indicators } }
+                  const wellnessScore = profileWellnessSummary.scores?.wellness_score ?? null;
+                  const wellnessLabel = profileWellnessSummary.labels?.wellness ?? null;
+                  const insightsText = typeof profileWellnessSummary.insights === "string" && profileWellnessSummary.insights.trim()
+                    ? profileWellnessSummary.insights.trim()
+                    : null;
+                  const riskFactors: string[] = Array.isArray(profileWellnessSummary.ml_insights?.risk_indicators)
+                    ? profileWellnessSummary.ml_insights.risk_indicators.filter((s: unknown) => typeof s === "string" && (s as string).trim())
                     : [];
 
                   let recommendations: string[] = [];
-                  if (Array.isArray(profileWellnessSummary.recommendations)) {
-                    recommendations = profileWellnessSummary.recommendations;
-                  } else if (typeof profileWellnessSummary.recommendations === "string" && profileWellnessSummary.recommendations.trim()) {
-                    recommendations = [profileWellnessSummary.recommendations];
-                  } else if (
-                    profileWellnessSummary.recommendations &&
-                    typeof profileWellnessSummary.recommendations === "object"
-                  ) {
-                    // Handle recommendations as object (e.g., {primary: "...", actions: [...]})
-                    const rec = profileWellnessSummary.recommendations as any;
+                  const rawRec = profileWellnessSummary.recommendations;
+                  if (typeof rawRec === "string" && rawRec.trim()) {
+                    recommendations = [rawRec.trim()];
+                  } else if (Array.isArray(rawRec)) {
+                    recommendations = rawRec.filter((a: unknown) => typeof a === "string" && (a as string).trim());
+                  } else if (rawRec && typeof rawRec === "object") {
+                    const rec = rawRec as any;
                     if (typeof rec.primary === "string" && rec.primary.trim()) {
                       recommendations = [rec.primary];
                     } else if (Array.isArray(rec.actions)) {
-                      recommendations = rec.actions.filter((a: any) => typeof a === "string" && a.trim());
+                      recommendations = rec.actions.filter((a: unknown) => typeof a === "string" && (a as string).trim());
                     }
                   }
 
+                  const hasAnyData = wellnessScore != null || insightsText || riskFactors.length > 0 || recommendations.length > 0;
+
                   return (
                     <div className="space-y-4">
-                      {profileWellnessSummary.current_status && (
-                        <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
-                          <h4 className="font-medium flex items-center gap-2">
-                            <Heart className="h-4 w-4 text-primary" />
-                            Current Status
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            {typeof profileWellnessSummary.current_status === "string"
-                              ? profileWellnessSummary.current_status
-                              : JSON.stringify(profileWellnessSummary.current_status)}
-                          </p>
-                        </div>
-                      )}
-
-                      {profileWellnessSummary.wellness_score != null && (
+                      {wellnessScore != null && (
                         <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
                           <h4 className="font-medium flex items-center gap-2">
                             <Activity className="h-4 w-4 text-primary" />
                             Wellness Score
+                            {wellnessLabel && (
+                              <span className="ml-auto text-xs font-normal text-muted-foreground">{wellnessLabel}</span>
+                            )}
                           </h4>
                           <div className="flex items-center gap-3">
-                            <div className="text-3xl font-bold text-primary">
-                              {profileWellnessSummary.wellness_score}
-                            </div>
+                            <div className="text-3xl font-bold text-primary">{wellnessScore}%</div>
                             <div className="flex-1">
                               <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-primary rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(100, Math.max(0, Number(profileWellnessSummary.wellness_score)))}%` }}
+                                  style={{ width: `${Math.min(100, Math.max(0, Number(wellnessScore)))}%` }}
                                 />
                               </div>
                             </div>
@@ -1099,11 +1090,21 @@ const CounselorStudents = () => {
                         </div>
                       )}
 
+                      {insightsText && (
+                        <div className="rounded-xl bg-secondary/40 p-4 space-y-2">
+                          <h4 className="font-medium flex items-center gap-2">
+                            <Heart className="h-4 w-4 text-primary" />
+                            Clinical Insights
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{insightsText}</p>
+                        </div>
+                      )}
+
                       {riskFactors.length > 0 && (
                         <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-2">
                           <h4 className="font-medium flex items-center gap-2 text-destructive">
                             <AlertTriangle className="h-4 w-4" />
-                            Risk Factors
+                            Risk Indicators
                           </h4>
                           <ul className="space-y-1">
                             {riskFactors.map((factor: string, idx: number) => (
@@ -1133,10 +1134,7 @@ const CounselorStudents = () => {
                         </div>
                       )}
 
-                      {!profileWellnessSummary.current_status &&
-                        profileWellnessSummary.wellness_score == null &&
-                        riskFactors.length === 0 &&
-                        recommendations.length === 0 && (
+                      {!hasAnyData && (
                         <div className="text-center py-8 text-muted-foreground">
                           <Heart className="h-8 w-8 mx-auto mb-2 opacity-40" />
                           <p className="text-sm">No wellness data available yet for this student.</p>

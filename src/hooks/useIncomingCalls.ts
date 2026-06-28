@@ -188,8 +188,9 @@ export function useIncomingCalls<T extends IncomingCallBase>({
 
   const announceNewCall = useCallback(
     (call: T) => {
-      const mode = effectiveWebRtcCallMode(call);
-      startCallRingtone(mode === "video" ? "video" : "audio");
+      // Ringtone is managed by the `calls` state effect — calling startCallRingtone
+      // here as well causes it to fire twice in the same tick, resetting el.src and
+      // interrupting the audio before it has started playing.
       try {
         if (typeof navigator !== "undefined" && navigator.vibrate) {
           navigator.vibrate([300, 100, 300, 100, 300]);

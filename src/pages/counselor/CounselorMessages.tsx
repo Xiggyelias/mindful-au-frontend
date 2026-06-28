@@ -15,6 +15,7 @@ import {
   Pin,
   Archive,
   ArchiveRestore,
+  ArrowRight,
 } from "lucide-react";
 import { counselorNavItems, peerCounselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -24,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
-import { useEncryptedChat, ChatMessage } from "@/hooks/useEncryptedChat";
+import { useEncryptedChat, ChatMessage, ENCRYPTED_FALLBACK } from "@/hooks/useEncryptedChat";
 import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useChatPreloader } from "@/hooks/useChatPreloader";
 import { useChatRoomPrejoin } from "@/hooks/useChatRoomPrejoin";
@@ -309,7 +310,7 @@ const CounselorMessages = () => {
   const [isFlaggingUrgent, setIsFlaggingUrgent] = useState(false);
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
-  const [_isSwitchingChat, setIsSwitchingChat] = useState(false);
+  const [isSwitchingChat, setIsSwitchingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -407,9 +408,12 @@ const CounselorMessages = () => {
         const latest = list[0] ?? null;
         if (latest) {
           riskLevel = typeof latest.risk_level === "string" ? latest.risk_level.toLowerCase() : null;
+          // AiDiagnostic has a flat `recommendations` string; Diagnostic has `ai_recommendations.primary`.
           aiRecommendation =
-            typeof latest.ai_recommendations?.primary === "string"
-              ? latest.ai_recommendations.primary
+            typeof latest.ai_recommendations?.primary === "string" && latest.ai_recommendations.primary.trim()
+              ? latest.ai_recommendations.primary.trim()
+              : typeof latest.recommendations === "string" && latest.recommendations.trim()
+              ? latest.recommendations.trim().slice(0, 200)
               : null;
           focusAreas = Array.isArray(latest.ai_recommendations?.focus_areas)
             ? latest.ai_recommendations.focus_areas.slice(0, 3)
@@ -452,7 +456,9 @@ const CounselorMessages = () => {
             typeof flat.burnout_index === "number" ? flat.burnout_index : null;
         }
 
+        // Wellness summary returns `generated_at`; fall back to timestamps on nested objects.
         wellnessUpdatedAt =
+          typeof w?.generated_at === "string" ? w.generated_at :
           typeof w?.updated_at === "string" ? w.updated_at :
           typeof w?.created_at === "string" ? w.created_at :
           typeof flat?.created_at === "string" ? flat.created_at : null;
@@ -1446,12 +1452,7 @@ const CounselorMessages = () => {
     }
   };
 
-  const _handleSwitchToDirectChat = async () => {
-    if (selectedChat?.isPeerAssigned && selectedSessionId) {
-      toast.info("You are already in this shared case room. The peer counselor remains assigned.");
-      return;
-    }
-
+  const handleSwitchToDirectChat = async () => {
     if (!selectedChat?.studentId) {
       toast.error("Cannot resolve student details for this chat.");
       return;
@@ -1771,8 +1772,8 @@ const CounselorMessages = () => {
       );
     }
 
-    if (msg.is_encrypted && !msg.decryptedContent) {
-      return <p className="text-xs italic text-muted-foreground">[Message sent with previous encryption - not readable]</p>;
+    if (msg.is_encrypted && (!msg.decryptedContent || msg.decryptedContent === ENCRYPTED_FALLBACK)) {
+      return <p className="text-xs italic text-muted-foreground">[Encrypted message — key unavailable]</p>;
     }
 
     const content = msg.decryptedContent || msg.content || "";
@@ -2269,6 +2270,20 @@ const CounselorMessages = () => {
                           </p>
                         </div>
                       </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 gap-1.5 text-xs"
+                        disabled={isSwitchingChat}
+                        onClick={() => void handleSwitchToDirectChat()}
+                      >
+                        {isSwitchingChat ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <ArrowRight className="h-3 w-3" />
+                        )}
+                        Start direct chat
+                      </Button>
                     </div>
                   </div>
                 )}

@@ -349,10 +349,23 @@ export const useVoiceRecorder = () => {
   }, []);
 
   const cleanup = useCallback(() => {
+    // Prevent a late-resolving getUserMedia from starting a new recorder.
+    cancelledDuringStartRef.current = true;
     _stopTimer();
     _stopAnalyser();
-    _stopStream();
+    // Stop the recorder before stopping the stream — stopping the stream first
+    // leaves the MediaRecorder in a broken state with an active mic indicator.
+    const recorder = mediaRecorderRef.current;
+    if (recorder) {
+      recorder.onstop = null;
+      try {
+        if (recorder.state !== "inactive") recorder.stop();
+      } catch { /* ignore */ }
+    }
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
     pendingStopResolveRef.current = null;
+    _stopStream();
     setRecording((prev) => {
       if (prev?.url) URL.revokeObjectURL(prev.url);
       return null;
