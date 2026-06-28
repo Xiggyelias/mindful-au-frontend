@@ -1,4 +1,7 @@
 import { cn } from "@/lib/utils";
+import { resolveInstitutionName } from "@/lib/runtimeConfig";
+
+const INSTITUTION_NAME = resolveInstitutionName();
 
 interface LogoProps {
   className?: string;
@@ -34,7 +37,7 @@ export const Logo = ({ className, size = "md" }: LogoProps) => {
       </div>
       <div className="flex flex-col">
         <span className="font-display font-bold text-foreground leading-tight">
-          {size === "lg" ? "Africa University" : "AU"}
+          {size === "lg" ? INSTITUTION_NAME : "AU"}
         </span>
         <span className="text-xs text-muted-foreground tracking-wide uppercase">
           Counseling
