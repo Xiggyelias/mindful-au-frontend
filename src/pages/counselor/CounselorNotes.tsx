@@ -448,7 +448,12 @@ const CounselorNotes = () => {
                           onClick={() => setSelectedSessionId(row.id)}
                         >
                           <div className="flex justify-between items-start mb-1 gap-2">
-                            <span className="font-semibold text-sm truncate text-foreground group-hover:text-primary transition-colors">
+                            <span className={cn(
+                              "font-semibold text-sm truncate transition-colors",
+                              selectedSessionId === row.id
+                                ? "text-foreground"
+                                : "text-foreground/80 group-hover:text-foreground"
+                            )}>
                               {row.studentLabel}
                             </span>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
