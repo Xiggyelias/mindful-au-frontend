@@ -190,7 +190,13 @@ const CounselorAlerts = () => {
       const mappedPanic: PanicAlert[] = panicLogs.map((log: any) => {
         const student = buildPanicStudentSummary(log);
         const mapCoords = extractLatLngFromLocation(log.location);
-        const locationSuffix = log.location ? ` (at ${mapCoords ?? log.location})` : "";
+        // Use a short human-friendly suffix — raw coordinates are shown via
+        // "View on Maps" button so there's no need to print them in the message.
+        const locationSuffix = mapCoords
+          ? " (GPS location attached)"
+          : log.location
+          ? ` (at ${log.location})`
+          : "";
 
         return {
           id: Number(log.id),
@@ -620,11 +626,31 @@ const CounselorAlerts = () => {
                   </Badge>
                 )}
               </CardTitle>
-              {!isLoading && resolvedTodayPanicAlerts.length > 0 && (
-                <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-xs">
-                  {resolvedTodayPanicAlerts.length} resolved today
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {!isLoading && resolvedTodayPanicAlerts.length > 0 && (
+                  <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-xs">
+                    {resolvedTodayPanicAlerts.length} resolved today
+                  </Badge>
+                )}
+                {!isLoading && activePanicAlerts.length > 1 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 border-destructive/30 text-destructive hover:bg-destructive/10"
+                    disabled={resolvingPanicId !== null}
+                    onClick={async () => {
+                      for (const alert of activePanicAlerts) {
+                        await handleResolvePanic(alert.id);
+                      }
+                    }}
+                  >
+                    {resolvingPanicId !== null ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : null}
+                    Resolve all ({activePanicAlerts.length})
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading && (
