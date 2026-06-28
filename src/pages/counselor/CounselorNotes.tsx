@@ -456,16 +456,12 @@ const CounselorNotes = () => {
                             )}>
                               {row.studentLabel}
                             </span>
-                            <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <Badge variant="outline" className="text-[9px] px-1.5 uppercase">
-                                {row.status}
-                              </Badge>
-                              {row.hasClinicalNote ? (
-                                <span className="text-[10px] text-success font-medium">Has note</span>
-                              ) : (
-                                <span className="text-[10px] text-muted-foreground">No clinical note</span>
-                              )}
-                            </div>
+                            <span className={cn(
+                              "text-[10px] shrink-0 font-medium",
+                              row.hasClinicalNote ? "text-success" : "text-muted-foreground"
+                            )}>
+                              {row.hasClinicalNote ? "Has note" : "No note"}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                             <div className="flex items-center gap-1 min-w-0">
