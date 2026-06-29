@@ -68,7 +68,7 @@ type StudentRow = {
   isAnonymous: boolean;
   sessions: number;
   lastSession: string;
-  riskLevel: "low" | "medium" | "high";
+  riskLevel: "low" | "medium" | "high" | "critical";
   isOnline: boolean;
   activeChatSessionId: number | null;
   peerChatSessionId: number | null;
@@ -115,7 +115,7 @@ const CounselorStudents = () => {
   const [peerAssignmentAction, setPeerAssignmentAction] = useState<"assign" | "unassign" | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "critical" | "high" | "medium" | "low">("all");
   const [highlightedStudentId, setHighlightedStudentId] = useState<number | null>(null);
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<any | null>(null);
   const [profileWellnessSummary, setProfileWellnessSummary] = useState<any | null>(null);
@@ -149,7 +149,7 @@ const CounselorStudents = () => {
         return;
       }
       const riskRaw = String(diagnostic.risk_level || "").toLowerCase();
-      const normalizedRisk = riskRaw === "high" || riskRaw === "medium" ? riskRaw : "low";
+      const normalizedRisk = (riskRaw === "critical" || riskRaw === "high" || riskRaw === "medium") ? riskRaw : "low";
       latestRiskByStudent.set(studentId, {
         riskLevel: normalizedRisk,
         timestamp: diagnosticTimestamp,
@@ -703,7 +703,7 @@ const CounselorStudents = () => {
 
   const filteredStudents = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
-    const riskRank: Record<string, number> = { high: 3, medium: 2, low: 1 };
+    const riskRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
     return students
       .filter((student) => {
@@ -751,6 +751,13 @@ const CounselorStudents = () => {
             >
               <Filter className="h-4 w-4" />
               All Risk
+            </Button>
+            <Button
+              variant={riskFilter === "critical" ? "default" : "outline"}
+              className="gap-2"
+              onClick={() => setRiskFilter("critical")}
+            >
+              Critical
             </Button>
             <Button
               variant={riskFilter === "high" ? "default" : "outline"}
@@ -833,7 +840,7 @@ const CounselorStudents = () => {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold ${
-                              student.riskLevel === "high"
+                              student.riskLevel === "critical" || student.riskLevel === "high"
                                 ? "bg-destructive/15 text-destructive"
                                 : student.riskLevel === "medium"
                                 ? "bg-warning/15 text-warning"
@@ -873,7 +880,7 @@ const CounselorStudents = () => {
                                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                 : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                             }`}>
-                              {student.riskLevel === "high" && <AlertTriangle className="h-3 w-3" />}
+                              {(student.riskLevel === "high" || student.riskLevel === "critical") && <AlertTriangle className="h-3 w-3" />}
                               {student.riskLevel} Risk
                             </span>
                             {hasAssignedPeer && (
