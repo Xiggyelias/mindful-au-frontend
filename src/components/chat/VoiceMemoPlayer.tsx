@@ -195,32 +195,15 @@ export function VoiceMemoPlayer({
     const el = audioRef.current;
     if (!el) return;
 
-    let isProbing = false;
-
     const onTime = () => {
-      if (!isDragging && !isProbing && el.currentTime < 1e6) {
+      if (!isDragging) {
         setCurrent(el.currentTime);
       }
     };
 
     const onDur = () => {
       const d = el.duration;
-      if (d === Infinity) {
-        if (isProbing) return;
-        isProbing = true;
-        // WebM duration hack: seek to end of stream to force duration calculation
-        el.currentTime = 1e9;
-        const onSeeked = () => {
-          el.removeEventListener("seeked", onSeeked);
-          const realDuration = el.duration;
-          if (Number.isFinite(realDuration) && realDuration > 0) {
-            setDuration(realDuration);
-          }
-          el.currentTime = 0;
-          isProbing = false;
-        };
-        el.addEventListener("seeked", onSeeked);
-      } else if (Number.isFinite(d) && d > 0) {
+      if (Number.isFinite(d) && d > 0) {
         setDuration(d);
       }
     };
@@ -250,8 +233,6 @@ export function VoiceMemoPlayer({
     // If the audio metadata is already loaded (cached/local blob), set duration immediately
     if (Number.isFinite(el.duration) && el.duration > 0) {
       setDuration(el.duration);
-    } else if (el.duration === Infinity) {
-      onDur();
     } else if (el.src && el.src !== window.location.href) {
       // Force load to override browser lazy-loading optimizations on hidden media elements.
       // Skip when src is empty — that would trigger a spurious error event.
