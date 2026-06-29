@@ -57,6 +57,7 @@ const AdminAIReports = () => {
   const [generatingType, setGeneratingType] = useState<ReportType | null>(null);
   const [deletingReportId, setDeletingReportId] = useState<number | null>(null);
   const [loadingReportId, setLoadingReportId] = useState<number | null>(null);
+  const [downloadingReportId, setDownloadingReportId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadAnalytics = useCallback(async () => {
@@ -134,6 +135,7 @@ const AdminAIReports = () => {
 
   const handleDownloadReport = async (report: any) => {
     try {
+      setDownloadingReportId(Number(report.id));
       let data = report;
       if (!data?.data || !data?.summary) {
         data = await api.getAIReport(String(report.id));
@@ -153,6 +155,8 @@ const AdminAIReports = () => {
     } catch (error: any) {
       const message = error?.response?.data?.message || "Failed to download report";
       toast.error(message);
+    } finally {
+      setDownloadingReportId(null);
     }
   };
 
@@ -335,7 +339,16 @@ const AdminAIReports = () => {
                           {item.percentage}% ({item.count})
                         </span>
                       </div>
-                      <Progress value={item.percentage} className="h-2" />
+                      <Progress
+                        value={item.percentage}
+                        className="h-2"
+                        indicatorClassName={
+                          item.level === "low" ? "bg-emerald-500" :
+                          item.level === "medium" ? "bg-amber-400" :
+                          item.level === "high" ? "bg-orange-500" :
+                          "bg-destructive"
+                        }
+                      />
                     </div>
                   ))
                 ) : (
@@ -403,8 +416,15 @@ const AdminAIReports = () => {
                             <Button size="icon" variant="outline" onClick={() => handleViewReport(reportId)} disabled={isViewing}>
                               {isViewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                             </Button>
-                            <Button size="icon" variant="outline" onClick={() => handleDownloadReport(report)}>
-                              <Download className="h-4 w-4" />
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => handleDownloadReport(report)}
+                              disabled={downloadingReportId === reportId}
+                            >
+                              {downloadingReportId === reportId
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Download className="h-4 w-4" />}
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => handleDeleteReport(reportId)} disabled={isDeleting}>
                               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
@@ -446,7 +466,7 @@ const AdminAIReports = () => {
 
           <Card variant="glass">
             <CardHeader>
-              <CardTitle className="text-lg">AI Insights & Predictions</CardTitle>
+              <CardTitle className="text-lg">System Overview</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
