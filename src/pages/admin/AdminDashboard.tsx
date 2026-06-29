@@ -199,6 +199,13 @@ const AdminDashboard = () => {
     return Math.min(100, Math.round((pending / total) * 100));
   })();
 
+  const activeSessionsPercent = (() => {
+    const active = analytics?.overview?.active_sessions || 0;
+    const total = analytics?.sessions?.total_sessions || 0;
+    if (total === 0) return 0;
+    return Math.min(100, Math.round((active / total) * 100));
+  })();
+
   const diagnosticsCoverage = (() => {
     const totalStudents = analytics?.overview?.total_students || 0;
     const diagnostics = analytics?.ai_diagnostics?.diagnostics_this_month || 0;
@@ -322,21 +329,27 @@ const AdminDashboard = () => {
                         <span className="text-muted-foreground">Student Activity</span>
                         <span className="text-foreground font-medium">{studentActivity}%</span>
                       </div>
-                      <Progress value={studentActivity} className="h-2" />
+                      <Progress value={studentActivity} className="h-2"
+                        indicatorClassName={studentActivity >= 60 ? "bg-emerald-500" : studentActivity >= 30 ? "bg-amber-400" : ""}
+                      />
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Counselor Availability</span>
                         <span className="text-foreground font-medium">{counselorAvailability}%</span>
                       </div>
-                      <Progress value={counselorAvailability} className="h-2" />
+                      <Progress value={counselorAvailability} className="h-2"
+                        indicatorClassName={counselorAvailability >= 60 ? "bg-emerald-500" : counselorAvailability >= 30 ? "bg-amber-400" : "bg-destructive"}
+                      />
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Session Completion</span>
                         <span className="text-foreground font-medium">{sessionCompletion}%</span>
                       </div>
-                      <Progress value={sessionCompletion} className="h-2" />
+                      <Progress value={sessionCompletion} className="h-2"
+                        indicatorClassName={sessionCompletion >= 60 ? "bg-emerald-500" : sessionCompletion >= 30 ? "bg-amber-400" : ""}
+                      />
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -345,21 +358,27 @@ const AdminDashboard = () => {
                         <span className="text-muted-foreground">AI Coverage</span>
                         <span className="text-foreground font-medium">{diagnosticsCoverage}%</span>
                       </div>
-                      <Progress value={diagnosticsCoverage} className="h-2" />
+                      <Progress value={diagnosticsCoverage} className="h-2"
+                        indicatorClassName={diagnosticsCoverage >= 60 ? "bg-emerald-500" : diagnosticsCoverage >= 30 ? "bg-amber-400" : ""}
+                      />
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Pending Appointments Ratio</span>
                         <span className="text-foreground font-medium">{pendingAppointmentsPercent}%</span>
                       </div>
-                      <Progress value={pendingAppointmentsPercent} className="h-2" />
+                      <Progress value={pendingAppointmentsPercent} className="h-2"
+                        indicatorClassName={pendingAppointmentsPercent >= 30 ? "bg-destructive" : pendingAppointmentsPercent >= 10 ? "bg-amber-400" : "bg-emerald-500"}
+                      />
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Active Sessions</span>
                         <span className="text-foreground font-medium">{analytics?.overview?.active_sessions ?? 0}</span>
                       </div>
-                      <Progress value={Math.min(100, Number(analytics?.overview?.active_sessions ?? 0) * 10)} className="h-2" />
+                      <Progress value={activeSessionsPercent} className="h-2"
+                        indicatorClassName={activeSessionsPercent >= 60 ? "bg-emerald-500" : activeSessionsPercent >= 20 ? "bg-amber-400" : ""}
+                      />
                     </div>
                   </div>
                 </div>
@@ -386,7 +405,7 @@ const AdminDashboard = () => {
                   <p className="text-sm text-foreground font-medium mb-1">Counselor Workload</p>
                   <p className="text-xs text-muted-foreground">
                     {analytics?.overview?.active_sessions
-                      ? `${analytics.overview.active_sessions} counselor(s) in active sessions`
+                      ? `${analytics.overview.active_sessions} active session(s) in progress`
                       : "No active sessions right now"}
                   </p>
                 </div>
