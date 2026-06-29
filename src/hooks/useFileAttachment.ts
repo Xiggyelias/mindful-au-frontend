@@ -5,6 +5,7 @@ import {
   ensureAttachmentFile,
   inferAttachmentMessageType,
   validateChatAttachment,
+  CHAT_VOICE_NOTE_MAX_BYTES,
 } from '@/lib/chatAttachments';
 import type { ChatMessage } from '@/hooks/useEncryptedChat';
 
@@ -34,7 +35,13 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
             type: "audio/webm",
           })
         : baseFile;
-    const validationError = validateChatAttachment(normalizedFile);
+    const isVoiceMessage = options?.messageType === "voice";
+    const validationError = validateChatAttachment(
+      normalizedFile,
+      isVoiceMessage
+        ? { maxBytes: CHAT_VOICE_NOTE_MAX_BYTES, maxLabel: '10MB' }
+        : undefined
+    );
     if (validationError) {
       setError(validationError);
       return null;
@@ -48,6 +55,12 @@ export const useFileAttachment = ({ sessionId }: UseFileAttachmentProps) => {
 
     try {
       const message = await uploadManager.enqueue(uploadId, normalizedFile, async (uploadFile, onProgress) => {
+        if (isVoiceMessage) {
+          return await api.uploadVoiceNote(sessionId, uploadFile, {
+            onUploadProgress: onProgress,
+          });
+        }
+
         return await api.uploadChatFile(sessionId, uploadFile, {
           message_type: options?.messageType ?? inferAttachmentMessageType(uploadFile),
           onUploadProgress: onProgress,

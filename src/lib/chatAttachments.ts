@@ -64,6 +64,7 @@ const ALLOWED_MIME_TYPES = new Set([
 const baseMime = (raw: string) => raw.split(';')[0].trim().toLowerCase();
 
 export const CHAT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const CHAT_VOICE_NOTE_MAX_BYTES = 10 * 1024 * 1024;
 export const CHAT_ATTACHMENT_ACCEPT =
   'image/jpeg,image/png,image/gif,.pdf,.docx,.txt,.mp3,.wav,.webm,.ogg,.m4a,.aac';
 
@@ -99,11 +100,16 @@ export const ensureAttachmentFile = (input: File): File => {
   });
 };
 
-export const validateChatAttachment = (input: File): string | null => {
+export const validateChatAttachment = (
+  input: File,
+  options?: { maxBytes?: number; maxLabel?: string }
+): string | null => {
   const file = ensureAttachmentFile(input);
+  const maxBytes = options?.maxBytes ?? CHAT_ATTACHMENT_MAX_BYTES;
+  const maxLabel = options?.maxLabel ?? '5MB';
 
-  if (file.size > CHAT_ATTACHMENT_MAX_BYTES) {
-    return 'File size exceeds 5MB limit';
+  if (file.size > maxBytes) {
+    return `File size exceeds ${maxLabel} limit`;
   }
 
   const extension = String(file.name.split('.').pop() || '').toLowerCase();

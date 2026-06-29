@@ -1628,11 +1628,29 @@ class ApiClient {
   }
 
   // Voice Notes
-  async uploadVoiceNote(sessionId: string, file: File) {
+  async uploadVoiceNote(
+    sessionId: string,
+    file: File,
+    options?: { onUploadProgress?: (progress: number) => void }
+  ) {
     const formData = new FormData();
-    formData.append('audio', file);
+    formData.append('audio', file, file.name);
     const response = await this.client.post(`/sessions/${sessionId}/voice-notes`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (event) => {
+        if (!options?.onUploadProgress) {
+          return;
+        }
+
+        if (typeof event.total === 'number' && event.total > 0) {
+          options.onUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+          return;
+        }
+
+        if (event.loaded > 0) {
+          options.onUploadProgress(65);
+        }
+      },
     });
     return response.data;
   }
