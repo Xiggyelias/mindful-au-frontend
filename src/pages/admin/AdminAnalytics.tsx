@@ -130,12 +130,34 @@ const AdminAnalytics = () => {
     }));
   }, [data]);
 
+  const riskLevelBars = useMemo(() => {
+    const dist = data?.ai_diagnostics?.risk_level_distribution || {};
+    const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
+    return Object.entries(dist).map(([level, count]) => ({
+      level,
+      count,
+      percentage: Math.round((count / total) * 100),
+    }));
+  }, [data]);
+
+  const riskBarColor = (level: string): string => {
+    switch (level.toLowerCase()) {
+      case "low": return "bg-emerald-500";
+      case "medium": return "bg-amber-400";
+      case "high": return "bg-orange-500";
+      case "critical": return "bg-destructive";
+      default: return "";
+    }
+  };
+
   const handleExport = useCallback(async () => {
     const parsedDays = Number(exportDays);
-    const days =
-      Number.isFinite(parsedDays) && parsedDays >= 7 && parsedDays <= 365
-        ? Math.floor(parsedDays)
-        : 180;
+    const validDays = Number.isFinite(parsedDays) && parsedDays >= 7 && parsedDays <= 365;
+    if (!validDays) {
+      toast.error("Days must be between 7 and 365.");
+      return;
+    }
+    const days = Math.floor(parsedDays);
 
     try {
       setIsExporting(true);
@@ -390,18 +412,22 @@ const AdminAnalytics = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {data?.ai_diagnostics?.risk_level_distribution ? (
-                  Object.entries(data.ai_diagnostics.risk_level_distribution).map(([level, count]) => (
+                {riskLevelBars.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No diagnostics data available.</p>
+                ) : (
+                  riskLevelBars.map(({ level, count, percentage }) => (
                     <div key={level}>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground capitalize">{level}</span>
-                        <span className="text-foreground font-medium">{count}</span>
+                        <span className="text-foreground font-medium">{percentage}% ({count})</span>
                       </div>
-                      <Progress value={Math.min(100, Number(count))} className="h-2" />
+                      <Progress
+                        value={percentage}
+                        className="h-2"
+                        indicatorClassName={riskBarColor(level)}
+                      />
                     </div>
                   ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No diagnostics data available.</p>
                 )}
               </CardContent>
             </Card>
@@ -452,7 +478,11 @@ const AdminAnalytics = () => {
                           {item.count} ({item.value}%)
                         </span>
                       </div>
-                      <Progress value={item.value} className="h-2" />
+                      <Progress
+                        value={item.value}
+                        className="h-2"
+                        indicatorClassName={riskBarColor(item.label)}
+                      />
                     </div>
                   ))
                 )}
