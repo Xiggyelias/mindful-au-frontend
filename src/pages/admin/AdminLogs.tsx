@@ -107,14 +107,17 @@ const AdminLogs = () => {
     }
   }, []);
 
+  // Split effects so a filter change (which recreates loadLogs) doesn't
+  // trigger an unwanted data-access reload when on the wrong tab.
   useEffect(() => {
-    if (!user) return;
-    if (activeTab === "activity") {
-      void loadLogs();
-    } else {
-      void loadDataAccessLogs();
-    }
-  }, [user, loadLogs, loadDataAccessLogs, activeTab]);
+    if (!user || activeTab !== "activity") return;
+    void loadLogs();
+  }, [user, loadLogs, activeTab]);
+
+  useEffect(() => {
+    if (!user || activeTab !== "data_access") return;
+    void loadDataAccessLogs();
+  }, [user, loadDataAccessLogs, activeTab]);
 
   // Live tail polling for activity logs
   useEffect(() => {
@@ -241,7 +244,7 @@ const AdminLogs = () => {
             <Card variant="glass">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Total Logs</p>
-                <p className="text-3xl font-bold text-foreground">{stats?.total_logs ?? logs.length}</p>
+                <p className="text-3xl font-bold text-foreground">{stats?.total_logs ?? "--"}</p>
               </CardContent>
             </Card>
             <Card variant="glass">
