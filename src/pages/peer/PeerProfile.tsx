@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { peerCounselorNavItems } from "@/config/counselorNavItems";
 
 const PeerProfile = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Peer Counselor";
 
@@ -27,6 +28,7 @@ const PeerProfile = () => {
     try {
       setIsSaving(true);
       await api.updateProfile({ full_name: fullName.trim() });
+      await refreshUser();
       toast.success("Profile updated.");
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, "Failed to update profile."));

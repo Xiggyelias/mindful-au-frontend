@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { AlertTriangle, Clock3 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -113,7 +114,9 @@ const PeerEscalatedCases = () => {
                       <span>Escalated to: {row.escalated_to || "Counselor"}</span>
                       <span className="inline-flex items-center gap-1">
                         <Clock3 className="h-3 w-3" />
-                        {row.created_at ? new Date(row.created_at).toLocaleString() : "--"}
+                        {row.created_at
+                          ? formatDistanceToNow(new Date(row.created_at), { addSuffix: true })
+                          : "--"}
                       </span>
                     </div>
                   </div>
