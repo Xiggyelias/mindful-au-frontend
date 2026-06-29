@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -171,7 +171,7 @@ const AdminStudents = () => {
     const total = students.length;
     const active = students.filter((s) => s.accountStatus === "active").length;
     const pending = total - active;
-    const atRisk = students.filter((s) => s.riskLevel === "high").length;
+    const atRisk = students.filter((s) => s.riskLevel === "high" || s.riskLevel === "critical").length;
     const peerAssigned = students.filter((s) => Number(s.assignedPeerCounselorId) > 0).length;
     return { total, active, pending, atRisk, peerAssigned };
   }, [students]);
@@ -408,7 +408,9 @@ const AdminStudents = () => {
       let createdDirectSession: any = null;
 
       if (!sessionId) {
-        const selectedCounselorId = Number(selectedCounselorByStudent[student.id] || 0);
+        const selectedCounselorId = Number(
+          selectedCounselorByStudent[student.id] || student.activeCounselorId || 0
+        );
         if (!selectedCounselorId) {
           toast.error("Select a supervising counselor before assigning peer support.");
           return;
@@ -930,7 +932,7 @@ const AdminStudents = () => {
                                   "text-[10px] pl-1 font-medium",
                                   student.isOnline ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
                                 )}>
-                                  â— {student.isOnline ? "Online" : "Offline"}
+                                  ● {student.isOnline ? "Online" : "Offline"}
                                 </span>
                               </div>
                             </TableCell>
@@ -1012,7 +1014,7 @@ const AdminStudents = () => {
                                           `#${student.assignedPeerCounselorId}`}
                                       </span>
                                       {student.riskLevel !== "low" && (
-                                        <span className="text-[10px] text-amber-500 font-bold" title="Risk has elevated! Review peer supervisor assignment!">âš ï¸</span>
+                                        <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title="Risk elevated — review peer assignment" />
                                       )}
                                     </div>
                                   ) : (
@@ -1073,7 +1075,7 @@ const AdminStudents = () => {
                                   </div>
                                   {student.riskLevel !== "low" && hasPeer && (
                                     <p className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-none">
-                                      âš ï¸ Risk elevated - professional follow-up advised
+                                      Risk elevated — professional follow-up advised
                                     </p>
                                   )}
                                 </div>
@@ -1192,27 +1194,25 @@ const AdminStudents = () => {
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Wellness</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.wellness_score ?? "—"}
+                      {studentSummary?.scores?.wellness_score != null ? `${studentSummary.scores.wellness_score}%` : "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Stress</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.stress_level ?? "—"}
+                      {studentSummary?.scores?.stress_level != null ? `${studentSummary.scores.stress_level}%` : "—"}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Burnout</p>
                     <p className="text-xl font-semibold mt-1">
-                      {studentSummary?.scores?.burnout_risk ?? "—"}
+                      {studentSummary?.scores?.burnout_risk != null ? `${studentSummary.scores.burnout_risk}%` : "—"}
                     </p>
                   </div>
-                  {studentSummary?.mood?.recorded_at && (
+                  {studentSummary?.generated_at && (
                     <div className="md:col-span-3 p-3 rounded-lg bg-secondary/30 text-xs text-muted-foreground">
-                      Last mood logged{" "}
-                      {formatDistanceToNow(new Date(studentSummary.mood.recorded_at), {
-                        addSuffix: true,
-                      })}
+                      Snapshot generated{" "}
+                      {formatDistanceToNow(new Date(studentSummary.generated_at), { addSuffix: true })}
                     </div>
                   )}
                 </div>
