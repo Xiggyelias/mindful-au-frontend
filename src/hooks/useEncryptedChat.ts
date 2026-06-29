@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api, getApiErrorMessage, isApiNetworkError } from '@/lib/api';
-import { loadPreloadedSessionMessages } from '@/lib/chatPreloadCache';
+import { loadPreloadedSessionMessages, savePreloadedSessionMessages } from '@/lib/chatPreloadCache';
 import { markSessionAsExpired } from '@/hooks/useChatSession';
 import { useDecryptWorker } from '@/hooks/useDecryptWorker';
 import { loadPersistedSessionKey } from '@/lib/chatSessionKeys';
@@ -469,6 +469,12 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           const visibleMessages = filterVisibleMessages(rawMessages);
           const formatted = visibleMessages.map(formatServerMessage);
 
+          if (fullHydration && visibleMessages.length > 0) {
+            void savePreloadedSessionMessages(sessionId, visibleMessages, {
+              ownerUserId: userId,
+            }).catch(() => undefined);
+          }
+
           setMessages((prev) => {
             const merged = new Map<number, ChatMessage>();
             for (const msg of prev) merged.set(msg.id, msg);
@@ -527,7 +533,7 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
         }
       }
     },
-    [isCurrentSession, sessionId, stopRealtimeAndTimers]
+    [isCurrentSession, sessionId, stopRealtimeAndTimers, userId]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -718,26 +724,15 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
     const bootstrap = async () => {
       try {
         let sessionGone = false;
-        try {
-          await api.getSession(sessionId, { minimal: true });
-        } catch (e: any) {
+        const sessionPromise = api.getSession(sessionId, { minimal: true }).catch((e: any) => {
           if (e?.response?.status === 410) {
             sessionGone = true;
           } else {
             console.warn('Session metadata unavailable; loading messages directly.', e);
           }
-        }
+        });
 
         if (isDisposed || controller.signal.aborted) {
-          return;
-        }
-
-        if (sessionGone) {
-          markSessionAsExpired(sessionId);
-          setIsLoading(false);
-          setSessionExpired(true);
-          sessionExpiredRef.current = true;
-          stopRealtimeAndTimers();
           return;
         }
 
@@ -760,12 +755,31 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
           setHasOlderMessages(preloaded.length >= 50);
         }
 
-        isInitializedRef.current = true;
-        setIsLoading(false);
+        const messagesPromise = loadMessages(true, controller.signal);
 
-        await loadMessages(true, controller.signal);
+        await sessionPromise;
+        if (isDisposed || controller.signal.aborted) {
+          return;
+        }
+
+        if (sessionGone) {
+          controller.abort();
+          markSessionAsExpired(sessionId);
+          setIsLoading(false);
+          setSessionExpired(true);
+          sessionExpiredRef.current = true;
+          stopRealtimeAndTimers();
+          return;
+        }
+
+        isInitializedRef.current = true;
+
+        // Keep the loading indicator up until the server fetch completes when
+        // there is no local cache, avoiding a premature "No messages yet" flash.
+        await messagesPromise;
         if (isDisposed || controller.signal.aborted || sessionExpiredRef.current) return;
 
+        setIsLoading(false);
         scheduleNextPoll();
         scheduleTypingPoll();
       } catch (err: any) {

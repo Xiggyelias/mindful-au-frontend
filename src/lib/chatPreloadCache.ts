@@ -14,7 +14,7 @@ import { isStorageQuotaError, trimSessionStorageByPrefix } from '@/lib/browserSt
 const KEY_PREFIX = 'chat:preload:';
 const MAX_TTL_MS = 5 * 60 * 1_000; // 5 minutes
 const MAX_CACHED_SESSIONS = 10;
-const MAX_CACHED_MESSAGES = 24;
+const MAX_CACHED_MESSAGES = 50;
 
 type PreloadEntry = {
   messages: unknown[];
