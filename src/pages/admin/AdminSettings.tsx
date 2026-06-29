@@ -92,6 +92,7 @@ const AdminSettings = () => {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearingCache, setIsClearingCache] = useState(false);
   const [savingSwitchKey, setSavingSwitchKey] = useState<string | null>(null);
   const [backupRuns, setBackupRuns] = useState<any[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
@@ -206,13 +207,13 @@ const AdminSettings = () => {
 
   const handleClearCache = async () => {
     try {
-      setIsSaving(true);
+      setIsClearingCache(true);
       await api.clearCache();
       toast.success("Cache cleared successfully");
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to clear cache");
     } finally {
-      setIsSaving(false);
+      setIsClearingCache(false);
     }
   };
 
@@ -360,7 +361,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.panic_alerts}
                     onCheckedChange={(v) => void handleSwitchChange("panic_alerts", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "panic_alerts"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -371,7 +372,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.ai_risk_alerts}
                     onCheckedChange={(v) => void handleSwitchChange("ai_risk_alerts", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "ai_risk_alerts"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -382,7 +383,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.daily_reports}
                     onCheckedChange={(v) => void handleSwitchChange("daily_reports", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "daily_reports"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -393,7 +394,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.new_registrations}
                     onCheckedChange={(v) => void handleSwitchChange("new_registrations", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "new_registrations"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
               </CardContent>
@@ -416,7 +417,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.two_factor_auth}
                     onCheckedChange={(v) => void handleSwitchChange("two_factor_auth", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "two_factor_auth"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -427,7 +428,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.session_timeout}
                     onCheckedChange={(v) => void handleSwitchChange("session_timeout", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "session_timeout"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -438,7 +439,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.audit_logging}
                     onCheckedChange={(v) => void handleSwitchChange("audit_logging", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "audit_logging"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -449,7 +450,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.data_encryption}
                     onCheckedChange={(v) => void handleSwitchChange("data_encryption", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "data_encryption"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
               </CardContent>
@@ -515,7 +516,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.anonymous_mode_default}
                     onCheckedChange={(v) => void handleSwitchChange("anonymous_mode_default", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "anonymous_mode_default"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -526,7 +527,7 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.ai_auto_analysis}
                     onCheckedChange={(v) => void handleSwitchChange("ai_auto_analysis", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "ai_auto_analysis"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -537,15 +538,8 @@ const AdminSettings = () => {
                   <Switch
                     checked={!!settings.auto_backup}
                     onCheckedChange={(v) => void handleSwitchChange("auto_backup", v)}
-                    disabled={isLoading || isSaving || savingSwitchKey === "auto_backup"}
+                    disabled={isLoading || savingSwitchKey !== null}
                   />
-                </div>
-                <div className="rounded-lg border border-border/60 bg-secondary/30 p-3">
-                  <Label>Video Call Timing Policy</Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Calls are allowed only during their scheduled appointment window.
-                    Early joins and extra grace time are disabled.
-                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-secondary/30 p-3 space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -642,9 +636,11 @@ const AdminSettings = () => {
                     className="w-full"
                     type="button"
                     onClick={handleClearCache}
-                    disabled={isSaving || isLoading}
+                    disabled={isClearingCache || isLoading}
                   >
-                    Clear Cache
+                    {isClearingCache ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />Clearing...</>
+                    ) : "Clear Cache"}
                   </Button>
                 </div>
               </CardContent>
