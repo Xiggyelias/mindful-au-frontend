@@ -15,6 +15,7 @@ import { DailyTipCard } from "@/components/DailyTipCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { api, getApiErrorMessage } from "@/lib/api";
@@ -196,12 +197,21 @@ const PeerDashboard = () => {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium text-foreground truncate">{row.student_label}</p>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary capitalize">
+                        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                          row.status === "active"
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : row.status === "pending"
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
                           {row.status}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Last activity: {row.updated_at ? new Date(row.updated_at).toLocaleString() : "--"}
+                        Last activity:{" "}
+                        {row.updated_at
+                          ? formatDistanceToNow(new Date(row.updated_at), { addSuffix: true })
+                          : "--"}
                       </p>
                     </button>
                   ))
