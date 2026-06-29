@@ -55,7 +55,7 @@ const AdminCounselors = () => {
         const data = await api.getCounselors();
         setCounselors(data || []);
       } catch (error) {
-        console.error("Failed to load counselors:", error);
+        if (import.meta.env.DEV) console.error("Failed to load counselors:", error);
         toast.error("Failed to load counselors");
       } finally {
         setIsLoading(false);
@@ -66,9 +66,14 @@ const AdminCounselors = () => {
   }, [user]);
 
   const refreshCounselors = async () => {
-    const data = await api.getCounselors();
-    setCounselors(data || []);
-    setSelectedIds(new Set());
+    try {
+      const data = await api.getCounselors();
+      setCounselors(data || []);
+      setSelectedIds(new Set());
+    } catch (error) {
+      if (import.meta.env.DEV) console.error("Failed to refresh counselors list:", error);
+      toast.error("List refresh failed — please reload the page to see the latest data.");
+    }
   };
 
   const stats = useMemo(() => {
