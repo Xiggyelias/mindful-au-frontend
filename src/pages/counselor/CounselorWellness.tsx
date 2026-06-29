@@ -449,7 +449,7 @@ const CounselorWellness = () => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
                         <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Mood</span>
-                        <span className="text-lg font-bold text-success">
+                        <span className={`text-lg font-bold ${getWellnessStatus(todayCheckInLog?.mood_score ?? null).color}`}>
                           {todayCheckInLog?.mood_score != null ? `${todayCheckInLog.mood_score}%` : "—"}
                         </span>
                       </div>
@@ -619,10 +619,10 @@ const CounselorWellness = () => {
                           <p className="text-sm font-medium">
                             {new Date(log.created_at).toLocaleDateString()} - {source}
                           </p>
-                          <div className="flex gap-3 text-xs text-muted-foreground">
-                            <span>Mood: {log.mood_score ?? "--"}%</span>
-                            <span>Stress: {log.stress_level ?? "--"}%</span>
-                            <span>Burnout: {log.burnout_index ?? "--"}%</span>
+                          <div className="flex gap-3 text-xs">
+                            <span className={getWellnessStatus(log.mood_score ?? null).color}>Mood: {log.mood_score ?? "--"}%</span>
+                            <span className={scoreColor(log.stress_level ?? null, 40, 70)}>Stress: {log.stress_level ?? "--"}%</span>
+                            <span className={scoreColor(log.burnout_index ?? null, 30, 60)}>Burnout: {log.burnout_index ?? "--"}%</span>
                           </div>
                         </div>
                         {log.notes && <p className="text-sm text-muted-foreground mt-2">{log.notes}</p>}

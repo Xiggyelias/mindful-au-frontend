@@ -160,11 +160,6 @@ const StudentHistory = () => {
       setIsLoading(false);
       return;
     }
-    void loadSessions(true, { force: true });
-  }, [loadSessions, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || sessionPage === 1) return;
     sessionPageRef.current = sessionPage;
     void loadSessions(true, { force: true });
   }, [sessionPage, loadSessions, user?.id]);
@@ -289,7 +284,18 @@ const StudentHistory = () => {
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                           {session.status && (
-                            <Badge variant="secondary" className="capitalize">
+                            <Badge
+                              variant="outline"
+                              className={`capitalize ${
+                                session.status === "completed"
+                                  ? "border-success/40 bg-success/10 text-success"
+                                  : session.status === "cancelled" || session.status === "inactive"
+                                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                                  : session.status === "active"
+                                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
+                                  : "border-warning/40 bg-warning/10 text-warning"
+                              }`}
+                            >
                               {session.status}
                             </Badge>
                           )}
@@ -332,7 +338,11 @@ const StudentHistory = () => {
                           ) : (
                             <Video className="h-4 w-4" />
                           )}
-                          Open session
+                          {String(session.session_type || "").toLowerCase() === "chat"
+                            ? "Open chat"
+                            : String(session.status || "").toLowerCase() === "completed"
+                            ? "View appointment"
+                            : "Open session"}
                         </Button>
                       </div>
                     </div>
@@ -415,7 +425,11 @@ const StudentHistory = () => {
                 </div>
               )}
               <Button className="w-full mt-2" onClick={() => openSessionFollowUp(selectedSession)}>
-                Go to {formatSessionType(selectedSession.session_type)}
+                {String(selectedSession.session_type || "").toLowerCase() === "chat"
+                  ? "Open chat"
+                  : String(selectedSession.status || "").toLowerCase() === "completed"
+                  ? "View appointment"
+                  : `Open ${formatSessionType(selectedSession.session_type)}`}
               </Button>
             </div>
           )}

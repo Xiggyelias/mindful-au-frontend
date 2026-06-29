@@ -204,26 +204,43 @@ const CounselorAIDashboard = () => {
   };
 
   const getRiskColor = (riskLevel: string) => {
-    return {
-      low: "text-green-600",
-      medium: "text-yellow-600",
-      high: "text-orange-600",
-      critical: "text-red-600",
-    }[riskLevel] || "text-gray-600";
+    return (
+      {
+        low: "text-success",
+        medium: "text-warning",
+        high: "text-orange-600 dark:text-orange-400",
+        critical: "text-destructive",
+      } as Record<string, string>
+    )[riskLevel] ?? "text-muted-foreground";
   };
 
   const getRiskBgColor = (riskLevel: string) => {
-    return {
-      low: "bg-green-100",
-      medium: "bg-yellow-100",
-      high: "bg-orange-100",
-      critical: "bg-red-100",
-    }[riskLevel] || "bg-gray-100";
+    return (
+      {
+        low: "bg-success/15",
+        medium: "bg-warning/15",
+        high: "bg-orange-500/15",
+        critical: "bg-destructive/15",
+      } as Record<string, string>
+    )[riskLevel] ?? "bg-muted/40";
+  };
+
+  const getRiskIndicator = (riskLevel: string) => {
+    return (
+      {
+        low: "bg-success",
+        medium: "bg-warning",
+        high: "bg-orange-500",
+        critical: "bg-destructive",
+      } as Record<string, string>
+    )[riskLevel] ?? "";
   };
 
   const trendText = (trend: StudentObservation["trend"]) => {
-    if (trend.label === "worsening") return `Worsening (${trend.delta > 0 ? "+" : ""}${trend.delta})`;
-    if (trend.label === "improving") return `Improving (${trend.delta})`;
+    if (trend.label === "worsening")
+      return trend.delta !== 0 ? `Worsening (${trend.delta})` : "Worsening";
+    if (trend.label === "improving")
+      return trend.delta !== 0 ? `Improving (${trend.delta > 0 ? "+" : ""}${trend.delta})` : "Improving";
     if (trend.label === "stable") return "Stable";
     return "Need more data";
   };
@@ -458,7 +475,7 @@ const CounselorAIDashboard = () => {
                             >
                               {normalizeRiskLevel(diagnostic.risk_level)}
                             </span>
-                            <Progress value={clampPercent(diagnostic.total_score)} className="h-2 w-full md:w-44" />
+                            <Progress value={clampPercent(diagnostic.total_score)} className="h-2 w-full md:w-44" indicatorClassName={getRiskIndicator(normalizeRiskLevel(diagnostic.risk_level))} />
                             <span
                               className="text-[11px] font-medium tabular-nums text-muted-foreground"
                             >
@@ -535,7 +552,17 @@ const CounselorAIDashboard = () => {
                               <span className="text-muted-foreground capitalize">{category}</span>
                               <span className="font-medium">{clampPercent(score)}%</span>
                             </div>
-                            <Progress value={clampPercent(score)} className="h-2" />
+                            <Progress
+                              value={clampPercent(score)}
+                              className="h-2"
+                              indicatorClassName={
+                                clampPercent(score) >= 70
+                                  ? "bg-destructive"
+                                  : clampPercent(score) >= 40
+                                  ? "bg-warning"
+                                  : "bg-success"
+                              }
+                            />
                           </div>
                         ));
                       })()}

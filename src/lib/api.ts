@@ -1665,9 +1665,10 @@ class ApiClient {
    * Use this instead of loading file_url directly so the file is never
    * served without authentication.
    */
-  async streamVoiceNoteBlob(messageId: number | string): Promise<Blob> {
+  async streamVoiceNoteBlob(messageId: number | string, options?: { signal?: AbortSignal }): Promise<Blob> {
     const response = await this.client.get(`/messages/${messageId}/voice-note/stream`, {
       responseType: "blob",
+      signal: options?.signal,
     });
     return response.data as Blob;
   }

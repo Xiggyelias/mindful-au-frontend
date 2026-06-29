@@ -72,32 +72,37 @@ export function WellnessCheckInResults({
         </div>
 
         <div className="mt-6 space-y-3">
-          <p className="text-sm font-semibold text-slate-700">What stood out</p>
-          {Object.entries(result.category_scores).map(([category, score]) => (
-            <div key={category} className="rounded-xl bg-white/70 px-3 py-2.5">
-              <div className="mb-1.5 flex justify-between text-sm">
-                <span className="capitalize text-slate-600">{category.replace(/_/g, " ")}</span>
-                <span className="font-semibold text-slate-800">{score}%</span>
+          <p className="text-sm font-semibold text-foreground">What stood out</p>
+          {Object.entries(result.category_scores).map(([category, score]) => {
+            const pct = Math.min(100, Math.max(0, Number(score) || 0));
+            return (
+              <div key={category} className="rounded-xl bg-white/70 dark:bg-secondary/40 px-3 py-2.5">
+                <div className="mb-1.5 flex justify-between text-sm">
+                  <span className="capitalize text-muted-foreground">{category.replace(/_/g, " ")}</span>
+                  <span className="font-semibold text-foreground">{score}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-border/40">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-sky-400 to-violet-400 transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-sky-400 to-violet-400 transition-all"
-                  style={{ width: `${Math.min(100, Number(score))}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        <div className="mt-6 space-y-3 rounded-2xl border border-white/80 bg-white/75 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <div className="mt-6 space-y-3 rounded-2xl border border-border/60 bg-white/75 dark:bg-secondary/30 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <Heart className="h-4 w-4 text-rose-500" />
             For you right now
           </p>
-          <p className="text-sm leading-relaxed text-slate-700">{result.ai_recommendations.primary}</p>
+          {result.ai_recommendations.primary && (
+            <p className="text-sm leading-relaxed text-muted-foreground">{result.ai_recommendations.primary}</p>
+          )}
           <ul className="space-y-2">
-            {result.ai_recommendations.actions.map((action, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
+            {(result.ai_recommendations.actions ?? []).map((action, index) => (
+              <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
                 <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
                 <span>{action}</span>
               </li>
@@ -141,13 +146,13 @@ export function WellnessCheckInResults({
       </div>
 
       {history.length > 0 && (
-        <div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-5 shadow-sm">
-          <p className="flex items-center gap-2 font-semibold text-slate-800">
+        <div className="rounded-[1.75rem] border border-border/60 bg-card/90 p-5 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold text-foreground">
             <TrendingUp className="h-4 w-4 text-violet-500" />
             Your past check-ins
           </p>
           {isHistoryLoading ? (
-            <p className="mt-3 text-sm text-slate-500">Loading…</p>
+            <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
           ) : (
             <div className="mt-3 space-y-2">
               {history.slice(0, 5).map((item) => {
@@ -155,16 +160,16 @@ export function WellnessCheckInResults({
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5"
+                    className="flex items-center justify-between rounded-xl bg-secondary/30 px-3 py-2.5"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-800">
+                      <p className="text-sm font-medium text-foreground">
                         {new Date(item.created_at).toLocaleDateString(undefined, {
                           month: "short",
                           day: "numeric",
                         })}
                       </p>
-                      <p className="text-xs text-slate-500">{rs.label}</p>
+                      <p className="text-xs text-muted-foreground">{rs.label}</p>
                     </div>
                     <span className={cn("text-sm font-bold", rs.ring)}>{item.total_score}%</span>
                   </div>
@@ -176,12 +181,12 @@ export function WellnessCheckInResults({
       )}
 
       {trendPoints.length > 0 && (
-        <div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-5 shadow-sm">
-          <p className="font-semibold text-slate-800">Recent trend</p>
+        <div className="rounded-[1.75rem] border border-border/60 bg-card/90 p-5 shadow-sm">
+          <p className="font-semibold text-foreground">Recent trend</p>
           <div className="mt-3 space-y-2">
             {trendPoints.map((trend) => (
               <div key={trend.date} className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">
+                <span className="text-muted-foreground">
                   {new Date(trend.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                 </span>
                 <span className={cn("font-semibold", riskStyle(trend.risk_level).ring)}>{trend.score}%</span>

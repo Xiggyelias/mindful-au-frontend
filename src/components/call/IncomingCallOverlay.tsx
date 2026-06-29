@@ -220,6 +220,9 @@ export function IncomingCallOverlay({
           <h2 className="text-2xl font-semibold tracking-tight text-white drop-shadow-md">
             {callerDisplayName}
           </h2>
+          <p className="text-sm text-white/60 tracking-wide">
+            {isVideo ? "Video calling you…" : "Audio calling you…"}
+          </p>
 
           {/* Secure Audio / Secure Video badge */}
           <div

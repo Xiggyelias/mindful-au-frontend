@@ -398,19 +398,15 @@ const StudentAppointments = () => {
   );
 
   useEffect(() => {
-    if (!user?.id || hasInitiallyLoadedRef.current) return;
-    hasInitiallyLoadedRef.current = true;
-    void loadAppointments(true, { force: true });
-    void loadCounselors(true, { force: true });
-    void loadEmergencyRequests(false);
-  }, [loadAppointments, loadCounselors, loadEmergencyRequests, user?.id]);
-
-  // Reload when user navigates to a different page via pagination
-  useEffect(() => {
-    if (!user?.id || appointmentPage === 1 || !hasInitiallyLoadedRef.current) return;
+    if (!user?.id) return;
+    if (!hasInitiallyLoadedRef.current) {
+      hasInitiallyLoadedRef.current = true;
+      void loadCounselors(true, { force: true });
+      void loadEmergencyRequests(false);
+    }
     appointmentPageRef.current = appointmentPage;
     void loadAppointments(true, { force: true });
-  }, [appointmentPage, loadAppointments, user?.id]);
+  }, [appointmentPage, loadAppointments, loadCounselors, loadEmergencyRequests, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -591,9 +587,12 @@ const StudentAppointments = () => {
         const targetSlot = preselectedSlot || (
           pinnedCounselorIdRef.current
             ? null
-            : nextSlots.find(
-                (slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now()
-              )
+            : nextSlots.find((slot) => {
+                if (slot.status !== "available") return false;
+                if (new Date(slot.start_time).getTime() <= Date.now()) return false;
+                const h = Number(formatInDisplayZone(new Date(slot.start_time), "H"));
+                return h !== 12;
+              })
         );
         if (targetSlot) {
           setSelectedSlotId(Number(targetSlot.id));
@@ -652,7 +651,13 @@ const StudentAppointments = () => {
           day: "numeric",
         }),
         slots: daySlots
-          .filter((slot) => slot.status === "available" && new Date(slot.start_time).getTime() > Date.now())
+          .filter((slot) => {
+            if (slot.status !== "available") return false;
+            if (new Date(slot.start_time).getTime() <= Date.now()) return false;
+            // Exclude 12:00 PM – 1:00 PM (lunch break — never bookable)
+            const displayHour = Number(formatInDisplayZone(new Date(slot.start_time), "H"));
+            return displayHour !== 12;
+          })
           .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
       }))
       .filter((day) => day.slots.length > 0);
@@ -879,7 +884,7 @@ const StudentAppointments = () => {
       const sessionNotes =
         form.mode === "physical"
           ? "Physical"
-          : form.is_anonymous
+          : form.is_anonymous || form.online_media === "audio"
             ? "Online audio"
             : "Online";
 
@@ -1354,6 +1359,8 @@ const StudentAppointments = () => {
                             mode,
                             ...(mode === "online" && prev.is_anonymous
                               ? { online_media: "audio" as const }
+                              : mode === "online"
+                              ? { online_media: "video" as const }
                               : {}),
                           };
                         })
@@ -1363,11 +1370,42 @@ const StudentAppointments = () => {
                         <SelectValue placeholder="Select mode" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="physical">Physical</SelectItem>
+                        <SelectItem value="online">Online — Video call</SelectItem>
+                        <SelectItem value="physical">Physical — In person</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                  {form.mode === "online" && !form.is_anonymous && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Call type</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, online_media: "video" }))}
+                          className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                            form.online_media === "video"
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-secondary/20 text-muted-foreground hover:bg-secondary/40"
+                          }`}
+                        >
+                          <Video className="h-4 w-4 shrink-0" />
+                          Video call
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, online_media: "audio" }))}
+                          className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                            form.online_media === "audio"
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-secondary/20 text-muted-foreground hover:bg-secondary/40"
+                          }`}
+                        >
+                          <Mic className="h-4 w-4 shrink-0" />
+                          Audio only
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {form.mode === "online" && form.is_anonymous && (
                     <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/20 px-3 py-2.5">
                       <Mic className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -1790,7 +1828,7 @@ const StudentAppointments = () => {
                 {appointmentToCancel?.scheduled_at && (
                   <p className="text-xs text-muted-foreground">
                     Scheduled for{" "}
-                    {new Date(appointmentToCancel.scheduled_at).toLocaleString()}
+                    {formatInDisplayZone(new Date(appointmentToCancel.scheduled_at), "MMM d, yyyy 'at' h:mm a")}
                   </p>
                 )}
                 <div className="space-y-2">
@@ -1888,16 +1926,11 @@ const StudentAppointments = () => {
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <p className="font-medium text-foreground">
-                            {apt.scheduled_at ? new Date(apt.scheduled_at).toLocaleDateString() : ""}
+                            {apt.scheduled_at ? formatInDisplayZone(new Date(apt.scheduled_at), "MMM d, yyyy") : ""}
                           </p>
                           <p className="text-sm text-muted-foreground flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {apt.scheduled_at
-                              ? new Date(apt.scheduled_at).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : ""}
+                            {apt.scheduled_at ? formatInDisplayZone(new Date(apt.scheduled_at), "h:mm a") : ""}
                           </p>
                         </div>
                         <span

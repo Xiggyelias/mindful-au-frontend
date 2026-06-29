@@ -31,6 +31,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
   const [voiceBlobLoading, setVoiceBlobLoading] = useState(false);
   const [voiceBlobFailed, setVoiceBlobFailed] = useState(false);
+  const [voiceBlobRetry, setVoiceBlobRetry] = useState(0);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
   const resolved = resolveMessageAttachment(msg);
@@ -73,25 +74,35 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
 
     let cancelled = false;
     let objectUrl: string | null = null;
+    const abortController = new AbortController();
+    // Abort the fetch after 20 s to prevent the "Loading…" state from sticking forever.
+    const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
 
     const fetchBlob = async () => {
       setVoiceBlobLoading(true);
       setVoiceBlobFailed(false);
       try {
-        const blob = await api.streamVoiceNoteBlob(messageId);
-        if (!cancelled) {
+        const blob = await api.streamVoiceNoteBlob(messageId, { signal: abortController.signal });
+        if (!cancelled && !abortController.signal.aborted) {
           objectUrl = URL.createObjectURL(blob);
           setVoiceAuthBlobUrl(objectUrl);
         }
-      } catch {
-        if (!cancelled) {
-          // Only fall back to resolvedUrl when it's a real HTTP URL (not private://)
-          const isPublicUrl = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://") || resolvedUrl.startsWith("blob:");
+      } catch (err: unknown) {
+        // Ignore abort errors — they're intentional (timeout or unmount cleanup).
+        const isAbort = (err as { name?: string })?.name === "CanceledError" ||
+          (err as { name?: string })?.name === "AbortError" ||
+          (err as { code?: string })?.code === "ERR_CANCELED";
+        if (!cancelled && !isAbort) {
+          const isPublicUrl =
+            resolvedUrl.startsWith("http://") ||
+            resolvedUrl.startsWith("https://") ||
+            resolvedUrl.startsWith("blob:");
           if (!isPublicUrl) {
             setVoiceBlobFailed(true);
           }
         }
       } finally {
+        window.clearTimeout(timeoutId);
         if (!cancelled) {
           setVoiceBlobLoading(false);
         }
@@ -102,13 +113,13 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      window.clearTimeout(timeoutId);
+      abortController.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       setVoiceAuthBlobUrl(null);
       setVoiceBlobLoading(false);
     };
-  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, resolvedUrl]);
+  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, resolvedUrl, voiceBlobRetry]);
 
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
@@ -321,7 +332,14 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         uploadProgress={uploadProgress}
         uploadFailed={msg.uploadFailed || (voiceBlobFailed && !playbackSrc)}
         isDeleting={isDeleting}
-        onRetry={onRetry}
+        onRetry={() => {
+          // Re-trigger the blob fetch (increments retry counter which is in the
+          // useEffect dep array) so the player can recover from a transient error.
+          setVoiceBlobFailed(false);
+          setVoiceAuthBlobUrl(null);
+          setVoiceBlobRetry((n) => n + 1);
+          onRetry?.();
+        }}
         onDelete={onDelete}
       />
     );

@@ -284,6 +284,11 @@ export function VoiceMemoPlayer({
       stopLevelLoop();
       return;
     }
+    // If previously failed, retry the blob fetch before attempting play.
+    if (playbackError && onRetry) {
+      onRetry();
+      return;
+    }
     setPlaybackError(null);
     // Wire up analyser on first play (requires user gesture)
     setupAnalyser();
@@ -300,7 +305,7 @@ export function VoiceMemoPlayer({
       stopLevelLoop();
       setPlaybackError("Could not play audio");
     }
-  }, [playing, isUploading, uploadFailed, setupAnalyser, src, startLevelLoop, stopLevelLoop]);
+  }, [playing, isUploading, uploadFailed, playbackError, onRetry, setupAnalyser, src, startLevelLoop, stopLevelLoop]);
 
   const seekTo = useCallback((clientX: number) => {
     const el = audioRef.current;
@@ -524,6 +529,15 @@ export function VoiceMemoPlayer({
             <span className={cn("inline-flex min-w-0 items-center gap-1 truncate text-[11px] font-semibold leading-none", isOutgoing ? "text-primary-foreground/90" : "text-destructive")}>
               <AlertTriangle className="h-3 w-3 shrink-0" />
               {playbackError}
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onRetry(); }}
+                  className={cn("ml-1 underline underline-offset-2 text-[10px]", isOutgoing ? "text-primary-foreground/70" : "text-destructive/70")}
+                >
+                  Retry
+                </button>
+              )}
             </span>
           ) : (
             <span className={cn("text-[11px] tabular-nums font-medium leading-none", timeCls)}>

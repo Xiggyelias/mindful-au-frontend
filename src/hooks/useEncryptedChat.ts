@@ -160,7 +160,11 @@ const formatServerMessage = (msg: any): ChatMessage => ({
 
 export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Start in loading state immediately when a session is provided so that
+  // MessageList never renders the "Start a Safe Conversation" empty state
+  // between the render that receives the new sessionId and the useEffect
+  // that calls setIsLoading(true).
+  const [isLoading, setIsLoading] = useState(() => Boolean(sessionId));
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [isPeerTyping, setIsPeerTyping] = useState(false);

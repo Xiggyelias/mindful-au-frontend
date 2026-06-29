@@ -72,8 +72,16 @@ const getInitials = (value: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-const formatScheduleLabel = (scheduledAt?: string | null) =>
-  scheduledAt ? format(new Date(scheduledAt), "MMM d, yyyy h:mm a") : "TBD";
+const formatScheduleLabel = (scheduledAt?: string | null): string => {
+  if (!scheduledAt) return "TBD";
+  try {
+    const d = new Date(scheduledAt);
+    if (!isFinite(d.getTime())) return "TBD";
+    return format(d, "MMM d, yyyy h:mm a");
+  } catch {
+    return "TBD";
+  }
+};
 
 const StudentVideoCall = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1228,7 +1236,7 @@ const StudentVideoCall = () => {
                   ) : upcomingAppointments.length === 0 ? (
                     <div className="rounded-[22px] border border-dashed border-border/70 bg-background/60 p-6 text-center">
                       <p className="text-base font-medium text-foreground">No active online sessions</p>
-                      <p className="mt-2 text-sm text-muted-foreground text-xs">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         Online calls appear here up to 15 minutes before the appointment time.
                       </p>
                     </div>

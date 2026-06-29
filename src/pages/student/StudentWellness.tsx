@@ -217,17 +217,32 @@ const StudentWellness = () => {
                           <span>Vitality Level</span>
                           <span>{wellnessScore}%</span>
                         </div>
-                        <Progress value={wellnessScore} className="h-4 rounded-full bg-secondary/50" />
+                        <Progress
+                          value={wellnessScore}
+                          className="h-4 rounded-full bg-secondary/50"
+                          indicatorClassName={
+                            wellnessScore >= 70 ? "bg-success" :
+                            wellnessScore >= 40 ? "bg-warning" : "bg-destructive"
+                          }
+                        />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50">
                           <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Stress</p>
-                          <p className="text-lg font-bold text-foreground">{stressLevel ?? "--"}%</p>
+                          <p className={`text-lg font-bold ${
+                            stressLevel === null ? "text-foreground" :
+                            stressLevel < 40 ? "text-success" :
+                            stressLevel < 70 ? "text-warning" : "text-destructive"
+                          }`}>{stressLevel ?? "--"}%</p>
                         </div>
                         <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50">
                           <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Burnout</p>
-                          <p className="text-lg font-bold text-foreground">{burnoutRisk ?? "--"}%</p>
+                          <p className={`text-lg font-bold ${
+                            burnoutRisk === null ? "text-foreground" :
+                            burnoutRisk < 30 ? "text-success" :
+                            burnoutRisk < 60 ? "text-warning" : "text-destructive"
+                          }`}>{burnoutRisk ?? "--"}%</p>
                         </div>
                       </div>
                     </div>
@@ -282,7 +297,9 @@ const StudentWellness = () => {
                             ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20"
                             : riskLabel === "medium"
                             ? "bg-warning text-warning-foreground"
-                            : "bg-success text-success-foreground"
+                            : riskLabel === "low"
+                            ? "bg-success text-success-foreground"
+                            : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {riskLabel}
@@ -316,6 +333,8 @@ const StudentWellness = () => {
                           className={`h-2 w-2 rounded-full ${
                             entry.risk_level === "high" || entry.risk_level === "critical"
                               ? "bg-destructive shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                              : entry.risk_level === "medium"
+                              ? "bg-warning"
                               : "bg-success"
                           }`}
                         />

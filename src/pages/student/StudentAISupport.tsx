@@ -628,7 +628,7 @@ const StudentAISupport = () => {
                       onBlur={() => setIsFocused(false)}
                       placeholder="Share what's on your mind..."
                       disabled={isLoading}
-                      className="flex-1 bg-background border border-input rounded-l-2xl px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                      className="flex-1 bg-transparent border-0 px-5 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
                     />
                     <div className="flex items-center gap-2 pr-2">
                       <Button

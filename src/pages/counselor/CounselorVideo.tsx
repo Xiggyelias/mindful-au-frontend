@@ -64,8 +64,16 @@ const getInitials = (value: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-const formatScheduleLabel = (scheduledAt?: string | null) =>
-  scheduledAt ? format(new Date(scheduledAt), "MMM d, yyyy h:mm a") : "TBD";
+const formatScheduleLabel = (scheduledAt?: string | null): string => {
+  if (!scheduledAt) return "TBD";
+  try {
+    const d = new Date(scheduledAt);
+    if (!isFinite(d.getTime())) return "TBD";
+    return format(d, "MMM d, yyyy h:mm a");
+  } catch {
+    return "TBD";
+  }
+};
 
 const isMobileOrTablet = () =>
   typeof navigator !== "undefined" &&
@@ -1144,8 +1152,8 @@ const CounselorVideo = () => {
                         <span className="font-medium text-emerald-500">Connected</span>
                       </div>
                       <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-muted-foreground">Call Quality</span>
-                        <span className="font-medium">Excellent</span>
+                        <span className="text-muted-foreground">Mode</span>
+                        <span className="font-medium">{isAudioOnly ? "Audio only" : "Video + Audio"}</span>
                       </div>
                     </div>
                   </div>
@@ -1170,12 +1178,16 @@ const CounselorVideo = () => {
                         )}
                       </span>
                     </p>
-                    <textarea 
+                    <textarea
                       className="w-full flex-1 min-h-[200px] p-4 rounded-2xl bg-secondary/20 border border-border/40 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                       placeholder="Type your session observations here..."
                       value={noteText}
+                      maxLength={5000}
                       onChange={(e) => setNoteText(e.target.value)}
                     />
+                    <p className={`text-[10px] text-right tabular-nums ${noteText.length > 4500 ? (noteText.length >= 5000 ? "text-destructive" : "text-warning") : "text-muted-foreground/50"}`}>
+                      {noteText.length}/5000
+                    </p>
                   </div>
                   
                   <div className="pt-2">
@@ -1208,7 +1220,7 @@ const CounselorVideo = () => {
                   ) : upcomingSessions.length === 0 ? (
                     <div className="rounded-[22px] border border-dashed border-border/70 bg-background/60 p-6 text-center">
                       <p className="text-base font-medium text-foreground">No active online sessions</p>
-                      <p className="mt-2 text-sm text-muted-foreground text-xs">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         Online sessions appear here up to 15 minutes before the appointment time.
                       </p>
                     </div>

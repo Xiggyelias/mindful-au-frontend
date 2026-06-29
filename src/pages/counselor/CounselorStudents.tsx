@@ -536,14 +536,13 @@ const CounselorStudents = () => {
         s.status !== "cancelled"
     );
     if (existing) {
-      toast.info("An active counseling session already exists with this student.");
+      navigate(`/counselor/messages?session=${existing.id}`);
       return;
     }
     try {
       setMessagingStudentId(studentId);
-      await api.createSessionAsCounselor({ student_id: studentId, session_type: "chat" });
-      toast.success("Counseling session created. The student can now message you.");
-      setReloadToken((prev) => prev + 1);
+      const newSession = await api.createSessionAsCounselor({ student_id: studentId, session_type: "chat" });
+      navigate(`/counselor/messages?session=${newSession.id}`);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to create session.");
     } finally {

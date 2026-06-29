@@ -186,6 +186,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
 
     if (title.includes("wellness")) {
       if (basePath === "/admin") return "/admin/dashboard";
+      if (basePath === "/peer") return "/peer/dashboard";
       return `${basePath}/wellness`;
     }
 
@@ -394,7 +395,7 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
                                 {formatTimestamp(notification.created_at)}
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5 break-all whitespace-normal leading-relaxed">
+                            <p className="text-xs text-muted-foreground mt-0.5 break-words whitespace-normal leading-relaxed">
                               {notification.message}
                             </p>
                           </div>
