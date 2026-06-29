@@ -24,6 +24,7 @@ import { useFileAttachment } from "@/hooks/useFileAttachment";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { toast } from "sonner";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { getEmergencyLocation } from "@/lib/emergencyLocation";
 import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -633,17 +634,7 @@ const StudentChat = () => {
     try {
       setIsTriggeringEmergency(true);
 
-      let location: string | undefined;
-      if (typeof navigator !== "undefined" && navigator.geolocation) {
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-          });
-          location = `${position.coords.latitude}, ${position.coords.longitude}`;
-        } catch {
-          // Location is optional; proceed without it.
-        }
-      }
+      const location = await getEmergencyLocation();
 
       if (sessionId) {
         // Active conversation: escalate to counselors and mark this session as panic.

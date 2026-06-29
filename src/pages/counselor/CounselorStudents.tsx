@@ -829,7 +829,7 @@ const CounselorStudents = () => {
                             : "border-border/50 hover:border-border hover:shadow-sm"
                         }`}
                       >
-                        {/* â”€â”€ Header Row: Student Info + Status Badges â”€â”€ */}
+                        {/* Header Row: Student Info + Status Badges */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold ${
@@ -852,7 +852,7 @@ const CounselorStudents = () => {
                                 <p className="font-semibold text-foreground truncate">{student.name}</p>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} · Last active {student.lastSession}
+                                {student.sessions} {student.sessions === 1 ? "session" : "sessions"} - Last active {student.lastSession}
                               </p>
                             </div>
                           </div>
@@ -885,7 +885,7 @@ const CounselorStudents = () => {
                           </div>
                         </div>
 
-                        {/* â”€â”€ Actions Row â”€â”€ */}
+                        {/* Actions Row */}
                         <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
                           <Button
                             size="sm"
@@ -926,7 +926,7 @@ const CounselorStudents = () => {
                           </Button>
                         </div>
 
-                        {/* â”€â”€ Peer Counselor Section (only for low-risk or already assigned) â”€â”€ */}
+                        {/* Peer Counselor Section (only for low-risk or already assigned) */}
                         {showPeerSection && (peerOptions.length > 0 || hasAssignedPeer) && (
                           <div className="border-t border-border/40 bg-muted/20 px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -1040,7 +1040,7 @@ const CounselorStudents = () => {
         </main>
       </div>
 
-      {/* â”€â”€â”€â”€â”€ Student Profile Dialog â”€â”€â”€â”€â”€ */}
+      {/* Student Profile Dialog */}
       <Dialog
         open={selectedStudentForProfile !== null}
         onOpenChange={(open) => {
@@ -1080,7 +1080,7 @@ const CounselorStudents = () => {
               <TabsTrigger value="actions">Actions</TabsTrigger>
             </TabsList>
 
-            {/* â”€â”€ Overview Tab â”€â”€ */}
+            {/* Overview Tab */}
             <TabsContent value="overview" className="mt-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-xl bg-secondary/40 p-4 space-y-1">
@@ -1143,7 +1143,7 @@ const CounselorStudents = () => {
               )}
             </TabsContent>
 
-            {/* â”€â”€ Wellness Tab â”€â”€ */}
+            {/* Wellness Tab */}
             <TabsContent value="wellness" className="mt-4 space-y-4">
               {isLoadingWellness ? (
                 <div className="flex items-center justify-center py-12">
@@ -1275,7 +1275,7 @@ const CounselorStudents = () => {
               )}
             </TabsContent>
 
-            {/* â”€â”€ Actions Tab â”€â”€ */}
+            {/* Actions Tab */}
             <TabsContent value="actions" className="mt-4 space-y-3">
               <Button
                 className="w-full justify-start gap-3"

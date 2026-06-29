@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { API_RECOVERED_EVENT, api, getApiErrorMessage } from "@/lib/api";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
+import { getEmergencyLocation } from "@/lib/emergencyLocation";
 import {
   getVideoCallWindowStatus,
   isVideoEnabledAppointment,
@@ -806,28 +807,7 @@ const StudentAppointments = () => {
     try {
       setIsEmergencySubmitting(true);
 
-      let emergencyLocation: string | undefined;
-      if (navigator.geolocation) {
-        try {
-          const positionPromise = new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 3000,
-              maximumAge: 60000,
-            });
-          });
-          // Cap at 2.5 s — never delay an emergency alert waiting for GPS.
-          const position = await Promise.race([
-            positionPromise,
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-          ]);
-          if (position) {
-            emergencyLocation = `${position.coords.latitude},${position.coords.longitude}`;
-          }
-        } catch {
-          // GPS failed — emergency request goes out without location.
-        }
-      }
+      const emergencyLocation = await getEmergencyLocation();
 
       const preferredCounselorId = Number(emergencyCounselorId || 0);
       const response = await api.createEmergencyRequest({

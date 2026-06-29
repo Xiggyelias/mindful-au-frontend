@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { api } from "@/lib/api";
+import { getEmergencyLocation } from "@/lib/emergencyLocation";
 import { resolveCounselorPhone } from "@/lib/runtimeConfig";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -217,32 +218,7 @@ const StudentDashboard = () => {
 
     setIsPanicLoading(true);
     try {
-      let location: string | undefined;
-
-      // Get location with a hard 2.5-second cap so the alert is never delayed
-      // waiting for GPS. Accept a cached fix up to 60 s old — it is accurate
-      // enough to within a few metres and returns instantly on most devices.
-      if (navigator.geolocation) {
-        try {
-          const positionPromise = new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 3000,
-              maximumAge: 60000,
-            });
-          });
-          // Race: send the alert after 2.5 s regardless — do not block the user.
-          const position = await Promise.race([
-            positionPromise,
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-          ]);
-          if (position) {
-            location = `${position.coords.latitude},${position.coords.longitude}`;
-          }
-        } catch {
-          // GPS failed — alert goes out immediately without location.
-        }
-      }
+      const location = await getEmergencyLocation();
 
       await api.createPanicLog({ location });
       toast.success("Emergency alert sent! A counselor will contact you shortly.");

@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAIChat } from "@/hooks/useAIChat";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { useChatScroll } from "@/hooks/useChatScroll";
+import { getEmergencyLocation } from "@/lib/emergencyLocation";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 
@@ -359,20 +360,7 @@ const StudentAISupport = () => {
 
     setIsTriggeringEmergency(true);
     try {
-      let location: string | undefined;
-
-      if (navigator.geolocation) {
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-          });
-          location = `${position.coords.latitude}, ${position.coords.longitude}`;
-        } catch (geoError) {
-          if (import.meta.env.DEV) {
-            console.info("Could not get location:", geoError);
-          }
-        }
-      }
+      const location = await getEmergencyLocation();
 
       const response = await api.createPanicLog({ location });
       const recipientsNotified = Number(
