@@ -334,10 +334,8 @@ const CounselorDashboard = () => {
     const params = new URLSearchParams({
       appointment_id: String(apt.id),
       autostart: "1",
+      mode: isAppointmentAudioOnly(apt) ? "audio" : "video",
     });
-    if (isVideoEnabledAppointment(apt.notes)) {
-      params.set("mode", isAppointmentAudioOnly(apt) ? "audio" : "video");
-    }
     navigate(`/counselor/video?${params.toString()}`);
   };
 
@@ -519,6 +517,13 @@ const CounselorDashboard = () => {
                   <Progress
                     value={typeof counselorWellness?.scores?.stress_level === "number" ? counselorWellness.scores.stress_level : 0}
                     className="h-2"
+                    indicatorClassName={
+                      typeof counselorWellness?.scores?.stress_level === "number"
+                        ? counselorWellness.scores.stress_level < 40 ? "bg-emerald-500"
+                          : counselorWellness.scores.stress_level < 70 ? "bg-amber-400"
+                          : "bg-destructive"
+                        : ""
+                    }
                   />
                 </div>
                 <div>
@@ -531,6 +536,13 @@ const CounselorDashboard = () => {
                   <Progress
                     value={typeof counselorWellness?.scores?.burnout_index === "number" ? counselorWellness.scores.burnout_index : 0}
                     className="h-2"
+                    indicatorClassName={
+                      typeof counselorWellness?.scores?.burnout_index === "number"
+                        ? counselorWellness.scores.burnout_index < 30 ? "bg-emerald-500"
+                          : counselorWellness.scores.burnout_index < 60 ? "bg-amber-400"
+                          : "bg-destructive"
+                        : ""
+                    }
                   />
                 </div>
                 <div>
@@ -545,6 +557,13 @@ const CounselorDashboard = () => {
                   <Progress
                     value={typeof counselorWellness?.metrics?.workload_index === "number" ? counselorWellness.metrics.workload_index : 0}
                     className="h-2"
+                    indicatorClassName={
+                      typeof counselorWellness?.metrics?.workload_index === "number"
+                        ? counselorWellness.metrics.workload_index < 40 ? "bg-emerald-500"
+                          : counselorWellness.metrics.workload_index < 70 ? "bg-amber-400"
+                          : "bg-destructive"
+                        : ""
+                    }
                   />
                 </div>
                 {counselorWellness?.recommendations && (
@@ -572,8 +591,8 @@ const CounselorDashboard = () => {
                   return [
                     { label: "Low", count: Number(byRisk.low || 0), color: "bg-success/20 text-success" },
                     { label: "Medium", count: Number(byRisk.medium || 0), color: "bg-warning/20 text-warning" },
-                    { label: "High", count: Number(byRisk.high || 0), color: "bg-info/20 text-info" },
-                    { label: "Critical", count: Number(byRisk.critical || 0), color: "bg-primary/20 text-primary" },
+                    { label: "High", count: Number(byRisk.high || 0), color: "bg-orange-500/20 text-orange-600 dark:text-orange-400" },
+                    { label: "Critical", count: Number(byRisk.critical || 0), color: "bg-destructive/20 text-destructive" },
                   ].map((item) => (
                     <Button
                       key={item.label}
