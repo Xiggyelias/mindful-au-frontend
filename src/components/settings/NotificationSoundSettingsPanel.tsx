@@ -6,10 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   getNotificationSoundSettings,
   setNotificationSoundSettings,
-  primeNotificationAudioFromUserGesture,
-  playMessageNotificationSound,
-  playSessionReminderSound,
-  playEmergencyAlertSound,
   type MessageVariant,
   subscribeNotificationSoundSettings,
 } from "@/lib/sounds/notificationSoundManager";
@@ -121,49 +117,6 @@ export function NotificationSoundSettingsPanel() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="text-xs"
-          onClick={() => {
-            primeNotificationAudioFromUserGesture();
-            playMessageNotificationSound({ batchKey: `test-${Date.now()}` });
-          }}
-        >
-          Test message
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="text-xs"
-          onClick={() => {
-            primeNotificationAudioFromUserGesture();
-            playSessionReminderSound();
-          }}
-        >
-          Test reminder
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="text-xs"
-          onClick={() => {
-            primeNotificationAudioFromUserGesture();
-            playEmergencyAlertSound();
-          }}
-        >
-          Test emergency
-        </Button>
-      </div>
-      <p className="text-[10px] leading-snug text-muted-foreground">
-        Short sounds use soft synthesized tones (similar polish to WhatsApp / Discord). Call ringtones fade in
-        and out. Message and reminder volume dips slightly when this tab is in the background. Some mobile
-        browsers need a tap before audio can play.
-      </p>
     </div>
   );
 }
