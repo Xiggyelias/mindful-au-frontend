@@ -1670,7 +1670,18 @@ class ApiClient {
       responseType: "blob",
       signal: options?.signal,
     });
-    return response.data as Blob;
+    const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
+    const blobType = blob.type.toLowerCase();
+    if (blobType && blobType !== "application/octet-stream" && blobType !== "video/webm" && !blobType.includes("matroska")) {
+      return blob;
+    }
+
+    const contentType = String(response.headers?.["content-type"] || "audio/webm")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    const audioType = contentType.startsWith("audio/") ? contentType : "audio/webm";
+    return new Blob([blob], { type: audioType });
   }
 
   // Video Calls

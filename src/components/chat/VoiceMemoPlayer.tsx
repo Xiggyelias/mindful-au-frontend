@@ -54,7 +54,7 @@ export interface VoiceMemoPlayerProps {
   uploadFailed?: boolean;
   /** True while a delete request is in-flight. */
   isDeleting?: boolean;
-  onRetry?: () => void;
+  onRetry?: () => void | Promise<void>;
   onDelete?: () => void;
 }
 
@@ -256,6 +256,11 @@ export function VoiceMemoPlayer({
     const el = audioRef.current;
     if (!el || isUploading || uploadFailed) return;
     if (!src.trim()) {
+      if (onRetry) {
+        setPlaybackError(null);
+        await onRetry();
+        return;
+      }
       setPlaybackError("Audio unavailable");
       return;
     }
@@ -267,7 +272,7 @@ export function VoiceMemoPlayer({
     }
     // If previously failed, retry the blob fetch before attempting play.
     if (playbackError && onRetry) {
-      onRetry();
+      await onRetry();
       return;
     }
     setPlaybackError(null);

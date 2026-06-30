@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
@@ -31,9 +31,11 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
   const [voiceBlobLoading, setVoiceBlobLoading] = useState(false);
   const [voiceBlobFailed, setVoiceBlobFailed] = useState(false);
-  const [voiceBlobRetry, setVoiceBlobRetry] = useState(0);
+  const [voiceAuthPreferred, setVoiceAuthPreferred] = useState(false);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
+  const voiceFetchAbortRef = useRef<AbortController | null>(null);
+  const voiceObjectUrlRef = useRef<string | null>(null);
   const resolved = resolveMessageAttachment(msg);
   const att =
     resolved ??
@@ -48,6 +50,19 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const resolvedUrl = (att.url || msg.file_url || "").trim();
   const activePreviewUrl = (previewUrl || resolvedUrl).trim();
   const hasPreviewUrl = resolvedUrl.length > 0;
+  // Pass message_type so voice notes are always routed to the audio player even
+  // when PHP finfo returns video/webm or audio/x-matroska instead of audio/webm.
+  const kind = getAttachmentKind(att, msg.message_type);
+  const hasSize = Number(att.file_size) > 0;
+  const messageId = Number(msg.id);
+
+  const revokeVoiceObjectUrl = useCallback(() => {
+    if (voiceObjectUrlRef.current) {
+      URL.revokeObjectURL(voiceObjectUrlRef.current);
+      voiceObjectUrlRef.current = null;
+    }
+    setVoiceAuthBlobUrl(null);
+  }, []);
 
   useEffect(() => {
     setImageLoadFailed(false);
@@ -55,71 +70,81 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     refreshingPreviewRef.current = false;
     attemptedPreviewRefreshRef.current = false;
     setVoiceBlobFailed(false);
-  }, [resolvedUrl]);
-  // Pass message_type so voice notes are always routed to the audio player even
-  // when PHP finfo returns video/webm or audio/x-matroska instead of audio/webm.
-  const kind = getAttachmentKind(att, msg.message_type);
-  const hasSize = Number(att.file_size) > 0;
-  const messageId = Number(msg.id);
+    setVoiceAuthPreferred(false);
+    setVoiceBlobLoading(false);
+    voiceFetchAbortRef.current?.abort();
+    voiceFetchAbortRef.current = null;
+    revokeVoiceObjectUrl();
+  }, [messageId, resolvedUrl, revokeVoiceObjectUrl]);
 
-  // For persisted voice memos (not in-flight uploads), fetch audio through the
-  // authenticated stream endpoint and create an object URL. This prevents direct
-  // access to public-storage URLs that bypass authentication.
   useEffect(() => {
+    return () => {
+      voiceFetchAbortRef.current?.abort();
+      voiceFetchAbortRef.current = null;
+      revokeVoiceObjectUrl();
+    };
+  }, [revokeVoiceObjectUrl]);
+
+  const loadVoiceAudio = useCallback(async (forceReload = false) => {
     const isVoice = msg.message_type === "voice";
     const isUploading = Boolean(msg.isUploading || msg.localBlobUrl);
     if (!isVoice || isUploading || !Number.isInteger(messageId) || messageId <= 0) {
       return;
     }
 
-    let cancelled = false;
-    let objectUrl: string | null = null;
+    if (voiceAuthBlobUrl && !forceReload) {
+      setVoiceAuthPreferred(true);
+      setVoiceBlobFailed(false);
+      return;
+    }
+
+    voiceFetchAbortRef.current?.abort();
+    if (forceReload) {
+      revokeVoiceObjectUrl();
+    }
     const abortController = new AbortController();
+    voiceFetchAbortRef.current = abortController;
     // Abort the fetch after 20 s to prevent the "Loading…" state from sticking forever.
     const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
 
-    const fetchBlob = async () => {
-      setVoiceBlobLoading(true);
-      setVoiceBlobFailed(false);
-      try {
-        const blob = await api.streamVoiceNoteBlob(messageId, { signal: abortController.signal });
-        if (!cancelled && !abortController.signal.aborted) {
-          objectUrl = URL.createObjectURL(blob);
-          setVoiceAuthBlobUrl(objectUrl);
-        }
-      } catch (err: unknown) {
-        // Ignore abort errors — they're intentional (timeout or unmount cleanup).
-        const isAbort = (err as { name?: string })?.name === "CanceledError" ||
-          (err as { name?: string })?.name === "AbortError" ||
-          (err as { code?: string })?.code === "ERR_CANCELED";
-        if (!cancelled && !isAbort) {
-          const isPublicUrl =
-            resolvedUrl.startsWith("http://") ||
-            resolvedUrl.startsWith("https://") ||
-            resolvedUrl.startsWith("blob:");
-          if (!isPublicUrl) {
-            setVoiceBlobFailed(true);
-          }
-        }
-      } finally {
-        window.clearTimeout(timeoutId);
-        if (!cancelled) {
-          setVoiceBlobLoading(false);
-        }
+    setVoiceAuthPreferred(true);
+    setVoiceBlobLoading(true);
+    setVoiceBlobFailed(false);
+
+    try {
+      const blob = await api.streamVoiceNoteBlob(messageId, { signal: abortController.signal });
+      if (abortController.signal.aborted) {
+        return;
       }
-    };
 
-    void fetchBlob();
+      if (!(blob instanceof Blob) || blob.size <= 0) {
+        throw new Error("Voice note stream returned no audio bytes.");
+      }
 
-    return () => {
-      cancelled = true;
+      const objectUrl = URL.createObjectURL(blob);
+      if (voiceObjectUrlRef.current) {
+        URL.revokeObjectURL(voiceObjectUrlRef.current);
+      }
+      voiceObjectUrlRef.current = objectUrl;
+      setVoiceAuthBlobUrl(objectUrl);
+    } catch (err: unknown) {
+      // Ignore abort errors - they are intentional (timeout or unmount cleanup).
+      const isAbort = (err as { name?: string })?.name === "CanceledError" ||
+        (err as { name?: string })?.name === "AbortError" ||
+        (err as { code?: string })?.code === "ERR_CANCELED";
+      if (!isAbort) {
+        setVoiceBlobFailed(true);
+      }
+    } finally {
       window.clearTimeout(timeoutId);
-      abortController.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      setVoiceAuthBlobUrl(null);
-      setVoiceBlobLoading(false);
-    };
-  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, resolvedUrl, voiceBlobRetry]);
+      if (voiceFetchAbortRef.current === abortController) {
+        voiceFetchAbortRef.current = null;
+      }
+      if (!abortController.signal.aborted) {
+        setVoiceBlobLoading(false);
+      }
+    }
+  }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, revokeVoiceObjectUrl, voiceAuthBlobUrl]);
 
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
@@ -314,11 +339,11 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
       resolvedUrl.startsWith("http://") ||
       resolvedUrl.startsWith("https://") ||
       resolvedUrl.startsWith("blob:");
-    const playbackSrc = (
-      msg.localBlobUrl ||
-      voiceAuthBlobUrl ||
-      (isPublicFallback ? resolvedUrl : "")
-    ).trim();
+    const directPlaybackSrc = isPublicFallback ? resolvedUrl : "";
+    const remotePlaybackSrc = voiceAuthPreferred
+      ? (voiceAuthBlobUrl || directPlaybackSrc)
+      : (directPlaybackSrc || voiceAuthBlobUrl || "");
+    const playbackSrc = (msg.localBlobUrl || remotePlaybackSrc).trim();
 
     return (
       <VoiceMemoPlayer
@@ -332,12 +357,9 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         uploadProgress={uploadProgress}
         uploadFailed={msg.uploadFailed || (voiceBlobFailed && !playbackSrc)}
         isDeleting={isDeleting}
-        onRetry={() => {
-          // Re-trigger the blob fetch (increments retry counter which is in the
-          // useEffect dep array) so the player can recover from a transient error.
+        onRetry={async () => {
           setVoiceBlobFailed(false);
-          setVoiceAuthBlobUrl(null);
-          setVoiceBlobRetry((n) => n + 1);
+          await loadVoiceAudio(true);
           onRetry?.();
         }}
         onDelete={onDelete}
