@@ -269,7 +269,7 @@ export const useVoiceRecorder = () => {
       // Recorder hasn't started yet (still awaiting getUserMedia) — flag the
       // pending start so it aborts as soon as getUserMedia resolves.
       cancelledDuringStartRef.current = true;
-      return Promise.resolve(recording?.blob ?? null);
+      return Promise.resolve(null);
     }
     return new Promise<File | null>((resolve) => {
       pendingStopResolveRef.current = resolve;
@@ -283,7 +283,7 @@ export const useVoiceRecorder = () => {
       setIsRecording(false);
       setIsPaused(false);
     });
-  }, [recording]);
+  }, []);
 
   const pauseRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;

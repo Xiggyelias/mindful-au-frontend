@@ -103,6 +103,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     fileInputRef,
   }) => {
     const [micState, setMicState] = useState<MicGestureState>("idle");
+    const micStateRef = useRef<MicGestureState>("idle");
     const holdStartYRef = useRef<number | null>(null);
     const holdStartXRef = useRef<number | null>(null);
     const holdPointerIdRef = useRef<number | null>(null);
@@ -111,6 +112,11 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const LOCK_UP_PX = 60;
     const CANCEL_LEFT_PX = 60;
     const TAP_TO_LOCK_MS = 220;
+
+    const setMicGestureState = (nextState: MicGestureState) => {
+      micStateRef.current = nextState;
+      setMicState(nextState);
+    };
 
     const resetMicGesture = () => {
       holdStartYRef.current = null;
@@ -126,70 +132,85 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
         : IDLE_BARS;
 
     const handleMicPointerDown = async (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (isSending || micState === "locked") return;
+      if (isSending || micStateRef.current === "locked") return;
       holdPointerIdRef.current = e.pointerId;
       holdStartYRef.current = e.clientY;
       holdStartXRef.current = e.clientX;
       holdStartedAtRef.current = Date.now();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setMicState("recording");
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Some mobile browsers can reject pointer capture during gesture changes.
+      }
+      setMicGestureState("recording");
       try {
         await onVoiceStart();
       } catch (err) {
-        setMicState("idle");
+        setMicGestureState("idle");
         resetMicGesture();
         onVoiceError?.(err instanceof Error ? err : new Error("Could not access microphone."));
       }
     };
 
     const handleMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (micState === "locked" || holdStartYRef.current == null || holdStartXRef.current == null) return;
+      const currentState = micStateRef.current;
+      if (currentState === "locked" || holdStartYRef.current == null || holdStartXRef.current == null) return;
       const dy = holdStartYRef.current - e.clientY;
       const dx = holdStartXRef.current - e.clientX;
-      if (dy >= LOCK_UP_PX) { setMicState("locked"); return; }
-      if (dx >= CANCEL_LEFT_PX && micState === "recording") setMicState("cancelling");
-      else if (dx < CANCEL_LEFT_PX && micState === "cancelling") setMicState("recording");
+      if (dy >= LOCK_UP_PX) { setMicGestureState("locked"); return; }
+      if (dx >= CANCEL_LEFT_PX && currentState === "recording") setMicGestureState("cancelling");
+      else if (dx < CANCEL_LEFT_PX && currentState === "cancelling") setMicGestureState("recording");
     };
 
     const handleMicPointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
       if (holdPointerIdRef.current !== e.pointerId) return;
       holdPointerIdRef.current = null;
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Pointer capture may already be gone.
+      }
       const holdDurationMs = Date.now() - holdStartedAtRef.current;
-      if (micState === "locked") return;
-      if (micState === "recording" && holdDurationMs <= TAP_TO_LOCK_MS) {
-        setMicState("locked");
+      const currentState = micStateRef.current;
+      if (currentState === "locked") return;
+      if (currentState === "recording" && holdDurationMs <= TAP_TO_LOCK_MS) {
+        setMicGestureState("locked");
         resetMicGesture();
         return;
       }
-      if (micState === "cancelling") {
+      if (currentState === "cancelling") {
         onVoiceCancel();
-        setMicState("idle");
-      } else if (micState === "recording") {
-        setMicState("idle");
+        setMicGestureState("idle");
+      } else if (currentState === "recording") {
+        setMicGestureState("idle");
         await onVoiceStopAndSend();
       } else {
-        setMicState("idle");
+        setMicGestureState("idle");
       }
       resetMicGesture();
     };
 
     const handleMicPointerCancel = () => {
-      if (micState === "recording" || micState === "cancelling") {
+      const currentState = micStateRef.current;
+      if (currentState === "locked") return;
+      if (currentState === "recording" || currentState === "cancelling") {
         onVoiceCancel();
       }
-      setMicState("idle");
+      setMicGestureState("idle");
       resetMicGesture();
     };
 
     const handleLockedSend = async () => {
-      setMicState("idle");
+      setMicGestureState("idle");
       resetMicGesture();
       await Promise.resolve(onVoiceSendNow?.());
     };
 
     const handleLockedCancel = () => {
       onVoiceCancel();
-      setMicState("idle");
+      setMicGestureState("idle");
       resetMicGesture();
     };
 
@@ -451,7 +472,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                   onPointerUp={(e) => void handleMicPointerUp(e)}
                   onPointerCancel={handleMicPointerCancel}
                   onLostPointerCapture={() => {
-                    if (holdPointerIdRef.current !== null) {
+                    if (holdPointerIdRef.current !== null && micStateRef.current !== "locked") {
                       handleMicPointerCancel();
                     }
                   }}
