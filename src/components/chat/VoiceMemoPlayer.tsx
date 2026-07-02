@@ -52,10 +52,14 @@ export interface VoiceMemoPlayerProps {
   isLoadingAudio?: boolean;
   uploadProgress?: number;
   uploadFailed?: boolean;
+  /** Audio no longer exists on the server (404/410) — retrying cannot help. */
+  unavailable?: boolean;
   /** True while a delete request is in-flight. */
   isDeleting?: boolean;
   onRetry?: () => void | Promise<void>;
   onDelete?: () => void;
+  /** Fired when the <audio> element fails to load its current source. */
+  onSourceError?: () => void;
 }
 
 export function VoiceMemoPlayer({
@@ -69,9 +73,11 @@ export function VoiceMemoPlayer({
   isLoadingAudio = false,
   uploadProgress: _uploadProgress = 0,
   uploadFailed = false,
+  unavailable = false,
   isDeleting = false,
   onRetry,
   onDelete,
+  onSourceError,
 }: VoiceMemoPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -247,6 +253,9 @@ export function VoiceMemoPlayer({
       setPlaying(false);
       stopLevelLoop();
       setPlaybackError("Audio unavailable");
+      // Let the parent swap in an authenticated stream URL (or mark the
+      // note permanently unavailable) instead of waiting for a manual retry.
+      onSourceError?.();
     };
 
     el.addEventListener("timeupdate", onTime);
@@ -280,7 +289,7 @@ export function VoiceMemoPlayer({
       el.removeEventListener("ended", onEnd);
       el.removeEventListener("error", onAudioError);
     };
-  }, [src, isDragging, stopLevelLoop, playing]);
+  }, [src, isDragging, stopLevelLoop, playing, onSourceError]);
 
   const togglePlay = useCallback(async () => {
     const el = audioRef.current;
@@ -378,6 +387,37 @@ export function VoiceMemoPlayer({
   const speedCls  = isOutgoing
     ? "text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground"
     : "text-muted-foreground hover:bg-muted hover:text-foreground";
+
+  // ── Permanently unavailable (file deleted/lost on server) ─────────────────
+  if (unavailable) {
+    return (
+      <div className={cn(
+        "flex w-[min(100%,18rem)] items-center gap-3 rounded-2xl border border-dashed px-3.5 py-3",
+        isOutgoing ? "border-primary-foreground/30 bg-primary/80" : "border-border/60 bg-muted/30",
+        className
+      )}>
+        <div className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
+          isOutgoing
+            ? "border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground/70"
+            : "border-border/60 bg-muted/50 text-muted-foreground"
+        )}>
+          <AlertTriangle className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={cn(
+            "text-[12px] font-semibold leading-tight",
+            isOutgoing ? "text-primary-foreground" : "text-foreground"
+          )}>
+            Voice note unavailable
+          </p>
+          <p className={cn("mt-0.5 text-[11px] leading-tight", timeCls)}>
+            This recording is no longer stored on the server.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Failed state ──────────────────────────────────────────────────────────
   if (uploadFailed) {

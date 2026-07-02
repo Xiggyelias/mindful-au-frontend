@@ -31,11 +31,17 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
   const [voiceBlobLoading, setVoiceBlobLoading] = useState(false);
   const [voiceBlobFailed, setVoiceBlobFailed] = useState(false);
+  // 404/410 from the stream endpoint — the audio file no longer exists on the
+  // server (e.g. legacy voice notes lost in a redeploy). Retrying can't help.
+  const [voiceGone, setVoiceGone] = useState(false);
   const [voiceAuthPreferred, setVoiceAuthPreferred] = useState(false);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
   const voiceFetchAbortRef = useRef<AbortController | null>(null);
   const voiceObjectUrlRef = useRef<string | null>(null);
+  // One automatic stream-endpoint recovery per message when the direct
+  // URL fails (expired signature / legacy public path). Manual Retry still works.
+  const voiceAutoRecoveredRef = useRef(false);
   const resolved = resolveMessageAttachment(msg);
   const att =
     resolved ??
@@ -70,8 +76,10 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     refreshingPreviewRef.current = false;
     attemptedPreviewRefreshRef.current = false;
     setVoiceBlobFailed(false);
+    setVoiceGone(false);
     setVoiceAuthPreferred(false);
     setVoiceBlobLoading(false);
+    voiceAutoRecoveredRef.current = false;
     voiceFetchAbortRef.current?.abort();
     voiceFetchAbortRef.current = null;
     revokeVoiceObjectUrl();
@@ -133,7 +141,12 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         (err as { name?: string })?.name === "AbortError" ||
         (err as { code?: string })?.code === "ERR_CANCELED";
       if (!isAbort) {
-        setVoiceBlobFailed(true);
+        const status = Number((err as { response?: { status?: unknown } })?.response?.status);
+        if (status === 404 || status === 410) {
+          setVoiceGone(true);
+        } else {
+          setVoiceBlobFailed(true);
+        }
       }
     } finally {
       window.clearTimeout(timeoutId);
@@ -356,11 +369,18 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
         isLoadingAudio={voiceBlobLoading && !msg.localBlobUrl}
         uploadProgress={uploadProgress}
         uploadFailed={msg.uploadFailed || (voiceBlobFailed && !playbackSrc)}
+        unavailable={voiceGone}
         isDeleting={isDeleting}
         onRetry={async () => {
           setVoiceBlobFailed(false);
           await loadVoiceAudio(true);
           onRetry?.();
+        }}
+        onSourceError={() => {
+          if (voiceGone || msg.localBlobUrl || msg.isUploading) return;
+          if (voiceAutoRecoveredRef.current) return;
+          voiceAutoRecoveredRef.current = true;
+          void loadVoiceAudio(true);
         }}
         onDelete={onDelete}
       />
