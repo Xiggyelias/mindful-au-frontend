@@ -82,6 +82,9 @@ export function VoiceMemoPlayer({
   const [preloadMode, setPreloadMode] = useState<"metadata" | "none">("metadata");
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
+  // Chrome's MediaRecorder writes WebM without a duration header, so
+  // el.duration is Infinity until we force-seek to the end once per src.
+  const durationProbeRef = useRef<"idle" | "probing" | "done">("idle");
 
   // Web Audio API for live frequency visualisation during playback
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -184,6 +187,7 @@ export function VoiceMemoPlayer({
     setDuration(0);
     setSpeed(1);
     setPlaybackError(null);
+    durationProbeRef.current = "idle";
     // Tear down Web Audio so it's re-created on next play (new src = new stream)
     teardownAnalyser();
   }, [src, teardownAnalyser]);
@@ -196,7 +200,7 @@ export function VoiceMemoPlayer({
     if (!el) return;
 
     const onTime = () => {
-      if (!isDragging) {
+      if (!isDragging && durationProbeRef.current !== "probing") {
         setCurrent(el.currentTime);
       }
     };
@@ -205,10 +209,31 @@ export function VoiceMemoPlayer({
       const d = el.duration;
       if (Number.isFinite(d) && d > 0) {
         setDuration(d);
+      } else if (d === Infinity && durationProbeRef.current === "idle" && !playing) {
+        // Force the browser to compute the real duration by seeking to the
+        // end; onSeeked rewinds to 0 once durationchange delivers it.
+        durationProbeRef.current = "probing";
+        try {
+          el.currentTime = 1e7;
+        } catch {
+          durationProbeRef.current = "done";
+        }
       }
     };
 
+    const onSeeked = () => {
+      if (durationProbeRef.current !== "probing") return;
+      durationProbeRef.current = "done";
+      const d = el.duration;
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+      }
+      el.currentTime = 0;
+      setCurrent(0);
+    };
+
     const onEnd = () => {
+      if (durationProbeRef.current === "probing") return;
       setPlaying(false);
       setCurrent(0);
       el.currentTime = 0;
@@ -227,12 +252,16 @@ export function VoiceMemoPlayer({
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onDur);
     el.addEventListener("durationchange", onDur);
+    el.addEventListener("seeked", onSeeked);
     el.addEventListener("ended", onEnd);
     el.addEventListener("error", onAudioError);
 
     // If the audio metadata is already loaded (cached/local blob), set duration immediately
     if (Number.isFinite(el.duration) && el.duration > 0) {
       setDuration(el.duration);
+    } else if (el.duration === Infinity && el.readyState >= 1) {
+      // Metadata loaded before this effect ran — run the duration probe now.
+      onDur();
     } else if (el.src && el.src !== window.location.href) {
       // Force load to override browser lazy-loading optimizations on hidden media elements.
       // Skip when src is empty — that would trigger a spurious error event.
@@ -247,10 +276,11 @@ export function VoiceMemoPlayer({
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("loadedmetadata", onDur);
       el.removeEventListener("durationchange", onDur);
+      el.removeEventListener("seeked", onSeeked);
       el.removeEventListener("ended", onEnd);
       el.removeEventListener("error", onAudioError);
     };
-  }, [src, isDragging, stopLevelLoop]);
+  }, [src, isDragging, stopLevelLoop, playing]);
 
   const togglePlay = useCallback(async () => {
     const el = audioRef.current;
