@@ -34,7 +34,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   // 404/410 from the stream endpoint — the audio file no longer exists on the
   // server (e.g. legacy voice notes lost in a redeploy). Retrying can't help.
   const [voiceGone, setVoiceGone] = useState(false);
-  const [voiceAuthPreferred, setVoiceAuthPreferred] = useState(false);
   const refreshingPreviewRef = useRef(false);
   const attemptedPreviewRefreshRef = useRef(false);
   const voiceFetchAbortRef = useRef<AbortController | null>(null);
@@ -77,7 +76,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     attemptedPreviewRefreshRef.current = false;
     setVoiceBlobFailed(false);
     setVoiceGone(false);
-    setVoiceAuthPreferred(false);
     setVoiceBlobLoading(false);
     voiceAutoRecoveredRef.current = false;
     voiceFetchAbortRef.current?.abort();
@@ -101,7 +99,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     }
 
     if (voiceAuthBlobUrl && !forceReload) {
-      setVoiceAuthPreferred(true);
       setVoiceBlobFailed(false);
       return;
     }
@@ -115,7 +112,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     // Abort the fetch after 20 s to prevent the "Loading…" state from sticking forever.
     const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
 
-    setVoiceAuthPreferred(true);
     setVoiceBlobLoading(true);
     setVoiceBlobFailed(false);
 
@@ -158,6 +154,15 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
       }
     }
   }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, revokeVoiceObjectUrl, voiceAuthBlobUrl]);
+
+  // Always source playback from the authenticated stream endpoint rather than
+  // waiting for the raw URL to fail first — the raw URL (a direct S3 link for
+  // s3-disk files) skips the backend's video/webm -> audio/webm MIME
+  // correction and may be unreachable from networks that block direct access
+  // to the storage host, so trying it first produces avoidable playback errors.
+  useEffect(() => {
+    void loadVoiceAudio();
+  }, [loadVoiceAudio]);
 
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
@@ -347,16 +352,12 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     // Priority order for playback src:
     // 1. Local blob URL (in-flight upload — immediate feedback, no round-trip needed)
     // 2. Authenticated object URL fetched via the stream endpoint (persisted voice memos)
-    // 3. Raw resolvedUrl as last-resort fallback ONLY when it's a real HTTP/blob URL
-    const isPublicFallback =
-      resolvedUrl.startsWith("http://") ||
-      resolvedUrl.startsWith("https://") ||
-      resolvedUrl.startsWith("blob:");
-    const directPlaybackSrc = isPublicFallback ? resolvedUrl : "";
-    const remotePlaybackSrc = voiceAuthPreferred
-      ? (voiceAuthBlobUrl || directPlaybackSrc)
-      : (directPlaybackSrc || voiceAuthBlobUrl || "");
-    const playbackSrc = (msg.localBlobUrl || remotePlaybackSrc).trim();
+    // The raw resolvedUrl (a direct S3 link for s3-disk files, or a signed
+    // backend route otherwise) is intentionally never used as playback src:
+    // it skips the backend's video/webm -> audio/webm MIME correction, and a
+    // direct S3 link may be unreachable from networks that block the storage
+    // host outright. isLoadingAudio covers the gap while the stream fetch runs.
+    const playbackSrc = (msg.localBlobUrl || voiceAuthBlobUrl || "").trim();
 
     return (
       <VoiceMemoPlayer
