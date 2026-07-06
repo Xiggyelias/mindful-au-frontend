@@ -155,15 +155,6 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     }
   }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, revokeVoiceObjectUrl, voiceAuthBlobUrl]);
 
-  // Always source playback from the authenticated stream endpoint rather than
-  // waiting for the raw URL to fail first — the raw URL (a direct S3 link for
-  // s3-disk files) skips the backend's video/webm -> audio/webm MIME
-  // correction and may be unreachable from networks that block direct access
-  // to the storage host, so trying it first produces avoidable playback errors.
-  useEffect(() => {
-    void loadVoiceAudio();
-  }, [loadVoiceAudio]);
-
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
       setDownloading(true);
