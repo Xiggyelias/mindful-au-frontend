@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isSessionExpired, markSessionAsExpired } from '@/hooks/useChatSession';
-import { resolveMessageAttachment } from "@/lib/chatAttachments";
+import { resolveMessageAttachment, getAttachmentKind } from "@/lib/chatAttachments";
 import { savePreloadedSessionMessages } from "@/lib/chatPreloadCache";
 import { saveTypingSnapshot } from "@/lib/chatTypingCache";
 import { recordPrefetchAttempt, recordPrefetchResult } from "@/lib/chatPerfMetrics";
@@ -179,7 +179,13 @@ async function prefetchOne(sessionId: string, ownerUserId: string | null): Promi
       }
       for (const m of messages) {
         const attachment = resolveMessageAttachment(m as never);
-        const url = (attachment?.url || attachment?.download_url || m.file_url || "").trim();
+        if (!attachment) continue;
+        const kind = getAttachmentKind(attachment, (m as { message_type?: string }).message_type);
+        // Only warm image attachments. Voice notes are streamed through the
+        // backend proxy and must never be fetched directly from S3 (the storage
+        // host may have an untrusted certificate or be unreachable).
+        if (kind !== "image") continue;
+        const url = (attachment.url || attachment.download_url || m.file_url || "").trim();
         if (url) {
           warmImage(url);
         }

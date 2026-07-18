@@ -91,6 +91,10 @@ export function VoiceMemoPlayer({
   // Chrome's MediaRecorder writes WebM without a duration header, so
   // el.duration is Infinity until we force-seek to the end once per src.
   const durationProbeRef = useRef<"idle" | "probing" | "done">("idle");
+  // When the user taps play but src is empty (blob not yet fetched), we set
+  // this flag so that once the src arrives the player auto-plays without
+  // requiring a second tap.
+  const pendingPlayRef = useRef(false);
 
   // Web Audio API for live frequency visualisation during playback
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -196,6 +200,27 @@ export function VoiceMemoPlayer({
     durationProbeRef.current = "idle";
     // Tear down Web Audio so it's re-created on next play (new src = new stream)
     teardownAnalyser();
+
+    // If the user previously tapped play while src was empty (async blob
+    // fetch), auto-play now that the source has arrived.
+    if (pendingPlayRef.current && src.trim()) {
+      pendingPlayRef.current = false;
+      // Small delay lets the <audio> element pick up the new src attribute
+      // before we call play().  Without this the element may still reference
+      // the old (empty) source.
+      const timer = window.setTimeout(() => {
+        if (!el.paused) return; // already playing
+        el.play()
+          .then(() => {
+            setPlaying(true);
+          })
+          .catch(() => {
+            setPlaying(false);
+            setPlaybackError("Could not play audio");
+          });
+      }, 80);
+      return () => window.clearTimeout(timer);
+    }
   }, [src, teardownAnalyser]);
 
   // Unmount cleanup
@@ -297,6 +322,10 @@ export function VoiceMemoPlayer({
     if (!src.trim()) {
       if (onRetry) {
         setPlaybackError(null);
+        // Remember that the user wants to play — once the async fetch
+        // delivers a blob URL and the src prop updates, the reset
+        // useEffect will auto-play.
+        pendingPlayRef.current = true;
         await onRetry();
         return;
       }
@@ -434,7 +463,7 @@ export function VoiceMemoPlayer({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-semibold text-destructive leading-tight">Failed to send</p>
-          <p className={cn("text-[11px] leading-tight mt-0.5", timeCls)}>Voice note not delivered</p>
+          <p className="text-[11px] leading-tight mt-0.5 text-destructive/70">Voice note not delivered</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {onRetry && (
