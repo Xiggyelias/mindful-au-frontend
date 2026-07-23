@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import type { Appointment } from "@/hooks/useChatSession";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -156,6 +157,8 @@ const StudentVideoCall = () => {
   } = useWebRTC(sessionId, user?.id?.toString() || "");
 
   const isMobile = isMobileOrTablet();
+
+  useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
   const incomingRingVibratedRef = useRef(false);
 

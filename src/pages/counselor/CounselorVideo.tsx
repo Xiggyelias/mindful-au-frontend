@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
@@ -144,6 +145,8 @@ const CounselorVideo = () => {
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
   const isMobile = isMobileOrTablet();
+
+  useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
   const incomingRingVibratedRef = useRef(false);
 
