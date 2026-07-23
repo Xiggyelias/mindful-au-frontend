@@ -22,8 +22,15 @@ Set these in Dokploy **Build Arguments** or **Environment Variables** (do not co
 | `VITE_SUPABASE_URL` | Supabase project URL | `https://xxx.supabase.co` |
 | `VITE_SUPABASE_PROJECT_ID` | Supabase project ID | `xxx` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/public key | `eyJ...` |
+| `VITE_WEBRTC_TURN_URLS` | TURN relay URL(s), comma-separated | `turn:turn.africau.co.zw:3478?transport=udp,turn:turn.africau.co.zw:3478?transport=tcp` |
+| `VITE_WEBRTC_TURN_USERNAME` | TURN long-term credential username | see `mindful-au-backend/docker/turn/.env` |
+| `VITE_WEBRTC_TURN_CREDENTIAL` | TURN long-term credential password | see `mindful-au-backend/docker/turn/.env` |
 
 > **Note:** `VITE_*` variables are baked into the build at compile time. Rebuild after changing them.
+>
+> **Without the `VITE_WEBRTC_TURN_*` vars**, audio/video calls fall back to STUN-only and can
+> fail to connect between peers on different networks (e.g. mobile data ↔ office wifi). See
+> `mindful-au-backend/docker/turn/README.md` to stand up a TURN relay.
 
 ## Health Check
 
