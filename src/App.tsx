@@ -12,6 +12,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ScreenshotShield } from "@/components/ScreenshotShield";
 import { ChatIncomingNotificationHost } from "@/components/chat/ChatIncomingNotificationHost";
 import { IncomingCallHost } from "@/components/call/IncomingCallHost";
+import { FloatingCallDock } from "@/components/call/FloatingCallDock";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { PushNotificationPrompt } from "@/components/pwa/PushNotificationPrompt";
 import { ChatPerfDevBadge } from "@/components/dev/ChatPerfDevBadge";
@@ -159,6 +160,7 @@ const App = () => {
               <ConfirmDialogProvider>
               <ChatIncomingNotificationHost />
               <IncomingCallHost />
+              <FloatingCallDock />
               <PushNotificationPrompt />
               <PwaInstallBanner />
               {import.meta.env.DEV && <ChatPerfDevBadge />}

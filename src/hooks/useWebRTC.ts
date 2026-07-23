@@ -689,15 +689,27 @@ const createEnginePeerConnection = () => {
     }
 
     if (connection.connectionState === "connecting") {
-      setEngineState((prev) => ({
-        ...prev,
-        isConnecting: true,
-        error: null,
-        notice:
-          engine.wasConnected && engine.reconnectAttempts > 0
-            ? "Connection interrupted. Trying to reconnect..."
-            : null,
-      }));
+      // Once a call has already connected, a transient renegotiation (e.g. the
+      // ICE-restart safety net above, or a mid-call toggle) can bounce the
+      // browser's connectionState back through "connecting" even though media
+      // keeps flowing on the existing candidate pair. Treating that like the
+      // original ring/answer handshake would flip the UI back to the
+      // "Calling..." screen after the call was already answered — call once,
+      // then wait, like a real phone call. Only show the ringing/connecting
+      // state for the initial negotiation.
+      if (!engine.wasConnected) {
+        setEngineState((prev) => ({
+          ...prev,
+          isConnecting: true,
+          error: null,
+          notice: null,
+        }));
+      } else {
+        setEngineState((prev) => ({
+          ...prev,
+          error: null,
+        }));
+      }
       return;
     }
 
@@ -1549,6 +1561,14 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return false;
       }
 
+      // Someone is already calling us on this session — answer or decline that
+      // call instead of placing our own outgoing call on top of it. Without
+      // this guard both sides could end up dialing each other at once.
+      if (currentState.isIncomingCall) {
+        setEngineConnectionError("You have an incoming call. Accept or decline it first.");
+        return false;
+      }
+
       setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
 
       try {
@@ -2123,5 +2143,87 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     currentFacingMode: engine.currentFacingMode,
     acceptIncomingCall,
     rejectIncomingCall,
+  };
+};
+
+/**
+ * Read-only view onto the singleton call engine.
+ *
+ * Unlike `useWebRTC`, this hook does NOT open/attach a signaling channel — it only
+ * subscribes to engine state and binds video elements. It exists so a globally-mounted
+ * call dock can mirror and control an in-progress call on ANY route (like WhatsApp Web's
+ * floating call panel) without re-initializing signaling or fighting the call page for
+ * ownership of the channel. Because the engine is a module-level singleton, the media
+ * connection keeps running across route changes; this hook just re-attaches the UI to it.
+ */
+export const useActiveCallDock = () => {
+  const [state, setState] = useState<WebRTCState>(() => engine.state);
+  const [sessionId, setSessionId] = useState<string>(() => engine.sessionId);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const listener: WebRTCEngineListener = (nextState) => {
+      setState(nextState);
+      setSessionId(engine.sessionId);
+    };
+    engine.listeners.add(listener);
+    setState(engine.state);
+    setSessionId(engine.sessionId);
+    return () => {
+      engine.listeners.delete(listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = localVideoRef.current;
+    if (el && state.localStream) {
+      engine.localVideoElements.add(el);
+      el.srcObject = state.localStream;
+      playMediaElement(el, true);
+    }
+    return () => {
+      if (el) {
+        engine.localVideoElements.delete(el);
+      }
+    };
+  }, [state.localStream, state.isAudioOnly, state.isLocalVideoEnabled]);
+
+  useEffect(() => {
+    const el = remoteVideoRef.current;
+    if (el && state.remoteStream) {
+      engine.remoteVideoElements.add(el);
+      el.srcObject = state.remoteStream;
+      playMediaElement(el, false);
+    }
+    return () => {
+      if (el) {
+        engine.remoteVideoElements.delete(el);
+      }
+    };
+  }, [state.remoteStream, state.remoteHasVideo, state.remoteMediaEpoch]);
+
+  const endCall = useCallback(() => {
+    cleanupEngineCall(true);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    engine.localStream?.getAudioTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+    });
+  }, []);
+
+  const isMuted =
+    Boolean(state.localStream) &&
+    (engine.localStream?.getAudioTracks().every((track) => !track.enabled) ?? false);
+
+  return {
+    ...state,
+    sessionId,
+    isMuted,
+    localVideoRef,
+    remoteVideoRef,
+    endCall,
+    toggleMute,
   };
 };
