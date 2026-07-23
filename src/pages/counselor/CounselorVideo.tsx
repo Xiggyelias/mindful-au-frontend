@@ -90,6 +90,7 @@ const CounselorVideo = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [pendingSessionStartId, setPendingSessionStartId] = useState<string | null>(null);
   const [pendingCallMode, setPendingCallMode] = useState<"video" | "audio">("video");
+  const [outgoingCallMode, setOutgoingCallMode] = useState<"video" | "audio" | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -175,6 +176,22 @@ const CounselorVideo = () => {
       stopCallRingtone();
     };
   }, [isIncomingCall, incomingAudioOnly]);
+
+  // Ringback for the CALLER: audible/looping from the moment we place the call until the
+  // other side answers, declines, we cancel, or it times out. `localStream` stays null for
+  // the caller until the callee accepts (media is only acquired then), so
+  // isConnecting && !localStream precisely brackets "still ringing, nobody's answered yet."
+  useEffect(() => {
+    const isRingingOut = isConnecting && !isIncomingCall && !localStream;
+    if (!isRingingOut) {
+      stopCallRingtone();
+      return;
+    }
+    startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video");
+    return () => {
+      stopCallRingtone();
+    };
+  }, [isConnecting, isIncomingCall, localStream, outgoingCallMode]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -429,6 +446,7 @@ const CounselorVideo = () => {
 
       setActiveSessionId(sessionId);
       setPendingCallMode(resolvedMode);
+      setOutgoingCallMode(resolvedMode);
       setPendingSessionStartId(sessionId);
     },
     [activeSessionId, isOnline, localStream, upcomingSessions]
@@ -468,6 +486,7 @@ const CounselorVideo = () => {
     setIsMuted(false);
     setPendingSessionStartId(null);
     setPendingCallMode("video");
+    setOutgoingCallMode(null);
     setAuthorizedDurationMinutes(null);
 
     if (studentId && Number.isFinite(studentId) && studentId > 0 && sessionIdToEnd) {
@@ -487,6 +506,7 @@ const CounselorVideo = () => {
   useEffect(() => {
     setAuthorizedDurationMinutes(null);
     setPendingCallMode("video");
+    setOutgoingCallMode(null);
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -1307,7 +1327,8 @@ const CounselorVideo = () => {
                                 isBusyWithOtherCall ||
                                 isStarting ||
                                 !callWindow.canStart ||
-                                !isOnline
+                                !isOnline ||
+                                isIncomingCall
                               }
                             >
                               {isStarting && pendingCallMode === "video" ? (
@@ -1330,7 +1351,8 @@ const CounselorVideo = () => {
                                 isBusyWithOtherCall ||
                                 isStarting ||
                                 !callWindow.canStart ||
-                                !isOnline
+                                !isOnline ||
+                                isIncomingCall
                               }
                             >
                               {isStarting && pendingCallMode === "audio" ? (

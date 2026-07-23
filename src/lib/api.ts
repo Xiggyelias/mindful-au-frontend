@@ -1822,6 +1822,14 @@ class ApiClient {
     return response.data;
   }
 
+  /** Cancels the caller's own unanswered outgoing call. Idempotent — safe to call even if it was already answered or is already gone. */
+  async cancelVideoCall(appointmentId: number | string) {
+    const response = await this.client.post('/video-calls/cancel', {
+      appointment_id: Number(appointmentId),
+    });
+    return response.data;
+  }
+
   async revealAppointmentIdentity(appointmentId: number | string) {
     const response = await this.client.post(`/appointments/${appointmentId}/reveal-identity`);
     return response.data;
