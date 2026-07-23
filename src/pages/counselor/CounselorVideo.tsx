@@ -614,6 +614,10 @@ const CounselorVideo = () => {
     if (!activeSession || !activeSessionId) return;
     if (localStream || isConnecting || isStartingActiveSession) return;
     if (!isSignalingReady || !isOnline) return;
+    // The other side is already calling us — let the IncomingCallOverlay's
+    // acceptIncomingCall() handle it instead of placing our own outgoing call
+    // on top of it (see the overlay render below for why that collides).
+    if (isIncomingCall) return;
 
     const callWindow = getVideoCallWindowStatus(
       activeSession.scheduled_at,
@@ -635,6 +639,7 @@ const CounselorVideo = () => {
     activeSessionId,
     handleStartSession,
     isConnecting,
+    isIncomingCall,
     isOnline,
     isSignalingReady,
     isStartingActiveSession,

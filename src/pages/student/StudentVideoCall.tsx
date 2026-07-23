@@ -708,6 +708,10 @@ const StudentVideoCall = () => {
     if (!activeAppointment || !activeAppointmentId) return;
     if (localStream || isConnecting || isStartingMode) return;
     if (!isSignalingReady || !isOnline) return;
+    // The other side is already calling us — let the IncomingCallOverlay's
+    // acceptIncomingCall() handle it instead of placing our own outgoing call
+    // on top of it (see the overlay render below for why that collides).
+    if (isIncomingCall) return;
 
     const callWindow = getVideoCallWindowStatus(
       activeAppointment.scheduled_at,
@@ -734,6 +738,7 @@ const StudentVideoCall = () => {
     handleStartAudioCall,
     handleStartCall,
     isConnecting,
+    isIncomingCall,
     isOnline,
     isSignalingReady,
     isStartingMode,
