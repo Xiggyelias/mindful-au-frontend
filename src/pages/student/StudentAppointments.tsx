@@ -1147,66 +1147,8 @@ const StudentAppointments = () => {
                         <p className="truncate text-sm font-medium text-foreground">{emergencyResponderName}</p>
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label>Select any available time</Label>
-                        {isLoadingSlots && (
-                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                            <Loader2 className="h-3 w-3 animate-spin" />Loading
-                          </span>
-                        )}
-                      </div>
-                      <div className="max-h-[400px] space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-secondary/10 p-3">
-                        {isLoadingSlots ? (
-                          <p className="text-sm text-muted-foreground">Loading available times…</p>
-                        ) : slotDays.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            No available slots in the next {EMERGENCY_SLOT_LOOKAHEAD_DAYS} days.
-                          </p>
-                        ) : (
-                          slotDays.map((day) => (
-                            <div key={day.date} className="space-y-2">
-                              <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{day.label}</div>
-                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {day.slots.map((slot: CounselorSlot) => {
-                                  const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now();
-                                  const isSelected = Number(slot.id) === Number(selectedSlotId);
-                                  return (
-                                    <button
-                                      key={slot.id}
-                                      type="button"
-                                      disabled={!isAvailable}
-                                      onClick={() => chooseSlot(slot)}
-                                      className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                                        isSelected
-                                          ? "border-primary bg-primary text-primary-foreground"
-                                          : isAvailable
-                                            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400"
-                                            : "border-border bg-muted text-muted-foreground opacity-70"
-                                      }`}
-                                    >
-                                      <span className="block whitespace-nowrap text-[11px] font-semibold tabular-nums sm:text-xs">
-                                        {formatSlotRange(slot.start_time, slot.end_time)}
-                                      </span>
-                                      <span className="block text-[10px] font-medium">{isAvailable ? "Available" : "Booked"}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                      {selectedSlot && (
-                        <p className="text-xs text-muted-foreground">
-                          Selected: {formatInDisplayZone(new Date(selectedSlot.start_time), "M/d/yyyy")},{" "}
-                          {formatSlotRange(selectedSlot.start_time, selectedSlot.end_time)} (
-                          {minutesBetween(selectedSlot.start_time, selectedSlot.end_time)} min).
-                        </p>
-                      )}
-                    </div>
-                    <div className="border-t border-border/50 pt-3 space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center">— or pick any time —</p>
+                    <div className="space-y-2">
+                      <Label>Pick any time</Label>
                       <input
                         type="datetime-local"
                         value={emergencyCustomTime}
