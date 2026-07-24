@@ -167,7 +167,11 @@ export function IncomingCallOverlay({
     <div
       ref={overlayRef}
       className={cn(
-        "fixed inset-0 z-[200] flex flex-col items-center justify-between overflow-hidden",
+        // overflow-y-auto (not hidden) is a deliberate safety net: on a short/landscape
+        // viewport (phone rotated sideways, small tablet) the fixed vertical spacing below
+        // can exceed the viewport height. Accept/Decline must stay reachable by scrolling
+        // rather than silently clipped off-screen on an incoming call.
+        "fixed inset-0 z-[200] flex flex-col items-center justify-between overflow-y-auto",
         "animate-in fade-in slide-in-from-bottom-4 duration-300 motion-reduce:animate-none",
         // Background
         isAnonymous

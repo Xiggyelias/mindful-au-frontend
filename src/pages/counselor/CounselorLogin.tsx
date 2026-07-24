@@ -224,7 +224,7 @@ const CounselorLogin = () => {
                   New staff counselor?{" "}
                   <Link
                     to="/counselor/register"
-                    className="text-primary hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-primary hover:underline font-medium"
                   >
                     Register here
                   </Link>
@@ -233,7 +233,7 @@ const CounselorLogin = () => {
                   New peer counselor?{" "}
                   <Link
                     to="/counselor/register?role=peer_counselor"
-                    className="text-primary hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-primary hover:underline font-medium"
                   >
                     Register here
                   </Link>
@@ -242,7 +242,7 @@ const CounselorLogin = () => {
                   Are you an admin?{" "}
                   <Link
                     to="/admin/login"
-                    className="text-purple-400 hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-purple-400 hover:underline font-medium"
                   >
                     Admin Login
                   </Link>

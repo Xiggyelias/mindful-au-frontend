@@ -172,7 +172,7 @@ const AdminLogin = () => {
                   New administrator?{" "}
                   <Link
                     to="/admin/register"
-                    className="text-purple-400 hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-purple-400 hover:underline font-medium"
                   >
                     Register here
                   </Link>
@@ -181,7 +181,7 @@ const AdminLogin = () => {
                   Are you a counselor?{" "}
                   <Link
                     to="/counselor/login"
-                    className="text-info hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-info hover:underline font-medium"
                   >
                     Counselor Login
                   </Link>

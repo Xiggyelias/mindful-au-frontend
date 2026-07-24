@@ -253,7 +253,7 @@ const CounselorRegister = () => {
                 Already have an account?{" "}
                 <Link
                   to={loginPath}
-                  className="text-primary hover:underline font-medium"
+                  className="inline-block -my-2 py-2 text-primary hover:underline font-medium"
                 >
                   Sign in
                 </Link>

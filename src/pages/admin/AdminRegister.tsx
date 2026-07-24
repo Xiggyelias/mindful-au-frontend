@@ -45,7 +45,7 @@ const AdminRegister = () => {
               </Button>
               <p className="text-sm text-muted-foreground">
                 Need a different portal?{" "}
-                <Link to="/" className="text-primary hover:underline font-medium">
+                <Link to="/" className="inline-block -my-2 py-2 text-primary hover:underline font-medium">
                   Return to home
                 </Link>
               </p>

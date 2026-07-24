@@ -190,7 +190,7 @@ const PeerLogin = () => {
                   New peer counselor?{" "}
                   <Link
                     to="/counselor/register?role=peer_counselor"
-                    className="text-primary hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-primary hover:underline font-medium"
                   >
                     Register here
                   </Link>
@@ -199,7 +199,7 @@ const PeerLogin = () => {
                   Counselor account?{" "}
                   <Link
                     to="/counselor/login"
-                    className="text-info hover:underline font-medium"
+                    className="inline-block -my-2 py-2 text-info hover:underline font-medium"
                   >
                     Counselor Login
                   </Link>

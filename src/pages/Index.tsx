@@ -102,7 +102,7 @@ const Index = () => {
               <a
                 href={crisisTel}
                 aria-label={crisisAriaLabel}
-                className="inline-flex items-center justify-center gap-2 text-primary hover:text-primary/80 transition-colors font-semibold text-base"
+                className="inline-flex min-h-[44px] items-center justify-center gap-2 px-3 py-2 -my-2 text-primary hover:text-primary/80 transition-colors font-semibold text-base"
               >
                 <svg
                   className="h-4 w-4 shrink-0"
