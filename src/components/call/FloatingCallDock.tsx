@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveCallDock } from "@/hooks/useWebRTC";
 import { formatCallDuration } from "@/lib/videoCall";
+import { deriveCallStatus } from "@/lib/callState";
 
 const STUDENT_CALL_PATH = "/student/video-call";
 const COUNSELOR_CALL_PATH = "/counselor/video";
@@ -43,11 +44,20 @@ export function FloatingCallDock() {
   const onCallPage =
     location.pathname === STUDENT_CALL_PATH || location.pathname === COUNSELOR_CALL_PATH;
 
+  // Single shared classification (idle/ringing/calling/connected/reconnecting) — see
+  // src/lib/callState.ts.
+  const callStatus = deriveCallStatus({
+    isIncomingCall,
+    isConnecting,
+    isConnected,
+    isDisconnected,
+    localStream,
+  });
+
   // A call is "in progress" once we have media or are negotiating — but an
   // unanswered *incoming* call is handled by the full-screen IncomingCallOverlay,
   // so the dock stays out of the way until that call is actually accepted.
-  const hasActiveCall =
-    Boolean(localStream) || isConnected || (isConnecting && !isIncomingCall) || isDisconnected;
+  const hasActiveCall = callStatus !== "idle" && callStatus !== "ringing";
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const connectedAtRef = useRef<number | null>(null);
@@ -72,12 +82,17 @@ export function FloatingCallDock() {
   }, [isConnected]);
 
   const statusLabel = useMemo(() => {
-    if (isDisconnected) return "Reconnecting…";
-    if (isConnected) return formatCallDuration(elapsedSeconds);
-    if (isConnecting) return "Calling…";
-    if (localStream) return "Ringing…";
-    return "";
-  }, [elapsedSeconds, isConnected, isConnecting, isDisconnected, localStream]);
+    switch (callStatus) {
+      case "reconnecting":
+        return "Reconnecting…";
+      case "connected":
+        return formatCallDuration(elapsedSeconds);
+      case "calling":
+        return "Calling…";
+      default:
+        return "";
+    }
+  }, [callStatus, elapsedSeconds]);
 
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo && !isAudioOnly);
   const peerInitial = (user?.profile?.full_name?.[0] ?? "•").toUpperCase();

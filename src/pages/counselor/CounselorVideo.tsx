@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
+import { deriveCallStatus } from "@/lib/callState";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
@@ -729,6 +730,17 @@ const CounselorVideo = () => {
   const isVideoOff = Boolean(localStream && !isAudioOnly && !isLocalVideoEnabled);
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo);
 
+  // Single shared classification (idle/ringing/calling/connected/reconnecting) — see
+  // src/lib/callState.ts. Only the copy below is page-specific; the precedence between
+  // these states is decided in one place, not re-derived independently per page.
+  const callStatus = deriveCallStatus({
+    isIncomingCall,
+    isConnecting,
+    isConnected,
+    isDisconnected,
+    localStream,
+  });
+
   const statusMessage = useMemo(() => {
     if (!activeSession) {
       return "Choose a scheduled online session to open the room.";
@@ -736,7 +748,7 @@ const CounselorVideo = () => {
     if (!isOnline) {
       return "You are offline. Reconnect to continue the session.";
     }
-    if (isIncomingCall) {
+    if (callStatus === "ringing") {
       return `Incoming ${incomingAudioOnly ? "audio" : "video"} call. Accept or reject to continue.`;
     }
     if (notice) {
@@ -750,12 +762,12 @@ const CounselorVideo = () => {
         ? "Preparing an audio-only session..."
         : "Preparing camera, microphone, and secure call channel...";
     }
-    if (isConnecting) {
+    if (callStatus === "calling") {
       return localStream
         ? "Waiting for the student to answer..."
         : "Connecting to the session...";
     }
-    if (isConnected) {
+    if (callStatus === "connected") {
       return remoteStream
         ? !remoteHasVideo
           ? `${remoteParticipantName} joined without video. Audio is still live.`
@@ -763,6 +775,9 @@ const CounselorVideo = () => {
           ? "Connected. Video is unavailable, but audio is live."
           : "Connected. You and the student are live."
         : "Connected. Waiting for the student video feed to appear.";
+    }
+    if (callStatus === "reconnecting") {
+      return "Connection interrupted. Reconnecting...";
     }
     if (localStream) {
       return "Your preview is ready. Waiting for the student to join.";
@@ -776,9 +791,7 @@ const CounselorVideo = () => {
     activeSessionWindowStatus?.canStart,
     activeSessionWindowStatus?.message,
     isAudioOnly,
-    isConnected,
-    isConnecting,
-    isIncomingCall,
+    callStatus,
     incomingAudioOnly,
     error,
     isOnline,
