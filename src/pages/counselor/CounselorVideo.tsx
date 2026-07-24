@@ -156,43 +156,44 @@ const CounselorVideo = () => {
     warmCallRingtone();
   }, []);
 
+  // Single owner of the call ringtone on this page. Two separate effects both calling the
+  // shared start/stopCallRingtone() would fight — the ringback effect's stop() would silence
+  // the incoming ring the moment isIncomingCall flipped true. Precedence, highest first:
+  //   1. Incoming call ringing IN (receiver) — this must win.
+  //   2. Ringing OUT / ringback (caller): still connecting, no media yet, nobody answered.
+  //   3. Otherwise silent (idle or connected).
   useEffect(() => {
-    if (!isIncomingCall) {
-      incomingRingVibratedRef.current = false;
-      stopCallRingtone();
-      return;
-    }
-    startCallRingtone(incomingAudioOnly ? "audio" : "video");
-    if (!incomingRingVibratedRef.current) {
-      incomingRingVibratedRef.current = true;
-      try {
-        if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([300, 100, 300]);
+    if (isIncomingCall) {
+      startCallRingtone(incomingAudioOnly ? "audio" : "video");
+      if (!incomingRingVibratedRef.current) {
+        incomingRingVibratedRef.current = true;
+        try {
+          if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate([300, 100, 300]);
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
       }
+      return () => {
+        stopCallRingtone();
+      };
     }
-    return () => {
-      stopCallRingtone();
-    };
-  }, [isIncomingCall, incomingAudioOnly]);
 
-  // Ringback for the CALLER: audible/looping from the moment we place the call until the
-  // other side answers, declines, we cancel, or it times out. `localStream` stays null for
-  // the caller until the callee accepts (media is only acquired then), so
-  // isConnecting && !localStream precisely brackets "still ringing, nobody's answered yet."
-  useEffect(() => {
-    const isRingingOut = isConnecting && !isIncomingCall && !localStream;
-    if (!isRingingOut) {
-      stopCallRingtone();
-      return;
+    incomingRingVibratedRef.current = false;
+
+    // `localStream` stays null for the caller until the callee accepts (media is acquired
+    // only then), so isConnecting && !localStream precisely brackets "still ringing out".
+    const isRingingOut = isConnecting && !localStream;
+    if (isRingingOut) {
+      startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video");
+      return () => {
+        stopCallRingtone();
+      };
     }
-    startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video");
-    return () => {
-      stopCallRingtone();
-    };
-  }, [isConnecting, isIncomingCall, localStream, outgoingCallMode]);
+
+    stopCallRingtone();
+  }, [isIncomingCall, incomingAudioOnly, isConnecting, localStream, outgoingCallMode]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
