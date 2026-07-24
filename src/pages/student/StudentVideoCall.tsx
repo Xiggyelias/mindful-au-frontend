@@ -962,6 +962,18 @@ const StudentVideoCall = () => {
                   </Alert>
                 )}
 
+                {activeAppointment?.is_emergency && (
+                  <div className="mb-3 flex items-center gap-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-2.5">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wide text-destructive">Emergency session</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Priority crisis call with {remoteParticipantName}.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className={cn(
                   "relative flex-1 overflow-hidden transition-all duration-500 shadow-[0_28px_90px_-48px_rgba(0,0,0,0.8)]",
                   isConnected 

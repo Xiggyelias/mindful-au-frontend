@@ -1015,6 +1015,18 @@ const CounselorVideo = () => {
                         </div>
                       </div>
 
+                      {activeSession?.is_emergency && (
+                        <div className="flex items-center gap-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-2.5">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold uppercase tracking-wide text-destructive">Emergency session</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              Priority crisis call with {remoteParticipantName}.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="relative flex-1 overflow-hidden rounded-[24px] border border-border/50 bg-background/90 shadow-[0_30px_80px_-50px_hsl(var(--foreground)/0.55)]">
                         {remoteStream ? (
                           <video

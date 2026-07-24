@@ -83,6 +83,8 @@ export interface Appointment {
   duration_minutes: number;
   status: 'pending' | 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
   is_anonymous?: boolean;
+  /** Booked via the emergency "assigned counselor" flow — surface crisis context in the call UI. */
+  is_emergency?: boolean;
   anonymous_id?: string | null;
   identity_visible_to_viewer?: boolean;
   /** Booked media: `audio` | `video` (anonymous online is always audio). */
