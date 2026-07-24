@@ -736,7 +736,10 @@ const StudentAppointments = () => {
           ? minutesBetween(request.slot.start_time, request.slot.end_time)
           : prev.duration_minutes,
         mode: "online",
-        online_media: prev.is_anonymous ? "audio" : "video",
+        // Emergency sessions are always identified so the counselor knows who they're
+        // helping — never inherit the student's anonymous default here.
+        is_anonymous: false,
+        online_media: "video",
       }));
       setEmergencyDialogOpen(false);
       setOpenDialog(true);
@@ -770,7 +773,10 @@ const StudentAppointments = () => {
         scheduled_at: "",
         duration_minutes: 60,
         mode: "online",
-        online_media: prev.is_anonymous ? "audio" : "video",
+        // Emergency sessions are always identified so the counselor knows who they're
+        // helping — never inherit the student's anonymous default here.
+        is_anonymous: false,
+        online_media: "video",
       }));
       setEmergencyDialogOpen(false);
       setOpenDialog(true);
@@ -881,15 +887,18 @@ const StudentAppointments = () => {
       }
 
       const scheduledAt = parsedScheduledAt.toISOString();
+      // Emergency bookings are always identified (the counselor must know who they're helping),
+      // so anonymity never applies in emergency mode regardless of the student's default.
+      const bookingAnonymous = isEmergencyBookingMode ? false : form.is_anonymous;
       const sessionNotes =
         form.mode === "physical"
           ? "Physical"
-          : form.is_anonymous || form.online_media === "audio"
+          : bookingAnonymous || form.online_media === "audio"
             ? "Online audio"
             : "Online";
 
       const callTypeForApi =
-        form.mode === "physical" ? undefined : form.is_anonymous ? ("audio" as const) : form.online_media;
+        form.mode === "physical" ? undefined : bookingAnonymous ? ("audio" as const) : form.online_media;
       const durationMinutes = selectedSlot
         ? minutesBetween(selectedSlot.start_time, selectedSlot.end_time)
         : form.duration_minutes;
@@ -907,7 +916,7 @@ const StudentAppointments = () => {
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         notes: sessionNotes,
-        is_anonymous: form.is_anonymous,
+        is_anonymous: bookingAnonymous,
       };
 
       // Link to the emergency request so the backend resolves it automatically.
