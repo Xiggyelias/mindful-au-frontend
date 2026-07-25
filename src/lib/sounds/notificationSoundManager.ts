@@ -422,7 +422,30 @@ function clearHtml5RingRamp() {
   }
 }
 
-export function stopCallRingtone() {
+/**
+ * Who currently wants the ring playing. The incoming-call overlay exists in two places at
+ * once — the global ring host and the call page itself — and the ringtone is a single
+ * shared element. Without refcounting, whichever owner unmounts first silences the ring
+ * for the other one, which is how a receiver ends up with a visible call and no sound.
+ */
+const ringOwners = new Set<string>();
+
+export type CallRingtoneOwner = "incoming-banner" | "call-page";
+
+/**
+ * Stop the ring for one owner. The sound only actually stops once no owner wants it.
+ * Called without an owner it force-stops for everyone (teardown / global mute paths).
+ */
+export function stopCallRingtone(owner?: CallRingtoneOwner) {
+  if (owner) {
+    ringOwners.delete(owner);
+    if (ringOwners.size > 0) {
+      return;
+    }
+  } else {
+    ringOwners.clear();
+  }
+
   stopFallbackRing();
   clearRingStopTimer();
   clearHtml5RingRamp();
@@ -459,7 +482,9 @@ function ringEffectiveVolume(kind: "audio" | "video"): number {
 /**
  * Looping ringtone. One at a time; crossfade handled by fading the inactive element out first.
  */
-export function startCallRingtone(kind: "audio" | "video") {
+export function startCallRingtone(kind: "audio" | "video", owner: CallRingtoneOwner = "incoming-banner") {
+  ringOwners.add(owner);
+
   const vol = ringEffectiveVolume(kind);
   if (vol <= 0) {
     return;

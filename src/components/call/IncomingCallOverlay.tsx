@@ -11,6 +11,8 @@ export type IncomingCallOverlayCall = {
   appointment_id: number;
   /** For counselor-side banners, the student name. For student-side, the counselor name. */
   callerName: string;
+  /** Caller's profile picture, when they have one and are not anonymised. */
+  avatarUrl?: string | null;
   is_anonymous: boolean;
   call_type: string;
   scheduled_at: string | null;
@@ -61,11 +63,22 @@ function PulsingAvatar({
   isAnonymous,
   isVideo,
   callerInitial,
+  avatarUrl,
+  callerDisplayName,
 }: {
   isAnonymous: boolean;
   isVideo: boolean;
   callerInitial: string;
+  avatarUrl?: string | null;
+  callerDisplayName: string;
 }) {
+  // A broken/expired avatar URL must not leave an empty circle on the ring screen.
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUrl]);
+  const showPhoto = !isAnonymous && Boolean(avatarUrl) && !avatarFailed;
+
   return (
     <div className="relative flex h-32 w-32 items-center justify-center">
       {/* Outer rings */}
@@ -92,7 +105,7 @@ function PulsingAvatar({
       {/* Avatar circle */}
       <div
         className={cn(
-          "relative flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold text-white shadow-2xl ring-4",
+          "relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full text-3xl font-bold text-white shadow-2xl ring-4",
           isAnonymous
             ? "bg-gradient-to-br from-violet-600 to-violet-800 ring-violet-400/40"
             : isVideo
@@ -102,6 +115,13 @@ function PulsingAvatar({
       >
         {isAnonymous ? (
           <ShieldCheck className="h-10 w-10 text-violet-100" aria-hidden />
+        ) : showPhoto ? (
+          <img
+            src={avatarUrl as string}
+            alt={callerDisplayName}
+            className="h-full w-full object-cover"
+            onError={() => setAvatarFailed(true)}
+          />
         ) : (
           <span>{callerInitial}</span>
         )}
@@ -216,6 +236,8 @@ export function IncomingCallOverlay({
             isAnonymous={isAnonymous}
             isVideo={isVideo}
             callerInitial={callerInitial}
+            avatarUrl={call.avatarUrl}
+            callerDisplayName={callerDisplayName}
           />
         </div>
 

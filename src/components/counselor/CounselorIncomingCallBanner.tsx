@@ -13,12 +13,19 @@ import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 import type { IncomingCallOverlayCall } from "@/components/call/IncomingCallOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import { useIncomingCalls, useIncomingCallWakeSubscription } from "@/hooks/useIncomingCalls";
+import { useEngineRingingSessionId } from "@/hooks/useWebRTC";
+import {
+  isAcceptedCallSignal,
+  isTerminalCallSignal,
+  logCallSignal,
+} from "@/lib/incomingCallRealtime";
 
 export type IncomingCallItem = {
   id: number;
   appointment_id: number;
   student_id: number;
   student_name: string;
+  student_avatar_url?: string | null;
   is_anonymous: boolean;
   call_type: string;
   status: string;
@@ -44,7 +51,14 @@ export function CounselorIncomingCallBanner({
     return rows.filter((r) => r && typeof r.id === "number");
   }, []);
 
-  const { calls, busyId, setBusyId, removeCallLocal, fetchIncoming } = useIncomingCalls({
+  const {
+    calls,
+    busyId,
+    setBusyId,
+    removeCallLocal,
+    removeCallByAppointmentLocal,
+    fetchIncoming,
+  } = useIncomingCalls({
     enabled,
     fetchCalls,
     onActiveChange,
@@ -65,16 +79,26 @@ export function CounselorIncomingCallBanner({
   });
 
   useIncomingCallWakeSubscription(user?.id, enabled, (payload) => {
-    if (payload.status === "cancelled" || payload.status === "declined") {
-      removeCallLocal(payload.appointment_id);
-    } else {
-      void fetchIncoming({ urgent: true });
+    if (isTerminalCallSignal(payload)) {
+      logCallSignal("counselor: call ended remotely", payload);
+      removeCallByAppointmentLocal(payload.appointment_id);
+      return;
     }
+    if (isAcceptedCallSignal(payload)) {
+      // A call this counselor placed was answered — stop showing it as incoming.
+      removeCallByAppointmentLocal(payload.appointment_id);
+      return;
+    }
+    logCallSignal("counselor: RINGING", payload);
+    void fetchIncoming({ urgent: true });
   });
+
+  const engineRingingSessionId = useEngineRingingSessionId();
 
   const handleAccept = async (call: IncomingCallItem) => {
     setBusyId(call.id);
     try {
+      logCallSignal("counselor: call accepted", { call_id: call.id, appointment_id: call.appointment_id });
       await api.updateCounselorIncomingCall(call.id, "accepted");
       removeCallLocal(call.id);
       const params = new URLSearchParams({
@@ -90,9 +114,14 @@ export function CounselorIncomingCallBanner({
     }
   };
 
-  const handleDecline = async (call: IncomingCallItem, _reason: DismissReason) => {
+  const handleDecline = async (call: IncomingCallItem, reason: DismissReason) => {
     setBusyId(call.id);
     try {
+      logCallSignal("counselor: call declined", {
+        call_id: call.id,
+        appointment_id: call.appointment_id,
+        reason,
+      });
       await api.updateCounselorIncomingCall(call.id, "declined");
       removeCallLocal(call.id);
     } catch (e) {
@@ -103,17 +132,25 @@ export function CounselorIncomingCallBanner({
     }
   };
 
-  if (!enabled || calls.length === 0) {
+  // The call page for this appointment is already ringing over its own signaling
+  // channel and its overlay answers there — don't stack a second identical overlay
+  // on top of it.
+  const visibleCalls = engineRingingSessionId
+    ? calls.filter((c) => String(c.appointment_id) !== String(engineRingingSessionId))
+    : calls;
+
+  if (!enabled || visibleCalls.length === 0) {
     return null;
   }
 
-  if (calls.length === 1) {
-    const call = calls[0];
+  if (visibleCalls.length === 1) {
+    const call = visibleCalls[0];
     const callIsAnonymous = isAnonymousSessionFlag(call.is_anonymous);
     const overlayCall: IncomingCallOverlayCall = {
       id: call.id,
       appointment_id: call.appointment_id,
       callerName: callIsAnonymous ? "" : call.student_name,
+      avatarUrl: callIsAnonymous ? null : call.student_avatar_url ?? null,
       is_anonymous: call.is_anonymous,
       call_type: call.call_type,
       scheduled_at: call.scheduled_at,
@@ -128,8 +165,8 @@ export function CounselorIncomingCallBanner({
     );
   }
 
-  const visible = calls.slice(0, 4);
-  const overflow = Math.max(0, calls.length - visible.length);
+  const visible = visibleCalls.slice(0, 4);
+  const overflow = Math.max(0, visibleCalls.length - visible.length);
 
   return (
     <div

@@ -186,6 +186,26 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     [clearAutoDismiss]
   );
 
+  /**
+   * Clear the ring for an appointment. Realtime signals identify a call by appointment id
+   * (the caller knows the appointment, not the call row id), so cancelled/declined/missed
+   * updates have to be matched that way — passing an appointment id to removeCallLocal
+   * matches nothing and leaves the recipient ringing at a caller who already hung up.
+   */
+  const removeCallByAppointmentLocal = useCallback(
+    (appointmentId: number) => {
+      setCalls((prev) =>
+        prev.filter((c) => {
+          if (c.appointment_id !== appointmentId) return true;
+          clearAutoDismiss(c.id);
+          seenIdsRef.current.delete(c.id);
+          return false;
+        })
+      );
+    },
+    [clearAutoDismiss]
+  );
+
   const announceNewCall = useCallback(
     (call: T) => {
       // Ringtone is managed by the `calls` state effect — calling startCallRingtone
@@ -332,16 +352,16 @@ export function useIncomingCalls<T extends IncomingCallBase>({
 
   useEffect(() => {
     if (!enabled || calls.length === 0) {
-      stopCallRingtone();
+      stopCallRingtone("incoming-banner");
       return;
     }
     const wantsVideo = calls.some((c) => effectiveWebRtcCallMode(c) === "video");
-    startCallRingtone(wantsVideo ? "video" : "audio");
+    startCallRingtone(wantsVideo ? "video" : "audio", "incoming-banner");
   }, [enabled, calls]);
 
   useEffect(() => {
     return () => {
-      stopCallRingtone();
+      stopCallRingtone("incoming-banner");
     };
   }, []);
 
@@ -470,6 +490,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     busyId,
     setBusyId,
     removeCallLocal,
+    removeCallByAppointmentLocal,
     fetchIncoming,
     AUTO_DISMISS_MS,
   };
@@ -480,12 +501,19 @@ export function useIncomingCallWakeSubscription(
   enabled: boolean,
   onWake: (payload: IncomingCallWakePayload) => void
 ) {
+  // The handler is read through a ref so the subscription survives re-renders. Callers
+  // pass inline arrows and callbacks that depend on live call state; resubscribing on
+  // every render would drop and rebuild the realtime channel, and a signal that lands in
+  // that gap is a ring the recipient never hears.
+  const onWakeRef = useRef(onWake);
+  onWakeRef.current = onWake;
+
   useEffect(() => {
     if (!enabled || !userId) {
       return;
     }
     return subscribeIncomingCallWake(userId, (payload) => {
-      onWake(payload);
+      onWakeRef.current(payload);
     });
-  }, [enabled, onWake, userId]);
+  }, [enabled, userId]);
 }

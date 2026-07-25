@@ -117,6 +117,8 @@ type WebRTCEngine = {
   connectionTimeout: ReturnType<typeof setTimeout> | null;
   pendingCallTimeout: ReturnType<typeof setTimeout> | null;
   pendingCallRequest: { audioOnly: boolean } | null;
+  /** Peer we already re-announced our outgoing call-request to (see the handler below). */
+  callRequestResentTo: string | null;
   localSpeakingSince: number | null;
   remoteSpeakingSince: number | null;
   localVideoElements: Set<HTMLVideoElement>;
@@ -176,6 +178,7 @@ const engine: WebRTCEngine = {
   connectionTimeout: null,
   pendingCallTimeout: null,
   pendingCallRequest: null,
+  callRequestResentTo: null,
   localSpeakingSince: null,
   remoteSpeakingSince: null,
   localVideoElements: new Set(),
@@ -916,6 +919,7 @@ const cleanupEngineCall = (broadcastEnd = true, clearMedia = true) => {
   engine.remoteStream = null;
   engine.observedRemoteTrackIds.clear();
   engine.pendingCallRequest = null;
+  engine.callRequestResentTo = null;
   engine.makingOffer = false;
   engine.ignoreOffer = false;
   engine.wasConnected = false;
@@ -1012,6 +1016,23 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
       const currentState = engine.state;
       if (engine.pendingCallRequest && currentState.isConnecting) {
         if (!isPolitePeer(normalizedUserId, normalizedSenderId)) {
+          // We keep our own outgoing call. But our original call-request was a broadcast:
+          // if this peer only joined the channel now — which is exactly what happens when
+          // they answer from the incoming-call overlay and navigate to the call page —
+          // they never received it, and neither side would ever offer. Re-announce once
+          // so the polite peer can answer it.
+          if (engine.callRequestResentTo !== normalizedSenderId) {
+            engine.callRequestResentTo = normalizedSenderId;
+            logWebRTC("[WebRTC] Re-announcing call-request to late-joining peer:", normalizedSenderId);
+            void engine.channel?.send({
+              type: "broadcast",
+              event: "call-request",
+              payload: {
+                senderId: normalizedUserId,
+                audioOnly: Boolean(engine.pendingCallRequest.audioOnly),
+              },
+            });
+          }
           return;
         }
 
@@ -1478,6 +1499,35 @@ const performEngineRejoin = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * The appointment the signaling engine is currently ringing for, or null.
+ *
+ * The receiver can be rung by two independent surfaces: the global incoming-call host
+ * (backed by the calls API) and the call page itself (backed by the WebRTC channel it is
+ * already joined to). When the receiver is sitting on the call page for that very
+ * appointment both fire at once, so the global host uses this to stand down — the page's
+ * own overlay answers over the live channel, which is the path that actually negotiates
+ * media.
+ */
+export const useEngineRingingSessionId = (): string | null => {
+  const read = () => (engine.state.isIncomingCall ? engine.sessionId || null : null);
+  const [ringingSessionId, setRingingSessionId] = useState<string | null>(read);
+
+  useEffect(() => {
+    const listener: WebRTCEngineListener = (nextState) => {
+      setRingingSessionId(nextState.isIncomingCall ? engine.sessionId || null : null);
+    };
+
+    engine.listeners.add(listener);
+    setRingingSessionId(read());
+    return () => {
+      engine.listeners.delete(listener);
+    };
+  }, []);
+
+  return ringingSessionId;
+};
+
 export const useWebRTC = (sessionId: string, userId: string) => {
   const { lowBandwidthMode } = useBandwidthMode();
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -1573,6 +1623,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
       try {
         engine.pendingCallRequest = { audioOnly: Boolean(options.audioOnly) };
+        engine.callRequestResentTo = null;
         engine.ignoreOffer = false;
         engine.reconnectAttempts = 0;
         await engine.channel.send({

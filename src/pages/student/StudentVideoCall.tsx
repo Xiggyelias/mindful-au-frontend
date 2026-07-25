@@ -47,7 +47,14 @@ import {
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
 import { startCallRingtone, stopCallRingtone, warmCallRingtone } from "@/lib/sounds/notificationSoundManager";
-import { signalIncomingCallWake } from "@/lib/incomingCallRealtime";
+import {
+  isAcceptedCallSignal,
+  isTerminalCallSignal,
+  logCallSignal,
+  signalIncomingCallWake,
+  type IncomingCallWakePayload,
+} from "@/lib/incomingCallRealtime";
+import { useIncomingCallWakeSubscription } from "@/hooks/useIncomingCalls";
 import { studentNavItems } from "@/config/studentNavItems";
 import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 
@@ -176,7 +183,7 @@ const StudentVideoCall = () => {
   //   3. Otherwise silent (idle or connected).
   useEffect(() => {
     if (isIncomingCall) {
-      startCallRingtone(incomingAudioOnly ? "audio" : "video");
+      startCallRingtone(incomingAudioOnly ? "audio" : "video", "call-page");
       if (!incomingRingVibratedRef.current) {
         incomingRingVibratedRef.current = true;
         try {
@@ -188,7 +195,7 @@ const StudentVideoCall = () => {
         }
       }
       return () => {
-        stopCallRingtone();
+        stopCallRingtone("call-page");
       };
     }
 
@@ -198,13 +205,13 @@ const StudentVideoCall = () => {
     // only then), so isConnecting && !localStream precisely brackets "still ringing out".
     const isRingingOut = isConnecting && !localStream;
     if (isRingingOut) {
-      startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video");
+      startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video", "call-page");
       return () => {
-        stopCallRingtone();
+        stopCallRingtone("call-page");
       };
     }
 
-    stopCallRingtone();
+    stopCallRingtone("call-page");
   }, [isIncomingCall, incomingAudioOnly, isConnecting, localStream, outgoingCallMode]);
 
   useEffect(() => {
@@ -708,6 +715,47 @@ const StudentVideoCall = () => {
     setIsStartingMode(null);
     setOutgoingCallMode(null);
   }, [activeAppointmentId]);
+
+  /**
+   * Outgoing call state, driven by the server — mirrors the counselor page so a decline
+   * from the counselor's ring overlay stops the ringback here immediately instead of
+   * running out the 45s connection timeout.
+   */
+  const handleOutgoingCallSignal = useCallback(
+    (payload: IncomingCallWakePayload) => {
+      if (!activeAppointmentId || Number(payload.appointment_id) !== Number(activeAppointmentId)) {
+        return;
+      }
+
+      if (isAcceptedCallSignal(payload)) {
+        logCallSignal("student: outgoing call accepted -> CONNECTED", payload);
+        toast.success("Your counselor accepted. Connecting…");
+        return;
+      }
+
+      if (!isTerminalCallSignal(payload)) {
+        return;
+      }
+
+      if (!isConnecting || localStream) {
+        return;
+      }
+
+      logCallSignal("student: outgoing call ended -> ENDED", payload);
+      endCall();
+      setIsStartingMode(null);
+      setOutgoingCallMode(null);
+      setAuthorizedDurationMinutes(null);
+      toast.info(
+        payload.status === "declined"
+          ? "Your counselor declined the call."
+          : "The call was not answered."
+      );
+    },
+    [activeAppointmentId, endCall, isConnecting, localStream]
+  );
+
+  useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
 
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
