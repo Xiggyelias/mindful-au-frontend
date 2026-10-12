@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Phone, PhoneOff, Mic, Video, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
-import { effectiveWebRtcCallMode } from "@/lib/videoCall";
+import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { effectiveWebRtcCallMode, VIDEO_CALL_LIMITS } from "@/lib/videoCall";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 
 export type IncomingCallOverlayCall = {
@@ -18,7 +18,8 @@ export type IncomingCallOverlayCall = {
   scheduled_at: string | null;
 };
 
-const AUTO_DISMISS_MS = 30_000;
+/** The countdown ring has to run out exactly when the ring itself does. */
+const AUTO_DISMISS_MS = VIDEO_CALL_LIMITS.ringTimeoutMs;
 const TICK_MS = 50;
 
 /** Draws a single SVG arc for the countdown ring. */
@@ -149,7 +150,10 @@ export function IncomingCallOverlay({
       ? formatInDisplayZone(new Date(call.scheduled_at), "EEE, MMM d · h:mm a")
       : null;
 
-  const callerDisplayName = isAnonymous ? "Anonymous Student" : (call.callerName || "User");
+  // Only ever anonymous on counselor-facing rings; students are never shown a masked
+  // counselor. Same label the appointment list and video queue use, so the counselor is not
+  // asked to reconcile an "Anonymous Student" ring with an "Anonymous User" queue entry.
+  const callerDisplayName = isAnonymous ? anonymousLabelForCounselor() : (call.callerName || "User");
   const callerInitial = isAnonymous ? "?" : (call.callerName?.[0] ?? "?").toUpperCase();
 
   // Countdown progress 1 → 0 over AUTO_DISMISS_MS

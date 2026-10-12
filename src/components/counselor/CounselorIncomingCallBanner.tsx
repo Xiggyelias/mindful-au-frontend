@@ -6,7 +6,7 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { anonymousLabelForCounselor, isAnonymousSessionFlag } from "@/lib/anonymousMode";
 import { effectiveWebRtcCallMode } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
@@ -32,8 +32,6 @@ export type IncomingCallItem = {
   scheduled_at: string | null;
   created_at?: string | null;
 };
-
-type DismissReason = "declined" | "timeout";
 
 export function CounselorIncomingCallBanner({
   enabled,
@@ -63,17 +61,21 @@ export function CounselorIncomingCallBanner({
     fetchCalls,
     onActiveChange,
     buildNotification: (call) => {
-      const displayName = isAnonymousSessionFlag(call.is_anonymous) ? "Anonymous Student" : call.student_name;
+      const displayName = isAnonymousSessionFlag(call.is_anonymous)
+        ? anonymousLabelForCounselor()
+        : call.student_name;
       return {
         title: effectiveWebRtcCallMode(call) === "video" ? "Incoming video call" : "Incoming audio call",
         body: `${displayName} is calling you`,
       };
     },
+    // The overlay timing out is a missed call, not a rejection — reporting it as
+    // "declined" told the student their counselor had turned them away.
     onAutoDismissCall: async (call) => {
       try {
-        await api.updateCounselorIncomingCall(call.id, "declined");
+        await api.updateCounselorIncomingCall(call.id, "missed");
       } catch {
-        /* ignore */
+        /* the server sweeps expired rings on its own */
       }
     },
   });
@@ -114,13 +116,13 @@ export function CounselorIncomingCallBanner({
     }
   };
 
-  const handleDecline = async (call: IncomingCallItem, reason: DismissReason) => {
+  /** An explicit rejection. Ring timeouts go through `onAutoDismissCall` as `missed`. */
+  const handleDecline = async (call: IncomingCallItem) => {
     setBusyId(call.id);
     try {
       logCallSignal("counselor: call declined", {
         call_id: call.id,
         appointment_id: call.appointment_id,
-        reason,
       });
       await api.updateCounselorIncomingCall(call.id, "declined");
       removeCallLocal(call.id);
@@ -160,7 +162,7 @@ export function CounselorIncomingCallBanner({
         call={overlayCall}
         busy={busyId === call.id}
         onAccept={() => void handleAccept(call)}
-        onDecline={() => void handleDecline(call, "declined")}
+        onDecline={() => void handleDecline(call)}
       />
     );
   }
@@ -214,7 +216,9 @@ export function CounselorIncomingCallBanner({
                     Incoming session call
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="truncate text-lg font-semibold leading-tight">{callAnonymous ? "Anonymous Student" : call.student_name}</p>
+                    <p className="truncate text-lg font-semibold leading-tight">
+                      {callAnonymous ? anonymousLabelForCounselor() : call.student_name}
+                    </p>
                     {callAnonymous && <AnonymousModeIndicator variant="badge" audience="counselor" />}
                   </div>
                   <div
@@ -245,7 +249,7 @@ export function CounselorIncomingCallBanner({
                   variant="destructive"
                   className="gap-1.5 rounded-full font-semibold"
                   disabled={busyId === call.id}
-                  onClick={() => void handleDecline(call, "declined")}
+                  onClick={() => void handleDecline(call)}
                 >
                   <PhoneOff className="h-4 w-4" aria-hidden />
                   Decline

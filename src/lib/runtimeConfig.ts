@@ -32,8 +32,8 @@ export const resolveApiBaseUrl = (): string => {
     const hostname = window.location.hostname;
     const port = window.location.port;
 
-    // Keep local dev zero-config when frontend is on Vite dev server.
-    if (LOCAL_HOST_PATTERN.test(hostname) && VITE_DEV_SERVER_PORTS.has(port)) {
+    // Keep local dev zero-config when frontend is running on loopback/localhost.
+    if (LOCAL_HOST_PATTERN.test(hostname)) {
       return LOCAL_DEV_API_BASE_URL;
     }
 

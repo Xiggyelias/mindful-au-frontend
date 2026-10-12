@@ -28,7 +28,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { deriveCallStatus } from "@/lib/callState";
-import { api, getApiErrorMessage } from "@/lib/api";
+import {
+  api,
+  getApiErrorMessage,
+  VideoCallAuthorizationError,
+  type VideoCallAuthorization,
+} from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
@@ -84,15 +89,12 @@ const formatScheduleLabel = (scheduledAt?: string | null): string => {
   }
 };
 
-const isMobileOrTablet = () =>
-  typeof navigator !== "undefined" &&
-  (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
-
 const CounselorVideo = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const autoStartedRef = useRef(false);
+  /** The pending start already handed to beginSession — guards against duplicate attempts. */
+  const beganSessionStartRef = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -109,6 +111,7 @@ const CounselorVideo = () => {
   const [rejoinSecondsLeft, setRejoinSecondsLeft] = useState<number | null>(null);
   const [isRejoining, setIsRejoining] = useState(false);
   const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
+  const [isFlippingCamera, setIsFlippingCamera] = useState(false);
   const [counselingSessionId, setCounselingSessionId] = useState<number | null>(null);
   const [noteText, setNoteText] = useState<string>("");
   const [lastSavedText, setLastSavedText] = useState<string>("");
@@ -131,6 +134,7 @@ const CounselorVideo = () => {
     isSignalingReady,
     isAudioOnly,
     isLocalVideoEnabled,
+    canFlipCamera,
     error,
     isRelayError,
     notice,
@@ -152,8 +156,6 @@ const CounselorVideo = () => {
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(activeSessionId || "", String(user?.id || ""));
-
-  const isMobile = isMobileOrTablet();
 
   useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
@@ -215,6 +217,13 @@ const CounselorVideo = () => {
       window.removeEventListener("offline", syncNetworkStatus);
     };
   }, []);
+
+  // Read inside the start-session effect so a background list refresh does not re-trigger it
+  // (the effect places a real outgoing call; it must run exactly once per start request).
+  const upcomingSessionsRef = useRef<Appointment[]>([]);
+  useEffect(() => {
+    upcomingSessionsRef.current = upcomingSessions;
+  }, [upcomingSessions]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -333,6 +342,21 @@ const CounselorVideo = () => {
     }
     void toggleVideo();
   };
+
+  const handleFlipCamera = useCallback(async () => {
+    if (isFlippingCamera) return;
+    setIsFlippingCamera(true);
+    try {
+      // Re-opening a camera takes a moment and can fail (busy device, permission revoked for
+      // the other lens), so say so rather than leaving the picture unchanged with no reason.
+      const switched = await flipCamera();
+      if (!switched) {
+        toast.error("Could not switch camera. It may be in use by another app.");
+      }
+    } finally {
+      setIsFlippingCamera(false);
+    }
+  }, [flipCamera, isFlippingCamera]);
 
   const requestedMode = useMemo((): "video" | "audio" => {
     const rawMode = searchParams.get("mode");
@@ -456,9 +480,32 @@ const CounselorVideo = () => {
       setActiveSessionId(sessionId);
       setPendingCallMode(resolvedMode);
       setOutgoingCallMode(resolvedMode);
+      // A fresh start request, even for a session that was started (and ended) before.
+      beganSessionStartRef.current = null;
       setPendingSessionStartId(sessionId);
     },
     [activeSessionId, isOnline, localStream, upcomingSessions]
+  );
+
+  /**
+   * Withdraw an outgoing call we placed but never connected. The server row is what keeps
+   * the student's device ringing and both participants marked busy, so dropping the ring
+   * locally is not enough.
+   */
+  const cancelOutgoingCall = useCallback(
+    async (appointmentIdToCancel: string) => {
+      endCall();
+      setPendingSessionStartId(null);
+      setPendingCallMode("video");
+      setOutgoingCallMode(null);
+      setAuthorizedDurationMinutes(null);
+      try {
+        await api.cancelVideoCall(appointmentIdToCancel);
+      } catch {
+        // Idempotent server-side, and stale rings are swept anyway.
+      }
+    },
+    [endCall]
   );
 
   const removeSessionFromQueue = useCallback((sessionIdToRemove: string) => {
@@ -467,21 +514,31 @@ const CounselorVideo = () => {
     );
   }, []);
 
+  /**
+   * Tell the server the call ended, and drop the slot from the queue only if the session is
+   * actually over.
+   *
+   * `session_still_open` is the server's answer to "can this slot be hosted again?". While it
+   * is true the session stays listed so a dropped or hung-up call can be restarted for the
+   * rest of the booked window. Returns that flag so callers can word their feedback correctly.
+   */
   const finalizeEndedSession = useCallback(
-    async (appointmentIdToEnd: string) => {
+    async (appointmentIdToEnd: string): Promise<boolean> => {
+      let sessionStillOpen = false;
       try {
         const result = await api.endVideoCall(appointmentIdToEnd);
-        if (
-          result?.appointment_status === "completed" ||
-          result?.status === "completed"
-        ) {
+        sessionStillOpen = Boolean(result?.session_still_open);
+        if (!sessionStillOpen && result?.appointment_status === "completed") {
           removeSessionFromQueue(appointmentIdToEnd);
         }
       } catch {
-        // Best effort: the local call has already been closed.
+        // Best effort: the local call has already been closed. Keep the slot listed — assuming
+        // the session is over on a failed request would hide a session still due to run.
+        sessionStillOpen = true;
       } finally {
         void loadSessions();
       }
+      return sessionStillOpen;
     },
     [loadSessions, removeSessionFromQueue]
   );
@@ -505,18 +562,28 @@ const CounselorVideo = () => {
       });
     }
 
-    if (sessionIdToEnd) {
-      await finalizeEndedSession(sessionIdToEnd);
+    // A fresh start request is allowed again for this slot once the call is down.
+    beganSessionStartRef.current = null;
+
+    if (!sessionIdToEnd) {
+      toast.info("Call ended");
+      return;
     }
 
-    toast.info("Session ended");
+    const sessionStillOpen = await finalizeEndedSession(sessionIdToEnd);
+    toast.info(
+      sessionStillOpen
+        ? "Call ended. The session is still booked — you can start the room again."
+        : "Session ended"
+    );
   };
 
   useEffect(() => {
+    if (pendingSessionStartId) return;
     setAuthorizedDurationMinutes(null);
     setPendingCallMode("video");
     setOutgoingCallMode(null);
-  }, [activeSessionId]);
+  }, [activeSessionId, pendingSessionStartId]);
 
   /**
    * Outgoing call state, driven by the server. Without this the counselor keeps hearing
@@ -529,6 +596,14 @@ const CounselorVideo = () => {
       if (!activeSessionId || Number(payload.appointment_id) !== Number(activeSessionId)) {
         return;
       }
+
+      // Anonymity can change between page loads (a student reveals their identity, or flips
+      // their profile out of anonymous mode) and nothing in this tab would notice — the
+      // CHAT_ANONYMITY_SYNC_EVENT that drives the refresh is a window event, so it only ever
+      // fires in the student's own browser. Any call signal for the open session is a good
+      // moment to re-read the row, otherwise the student stays labelled "Anonymous User"
+      // here for the whole call.
+      void loadSessions();
 
       if (isAcceptedCallSignal(payload)) {
         logCallSignal("counselor: outgoing call accepted -> CONNECTED", payload);
@@ -556,10 +631,34 @@ const CounselorVideo = () => {
         payload.status === "declined" ? "The student declined the call." : "The call was not answered."
       );
     },
-    [activeSessionId, endCall, isConnecting, localStream]
+    [activeSessionId, endCall, isConnecting, loadSessions, localStream]
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
+
+  /**
+   * Release the server-side ring when an outgoing call stops ringing without connecting —
+   * the WebRTC layer's 45s "no one answered" timeout only fires locally. A pending row left
+   * behind keeps the student's device ringing and refuses the next attempt as busy.
+   */
+  const ringingOutSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+
+    if (isRingingOut) {
+      ringingOutSessionRef.current = activeSessionId;
+      return;
+    }
+
+    const abandoned = ringingOutSessionRef.current;
+    ringingOutSessionRef.current = null;
+
+    if (!abandoned || localStream || isConnected) {
+      return;
+    }
+
+    void cancelOutgoingCall(abandoned);
+  }, [activeSessionId, cancelOutgoingCall, isConnected, isConnecting, localStream, outgoingCallMode]);
 
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
@@ -598,81 +697,116 @@ const CounselorVideo = () => {
     if (!activeSessionId || pendingSessionStartId !== activeSessionId) return;
     if (!isSignalingReady) return;
     if (!isOnline) return;
-
-    let cancelled = false;
+    // A background refresh of the session list used to re-run this effect while the first
+    // attempt was still in flight, firing a second authorize + startCall for the same ring.
+    if (beganSessionStartRef.current === pendingSessionStartId) return;
+    beganSessionStartRef.current = pendingSessionStartId;
 
     const beginSession = async () => {
-      const callType = pendingCallMode === "audio" ? "audio" : "video";
-      const activeRow = upcomingSessions.find((item) => String(item.id) === activeSessionId);
-      const studentId = Number(activeRow?.student_id);
+      const requestedCallType = pendingCallMode === "audio" ? "audio" : "video";
+      const studentId = Number(
+        upcomingSessionsRef.current.find((item) => String(item.id) === activeSessionId)?.student_id
+      );
 
+      // Authorize BEFORE opening the media channel. The server call row is what rings the
+      // student (realtime signal, web push, their polling); starting the local ringback
+      // first meant a failed authorize left this side ringing out at a student who was
+      // never notified at all.
+      let authorization: VideoCallAuthorization;
       try {
-        const [authorization, started] = await Promise.all([
-          api.authorizeVideoCall(activeSessionId, { call_type: callType }),
-          pendingCallMode === "audio" ? startAudioCall() : startCall(),
-        ]);
-        const serverDuration = Number(authorization?.max_duration_minutes);
-        setAuthorizedDurationMinutes(
-          Number.isFinite(serverDuration) ? serverDuration : null
-        );
-        if (authorization?.session_id) {
-          setCounselingSessionId(Number(authorization.session_id));
-        }
-
-        if (!cancelled && Number.isFinite(studentId) && studentId > 0) {
-          signalIncomingCallWake(studentId, {
-            appointment_id: Number(activeSessionId),
-            call_type: callType,
-            caller_role: "counselor",
-            status: "pending",
-          });
-        }
-
-        if (cancelled) return;
-
-        if (started) {
-          toast.success(
-            pendingCallMode === "audio"
-              ? "Audio session started - waiting for student to connect"
-              : "Session started - waiting for student to connect"
-          );
-        }
+        authorization = (await api.authorizeVideoCall(activeSessionId, {
+          call_type: requestedCallType,
+        })) as VideoCallAuthorization;
       } catch (err: unknown) {
-        if (!cancelled) {
-          const errMsg = getApiErrorMessage(err, "Failed to start session");
-          toast.error(errMsg);
+        beganSessionStartRef.current = null;
+        setPendingSessionStartId(null);
+        setPendingCallMode("video");
+        setOutgoingCallMode(null);
+        endCall();
 
-          if (
-            errMsg.toLowerCase().includes("unavailable") ||
-            errMsg.toLowerCase().includes("500") ||
-            errMsg.toLowerCase().includes("internal server error")
-          ) {
-            toast.info("You can try refreshing the page or contact support if the issue persists.");
-          }
+        if (err instanceof VideoCallAuthorizationError && err.isGlare) {
+          // Call glare: the student rang us at the same moment. Answer their invite instead
+          // of placing a second call on top of it.
+          toast.info("This student is calling you. Answer the incoming call to connect.");
+          return;
+        }
 
-          setPendingSessionStartId(null);
+        const errMsg = getApiErrorMessage(err, "Failed to start session");
+        toast.error(errMsg);
+
+        if (
+          errMsg.toLowerCase().includes("unavailable") ||
+          errMsg.toLowerCase().includes("500") ||
+          errMsg.toLowerCase().includes("internal server error")
+        ) {
+          toast.info("You can try refreshing the page or contact support if the issue persists.");
         }
         return;
       }
 
-      setPendingSessionStartId(null);
-      setPendingCallMode("video");
+      // The server resolves the media type (anonymous and audio-only bookings are forced to
+      // audio); negotiate WebRTC with the same answer so the call row and the media agree.
+      const callType: "video" | "audio" =
+        authorization?.call_type === "audio"
+          ? "audio"
+          : authorization?.call_type === "video"
+          ? "video"
+          : requestedCallType;
+
+      setPendingCallMode(callType);
+      setOutgoingCallMode(callType);
+
+      const serverDuration = Number(authorization?.max_duration_minutes);
+      setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
+      if (authorization?.session_id) {
+        setCounselingSessionId(Number(authorization.session_id));
+      }
+
+      // Best-effort browser-to-browser nudge on top of the server broadcast. It only works
+      // for identified bookings — the appointments API masks `student_id` to 0 on anonymous
+      // ones, which is exactly why the server-side signal is the authoritative path.
+      if (Number.isFinite(studentId) && studentId > 0) {
+        signalIncomingCallWake(studentId, {
+          appointment_id: Number(activeSessionId),
+          call_id: authorization?.call_id ?? undefined,
+          call_type: callType,
+          caller_role: "counselor",
+          status: "pending",
+        });
+      }
+
+      try {
+        const started = callType === "audio" ? await startAudioCall() : await startCall();
+
+        if (!started) {
+          await cancelOutgoingCall(activeSessionId);
+          return;
+        }
+
+        toast.success(
+          callType === "audio"
+            ? "Audio session started - waiting for student to connect"
+            : "Session started - waiting for student to connect"
+        );
+      } catch (err: unknown) {
+        beganSessionStartRef.current = null;
+        await cancelOutgoingCall(activeSessionId);
+        toast.error(getApiErrorMessage(err, "Failed to start session"));
+      } finally {
+        setPendingSessionStartId(null);
+      }
     };
 
     void beginSession();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     activeSessionId,
+    cancelOutgoingCall,
     isOnline,
     isSignalingReady,
     pendingCallMode,
     pendingSessionStartId,
     startAudioCall,
     startCall,
-    upcomingSessions,
   ]);
 
   const isStartingActiveSession = Boolean(
@@ -1116,29 +1250,19 @@ const CounselorVideo = () => {
                           <Badge className="rounded-full bg-background/85 px-3 py-1 text-foreground shadow-sm">
                             {remoteParticipantName}{remoteSpeaking ? " • speaking" : ""}
                           </Badge>
+                          {/* Framing only. Switching camera lives in the main control bar so
+                              it is reachable before the student's video arrives, too. */}
                           {isConnected && showRemoteVideo && (
-                            isMobile ? (
-                              <Button
-                                size="icon"
-                                variant="secondary"
-                                className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
-                                onClick={() => void flipCamera()}
-                                disabled={isAudioOnly}
-                                title="Flip camera"
-                              >
-                                <FlipHorizontal className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="icon"
-                                variant="secondary"
-                                className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
-                                onClick={() => setVideoFit(prev => prev === "cover" ? "contain" : "cover")}
-                                title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
-                              >
-                                <RefreshCw className={cn("h-3.5 w-3.5", videoFit === "contain" && "rotate-45")} />
-                              </Button>
-                            )
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-7 w-7 rounded-full bg-background/85 text-foreground shadow-sm"
+                              onClick={() => setVideoFit(prev => prev === "cover" ? "contain" : "cover")}
+                              title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                              aria-label={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                            >
+                              <RefreshCw className={cn("h-3.5 w-3.5", videoFit === "contain" && "rotate-45")} />
+                            </Button>
                           )}
                         </div>
 
@@ -1206,6 +1330,26 @@ const CounselorVideo = () => {
                   >
                     {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
                   </Button>
+                  {/* Offered whenever the device actually has a second camera, rather than
+                      only to anything with a mobile user agent — a counselor on a laptop with
+                      an external webcam had no way to switch at all. */}
+                  {canFlipCamera && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="h-11 w-11 sm:h-14 sm:w-14 rounded-full"
+                      onClick={handleFlipCamera}
+                      disabled={!localStream || isAudioOnly || isVideoOff || isFlippingCamera}
+                      title="Switch camera"
+                      aria-label="Switch camera"
+                    >
+                      {isFlippingCamera ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <FlipHorizontal className="h-5 w-5" />
+                      )}
+                    </Button>
+                  )}
                   {canEndActiveSession && (
                     <Button
                       variant="destructive"
@@ -1214,7 +1358,9 @@ const CounselorVideo = () => {
                       onClick={handleEndCall}
                     >
                       <Phone className="mr-2 h-5 w-5 rotate-[135deg]" />
-                      End session
+                      {/* Hangs up the call. The booked session stays open and can be
+                          restarted — it is not the same thing as completing the appointment. */}
+                      End call
                     </Button>
                   )}
                 </div>

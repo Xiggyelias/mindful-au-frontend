@@ -71,7 +71,11 @@ function bumpStreak(): number {
   const today = todayIso();
   const { lastDate, streak } = getMoodStreakData();
   const next = lastDate === today ? streak : lastDate === yesterdayIso() ? streak + 1 : 1;
-  try { localStorage.setItem(MOOD_STREAK_KEY, JSON.stringify({ lastDate: today, streak: next })); } catch {}
+  try {
+    localStorage.setItem(MOOD_STREAK_KEY, JSON.stringify({ lastDate: today, streak: next }));
+  } catch {
+    /* ignore */
+  }
   return next;
 }
 
@@ -99,7 +103,6 @@ const StudentDashboard = () => {
     label: string | null;
   }>({ trend: null, label: null });
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [, setStatsLoading] = useState(false);
   const { user } = useAuth();
   const {
     tip: dailyTip,

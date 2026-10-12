@@ -32,8 +32,6 @@ export type StudentIncomingCallItem = {
   created_at?: string | null;
 };
 
-type DismissReason = "declined" | "timeout";
-
 export function StudentIncomingCallBanner({
   enabled,
   onActiveChange,
@@ -68,11 +66,13 @@ export function StudentIncomingCallBanner({
         body: `${displayName} is calling you`,
       };
     },
+    // The overlay timing out is a missed call, not a rejection — reporting it as
+    // "declined" told the counselor the student had turned them away.
     onAutoDismissCall: async (call) => {
       try {
-        await api.updateStudentIncomingCall(call.id, "declined");
+        await api.updateStudentIncomingCall(call.id, "missed");
       } catch {
-        /* ignore */
+        /* the server sweeps expired rings on its own */
       }
     },
   });
@@ -116,13 +116,13 @@ export function StudentIncomingCallBanner({
     }
   };
 
-  const handleDecline = async (call: StudentIncomingCallItem, reason: DismissReason) => {
+  /** An explicit rejection. Ring timeouts go through `onAutoDismissCall` as `missed`. */
+  const handleDecline = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
     try {
       logCallSignal("student: call declined", {
         call_id: call.id,
         appointment_id: call.appointment_id,
-        reason,
       });
       await api.updateStudentIncomingCall(call.id, "declined");
       removeCallLocal(call.id);
@@ -161,7 +161,7 @@ export function StudentIncomingCallBanner({
         call={overlayCall}
         busy={busyId === call.id}
         onAccept={() => void handleAccept(call)}
-        onDecline={() => void handleDecline(call, "declined")}
+        onDecline={() => void handleDecline(call)}
       />
     );
   }
@@ -245,7 +245,7 @@ export function StudentIncomingCallBanner({
                   variant="destructive"
                   className="gap-1.5 rounded-full font-semibold"
                   disabled={busyId === call.id}
-                  onClick={() => void handleDecline(call, "declined")}
+                  onClick={() => void handleDecline(call)}
                 >
                   <PhoneOff className="h-4 w-4" aria-hidden />
                   Decline

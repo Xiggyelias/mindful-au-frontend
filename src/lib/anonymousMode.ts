@@ -61,6 +61,13 @@ export function isProfileAnonymousMode(value: unknown): boolean {
   return isAnonymousSessionFlag(value);
 }
 
+/**
+ * The one label a counselor sees in place of an anonymous student's name.
+ *
+ * Every counselor-facing surface — appointment lists, video queue, ring banner, ring overlay
+ * — must use this. The backend masks to the same string, so a student who is masked in one
+ * place is never named differently in another.
+ */
 export const ANONYMOUS_DISPLAY_NAME_COUNSELOR = "Anonymous User" as const;
 
 /** Counselor-facing list: fixed label (server may mask `anonymous_id`). */

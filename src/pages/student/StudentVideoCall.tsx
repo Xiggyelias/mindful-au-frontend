@@ -28,7 +28,12 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { deriveCallStatus } from "@/lib/callState";
 import type { Appointment } from "@/hooks/useChatSession";
-import { api, getApiErrorMessage } from "@/lib/api";
+import {
+  api,
+  getApiErrorMessage,
+  VideoCallAuthorizationError,
+  type VideoCallAuthorization,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   formatCallDuration,
@@ -59,11 +64,6 @@ import { studentNavItems } from "@/config/studentNavItems";
 import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 
 type CallMode = "video" | "audio";
-
-const isMobileOrTablet = () =>
-  typeof navigator !== "undefined" &&
-  (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
 
 const getParticipantName = (
   participant: { profile?: { full_name?: string }; email?: string } | null | undefined,
@@ -105,6 +105,7 @@ const StudentVideoCall = () => {
   const [isStartingMode, setIsStartingMode] = useState<CallMode | null>(null);
   const [outgoingCallMode, setOutgoingCallMode] = useState<CallMode | null>(null);
   const [videoFit, setVideoFit] = useState<"cover" | "fit">("cover");
+  const [isFlippingCamera, setIsFlippingCamera] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimerRef = useRef<number | null>(null);
 
@@ -143,6 +144,7 @@ const StudentVideoCall = () => {
     isSignalingReady,
     isAudioOnly,
     isLocalVideoEnabled,
+    canFlipCamera,
     error,
     isRelayError,
     notice,
@@ -164,8 +166,6 @@ const StudentVideoCall = () => {
     acceptIncomingCall,
     rejectIncomingCall,
   } = useWebRTC(sessionId, user?.id?.toString() || "");
-
-  const isMobile = isMobileOrTablet();
 
   useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
@@ -500,6 +500,21 @@ const StudentVideoCall = () => {
     void toggleVideo();
   };
 
+  const handleFlipCamera = useCallback(async () => {
+    if (isFlippingCamera) return;
+    setIsFlippingCamera(true);
+    try {
+      // Re-opening a camera takes a moment and can fail (busy device, permission revoked for
+      // the other lens), so say so rather than leaving the picture unchanged with no reason.
+      const switched = await flipCamera();
+      if (!switched) {
+        toast.error("Could not switch camera. It may be in use by another app.");
+      }
+    } finally {
+      setIsFlippingCamera(false);
+    }
+  }, [flipCamera, isFlippingCamera]);
+
   const handleToggleAnonymousMode = async () => {
     if (isUpdatingAnonymousMode) return;
     await toggleProfileAnonymousMode(!profileAnonymousMode);
@@ -537,23 +552,58 @@ const StudentVideoCall = () => {
     );
   }, []);
 
+  /**
+   * Tell the server the call ended, and drop the slot from the queue only if the session is
+   * actually over.
+   *
+   * `session_still_open` is the server's answer to "can this slot be called again?". While it
+   * is true the appointment stays in the queue so a dropped or hung-up call can be redialled
+   * for the rest of the booked window. Returns that flag so callers can word their feedback
+   * correctly.
+   */
   const finalizeEndedAppointment = useCallback(
-    async (appointmentIdToEnd: string) => {
+    async (appointmentIdToEnd: string): Promise<boolean> => {
+      let sessionStillOpen = false;
       try {
         const result = await api.endVideoCall(appointmentIdToEnd);
-        if (
-          result?.appointment_status === "completed" ||
-          result?.status === "completed"
-        ) {
+        sessionStillOpen = Boolean(result?.session_still_open);
+        if (!sessionStillOpen && result?.appointment_status === "completed") {
           removeAppointmentFromQueue(appointmentIdToEnd);
         }
       } catch {
-        // Best-effort cleanup for the server-side session.
+        // Best-effort cleanup for the server-side session. Keep the slot listed: assuming the
+        // session is over on a failed request would hide a call the student can still make.
+        sessionStillOpen = true;
       } finally {
         void loadUpcomingVideoAppointments();
       }
+      return sessionStillOpen;
     },
     [loadUpcomingVideoAppointments, removeAppointmentFromQueue]
+  );
+
+  /**
+   * Withdraw an outgoing call we placed but never connected.
+   *
+   * The server row is what keeps the counselor's device ringing and both participants
+   * marked busy, so abandoning a ring locally is not enough — without this the callee keeps
+   * ringing at a caller who has already given up, and the next attempt is refused as busy
+   * until the row expires.
+   */
+  const cancelOutgoingCall = useCallback(
+    async (appointmentIdToCancel: string) => {
+      endCall();
+      setIsStartingMode(null);
+      setOutgoingCallMode(null);
+      setAuthorizedDurationMinutes(null);
+      try {
+        await api.cancelVideoCall(appointmentIdToCancel);
+      } catch {
+        // Idempotent on the server, and it sweeps stale rings on its own — a failure here
+        // only delays the cleanup.
+      }
+    },
+    [endCall]
   );
 
   const beginCall = useCallback(
@@ -588,57 +638,108 @@ const StudentVideoCall = () => {
         return;
       }
 
-      const effectiveMode: CallMode = isAppointmentAudioOnly(activeAppointment) ? "audio" : mode;
-      setIsStartingMode(effectiveMode);
-      setOutgoingCallMode(effectiveMode);
+      setIsStartingMode(mode);
 
+      // Revealing lifts the anonymous audio-only restriction, so the mode has to be derived
+      // from the row as it stands *after* the reveal — the pre-reveal copy still reads
+      // audio-only and would ask the server for an audio call we no longer want.
+      let callRow: typeof activeAppointment = activeAppointment;
       if (
         isAnonymousBookingForParticipant(activeAppointment) &&
         !isProfileAnonymousMode(user?.profile?.anonymous_mode)
       ) {
         try {
-          await api.revealAppointmentIdentity(activeAppointmentId);
+          const revealed = await api.revealAppointmentIdentity(activeAppointmentId);
+          if (revealed?.appointment) {
+            callRow = revealed.appointment as typeof activeAppointment;
+          }
           await loadUpcomingVideoAppointments();
         } catch {
           /* authorize will still enforce server rules */
         }
       }
 
+      const requestedEffectiveMode: CallMode = isAppointmentAudioOnly(callRow) ? "audio" : mode;
+      setIsStartingMode(requestedEffectiveMode);
+
+      const counselorId = Number(activeAppointment.counselor_id);
+
+      // Authorize BEFORE touching WebRTC. The server call row is what actually rings the
+      // recipient (realtime signal + web push + their polling), so starting the local
+      // ringback first meant a failed authorize left this side ringing out at a recipient
+      // who was never told anything — the caller hears a ring, the callee sees nothing.
+      let authorization: VideoCallAuthorization;
       try {
-        const counselorId = Number(activeAppointment.counselor_id);
-        const [authorization, started] = await Promise.all([
-          api.authorizeVideoCall(activeAppointmentId, { call_type: effectiveMode }),
-          effectiveMode === "audio" ? startAudioCall() : startCall(),
-        ]);
-        const serverDuration = Number(authorization?.max_duration_minutes);
-        setAuthorizedDurationMinutes(
-          Number.isFinite(serverDuration) ? serverDuration : null
-        );
+        authorization = (await api.authorizeVideoCall(activeAppointmentId, {
+          call_type: requestedEffectiveMode,
+        })) as VideoCallAuthorization;
+      } catch (authorizeError: unknown) {
+        setIsStartingMode(null);
+        endCall();
 
-        if (Number.isFinite(counselorId) && counselorId > 0) {
-          signalIncomingCallWake(counselorId, {
-            appointment_id: Number(activeAppointmentId),
-            call_type: effectiveMode,
-            caller_role: "student",
-            status: "pending",
-          });
+        if (authorizeError instanceof VideoCallAuthorizationError && authorizeError.isGlare) {
+          // Call glare: the counselor rang us at the same instant. Their invite is already
+          // on its way to this page's overlay and to the global ring host — answer that
+          // instead of dialing over it.
+          toast.info("Your counselor is calling you. Answer the incoming call to connect.");
+          return;
         }
 
-        if (started) {
-          toast.success(
-            effectiveMode === "audio"
-              ? "Audio call started. Waiting for your counselor."
-              : "Video call started. Waiting for your counselor."
-          );
-        }
-      } catch (startError: unknown) {
-        const errorMessage = getApiErrorMessage(startError, "Failed to start the call");
+        const errorMessage = getApiErrorMessage(authorizeError, "Failed to start the call");
         toast.error(errorMessage);
-        
-        // If it's a server error, provide a helpful fallback
         if (errorMessage.includes("temporarily unavailable") || errorMessage.includes("500")) {
           toast.info("You can try refreshing the page or contact support if the issue persists.");
         }
+        return;
+      }
+
+      // The server has the final say on media type (anonymous and audio-only bookings are
+      // forced to audio). Negotiating video against an audio call row would leave the two
+      // sides disagreeing about the session.
+      const effectiveMode: CallMode =
+        authorization?.call_type === "audio"
+          ? "audio"
+          : authorization?.call_type === "video"
+          ? "video"
+          : requestedEffectiveMode;
+
+      setIsStartingMode(effectiveMode);
+      setOutgoingCallMode(effectiveMode);
+
+      const serverDuration = Number(authorization?.max_duration_minutes);
+      setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
+
+      // Best-effort browser-to-browser nudge alongside the server's own broadcast, sent as
+      // soon as the call row exists rather than after media negotiation.
+      if (Number.isFinite(counselorId) && counselorId > 0) {
+        signalIncomingCallWake(counselorId, {
+          appointment_id: Number(activeAppointmentId),
+          call_id: authorization?.call_id ?? undefined,
+          call_type: effectiveMode,
+          caller_role: "student",
+          status: "pending",
+        });
+      }
+
+      try {
+        const started = effectiveMode === "audio" ? await startAudioCall() : await startCall();
+
+        if (!started) {
+          // The ring row exists on the server but this side never got onto the media
+          // channel. Cancel it so the counselor's device stops ringing for a call that
+          // cannot connect, and so neither party is left marked busy.
+          await cancelOutgoingCall(activeAppointmentId);
+          return;
+        }
+
+        toast.success(
+          effectiveMode === "audio"
+            ? "Audio call started. Waiting for your counselor."
+            : "Video call started. Waiting for your counselor."
+        );
+      } catch (startError: unknown) {
+        await cancelOutgoingCall(activeAppointmentId);
+        toast.error(getApiErrorMessage(startError, "Failed to start the call"));
       } finally {
         setIsStartingMode(null);
       }
@@ -646,6 +747,7 @@ const StudentVideoCall = () => {
     [
       activeAppointment,
       activeAppointmentId,
+      cancelOutgoingCall,
       isOnline,
       isSignalingReady,
       loadUpcomingVideoAppointments,
@@ -703,11 +805,17 @@ const StudentVideoCall = () => {
       });
     }
 
-    if (appointmentIdToEnd) {
-      await finalizeEndedAppointment(appointmentIdToEnd);
+    if (!appointmentIdToEnd) {
+      toast.info("Call ended");
+      return;
     }
 
-    toast.info("Call ended");
+    const sessionStillOpen = await finalizeEndedAppointment(appointmentIdToEnd);
+    toast.info(
+      sessionStillOpen
+        ? "Call ended. Your session is still booked — you can start the call again."
+        : "Call ended"
+    );
   };
 
   useEffect(() => {
@@ -756,6 +864,32 @@ const StudentVideoCall = () => {
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
+
+  /**
+   * Release the server-side ring when an outgoing call we placed stops ringing without
+   * connecting — the WebRTC layer's own 45s "no one answered" timeout fires locally only.
+   * Left behind, that pending row keeps the counselor's device ringing and refuses the next
+   * attempt as busy.
+   */
+  const ringingOutAppointmentRef = useRef<string | null>(null);
+  useEffect(() => {
+    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+
+    if (isRingingOut) {
+      ringingOutAppointmentRef.current = activeAppointmentId;
+      return;
+    }
+
+    const abandoned = ringingOutAppointmentRef.current;
+    ringingOutAppointmentRef.current = null;
+
+    // Connecting through to media is a success, not an abandoned ring.
+    if (!abandoned || localStream || isConnected) {
+      return;
+    }
+
+    void cancelOutgoingCall(abandoned);
+  }, [activeAppointmentId, cancelOutgoingCall, isConnected, isConnecting, localStream, outgoingCallMode]);
 
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
@@ -1225,28 +1359,37 @@ const StudentVideoCall = () => {
                                   {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
                                 </Button>
 
-                                {isMobile ? (
+                                {/* Offered whenever the device actually has a second camera,
+                                    not just when the user agent looks like a phone — a laptop
+                                    with an external webcam can switch too. */}
+                                {canFlipCamera && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
                                     className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
-                                    onClick={() => void flipCamera()}
-                                    disabled={!localStream || isAudioOnly}
-                                    title="Flip camera"
+                                    onClick={handleFlipCamera}
+                                    disabled={!localStream || isAudioOnly || isVideoOff || isFlippingCamera}
+                                    title="Switch camera"
+                                    aria-label="Switch camera"
                                   >
-                                    <FlipHorizontal className="h-6 w-6" />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
-                                    onClick={() => setVideoFit(videoFit === "cover" ? "fit" : "cover")}
-                                    title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
-                                  >
-                                    <RefreshCw className={cn("h-6 w-6 transition-transform duration-500", videoFit === "fit" && "rotate-180")} />
+                                    {isFlippingCamera ? (
+                                      <Loader2 className="h-6 w-6 animate-spin" />
+                                    ) : (
+                                      <FlipHorizontal className="h-6 w-6" />
+                                    )}
                                   </Button>
                                 )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
+                                  onClick={() => setVideoFit(videoFit === "cover" ? "fit" : "cover")}
+                                  title={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                                  aria-label={videoFit === "cover" ? "Fit to frame" : "Fill frame"}
+                                >
+                                  <RefreshCw className={cn("h-6 w-6 transition-transform duration-500", videoFit === "fit" && "rotate-180")} />
+                                </Button>
 
                                 <Button
                                   variant="destructive"

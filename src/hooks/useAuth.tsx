@@ -1,75 +1,27 @@
-import { useState, useEffect, createContext, useContext, ReactNode, useRef } from "react";
+import { useState, useEffect, ReactNode, useRef } from "react";
 import { api, AUTH_EXPIRED_EVENT, getApiErrorMessage } from "@/lib/api";
+import {
+  AuthContext,
+  DEFAULT_TWO_FACTOR_STATE,
+  useAuth,
+  type AppRole,
+  type AuthContextType,
+  type AuthResult,
+  type LoginPortal,
+  type TwoFactorState,
+  type User,
+} from "@/hooks/authContext";
 
-type AppRole = "admin" | "counselor" | "peer_counselor" | "student";
-type LoginPortal = "student" | "counselor" | "admin";
 const PRESENCE_PING_INTERVAL_MS = 20 * 1000;
 const PRESENCE_MIN_GAP_MS = 10 * 1000;
-const DEFAULT_TWO_FACTOR_STATE = {
-  enabled: false,
-  required: false,
-  setupRequired: false,
-  verified: false,
-  tokenVerified: false,
-};
 
-type TwoFactorState = typeof DEFAULT_TWO_FACTOR_STATE;
-
-interface User {
-  id: number;
-  email: string;
-  needs_assessment?: boolean;
-  profile?: {
-    full_name?: string;
-    id_number?: string;
-    avatar_url?: string;
-    anonymous_mode?: boolean;
-  };
-  roles?: Array<{
-    role: AppRole;
-    approved: boolean;
-  }>;
-}
-
-interface AuthResult {
-  error: Error | null;
-  user?: User | null;
-  role?: AppRole | null;
-  twoFactorRequired?: boolean;
-  twoFactorSetupRequired?: boolean;
-}
-
-interface AuthContextType {
-  user: User | null;
-  role: AppRole | null;
-  twoFactor: TwoFactorState;
-  isLoading: boolean;
-  signInWithGoogle: (portal?: LoginPortal) => Promise<{ error: Error | null }>;
-  signInWithEmail: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-    idNumber: string,
-    role: AppRole
-  ) => Promise<AuthResult>;
-  completeOAuthLogin: (token: string) => Promise<AuthResult>;
-  completeOAuthLoginWithTicket: (ticket: string) => Promise<AuthResult>;
-  refreshUser: () => Promise<void>;
-  /** Clears needs_assessment locally after a successful check-in submit (server sync via refreshUser). */
-  markAssessmentComplete: () => void;
-  refreshTwoFactorStatus: () => Promise<TwoFactorState>;
-  setupTwoFactor: () => Promise<{
-    secret: string;
-    otpauth_uri: string;
-    configured: boolean;
-    verified: boolean;
-  }>;
-  verifyTwoFactor: (code: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+/**
+ * Re-exported so the ~50 existing `import { useAuth } from "@/hooks/useAuth"` call sites keep
+ * working. The hook and the context itself live in `authContext.ts`, outside this module's
+ * Fast Refresh boundary — see the comment there for why that separation matters.
+ */
+export { useAuth };
+export type { AppRole, AuthContextType, AuthResult, LoginPortal, TwoFactorState, User };
 
 const resolveRole = (user: User | null) => {
   if (!user?.roles?.length) {
@@ -565,12 +517,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
 };

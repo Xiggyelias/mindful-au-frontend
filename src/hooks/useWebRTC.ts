@@ -21,6 +21,8 @@ interface WebRTCState {
   isSignalingReady: boolean;
   isAudioOnly: boolean;
   isLocalVideoEnabled: boolean;
+  /** This device has more than one camera, so switching between them is possible. */
+  canFlipCamera: boolean;
   error: string | null;
   isRelayError: boolean;
   notice: string | null;
@@ -128,6 +130,8 @@ type WebRTCEngine = {
   reconnectDeadlineMs: number | null;
   reconnectIntervalId: number | null;
   currentFacingMode: "user" | "environment";
+  /** deviceId of the camera currently in use, for cycling on hardware without facingMode. */
+  currentVideoDeviceId: string | null;
 };
 
 const DEFAULT_ENGINE_STATE: WebRTCState = {
@@ -143,6 +147,7 @@ const DEFAULT_ENGINE_STATE: WebRTCState = {
   isSignalingReady: false,
   isAudioOnly: false,
   isLocalVideoEnabled: false,
+  canFlipCamera: false,
   error: null,
   isRelayError: false,
   notice: null,
@@ -188,6 +193,7 @@ const engine: WebRTCEngine = {
   reconnectDeadlineMs: null,
   reconnectIntervalId: null,
   currentFacingMode: "user",
+  currentVideoDeviceId: null,
 };
 
 const ACTIVE_CALL_STORAGE_KEY = "mindful.activeCall";
@@ -289,6 +295,35 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
   }
 
   return "Could not access camera or microphone. Check device permissions and try again.";
+};
+
+/** Cameras attached to this device, in enumeration order. Empty until permission is granted. */
+const listVideoInputDevices = async (): Promise<MediaDeviceInfo[]> => {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+    return [];
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((device) => device.kind === "videoinput");
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Refresh whether a camera switch is offered at all.
+ *
+ * Driven by the hardware rather than a user-agent sniff: the control used to be shown only to
+ * anything matching a mobile UA string, so a laptop with a built-in and an external webcam had
+ * no way to switch, while a phone with a single camera was offered a button that did nothing.
+ */
+const refreshEngineCameraCapability = async (): Promise<void> => {
+  const cameras = await listVideoInputDevices();
+  const canFlip = cameras.length > 1;
+  if (engine.state.canFlipCamera === canFlip) {
+    return;
+  }
+  setEngineState((prev) => ({ ...prev, canFlipCamera: canFlip }));
 };
 
 const normalizeId = (id: string | number | null | undefined): string => {
@@ -1550,6 +1585,26 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     };
   }, []);
 
+  // Whether a camera switch is possible depends on the hardware, and the answer changes:
+  // enumerateDevices() hides device labels and sometimes entries until camera permission is
+  // granted, and cameras get plugged in and unplugged mid-call. Re-check on mount, whenever
+  // the local stream changes (permission has just been granted), and on devicechange.
+  useEffect(() => {
+    void refreshEngineCameraCapability();
+
+    const mediaDevices = typeof navigator === "undefined" ? null : navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) {
+      return;
+    }
+    const onDeviceChange = () => {
+      void refreshEngineCameraCapability();
+    };
+    mediaDevices.addEventListener("devicechange", onDeviceChange);
+    return () => {
+      mediaDevices.removeEventListener("devicechange", onDeviceChange);
+    };
+  }, [state.localStream]);
+
   // Broadcast call-ended when the user closes or navigates away from the tab mid-call.
   // pagehide is more reliable than beforeunload (handles bfcache, mobile browsers).
   // Both are registered for maximum coverage. The channel.send() is fire-and-forget —
@@ -1580,8 +1635,6 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   const startCall = useCallback(
     async (options: StartCallOptions = {}) => {
-      const currentState = engine.state;
-
       if (!sessionId) {
         setEngineConnectionError("Select a session before starting a call.");
         return false;
@@ -1598,6 +1651,13 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
 
       ensureEngineChannel(sessionId, userId);
+
+      // Read the state *after* ensuring the channel. ensureEngineChannel resets
+      // isSignalingReady to false when it has to (re)subscribe, and a snapshot taken before
+      // the call could still say "ready" — we would then broadcast call-request onto a
+      // channel nobody is subscribed to yet. The frame is dropped, so this side rings out
+      // while the recipient is never told about the call at all.
+      const currentState = engine.state;
       if (!engine.channel || !currentState.isSignalingReady) {
         setEngineConnectionError("Call channel is not ready yet. Please try again.");
         return false;
@@ -1841,26 +1901,70 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     if (videoTracks.length === 0) return false;
 
     const nextFacingMode = engine.currentFacingMode === "user" ? "environment" : "user";
+    const activeDeviceId =
+      engine.currentVideoDeviceId || videoTracks[0].getSettings().deviceId || null;
+
+    const resolution = {
+      width: { ideal: engine.lowBandwidthMode ? 640 : 1280 },
+      height: { ideal: engine.lowBandwidthMode ? 360 : 720 },
+      frameRate: {
+        ideal: engine.lowBandwidthMode ? 15 : 24,
+        max: engine.lowBandwidthMode ? 20 : 30,
+      },
+    };
+
+    /**
+     * The next camera by device id, for hardware that does not report facingMode — desktops
+     * and laptops with a second webcam, and some tablets. facingMode alone silently returned
+     * the same camera there, so the button appeared to do nothing.
+     */
+    const openNextDeviceById = async (): Promise<MediaStream | null> => {
+      const cameras = await listVideoInputDevices();
+      if (cameras.length < 2) {
+        return null;
+      }
+      const currentIndex = cameras.findIndex((camera) => camera.deviceId === activeDeviceId);
+      const next = cameras[(currentIndex + 1 + cameras.length) % cameras.length];
+      if (!next || (activeDeviceId && next.deviceId === activeDeviceId)) {
+        return null;
+      }
+      return navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: next.deviceId }, ...resolution },
+        audio: false,
+      });
+    };
 
     try {
-      let newStream: MediaStream;
+      let newStream: MediaStream | null = null;
       try {
         newStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { exact: nextFacingMode },
-            width: { ideal: engine.lowBandwidthMode ? 640 : 1280 },
-            height: { ideal: engine.lowBandwidthMode ? 360 : 720 },
-            frameRate: { ideal: engine.lowBandwidthMode ? 15 : 24, max: engine.lowBandwidthMode ? 20 : 30 },
-          },
+          video: { facingMode: { exact: nextFacingMode }, ...resolution },
           audio: false,
         });
       } catch {
-        // Exact facingMode failed (some devices don't report it) — try with ideal
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextFacingMode },
-          audio: false,
-        });
+        // No camera reports the requested facing mode. Cycle by device id instead, and only
+        // fall back to a loose facingMode hint if there is nothing to cycle to.
+        newStream = await openNextDeviceById();
+        if (!newStream) {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: nextFacingMode, ...resolution },
+            audio: false,
+          });
+        }
       }
+
+      // Exact facingMode can still hand back the camera already in use (a single-camera
+      // device that reports both modes). Treat that as "not switched" and cycle instead.
+      const openedDeviceId = newStream?.getVideoTracks()[0]?.getSettings().deviceId || null;
+      if (newStream && activeDeviceId && openedDeviceId === activeDeviceId) {
+        const cycled = await openNextDeviceById();
+        if (cycled) {
+          newStream.getTracks().forEach((t) => t.stop());
+          newStream = cycled;
+        }
+      }
+
+      if (!newStream) return false;
 
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) {
@@ -1893,6 +1997,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       }
 
       engine.currentFacingMode = nextFacingMode;
+      engine.currentVideoDeviceId = newVideoTrack.getSettings().deviceId || null;
       setEngineState((prev) => ({
         ...prev,
         localStream: stream,

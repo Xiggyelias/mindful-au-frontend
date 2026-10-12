@@ -1,3 +1,5 @@
+import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+
 export const VIDEO_CALL_LIMITS = {
   minDurationMinutes: 15,
   maxDurationMinutes: 120,
@@ -5,6 +7,14 @@ export const VIDEO_CALL_LIMITS = {
   joinEarlyMinutes: 15,
   joinLateGraceMinutes: 15,
   connectionTimeoutMs: 45_000,
+  /**
+   * How long an unanswered call rings before it counts as missed. Must match
+   * `CallCoordinator::RING_TTL_SECONDS` on the backend: the countdown ring on the incoming
+   * overlay, the timer that dismisses it, and the server's own expiry all describe the same
+   * deadline, and a shorter client timeout would report "declined" for calls the server was
+   * still ringing.
+   */
+  ringTimeoutMs: 45_000,
 } as const;
 
 const DEFAULT_STUN_SERVERS = [
@@ -144,25 +154,33 @@ export const prefersAudioOnlyOnlineCall = (notes?: string | null): boolean => {
   return (notes || "").trim().toLowerCase().startsWith("online audio");
 };
 
+export type AppointmentCallMediaInput = {
+  is_anonymous?: unknown;
+  call_type?: string | null;
+  notes?: string | null;
+};
+
 /**
- * Audio-only WebRTC for this appointment: explicit `call_type` audio, legacy "Online audio" notes.
+ * Audio-only WebRTC for this appointment: an anonymous booking, an explicit `call_type` of
+ * audio, or legacy "Online audio" notes.
+ *
+ * Anonymity is checked first and on its own. The backend forces anonymous online appointments
+ * to audio, but a row whose flag and format have drifted apart — anonymous while `notes` still
+ * read "Online" — must still be treated as audio here. Reading only `notes`/`call_type` let
+ * such a row negotiate video against a call the server had recorded as audio, so the two
+ * participants disagreed about the session they were in.
  */
-export const isAppointmentAudioOnly = (
-  apt?: { is_anonymous?: boolean; call_type?: string | null; notes?: string | null } | null
-): boolean => {
+export const isAppointmentAudioOnly = (apt?: AppointmentCallMediaInput | null): boolean => {
   if (!apt) {
     return false;
+  }
+  if (isAnonymousSessionFlag(apt.is_anonymous)) {
+    return true;
   }
   if (String(apt.call_type || "").toLowerCase() === "audio") {
     return true;
   }
   return prefersAudioOnlyOnlineCall(apt.notes);
-};
-
-export type AppointmentCallMediaInput = {
-  is_anonymous?: unknown;
-  call_type?: string | null;
-  notes?: string | null;
 };
 
 /**

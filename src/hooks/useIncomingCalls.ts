@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { effectiveWebRtcCallMode } from "@/lib/videoCall";
+import { effectiveWebRtcCallMode, VIDEO_CALL_LIMITS } from "@/lib/videoCall";
 import {
   startCallRingtone,
   stopCallRingtone,
@@ -7,12 +7,17 @@ import {
 } from "@/lib/sounds/notificationSoundManager";
 import { subscribeIncomingCallWake, type IncomingCallWakePayload } from "@/lib/incomingCallRealtime";
 
-const POLL_ACTIVE_MS = 30_000;
+const POLL_ACTIVE_MS = 4_000;
 const POLL_HIDDEN_MS = 90_000;
 const POLL_BACKOFF_INITIAL_MS = 60_000;
 const POLL_BACKOFF_MAX_MS = 5 * 60_000;
 const POLL_JITTER_MAX_MS = 5_000;
-const AUTO_DISMISS_MS = 30_000;
+/**
+ * Give up on the ring at the same moment the server does. A shorter window here used to
+ * dismiss the overlay 15s early and mark the call `declined`, so a caller whose ring simply
+ * ran out was told the other party had rejected them.
+ */
+const AUTO_DISMISS_MS = VIDEO_CALL_LIMITS.ringTimeoutMs;
 const TAB_FLASH_MS = 1_000;
 const CALLS_LEADER_KEY = "mindful:incoming-calls-leader";
 const CALLS_RATE_LIMIT_KEY = "mindful:incoming-calls-rate-limit";
@@ -233,7 +238,8 @@ export function useIncomingCalls<T extends IncomingCallBase>({
       isLeaderTabRef.current = false;
       return;
     }
-    if (leaderIsStale || leader?.id === tabIdRef.current) {
+    // Focused tab or stale leader claims leadership so active view always polls
+    if (leaderIsStale || leader?.id === tabIdRef.current || (typeof document !== "undefined" && document.hasFocus())) {
       writeCallsLeader({ id: tabIdRef.current, ts: now });
       isLeaderTabRef.current = true;
       return;
@@ -267,14 +273,16 @@ export function useIncomingCalls<T extends IncomingCallBase>({
         );
         return;
       }
+      const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
       if (options?.urgent) {
         evaluateCallsLeadership();
         const leader = readCallsLeader();
         const leaderIsStale = !leader || Date.now() - leader.ts > CALLS_LEADER_STALE_MS;
-        if (!isLeaderTabRef.current && !leaderIsStale) return;
+        // On urgent wake (call incoming right now), any visible tab must fetch immediately
+        if (!isLeaderTabRef.current && !leaderIsStale && !isVisible) return;
         if (Date.now() < backoffUntilRef.current) return;
       } else {
-        if (!isLeaderTabRef.current) return;
+        if (!isLeaderTabRef.current && !isVisible) return;
         if (Date.now() < backoffUntilRef.current) return;
       }
       if (fetchInFlightRef.current) {

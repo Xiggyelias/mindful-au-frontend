@@ -105,10 +105,7 @@ const isLikelyViteDevOrigin = (): boolean => {
     return false;
   }
 
-  return (
-    LOCAL_HOST_PATTERN.test(window.location.hostname)
-    && VITE_DEV_SERVER_PORTS.has(String(window.location.port || ''))
-  );
+  return LOCAL_HOST_PATTERN.test(window.location.hostname);
 };
 
 const parseContentDispositionFilename = (headerValue: unknown): string | null => {
@@ -242,7 +239,18 @@ export const isApiNetworkError = (error: unknown): boolean => {
     return true;
   }
 
-  return (error as { response?: unknown })?.response == null && message.trim() !== '';
+  // A missing `response` only means "unreachable" for a request that actually went out and
+  // came back with nothing — i.e. an axios error. Treating *every* response-less Error as a
+  // network failure meant any hand-thrown error (the video-call authorize wrappers throw
+  // plain Errors carrying the server's own explanation) was reported to the user as
+  // "Cannot reach the server right now", burying the real reason the call would not start.
+  const isTransportError = Boolean(
+    (error as { isAxiosError?: unknown })?.isAxiosError ||
+      (error as { config?: unknown })?.config ||
+      (error as { request?: unknown })?.request
+  );
+
+  return isTransportError && (error as { response?: unknown })?.response == null;
 };
 
 const isTimeoutError = (error: unknown): boolean => {
@@ -296,6 +304,50 @@ export const getApiErrorMessage = (
   }
 
   return fallback;
+};
+
+/**
+ * Why `/video-calls/authorize` refused to open the call.
+ *
+ * `reason` mirrors the backend's own vocabulary (`busy`, `incoming_call`) so the caller can
+ * tell a real failure apart from call glare — two participants dialling the same appointment
+ * at the same moment, where the right move is to answer the ring already on screen.
+ */
+export class VideoCallAuthorizationError extends Error {
+  readonly status: number | null;
+
+  readonly reason: string | null;
+
+  constructor(message: string, details: { status: number | null; reason: string | null }) {
+    super(message);
+    this.name = 'VideoCallAuthorizationError';
+    this.status = details.status;
+    this.reason = details.reason;
+  }
+
+  /** The other participant is already ringing us for this appointment — answer, don't dial. */
+  get isGlare(): boolean {
+    return this.status === 409 && this.reason === 'incoming_call';
+  }
+
+  /** Either side is tied up in another call. */
+  get isBusy(): boolean {
+    return this.status === 409 && this.reason === 'busy';
+  }
+}
+
+/** Successful `/video-calls/authorize` payload. */
+export type VideoCallAuthorization = {
+  appointment_id: number;
+  session_id: number;
+  channel: string;
+  max_duration_minutes: number;
+  call_id: number | null;
+  /** Server-resolved media type. Anonymous and audio-only bookings are forced to `audio`. */
+  call_type: 'video' | 'audio';
+  caller_role: 'student' | 'counselor' | null;
+  is_anonymous: boolean;
+  call_state: 'CALLING' | null;
 };
 
 class ApiClient {
@@ -1737,44 +1789,55 @@ class ApiClient {
 
       const ensureMessage = (msg: string) => (msg.trim() !== '' ? msg.trim() : 'Failed to authorize video call');
 
+      // Callers need to branch on *why* authorization failed (a glare 409 is a normal
+      // race that should hand over to the incoming-call overlay, not an error to retry),
+      // so keep the status and the server's machine-readable reason on the thrown error
+      // instead of collapsing everything into a message string.
+      const fail = (message: string): never => {
+        throw new VideoCallAuthorizationError(ensureMessage(message), {
+          status: Number.isFinite(status) && status > 0 ? status : null,
+          reason:
+            typeof error.response?.data?.reason === 'string'
+              ? error.response.data.reason
+              : null,
+        });
+      };
+
       if (status === 500 || status === 502 || status === 503 || status === 504) {
-        throw new Error(
-          'Video call service is temporarily unavailable. Please try again in a few moments.'
-        );
+        fail('Video call service is temporarily unavailable. Please try again in a few moments.');
       }
       if (status === 404) {
-        throw new Error('Appointment not found or has expired.');
+        fail('Appointment not found or has expired.');
       }
       if (status === 403) {
-        throw new Error(
-          ensureMessage(fromApi || "You don't have permission to start this video call.")
-        );
+        fail(fromApi || "You don't have permission to start this video call.");
+      }
+      if (status === 409) {
+        fail(fromApi || 'The other participant is already on a call.');
       }
       if (status === 422) {
-        throw new Error(
-          ensureMessage(
-            fromApi ||
-              'This call cannot start right now. Check the appointment status, time window, and online vs in-person booking, then try again.'
-          )
+        fail(
+          fromApi ||
+            'This call cannot start right now. Check the appointment status, time window, and online vs in-person booking, then try again.'
         );
       }
       if (status === 429) {
-        throw new Error('Too many requests. Please wait a moment and try again.');
+        fail('Too many requests. Please wait a moment and try again.');
       }
       if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-        throw new Error('Request timed out. Please check your connection and try again.');
+        fail('Request timed out. Please check your connection and try again.');
       }
 
       if (fromApi) {
-        throw new Error(ensureMessage(fromApi));
+        fail(fromApi);
       }
       if (axiosText) {
-        throw new Error(ensureMessage(axiosText));
+        fail(axiosText);
       }
       if (Number.isFinite(status) && status > 0) {
-        throw new Error(`Could not start the call (HTTP ${status}). Please try again.`);
+        fail(`Could not start the call (HTTP ${status}). Please try again.`);
       }
-      throw new Error('Failed to authorize video call');
+      return fail('Failed to authorize video call');
     }
   }
 
@@ -1785,9 +1848,10 @@ class ApiClient {
     return response.data;
   }
 
+  /** `missed` = the ring ran out; the caller is told "not answered", not "declined". */
   async updateCounselorIncomingCall(
     callId: number | string,
-    status: "accepted" | "declined"
+    status: "accepted" | "declined" | "missed"
   ) {
     const response = await this.client.patch(`/counselor/incoming-calls/${callId}`, { status });
     return response.data;
@@ -1800,9 +1864,10 @@ class ApiClient {
     return response.data;
   }
 
+  /** `missed` = the ring ran out; the caller is told "not answered", not "declined". */
   async updateStudentIncomingCall(
     callId: number | string,
-    status: "accepted" | "declined"
+    status: "accepted" | "declined" | "missed"
   ) {
     const response = await this.client.patch(`/student/incoming-calls/${callId}`, { status });
     return response.data;

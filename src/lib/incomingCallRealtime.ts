@@ -56,6 +56,32 @@ const sharedWakeChannels = new Map<string, SharedWakeChannel>();
  * browser also emits a best-effort copy so the two devices stay in sync even when the
  * server cannot reach realtime.
  */
+const LOCAL_WAKE_CHANNEL_PREFIX = "mindful:call-wake-local:";
+
+const emitLocalWakeSignal = (targetUserId: number | string, payload: IncomingCallWakePayload) => {
+  if (typeof window === "undefined") return;
+  const key = `${LOCAL_WAKE_CHANNEL_PREFIX}${targetUserId}`;
+  const data = JSON.stringify({ payload, ts: Date.now() });
+
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const bc = new BroadcastChannel(key);
+      bc.postMessage(data);
+      bc.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  window.dispatchEvent(new CustomEvent(key, { detail: payload }));
+};
+
+/**
+ * Subscribe to call signaling for a user (incoming ring, plus accepted/declined/cancelled
+ * updates for calls they placed). The backend is the authoritative sender; the caller's
+ * browser also emits a best-effort copy so the two devices stay in sync even when the
+ * server cannot reach realtime.
+ */
 export function subscribeIncomingCallWake(
   userId: number | string,
   onWake: WakeListener
@@ -92,7 +118,48 @@ export function subscribeIncomingCallWake(
 
   shared.listeners.add(onWake);
 
+  // Local event listener for same-tab/cross-tab signaling fallback
+  const localKey = `${LOCAL_WAKE_CHANNEL_PREFIX}${userId}`;
+  const handleLocalEvent = (e: Event) => {
+    const detail = (e as CustomEvent).detail as IncomingCallWakePayload | undefined;
+    if (detail && typeof detail.appointment_id === "number") {
+      logCallSignal("local wake event received", detail);
+      onWake(detail);
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener(localKey, handleLocalEvent);
+  }
+
+  let localBc: BroadcastChannel | null = null;
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      localBc = new BroadcastChannel(localKey);
+      localBc.onmessage = (msg) => {
+        try {
+          const parsed = typeof msg.data === "string" ? JSON.parse(msg.data) : msg.data;
+          const payload = parsed?.payload || parsed;
+          if (payload && typeof payload.appointment_id === "number") {
+            logCallSignal("local BroadcastChannel event received", payload);
+            onWake(payload);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+    } catch {
+      /* ignore */
+    }
+  }
+
   return () => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener(localKey, handleLocalEvent);
+    }
+    if (localBc) {
+      localBc.close();
+    }
     const entry = sharedWakeChannels.get(name);
     if (!entry) return;
     entry.listeners.delete(onWake);
@@ -118,6 +185,9 @@ export function signalIncomingCallWake(
 ): void {
   const name = incomingCallWakeChannelName(targetUserId);
   logCallSignal("client wake -> recipient", { channel: name, payload });
+
+  // Instantly dispatch to any local listener on the same origin / device
+  emitLocalWakeSignal(targetUserId, payload);
 
   void (async () => {
     // Same topic the recipient listens on — a broadcast only reaches subscribers of the
