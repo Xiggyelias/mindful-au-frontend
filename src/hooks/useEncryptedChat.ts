@@ -55,11 +55,14 @@ interface UseEncryptedChatProps {
 const MESSAGE_POLL_TIMEOUT_MS = 5000;
 const OLDER_MESSAGE_BATCH_LIMIT = 40;
 const MESSAGE_BATCH_LIMIT = 30;
-const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 10_000;
-const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 45_000;
-const TYPING_POLL_INTERVAL_ACTIVE_MS = 20_000;
-const TYPING_POLL_INTERVAL_HIDDEN_MS = 60_000;
-const POLL_JITTER_MAX_MS = 2_000;
+// 3 s active polling gives near-real-time chat feel (WhatsApp-grade).
+// Incremental polling (after_id) keeps server load minimal — only genuinely
+// new messages are fetched after the first load, not the full page.
+const MESSAGE_POLL_INTERVAL_ACTIVE_MS = 3_000;
+const MESSAGE_POLL_INTERVAL_HIDDEN_MS = 30_000;
+const TYPING_POLL_INTERVAL_ACTIVE_MS = 3_000;
+const TYPING_POLL_INTERVAL_HIDDEN_MS = 30_000;
+const POLL_JITTER_MAX_MS = 500;
 const RATE_LIMIT_BACKOFF_INITIAL_MS = 30_000;
 const RATE_LIMIT_BACKOFF_MAX_MS = 5 * 60_000;
 const NETWORK_BACKOFF_MAX_MS = 60_000;
@@ -155,7 +158,13 @@ const formatServerMessage = (msg: any): ChatMessage => ({
   ...msg,
   decryptedContent: msg.is_encrypted ? ENCRYPTED_FALLBACK : msg.content,
   e2eVisual: 'plain' as const,
-  delivery_status: msg.seen_at ? 'read' : 'delivered',
+  // WhatsApp delivery status semantics:
+  //   'sent'      → message saved on server, recipient not yet fetched it   (single tick)
+  //   'delivered' → recipient's client has fetched it but not opened thread  (double grey tick)
+  //   'read'      → seen_at is set (recipient opened the thread and it was marked read) (double blue tick)
+  // We don't have a separate delivery ack yet, so we use 'sent' as the interim
+  // state and only promote to 'read' when seen_at arrives.
+  delivery_status: msg.seen_at ? 'read' : 'sent',
 });
 
 export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {

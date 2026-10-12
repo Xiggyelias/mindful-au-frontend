@@ -170,9 +170,10 @@ const MessageBubble = React.memo(
             </div>
             <div className="flex items-center gap-2">
           {/* Show delete for plain text messages on hover.
+              Only the SENDER can delete their own messages (isMe guard).
               Attachment messages (voice/file/image) get their own delete button
               wired through ChatAttachmentView → VoiceMemoPlayer / image overlay. */}
-          {!messageIsAttachmentFirst(msg) && !isDeletedMessage && msg.id > 0 && (
+          {!messageIsAttachmentFirst(msg) && !isDeletedMessage && msg.id > 0 && isMe && (
             <Button
               variant="ghost"
               size="icon"
@@ -188,8 +189,8 @@ const MessageBubble = React.memo(
             </Button>
           )}
           {/* For non-voice attachment messages (images, files) show an outer
-              delete button. Voice notes render their own inside VoiceMemoPlayer. */}
-          {messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && !isDeletedMessage && msg.message_type !== "voice" && (
+              delete button. Only the sender sees it (isMe guard). */}
+          {messageIsAttachmentFirst(msg) && msg.id > 0 && !msg.isUploading && !msg.uploadFailed && !isDeletedMessage && msg.message_type !== "voice" && isMe && (
             <Button
               variant="ghost"
               size="icon"
@@ -244,9 +245,14 @@ const MessageBubble = React.memo(
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                 ) : msg.delivery_status === "failed" ? (
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                ) : msg.seen_at || msg.delivery_status === "read" || msg.delivery_status === "delivered" ? (
+                ) : msg.seen_at || msg.delivery_status === "read" ? (
+                  /* Double blue/green tick — message was read */
                   <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : msg.delivery_status === "delivered" ? (
+                  /* Double grey tick — delivered to device, not yet read */
+                  <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 ) : (
+                  /* Single grey tick — sent/saved on server only */
                   <Check className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
               </span>

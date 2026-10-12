@@ -402,6 +402,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                     onChange={(e) => {
                       const v = e.target.value;
                       onMessageChange(v);
+                      // Fire false immediately when the field is cleared so the peer's
+                      // typing indicator disappears without waiting for blur.
                       onTypingChange?.(v.trim().length > 0);
                     }}
                     onBlur={() => onTypingChange?.(false)}
