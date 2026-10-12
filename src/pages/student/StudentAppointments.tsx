@@ -218,15 +218,19 @@ const StudentAppointments = () => {
       if (sId) {
         preselectedSlotIdRef.current = Number(sId);
       }
+      const defaultAnonymous = isProfileAnonymousMode(user?.profile?.anonymous_mode);
       setForm((prev) => ({
         ...prev,
         counselor_id: cId,
+        is_anonymous: defaultAnonymous,
+        online_media:
+          prev.mode === "online" ? (defaultAnonymous ? "audio" : "video") : prev.online_media,
       }));
       setOpenDialog(true);
       
       navigate("/student/appointments", { replace: true });
     }
-  }, [location.search, navigate]);
+  }, [location.search, navigate, user?.profile?.anonymous_mode]);
 
   const loadAppointments = useCallback(
     async (showErrorToast = true, options?: { force?: boolean }) => {
@@ -1121,9 +1125,16 @@ const StudentAppointments = () => {
             <div className="flex flex-wrap gap-2">
               <Dialog open={openDialog} onOpenChange={(open) => {
                 if (open) {
+                  const defaultAnonymous = isProfileAnonymousMode(user?.profile?.anonymous_mode);
                   setForm((prev) => ({
                     ...prev,
-                    is_anonymous: isProfileAnonymousMode(user?.profile?.anonymous_mode),
+                    is_anonymous: defaultAnonymous,
+                    online_media:
+                      prev.mode === "online"
+                        ? defaultAnonymous
+                          ? "audio"
+                          : "video"
+                        : prev.online_media,
                   }));
                 } else {
                   pinnedCounselorIdRef.current = null;

@@ -359,9 +359,36 @@ const StudentChat = () => {
       const saved = await toggleProfileAnonymousMode(checked);
       if (!saved) {
         setAnonymousStartMode(previousValue);
+        return;
+      }
+      if (
+        sessionId &&
+        activeSession &&
+        isAnonymousSessionFlag(activeSession.is_anonymous) !== checked
+      ) {
+        try {
+          const updatedSession = await api.updateSessionChatAnonymity(sessionId, checked);
+          selectSession({
+            ...activeSession,
+            ...updatedSession,
+            is_anonymous: checked,
+          });
+          await refreshSessions(true, { force: true });
+          dispatchChatAnonymitySync();
+        } catch {
+          /* profile default succeeded; active chat can still be toggled from header */
+        }
       }
     },
-    [toggleProfileAnonymousMode, user?.id, anonymousStartMode],
+    [
+      activeSession,
+      anonymousStartMode,
+      refreshSessions,
+      selectSession,
+      sessionId,
+      toggleProfileAnonymousMode,
+      user?.id,
+    ],
   );
 
   const {

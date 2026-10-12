@@ -174,6 +174,12 @@ export function useIncomingCalls<T extends IncomingCallBase>({
   const backoffMsRef = useRef(POLL_BACKOFF_INITIAL_MS);
   const tabIdRef = useRef(`calls-tab-${Math.random().toString(36).slice(2)}-${Date.now()}`);
   const isLeaderTabRef = useRef(false);
+  const buildNotificationRef = useRef(buildNotification);
+  buildNotificationRef.current = buildNotification;
+  const onAutoDismissCallRef = useRef(onAutoDismissCall);
+  onAutoDismissCallRef.current = onAutoDismissCall;
+  const onActiveChangeRef = useRef(onActiveChange);
+  onActiveChangeRef.current = onActiveChange;
 
   const clearAutoDismiss = useCallback((callId: number) => {
     const t = autoDismissTimersRef.current.get(callId);
@@ -186,7 +192,10 @@ export function useIncomingCalls<T extends IncomingCallBase>({
   const removeCallLocal = useCallback(
     (callId: number) => {
       clearAutoDismiss(callId);
-      setCalls((prev) => prev.filter((c) => c.id !== callId));
+      setCalls((prev) => {
+        const next = prev.filter((c) => c.id !== callId);
+        return next.length === prev.length ? prev : next;
+      });
     },
     [clearAutoDismiss]
   );
@@ -199,35 +208,33 @@ export function useIncomingCalls<T extends IncomingCallBase>({
    */
   const removeCallByAppointmentLocal = useCallback(
     (appointmentId: number) => {
-      setCalls((prev) =>
-        prev.filter((c) => {
+      setCalls((prev) => {
+        const next = prev.filter((c) => {
           if (c.appointment_id !== appointmentId) return true;
           clearAutoDismiss(c.id);
           seenIdsRef.current.delete(c.id);
           return false;
-        })
-      );
+        });
+        return next.length === prev.length ? prev : next;
+      });
     },
     [clearAutoDismiss]
   );
 
-  const announceNewCall = useCallback(
-    (call: T) => {
-      // Ringtone is managed by the `calls` state effect — calling startCallRingtone
-      // here as well causes it to fire twice in the same tick, resetting el.src and
-      // interrupting the audio before it has started playing.
-      try {
-        if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([300, 100, 300, 100, 300]);
-        }
-      } catch {
-        /* ignore */
+  const announceNewCall = useCallback((call: T) => {
+    // Ringtone is managed by the `calls` state effect — calling startCallRingtone
+    // here as well causes it to fire twice in the same tick, resetting el.src and
+    // interrupting the audio before it has started playing.
+    try {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([300, 100, 300, 100, 300]);
       }
-      const { title, body } = buildNotification(call);
-      showBrowserCallNotification(title, body, `cms-incoming-call-${call.id}`);
-    },
-    [buildNotification]
-  );
+    } catch {
+      /* ignore */
+    }
+    const { title, body } = buildNotificationRef.current(call);
+    showBrowserCallNotification(title, body, `cms-incoming-call-${call.id}`);
+  }, []);
 
   const evaluateCallsLeadership = useCallback(() => {
     const now = Date.now();
@@ -294,7 +301,23 @@ export function useIncomingCalls<T extends IncomingCallBase>({
         const normalized = await fetchCalls();
         backoffMsRef.current = POLL_BACKOFF_INITIAL_MS;
         backoffUntilRef.current = 0;
-        setCalls(normalized);
+        setCalls((prev) => {
+          if (prev.length === 0 && normalized.length === 0) {
+            return prev;
+          }
+          if (
+            prev.length === normalized.length &&
+            prev.every(
+              (item, index) =>
+                item.id === normalized[index]?.id &&
+                item.appointment_id === normalized[index]?.appointment_id &&
+                item.call_type === normalized[index]?.call_type
+            )
+          ) {
+            return prev;
+          }
+          return normalized;
+        });
 
         for (const c of normalized) {
           if (!seenIdsRef.current.has(c.id)) {
@@ -352,11 +375,11 @@ export function useIncomingCalls<T extends IncomingCallBase>({
 
   useEffect(() => {
     if (!enabled) {
-      onActiveChange?.(false);
+      onActiveChangeRef.current?.(false);
       return;
     }
-    onActiveChange?.(calls.length > 0);
-  }, [enabled, calls.length, onActiveChange]);
+    onActiveChangeRef.current?.(calls.length > 0);
+  }, [enabled, calls.length]);
 
   useEffect(() => {
     if (!enabled || calls.length === 0) {
@@ -377,7 +400,7 @@ export function useIncomingCalls<T extends IncomingCallBase>({
     const tabId = tabIdRef.current;
 
     if (!enabled) {
-      setCalls([]);
+      setCalls((prev) => (prev.length === 0 ? prev : []));
       seenIdsRef.current.clear();
       autoDismissTimersRef.current.forEach((t) => window.clearTimeout(t));
       autoDismissTimersRef.current.clear();
@@ -444,12 +467,12 @@ export function useIncomingCalls<T extends IncomingCallBase>({
       if (!autoDismissTimersRef.current.has(c.id)) {
         const timer = window.setTimeout(() => {
           autoDismissTimersRef.current.delete(c.id);
-          void Promise.resolve(onAutoDismissCall?.(c)).finally(() => removeCallLocal(c.id));
+          void Promise.resolve(onAutoDismissCallRef.current?.(c)).finally(() => removeCallLocal(c.id));
         }, AUTO_DISMISS_MS);
         autoDismissTimersRef.current.set(c.id, timer);
       }
     }
-  }, [calls, onAutoDismissCall, removeCallLocal]);
+  }, [calls, removeCallLocal]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

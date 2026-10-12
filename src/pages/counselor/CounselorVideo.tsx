@@ -221,13 +221,16 @@ const CounselorVideo = () => {
   // Read inside the start-session effect so a background list refresh does not re-trigger it
   // (the effect places a real outgoing call; it must run exactly once per start request).
   const upcomingSessionsRef = useRef<Appointment[]>([]);
+  const hasLoadedSessionsOnceRef = useRef(false);
   useEffect(() => {
     upcomingSessionsRef.current = upcomingSessions;
   }, [upcomingSessions]);
 
   const loadSessions = useCallback(async () => {
     try {
-      setIsLoading(true);
+      if (!hasLoadedSessionsOnceRef.current) {
+        setIsLoading(true);
+      }
       const appointments = await api.getAppointments();
       const videoAppointments = appointments
         .filter((apt: Appointment) => {
@@ -272,15 +275,16 @@ const CounselorVideo = () => {
       }
       toast.error("Failed to load upcoming sessions");
     } finally {
+      hasLoadedSessionsOnceRef.current = true;
       setIsLoading(false);
     }
   }, [requestedAppointmentId]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       void loadSessions();
     }
-  }, [loadSessions, user]);
+  }, [loadSessions, user?.id]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -753,8 +757,9 @@ const CounselorVideo = () => {
           ? "video"
           : requestedCallType;
 
+      const isOutgoingRing = authorization?.call_state === "CALLING";
       setPendingCallMode(callType);
-      setOutgoingCallMode(callType);
+      setOutgoingCallMode(isOutgoingRing ? callType : null);
 
       const serverDuration = Number(authorization?.max_duration_minutes);
       setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
@@ -762,10 +767,9 @@ const CounselorVideo = () => {
         setCounselingSessionId(Number(authorization.session_id));
       }
 
-      // Best-effort browser-to-browser nudge on top of the server broadcast. It only works
-      // for identified bookings — the appointments API masks `student_id` to 0 on anonymous
-      // ones, which is exactly why the server-side signal is the authoritative path.
-      if (Number.isFinite(studentId) && studentId > 0) {
+      // Best-effort browser-to-browser nudge on top of the server broadcast when we are
+      // actually placing an outgoing call (not when joining a call we just accepted).
+      if (isOutgoingRing && Number.isFinite(studentId) && studentId > 0) {
         signalIncomingCallWake(studentId, {
           appointment_id: Number(activeSessionId),
           call_id: authorization?.call_id ?? undefined,
@@ -823,10 +827,17 @@ const CounselorVideo = () => {
     if (!activeSession || !activeSessionId) return;
     if (localStream || isConnecting || isStartingActiveSession) return;
     if (!isSignalingReady || !isOnline) return;
-    // The other side is already calling us — let the IncomingCallOverlay's
-    // acceptIncomingCall() handle it instead of placing our own outgoing call
-    // on top of it (see the overlay render below for why that collides).
-    if (isIncomingCall) return;
+    // If the other side is already calling us on the WebRTC channel and we navigated here
+    // via Accept (autostart=1), accept their incoming WebRTC request directly instead of
+    // stalling on a second IncomingCallOverlay or placing a conflicting outgoing call.
+    if (isIncomingCall) {
+      autoStartedRef.current = true;
+      void acceptIncomingCall();
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("autostart");
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
 
     const callWindow = getVideoCallWindowStatus(
       activeSession.scheduled_at,
@@ -844,6 +855,7 @@ const CounselorVideo = () => {
     nextParams.delete("autostart");
     setSearchParams(nextParams, { replace: true });
   }, [
+    acceptIncomingCall,
     activeSession,
     activeSessionId,
     handleStartSession,

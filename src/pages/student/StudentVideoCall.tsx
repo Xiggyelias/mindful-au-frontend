@@ -228,14 +228,18 @@ const StudentVideoCall = () => {
     };
   }, []);
 
+  const hasLoadedAppointmentsOnceRef = useRef(false);
+
   const loadUpcomingVideoAppointments = useCallback(async () => {
-    if (!user) {
+    if (!user?.id) {
       setIsLoading(false);
       return;
     }
 
     try {
-      setIsLoading(true);
+      if (!hasLoadedAppointmentsOnceRef.current) {
+        setIsLoading(true);
+      }
       const appointments = await api.getAppointments();
       const availableNow = appointments
         .filter((appointment: Appointment) => {
@@ -292,9 +296,10 @@ const StudentVideoCall = () => {
       }
       toast.error(getApiErrorMessage(loadError, "Failed to load upcoming appointments"));
     } finally {
+      hasLoadedAppointmentsOnceRef.current = true;
       setIsLoading(false);
     }
-  }, [requestedAppointmentId, requestedCounselorId, user]);
+  }, [requestedAppointmentId, requestedCounselorId, user?.id]);
 
   useEffect(() => {
     void loadUpcomingVideoAppointments();
@@ -703,15 +708,16 @@ const StudentVideoCall = () => {
           ? "video"
           : requestedEffectiveMode;
 
+      const isOutgoingRing = authorization?.call_state === "CALLING";
       setIsStartingMode(effectiveMode);
-      setOutgoingCallMode(effectiveMode);
+      setOutgoingCallMode(isOutgoingRing ? effectiveMode : null);
 
       const serverDuration = Number(authorization?.max_duration_minutes);
       setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
 
-      // Best-effort browser-to-browser nudge alongside the server's own broadcast, sent as
-      // soon as the call row exists rather than after media negotiation.
-      if (Number.isFinite(counselorId) && counselorId > 0) {
+      // Best-effort browser-to-browser nudge alongside the server's own broadcast when we
+      // are actually placing an outgoing call (not when joining a call we just accepted).
+      if (isOutgoingRing && Number.isFinite(counselorId) && counselorId > 0) {
         signalIncomingCallWake(counselorId, {
           appointment_id: Number(activeAppointmentId),
           call_id: authorization?.call_id ?? undefined,
@@ -927,10 +933,17 @@ const StudentVideoCall = () => {
     if (!activeAppointment || !activeAppointmentId) return;
     if (localStream || isConnecting || isStartingMode) return;
     if (!isSignalingReady || !isOnline) return;
-    // The other side is already calling us — let the IncomingCallOverlay's
-    // acceptIncomingCall() handle it instead of placing our own outgoing call
-    // on top of it (see the overlay render below for why that collides).
-    if (isIncomingCall) return;
+    // If the counselor is already calling us on the WebRTC channel and we navigated here
+    // via Accept (autostart=1), accept their incoming WebRTC request directly instead of
+    // stalling on a second IncomingCallOverlay or placing a conflicting outgoing call.
+    if (isIncomingCall) {
+      autoStartedRef.current = true;
+      void acceptIncomingCall();
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("autostart");
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
 
     const callWindow = getVideoCallWindowStatus(
       activeAppointment.scheduled_at,
@@ -952,6 +965,7 @@ const StudentVideoCall = () => {
     nextParams.delete("autostart");
     setSearchParams(nextParams, { replace: true });
   }, [
+    acceptIncomingCall,
     activeAppointment,
     activeAppointmentId,
     handleStartAudioCall,
