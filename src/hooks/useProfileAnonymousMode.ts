@@ -43,7 +43,7 @@ export function useProfileAnonymousMode(): UseProfileAnonymousModeReturn {
       if (!user?.id) return false;
 
       const current = isProfileAnonymousMode(user.profile?.anonymous_mode);
-      if (current === nextChecked) return true;
+      if (current === nextChecked && nextChecked) return true;
 
       if (current && !nextChecked) {
         const ok = await confirm(PROFILE_ANON_MODE_OFF_CONFIRMATION);

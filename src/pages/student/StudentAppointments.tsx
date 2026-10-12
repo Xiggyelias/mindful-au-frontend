@@ -26,7 +26,7 @@ import {
   isAppointmentAudioOnly,
   prefersAudioOnlyOnlineCall,
 } from "@/lib/videoCall";
-import { isAnonymousSessionFlag } from "@/lib/anonymousMode";
+import { isAnonymousSessionFlag, isProfileAnonymousMode } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 
 type PagedMeta = {
@@ -1120,7 +1120,12 @@ const StudentAppointments = () => {
             <h2 className="text-xl font-semibold">Scheduled Sessions</h2>
             <div className="flex flex-wrap gap-2">
               <Dialog open={openDialog} onOpenChange={(open) => {
-                if (!open) {
+                if (open) {
+                  setForm((prev) => ({
+                    ...prev,
+                    is_anonymous: isProfileAnonymousMode(user?.profile?.anonymous_mode),
+                  }));
+                } else {
                   pinnedCounselorIdRef.current = null;
                   setIsEmergencyBookingMode(false);
                   setEmergencyCustomTime("");
