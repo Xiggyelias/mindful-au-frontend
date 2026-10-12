@@ -215,8 +215,10 @@ const StudentAppointments = () => {
     const sId = params.get("slot_id");
 
     if (book === "1" && cId) {
+      pinnedCounselorIdRef.current = cId;
       if (sId) {
         preselectedSlotIdRef.current = Number(sId);
+        setSelectedSlotId(Number(sId));
       }
       const defaultAnonymous = isProfileAnonymousMode(user?.profile?.anonymous_mode);
       setForm((prev) => ({
@@ -580,18 +582,32 @@ const StudentAppointments = () => {
           timeout_ms: 15000,
         });
         const nextSlots = Array.isArray(payload?.data) ? (payload.data as CounselorSlot[]) : [];
-        setSlots(nextSlots);
+        let combinedSlots = [...nextSlots];
+        setSlots((prevSlots) => {
+          if (preselectedSlotIdRef.current) {
+            const foundInNext = nextSlots.some((s) => Number(s.id) === preselectedSlotIdRef.current);
+            if (!foundInNext) {
+              const previousSlot = prevSlots.find((s) => Number(s.id) === preselectedSlotIdRef.current);
+              if (previousSlot) {
+                combinedSlots = [previousSlot, ...nextSlots];
+                return combinedSlots;
+              }
+            }
+          }
+          return nextSlots;
+        });
 
         const preselectedSlot = preselectedSlotIdRef.current
-          ? nextSlots.find((s) => Number(s.id) === preselectedSlotIdRef.current)
+          ? combinedSlots.find((s) => Number(s.id) === preselectedSlotIdRef.current)
           : null;
 
         // In emergency booking mode the student is choosing their own time —
-        // don't auto-select any slot so they have to make a conscious choice.
+        // don't auto-select any slot so they have to make a conscious choice,
+        // UNLESS a preselectedSlot was explicitly passed.
         const targetSlot = preselectedSlot || (
           pinnedCounselorIdRef.current
             ? null
-            : nextSlots.find((slot) => {
+            : combinedSlots.find((slot) => {
                 if (slot.status !== "available") return false;
                 if (new Date(slot.start_time).getTime() <= Date.now()) return false;
                 const h = Number(formatInDisplayZone(new Date(slot.start_time), "H"));
@@ -606,8 +622,13 @@ const StudentAppointments = () => {
             duration_minutes: minutesBetween(targetSlot.start_time, targetSlot.end_time),
           }));
         } else {
-          setSelectedSlotId(null);
-          setForm((prev) => ({ ...prev, scheduled_at: "", duration_minutes: 60 }));
+          setForm((prev) => {
+            if (pinnedCounselorIdRef.current && prev.scheduled_at) {
+              return prev;
+            }
+            setSelectedSlotId(null);
+            return { ...prev, scheduled_at: "", duration_minutes: 60 };
+          });
         }
         preselectedSlotIdRef.current = null;
       } catch (err: unknown) {
@@ -718,6 +739,40 @@ const StudentAppointments = () => {
           ? "Emergency Request Assigned"
           : "Emergency Appointment";
 
+  useEffect(() => {
+    if (!openDialog || !activeEmergencyRequest) return;
+    const reqCounselorId = String(
+      activeEmergencyRequest.assigned_to ||
+      activeEmergencyRequest.counselor_id ||
+      activeEmergencyRequest.slot?.counselor_id ||
+      ""
+    );
+    const isCurrentCounselor =
+      reqCounselorId &&
+      (form.counselor_id === reqCounselorId || pinnedCounselorIdRef.current === reqCounselorId);
+    const isCurrentSlot =
+      activeEmergencySlotId > 0 &&
+      (selectedSlotId === activeEmergencySlotId || preselectedSlotIdRef.current === activeEmergencySlotId);
+
+    if (isCurrentCounselor || isCurrentSlot) {
+      setIsEmergencyBookingMode(true);
+      if (form.is_anonymous) {
+        setForm((prev) => ({
+          ...prev,
+          is_anonymous: false,
+          online_media: prev.mode === "online" ? "video" : prev.online_media,
+        }));
+      }
+    }
+  }, [
+    openDialog,
+    activeEmergencyRequest,
+    form.counselor_id,
+    form.is_anonymous,
+    selectedSlotId,
+    activeEmergencySlotId,
+  ]);
+
   const openEmergencyBooking = useCallback(
     (request: EmergencyRequest) => {
       const counselorId = Number(request.assigned_to || request.counselor_id || request.slot?.counselor_id || 0);
@@ -731,14 +786,22 @@ const StudentAppointments = () => {
         return;
       }
 
+      pinnedCounselorIdRef.current = String(counselorId);
+      setIsEmergencyBookingMode(true);
       preselectedSlotIdRef.current = slotId;
+      setSelectedSlotId(slotId);
+      setEmergencyCustomTime("");
+      if (request.slot) {
+        setSlots([request.slot as CounselorSlot]);
+      }
+
       setForm((prev) => ({
         ...prev,
         counselor_id: String(counselorId),
         scheduled_at: request.slot?.start_time || "",
         duration_minutes: request.slot?.start_time && request.slot?.end_time
           ? minutesBetween(request.slot.start_time, request.slot.end_time)
-          : prev.duration_minutes,
+          : 60,
         mode: "online",
         // Emergency sessions are always identified so the counselor knows who they're
         // helping — never inherit the student's anonymous default here.
@@ -893,7 +956,13 @@ const StudentAppointments = () => {
       const scheduledAt = parsedScheduledAt.toISOString();
       // Emergency bookings are always identified (the counselor must know who they're helping),
       // so anonymity never applies in emergency mode regardless of the student's default.
-      const bookingAnonymous = isEmergencyBookingMode ? false : form.is_anonymous;
+      const shouldAttachEmergency =
+        Boolean(activeEmergencyRequest?.id) &&
+        (isEmergencyBookingMode ||
+          Number(form.counselor_id) === Number(activeEmergencyRequest?.assigned_to || activeEmergencyRequest?.counselor_id || 0) ||
+          !activeEmergencyRequest?.assigned_to);
+
+      const bookingAnonymous = (isEmergencyBookingMode || shouldAttachEmergency) ? false : form.is_anonymous;
       const sessionNotes =
         form.mode === "physical"
           ? "Physical"
@@ -924,7 +993,7 @@ const StudentAppointments = () => {
       };
 
       // Link to the emergency request so the backend resolves it automatically.
-      if (isEmergencyBookingMode && activeEmergencyRequest?.id) {
+      if (shouldAttachEmergency && activeEmergencyRequest?.id) {
         basePayload.emergency_request_id = Number(activeEmergencyRequest.id);
       }
       let created: any;
@@ -1125,17 +1194,19 @@ const StudentAppointments = () => {
             <div className="flex flex-wrap gap-2">
               <Dialog open={openDialog} onOpenChange={(open) => {
                 if (open) {
-                  const defaultAnonymous = isProfileAnonymousMode(user?.profile?.anonymous_mode);
-                  setForm((prev) => ({
-                    ...prev,
-                    is_anonymous: defaultAnonymous,
-                    online_media:
-                      prev.mode === "online"
-                        ? defaultAnonymous
-                          ? "audio"
-                          : "video"
-                        : prev.online_media,
-                  }));
+                  if (!isEmergencyBookingMode && !pinnedCounselorIdRef.current) {
+                    const defaultAnonymous = isProfileAnonymousMode(user?.profile?.anonymous_mode);
+                    setForm((prev) => ({
+                      ...prev,
+                      is_anonymous: defaultAnonymous,
+                      online_media:
+                        prev.mode === "online"
+                          ? defaultAnonymous
+                            ? "audio"
+                            : "video"
+                          : prev.online_media,
+                    }));
+                  }
                 } else {
                   pinnedCounselorIdRef.current = null;
                   setIsEmergencyBookingMode(false);
@@ -1162,7 +1233,7 @@ const StudentAppointments = () => {
                   )}
                 </DialogHeader>
 
-                {/* Emergency mode: streamlined slot-picker only */}
+                {/* Emergency mode: priority slot, available slots, or custom time */}
                 {isEmergencyBookingMode && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
@@ -1172,8 +1243,91 @@ const StudentAppointments = () => {
                         <p className="truncate text-sm font-medium text-foreground">{emergencyResponderName}</p>
                       </div>
                     </div>
+
+                    {/* Priority slot prepared by counselor */}
+                    {(selectedSlot || activeEmergencyRequest?.slot) && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                            Priority slot prepared for you
+                          </span>
+                          <Badge variant="outline" className="border-primary/40 text-primary">
+                            Recommended
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-foreground">
+                              {formatInDisplayZone(
+                                new Date(selectedSlot?.start_time || activeEmergencyRequest?.slot?.start_time || form.scheduled_at),
+                                "EEEE, MMMM d, yyyy"
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatSlotRange(
+                                selectedSlot?.start_time || activeEmergencyRequest?.slot?.start_time || form.scheduled_at,
+                                selectedSlot?.end_time || activeEmergencyRequest?.slot?.end_time || form.scheduled_at
+                              )}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={selectedSlotId === Number(selectedSlot?.id || activeEmergencyRequest?.slot?.id) ? "default" : "outline"}
+                            onClick={() => {
+                              const s = selectedSlot || (activeEmergencyRequest?.slot as CounselorSlot);
+                              if (s) {
+                                chooseSlot(s);
+                              }
+                            }}
+                          >
+                            {selectedSlotId === Number(selectedSlot?.id || activeEmergencyRequest?.slot?.id) ? "Selected" : "Select Slot"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Available calendar slots */}
+                    {slotDays.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground">Or pick from counselor&apos;s available calendar</Label>
+                        <div className="max-h-[180px] space-y-3 overflow-y-auto rounded-2xl border border-border/70 bg-secondary/10 p-3">
+                          {slotDays.map((day) => (
+                            <div key={day.date} className="space-y-1.5">
+                              <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                {day.label}
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {day.slots.map((slot: CounselorSlot) => {
+                                  const isSelected = Number(slot.id) === Number(selectedSlotId);
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      type="button"
+                                      onClick={() => chooseSlot(slot)}
+                                      className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                                        isSelected
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                      }`}
+                                    >
+                                      <span className="block whitespace-nowrap text-[11px] font-semibold tabular-nums sm:text-xs">
+                                        {formatSlotRange(slot.start_time, slot.end_time)}
+                                      </span>
+                                      <span className="block text-[10px] font-medium">Available</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Propose a custom time */}
                     <div className="space-y-2">
-                      <Label>Pick any time</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Or propose a custom emergency time</Label>
                       <input
                         type="datetime-local"
                         value={emergencyCustomTime}
@@ -1195,17 +1349,17 @@ const StudentAppointments = () => {
                         }}
                         className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
-                      {emergencyCustomTime && !selectedSlot && form.scheduled_at && (
-                        <p className="text-xs text-muted-foreground">
-                          Custom time:{" "}
-                          {new Date(form.scheduled_at).toLocaleString([], {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}{" "}
-                          (60 min)
-                        </p>
-                      )}
                     </div>
+
+                    {/* Current confirmed appointment time */}
+                    {form.scheduled_at && (
+                      <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+                        <span className="font-semibold text-foreground">Appointment time: </span>
+                        <span className="text-muted-foreground">
+                          {formatInDisplayZone(new Date(form.scheduled_at), "EEEE, MMMM d, yyyy 'at' h:mm a")} ({form.duration_minutes || 60} mins)
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
