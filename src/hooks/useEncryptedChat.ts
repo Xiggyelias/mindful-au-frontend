@@ -493,7 +493,33 @@ export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) =
             for (const msg of prev) merged.set(msg.id, msg);
             for (const msg of formatted) {
               const existing = merged.get(msg.id);
-              merged.set(msg.id, existing ? { ...existing, ...msg } : msg);
+              if (existing) {
+                // Guard: never overwrite a real (non-zero) sender_id with the
+                // server's anonymous mask (sender_id=0). This stops the loop
+                // where own messages toggled between "You" and "Anonymous User"
+                // on every poll after anonymous mode was turned off — the backend
+                // had masked the message as sender_id=0 because the session flag
+                // hadn't finished syncing, but locally we already knew it was ours.
+                const safeSenderId =
+                  msg.sender_id === 0 && existing.sender_id > 0
+                    ? existing.sender_id
+                    : msg.sender_id;
+                // Similarly preserve a real sender_name_snapshot over an anonymous label.
+                const safeSenderName =
+                  (msg.sender_name_snapshot === 'Anonymous User' || msg.sender_name_snapshot === '') &&
+                  existing.sender_name_snapshot &&
+                  existing.sender_name_snapshot !== 'Anonymous User'
+                    ? existing.sender_name_snapshot
+                    : msg.sender_name_snapshot;
+                merged.set(msg.id, {
+                  ...existing,
+                  ...msg,
+                  sender_id: safeSenderId,
+                  sender_name_snapshot: safeSenderName,
+                });
+              } else {
+                merged.set(msg.id, msg);
+              }
             }
             return Array.from(merged.values()).sort((a, b) => a.id - b.id);
           });
