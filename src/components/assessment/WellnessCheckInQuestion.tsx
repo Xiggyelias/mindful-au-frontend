@@ -118,7 +118,7 @@ export function WellnessCheckInQuestion({
       return (
         <div className="mt-6 grid grid-cols-5 gap-2 sm:grid-cols-10">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => {
-            const selected = response === value;
+            const selected = Number(response) === value;
             return (
               <button
                 key={value}

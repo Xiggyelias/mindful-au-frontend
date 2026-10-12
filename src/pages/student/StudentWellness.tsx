@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { TrendingUp, Loader2, Sparkles, Bot, Heart } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { TrendingUp, Loader2, Sparkles, Bot, Heart, ClipboardCheck } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { studentMoodOptions, type StudentMood, studentMoodLabel } from "@/config/studentMoodOptions";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -14,6 +15,7 @@ import { toast } from "sonner";
 const moodOptions = studentMoodOptions;
 
 const StudentWellness = () => {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [summary, setSummary] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -305,6 +307,16 @@ const StudentWellness = () => {
                         {riskLabel}
                       </span>
                     </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => navigate("/student/diagnostic-assessment?retake=1")}
+                      className="w-full h-12 rounded-2xl border-primary/30 font-semibold text-primary hover:bg-primary/5"
+                    >
+                      <ClipboardCheck className="mr-2 h-4 w-4" />
+                      Take a Wellness Check-In Assessment
+                    </Button>
                   </div>
                 )}
               </CardContent>

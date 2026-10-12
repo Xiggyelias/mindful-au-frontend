@@ -2101,11 +2101,17 @@ class ApiClient {
     return response.data;
   }
 
-  async submitDiagnosticAssessment(responses: Record<string, any>, questionnaireId: number, isAnonymous: boolean = false) {
+  async submitDiagnosticAssessment(
+    responses: Record<string, any>,
+    questionnaireId: number | null,
+    isAnonymous: boolean = false,
+    assessmentMode?: "quick" | "full_university" | "clinical_intake"
+  ) {
     const response = await this.client.post('/diagnostics/analyze', {
       responses,
-      questionnaire_id: questionnaireId,
+      ...(questionnaireId ? { questionnaire_id: questionnaireId } : {}),
       is_anonymous: isAnonymous,
+      ...(assessmentMode ? { assessment_mode: assessmentMode } : {}),
     });
     return response.data;
   }

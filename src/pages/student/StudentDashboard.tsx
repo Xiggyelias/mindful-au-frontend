@@ -26,17 +26,11 @@ import { resolveCounselorPhone } from "@/lib/runtimeConfig";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
+import { studentNavItems } from "@/config/studentNavItems";
+
 const COUNSELOR_PHONE = resolveCounselorPhone() ?? "tel:+263774068265";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/student/dashboard" },
-  { label: "Chat", icon: MessageSquare, path: "/student/chat" },
-  { label: "Appointments", icon: Calendar, path: "/student/appointments" },
-  { label: "AI Support", icon: Bot, path: "/student/ai-support" },
-  { label: "Video Call", icon: Video, path: "/student/video-call" },
-  { label: "Past Sessions", icon: History, path: "/student/history" },
-  { label: "Wellness", icon: Heart, path: "/student/wellness" },
-];
+const navItems = studentNavItems;
 
 const moodOptions = [
   { value: "great", label: "Great", display: "\u{1F60A} Great" },

@@ -2,10 +2,44 @@ import { AlertCircle, ClipboardCheck, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+export type AssessmentMode = "quick" | "full_university" | "clinical_intake";
+
+const ASSESSMENT_MODE_OPTIONS: {
+  id: AssessmentMode;
+  emoji: string;
+  title: string;
+  badge: string;
+  description: string;
+}[] = [
+  {
+    id: "quick",
+    emoji: "⚡",
+    title: "Quick Campus Check-in",
+    badge: "10 questions · ~2 min",
+    description: "One focused question across each campus wellness area for a fast pulse check.",
+  },
+  {
+    id: "full_university",
+    emoji: "🎓",
+    title: "Full Campus Assessment",
+    badge: "30 questions · ~5 min",
+    description: "Complete 10-domain university check-in covering academics, sleep, mood, and social life.",
+  },
+  {
+    id: "clinical_intake",
+    emoji: "🩺",
+    title: "Pre-Counselling Intake",
+    badge: "Comprehensive · ~7 min",
+    description: "Multi-format intake with scales, checklists, and reflection prompts for your counselor.",
+  },
+];
+
 export function WellnessCheckInIntro({
   needsAssessment,
   isLoading,
   questionCount,
+  selectedMode = "quick",
+  onSelectMode,
   error,
   isHardError,
   onStart,
@@ -16,6 +50,8 @@ export function WellnessCheckInIntro({
   needsAssessment: boolean;
   isLoading: boolean;
   questionCount: number;
+  selectedMode?: AssessmentMode;
+  onSelectMode?: (mode: AssessmentMode) => void;
   error: string | null;
   isHardError: boolean;
   onStart: () => void;
@@ -40,38 +76,63 @@ export function WellnessCheckInIntro({
         </div>
 
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Wellness check-in</p>
-        <h1 className="mt-3 font-sans text-2xl font-bold leading-tight text-slate-800 sm:text-3xl">
+        <h1 className="mt-3 font-sans text-2xl font-bold leading-tight text-slate-800 dark:text-foreground sm:text-3xl">
           Let&apos;s see how you&apos;re doing
         </h1>
-        <p className="mt-4 max-w-sm text-base leading-relaxed text-slate-600">
-          One gentle question at a time — like a conversation, not a test. Takes about 7 minutes.
+        <p className="mt-3 max-w-sm text-base leading-relaxed text-slate-600 dark:text-muted-foreground">
+          Choose the mode of assessment that fits your time today — one gentle question at a time.
         </p>
 
         {needsAssessment && (
-          <div className="mt-6 flex w-full items-start gap-3 rounded-2xl border border-primary/30 bg-accent px-4 py-3 text-left">
+          <div className="mt-5 flex w-full items-start gap-3 rounded-2xl border border-primary/30 bg-accent px-4 py-3 text-left">
             <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <p className="text-sm leading-snug text-foreground">
-              Your counselor asked for a quick check-in before you use chat and appointments. You&apos;re almost there.
+              Your counselor asked for a check-in before you use chat and appointments. You&apos;re almost there.
             </p>
           </div>
         )}
 
-        <div className="mt-8 grid w-full gap-3 text-left">
-          {[
-            { emoji: "💬", text: "Short, friendly questions about campus life" },
-            { emoji: "🔒", text: "Private — only used to support you" },
-            { emoji: "✨", text: "Tips tailored to how you're feeling" },
-          ].map((item) => (
-            <div
-              key={item.text}
-              className="flex items-center gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-sm"
-            >
-              <span className="text-2xl" aria-hidden>
-                {item.emoji}
-              </span>
-              <span className="text-sm font-medium text-slate-700">{item.text}</span>
-            </div>
-          ))}
+        <div className="mt-6 grid w-full gap-3 text-left" role="radiogroup" aria-label="Assessment mode">
+          {ASSESSMENT_MODE_OPTIONS.map((mode) => {
+            const active = selectedMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onSelectMode?.(mode.id)}
+                className={cn(
+                  "flex w-full items-start gap-3.5 rounded-2xl border-2 px-4 py-3.5 text-left transition-all",
+                  active
+                    ? "border-primary bg-accent/80 shadow-md shadow-primary/10"
+                    : "border-white/80 bg-white/75 hover:border-primary/40 hover:bg-white dark:border-border dark:bg-card/80"
+                )}
+              >
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background text-2xl shadow-sm" aria-hidden>
+                  {mode.emoji}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-800 dark:text-foreground">{mode.title}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-slate-100 text-slate-600 dark:bg-secondary dark:text-muted-foreground"
+                      )}
+                    >
+                      {mode.badge}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-muted-foreground">
+                    {mode.description}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {isLoading && (
@@ -97,7 +158,7 @@ export function WellnessCheckInIntro({
           </div>
         )}
 
-        <div className="mt-8 flex w-full flex-col gap-3">
+        <div className="mt-7 flex w-full flex-col gap-3">
           <Button
             type="button"
             size="lg"
@@ -113,7 +174,7 @@ export function WellnessCheckInIntro({
             ) : (
               <>
                 <Sparkles className="mr-2 h-5 w-5" />
-                Let&apos;s begin
+                Start check-in ({questionCount} questions)
               </>
             )}
           </Button>

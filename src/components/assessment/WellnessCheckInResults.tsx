@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CheckCircle, Heart, LayoutDashboard, TrendingUp } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle, Heart, LayoutDashboard, RotateCcw, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ export type CheckInResult = {
     counselor_summary?: string;
     focus_areas?: string[];
     risk_flags?: string[];
+    assessment_mode?: string;
   };
   created_at: string;
 };
@@ -37,6 +38,7 @@ export function WellnessCheckInResults({
   onDashboard,
   onWellness,
   onAppointments,
+  onRetake,
 }: {
   result: CheckInResult;
   history: CheckInResult[];
@@ -45,6 +47,7 @@ export function WellnessCheckInResults({
   onDashboard: () => void;
   onWellness: () => void;
   onAppointments: () => void;
+  onRetake?: () => void;
 }) {
   const style = riskStyle(result.risk_level);
   const trendPoints = trends.slice(-7);
@@ -133,6 +136,17 @@ export function WellnessCheckInResults({
             <LayoutDashboard className="mr-2 h-5 w-5" />
             Go to dashboard
           </Button>
+          {onRetake && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onRetake}
+              className="h-12 rounded-2xl font-medium"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Take another check-in / Switch mode
+            </Button>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Button type="button" variant="outline" onClick={onWellness} className="h-12 rounded-2xl">
               Wellness

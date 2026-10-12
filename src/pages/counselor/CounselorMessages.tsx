@@ -72,7 +72,7 @@ const CHAT_LIST_TIMEOUT_MS = 30000;
 const CHAT_LIST_PAGE_SIZE = 64;
 const CHAT_LIST_RETRY_PAGE_SIZE = 32;
 const CHAT_LIST_CACHE_TTL_MS = 60 * 1000;
-const CHAT_LIST_CACHE_VERSION = 9;
+const CHAT_LIST_CACHE_VERSION = 10;
 const IDENTITY_REVEAL_GRANTS_KEY = "counselor_identity_reveal_grants_v1";
 const ONLINE_WINDOW_SECONDS = 10 * 60;
 const CHAT_LIST_MIN_REFRESH_GAP_MS = 8000;
@@ -135,6 +135,7 @@ type RawSession = {
 type ChatListItem = {
   id: number;
   studentId: number | null;
+  chatPeerStudentId: number | null;
   counselorId: number;
   realStudentName: string;
   realStudentEmail: string;
@@ -890,22 +891,35 @@ const CounselorMessages = () => {
               identityVisibleToViewer && Number.isInteger(numericStudentId) && numericStudentId > 0
                 ? numericStudentId
                 : null;
-            const peerCounselorId = Number(
-              session.peer_counselor_id ||
-                session.peer_counselor?.id ||
-                session.case_peer_counselor_id ||
-                session.case_peer_counselor?.id ||
-                0
-            );
-            const peerParticipant = session.peer_counselor || session.case_peer_counselor || null;
+            const rawChatPeerStudentId = Number(session.chat_peer_student_id ?? 0);
+            const chatPeerStudentId =
+              Number.isInteger(rawChatPeerStudentId) && rawChatPeerStudentId > 0
+                ? rawChatPeerStudentId
+                : visibleStudentId;
+            const isPeerAssignedRole =
+              session.assigned_role === "peer_counselor" ||
+              (!session.assigned_role && Boolean(session.peer_counselor_id));
+            const peerCounselorId = isPeerAssignedRole
+              ? Number(
+                  session.peer_counselor_id ||
+                    session.peer_counselor?.id ||
+                    session.case_peer_counselor_id ||
+                    session.case_peer_counselor?.id ||
+                    0
+                )
+              : 0;
+            const peerParticipant = isPeerAssignedRole
+              ? session.peer_counselor || session.case_peer_counselor || null
+              : null;
             const peerParticipantName =
               peerParticipant?.profile?.full_name ||
               peerParticipant?.email ||
               "";
             const isPeerAssigned =
-              session.assigned_role === "peer_counselor" ||
-              peerCounselorId > 0 ||
-              peerParticipantName.trim() !== "";
+              isPeerAssignedRole &&
+              (session.assigned_role === "peer_counselor" ||
+                peerCounselorId > 0 ||
+                peerParticipantName.trim() !== "");
             const peerCounselorName =
               peerParticipantName ||
               (peerCounselorId ? `Peer #${peerCounselorId}` : "Peer Counselor");
@@ -923,6 +937,7 @@ const CounselorMessages = () => {
             return {
               id: Number(session.id),
               studentId: visibleStudentId,
+              chatPeerStudentId,
               counselorId: Number(session.counselor_id),
               realStudentName: realName,
               realStudentEmail: realEmail,
@@ -1413,7 +1428,13 @@ const CounselorMessages = () => {
           : "Counselor emergency escalation",
       });
       toast.success("Emergency escalation sent.");
-      await loadSessions(true);
+      if (isPeerCounselor) {
+        setSelectedChatId(null);
+        activeSessionIdRef.current = null;
+        await loadSessions(false);
+      } else {
+        await loadSessions(true);
+      }
     } catch (error: unknown) {
       const errMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to send emergency escalation";
       toast.error(errMsg);
@@ -1453,22 +1474,24 @@ const CounselorMessages = () => {
   };
 
   const handleSwitchToDirectChat = async () => {
-    if (!selectedChat?.studentId) {
+    const resolvedStudentId = selectedChat?.studentId || selectedChat?.chatPeerStudentId || null;
+    if (!resolvedStudentId) {
       toast.error("Cannot resolve student details for this chat.");
       return;
     }
-    const studentId = selectedChat.studentId;
+    const studentId = resolvedStudentId;
     setIsSwitchingChat(true);
     try {
       const existingDirect = chats.find(
         (c) =>
-          c.studentId === studentId &&
+          (c.studentId === studentId || c.chatPeerStudentId === studentId) &&
           !c.isPeerAssigned &&
           c.status !== "completed" &&
           c.status !== "cancelled"
       );
 
       if (existingDirect) {
+        setSidebarLane("direct");
         selectConversationById(existingDirect.id);
         toast.info("Switched to your direct counselor chat.");
       } else {
@@ -1477,6 +1500,7 @@ const CounselorMessages = () => {
           session_type: "chat",
         });
         toast.success("Created a new direct counselor conversation.");
+        setSidebarLane("direct");
         await loadSessions(false);
         selectConversationById(newSession.id);
       }
@@ -1564,11 +1588,11 @@ const CounselorMessages = () => {
   }, [selectedSessionId]);
 
   const activePeerParticipant = useMemo(() => {
-    if (!selectedChat) {
+    if (!selectedChat || !selectedChat.isPeerAssigned) {
       return null;
     }
 
-    if (selectedChat.peerCounselorId || selectedChat.isPeerAssigned) {
+    if (selectedChat.peerCounselorId) {
       return {
         id: selectedChat.peerCounselorId,
         name: selectedChat.peerCounselorName || "Peer Counselor",
@@ -1580,7 +1604,10 @@ const CounselorMessages = () => {
       .find((msg) => msg.sender_role === "peer_counselor");
 
     if (!peerMessage) {
-      return null;
+      return {
+        id: null,
+        name: selectedChat.peerCounselorName || "Peer Counselor",
+      };
     }
 
     return {
@@ -1588,16 +1615,19 @@ const CounselorMessages = () => {
       name:
         peerMessage.sender_display_name ||
         peerMessage.sender_name_snapshot ||
+        selectedChat.peerCounselorName ||
         "Peer Counselor",
     };
   }, [messages, selectedChat]);
 
-  const selectedChatIsSharedPeerCase = Boolean(activePeerParticipant);
+  const selectedChatIsSharedPeerCase = Boolean(selectedChat?.isPeerAssigned);
 
   useEffect(() => {
     if (!showSupervisionColumn || !selectedChat?.id) return;
-    setSidebarLane(selectedChatIsSharedPeerCase ? "supervision" : "direct");
-  }, [selectedChat?.id, selectedChatIsSharedPeerCase, showSupervisionColumn]);
+    setSidebarLane(selectedChat.isPeerAssigned ? "supervision" : "direct");
+    // Only sync sidebar lane when the selected chat ID changes so counselors can freely switch lane tabs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChat?.id, showSupervisionColumn]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedSessionId) return;

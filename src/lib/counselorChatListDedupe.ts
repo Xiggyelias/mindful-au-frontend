@@ -79,6 +79,9 @@ type CounselorChatDedupeOptions = {
 
 export function counselorChatListLane(row: Record<string, unknown>): "direct" | "supervision" {
   const assignedRole = String(row.assigned_role ?? "").trim();
+  if (assignedRole === "counselor") {
+    return "direct";
+  }
   const peerCounselorId = _numberOrZero(row.peer_counselor_id);
   const casePeerCounselorId = _numberOrZero(row.case_peer_counselor_id);
   const peerCounselor = row.peer_counselor as Record<string, unknown> | undefined;
