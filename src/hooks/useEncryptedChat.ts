@@ -154,18 +154,23 @@ const filterVisibleMessages = <T extends { content?: unknown }>(msgs: T[]): T[] 
     return !isE2EHandshakeEnvelope(content);
   });
 
-const formatServerMessage = (msg: any): ChatMessage => ({
-  ...msg,
-  decryptedContent: msg.is_encrypted ? ENCRYPTED_FALLBACK : msg.content,
-  e2eVisual: 'plain' as const,
-  // WhatsApp delivery status semantics:
-  //   'sent'      → message saved on server, recipient not yet fetched it   (single tick)
-  //   'delivered' → recipient's client has fetched it but not opened thread  (double grey tick)
-  //   'read'      → seen_at is set (recipient opened the thread and it was marked read) (double blue tick)
-  // We don't have a separate delivery ack yet, so we use 'sent' as the interim
-  // state and only promote to 'read' when seen_at arrives.
-  delivery_status: msg.seen_at ? 'read' : 'sent',
-});
+const looksLikeCiphertext = (content: string): boolean => {
+  const trimmed = content.trim();
+  if (trimmed === '' || trimmed.includes(' ') || trimmed.startsWith('{')) return false;
+  return /^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length >= 44;
+};
+
+const formatServerMessage = (msg: any): ChatMessage => {
+  const rawContent = String(msg?.content ?? '');
+  const isTrulyCiphertext = Boolean(msg.is_encrypted) && looksLikeCiphertext(rawContent);
+
+  return {
+    ...msg,
+    decryptedContent: isTrulyCiphertext ? ENCRYPTED_FALLBACK : rawContent,
+    e2eVisual: 'plain' as const,
+    delivery_status: msg?.seen_at ? 'read' : 'sent',
+  };
+};
 
 export const useEncryptedChat = ({ sessionId, userId }: UseEncryptedChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);

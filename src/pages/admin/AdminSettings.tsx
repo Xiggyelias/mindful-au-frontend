@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Shield,
@@ -445,7 +445,7 @@ const AdminSettings = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <Label>Data Encryption</Label>
-                    <p className="text-sm text-muted-foreground">End-to-end encryption</p>
+                    <p className="text-sm text-muted-foreground">At-rest clinical note & 2FA encryption (AES-256)</p>
                   </div>
                   <Switch
                     checked={!!settings.data_encryption}

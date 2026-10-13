@@ -412,11 +412,11 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
                   </Button>
                 </div>
               ) : null}
-              {/* WhatsApp-style end-to-end encryption assurance badge */}
+              {/* Security & privacy assurance badge */}
               <div className="mx-auto flex max-w-md items-center justify-center my-3 px-3 select-none">
                 <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 text-center text-[11px] leading-relaxed text-amber-800 dark:text-amber-300 shadow-xs">
                   <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <span>Messages and calls are end-to-end encrypted. No one outside this consultation can read or listen to them.</span>
+                  <span>Consultation is protected with encrypted transport & WebRTC DTLS-SRTP. Clinical notes are encrypted at rest.</span>
                 </div>
               </div>
             </div>

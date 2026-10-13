@@ -1802,7 +1802,9 @@ const CounselorMessages = () => {
       );
     }
 
-    if (msg.is_encrypted && (!msg.decryptedContent || msg.decryptedContent === ENCRYPTED_FALLBACK)) {
+    const isCipherFallback = msg.is_encrypted && (!msg.decryptedContent || msg.decryptedContent === ENCRYPTED_FALLBACK);
+    const isActualCiphertext = typeof msg.content === 'string' && /^[A-Za-z0-9+/=]{44,}$/.test(msg.content.trim()) && !msg.content.includes(' ');
+    if (isCipherFallback && isActualCiphertext) {
       return <p className="text-xs italic text-muted-foreground">[Encrypted message — key unavailable]</p>;
     }
 
