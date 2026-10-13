@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
-import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar } from "lucide-react";
+import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar, Sparkles } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PreSessionPulseModal } from "@/components/assessment/PreSessionPulseModal";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -118,6 +119,10 @@ function isHttpServerError(error: unknown): boolean {
 
 const StudentAppointments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPreSessionModal, setShowPreSessionModal] = useState(
+    () => new URLSearchParams(location.search).get("checkin") === "1"
+  );
+  const [selectedCheckInAppointment, setSelectedCheckInAppointment] = useState<Appointment | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [appointmentTotalPages, setAppointmentTotalPages] = useState(1);
@@ -2089,6 +2094,18 @@ const StudentAppointments = () => {
                         </span>
                         {(status === "scheduled" || status === "confirmed") && (
                           <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 border-primary/30 text-primary hover:bg-primary/10 text-xs"
+                              onClick={() => {
+                                setSelectedCheckInAppointment(apt);
+                                setShowPreSessionModal(true);
+                              }}
+                            >
+                              <Sparkles className="h-3 w-3" />
+                              Check In
+                            </Button>
                             {showVideoJoin && (
                               <Button size="sm" onClick={() => openVideoCallRoom(apt)}>
                                 Join
@@ -2115,6 +2132,20 @@ const StudentAppointments = () => {
           </div>
         </main>
       </div>
+
+      <PreSessionPulseModal
+        isOpen={showPreSessionModal}
+        onClose={() => {
+          setShowPreSessionModal(false);
+          setSelectedCheckInAppointment(null);
+        }}
+        appointmentId={selectedCheckInAppointment?.id}
+        counselorName={selectedCheckInAppointment?.counselor?.profile?.full_name || undefined}
+        onSuccess={() => {
+          setShowPreSessionModal(false);
+          setSelectedCheckInAppointment(null);
+        }}
+      />
     </div>
   );
 };

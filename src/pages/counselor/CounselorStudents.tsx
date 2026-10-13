@@ -41,6 +41,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { CounselorPreSessionCard } from "@/components/assessment/CounselorPreSessionCard";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -1357,113 +1358,53 @@ const CounselorStudents = () => {
           </Tabs>
         </DialogContent>
       </Dialog>
-      {/* ── Pre-Session Assessment Dialog ────────────────────────────────── */}
+      {/* ── Pre-Session Pulse Dialog ────────────────────────────────── */}
       <Dialog open={preSessionStudent !== null} onOpenChange={(open) => { if (!open) setPreSessionStudent(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-primary" />
-              Pre-Session Assessment
+        <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl border-border">
+          <DialogHeader className="p-4 bg-muted/30 border-b border-border/60">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <ClipboardList className="h-4 w-4 text-primary" />
+              Pre-Session Student Pulse
             </DialogTitle>
-            <DialogDescription>
-              {preSessionStudent?.name} · Complete this brief before opening the session.
+            <DialogDescription className="text-xs">
+              {preSessionStudent?.name} · Review student's pre-session check-in before meeting
             </DialogDescription>
           </DialogHeader>
 
-          {/* Student wellness snapshot */}
-          {isLoadingPreSession ? (
-            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading student data…
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2 rounded-lg bg-secondary/20 p-3 text-center text-sm">
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Wellness</p>
-                <p className="font-semibold">{preSessionWellness?.scores?.wellness_score != null ? `${preSessionWellness.scores.wellness_score}%` : "--"}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Stress</p>
-                <p className="font-semibold">{preSessionWellness?.scores?.stress_level != null ? `${preSessionWellness.scores.stress_level}%` : "--"}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">AI Risk</p>
-                <p className={`font-semibold capitalize ${
-                  preSessionStudent?.riskLevel === "high" || preSessionStudent?.riskLevel === "critical"
-                    ? "text-destructive"
-                    : preSessionStudent?.riskLevel === "medium"
-                    ? "text-warning"
-                    : "text-success"
-                }`}>{preSessionStudent?.riskLevel || "low"}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Presenting concern</Label>
-              <Textarea
-                placeholder="Brief note on what the student brings to this session…"
-                value={preSessionForm.presenting_concern}
-                onChange={(e) => setPreSessionForm((prev) => ({ ...prev, presenting_concern: e.target.value }))}
-                rows={2}
-                maxLength={500}
+          <div className="p-4 space-y-4">
+            {preSessionStudent && (
+              <CounselorPreSessionCard
+                studentId={preSessionStudent.id}
+                studentName={preSessionStudent.name}
+                onInsertToNotes={(summary) => {
+                  setPreSessionForm((prev) => ({
+                    ...prev,
+                    presenting_concern: prev.presenting_concern ? `${prev.presenting_concern}\n${summary}` : summary,
+                  }));
+                }}
               />
-            </div>
+            )}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observed / reported risk level</Label>
-              <select
-                value={preSessionForm.observed_risk}
-                onChange={(e) => setPreSessionForm((prev) => ({ ...prev, observed_risk: e.target.value }))}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={preSessionForm.consent_confirmed}
-                  onChange={(e) => setPreSessionForm((prev) => ({ ...prev, consent_confirmed: e.target.checked }))}
-                  className="h-4 w-4 rounded border-input"
-                />
-                Informed consent confirmed
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={preSessionForm.safety_assessed}
-                  onChange={(e) => setPreSessionForm((prev) => ({ ...prev, safety_assessed: e.target.checked }))}
-                  className="h-4 w-4 rounded border-input"
-                />
-                Safety check completed
-              </label>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Session objective</Label>
-              <Input
-                placeholder="Primary goal for today's session…"
+            <div className="space-y-1.5 pt-1">
+              <Label className="text-xs font-medium text-muted-foreground">Counselor Session Objective (Optional)</Label>
+              <Textarea
+                placeholder="Any clinical focus or goal for today's session..."
                 value={preSessionForm.session_objective}
                 onChange={(e) => setPreSessionForm((prev) => ({ ...prev, session_objective: e.target.value }))}
-                maxLength={200}
+                rows={2}
+                maxLength={300}
+                className="text-xs resize-none"
               />
             </div>
           </div>
 
-          <DialogFooter className="gap-2 pt-1">
-            <Button variant="outline" onClick={() => setPreSessionStudent(null)} disabled={isStartingPreSession}>
-              Cancel
+          <DialogFooter className="gap-2 p-3 bg-muted/20 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => setPreSessionStudent(null)} disabled={isStartingPreSession} className="text-xs">
+              Close
             </Button>
-            <Button onClick={() => void handleStartWithPreSession()} disabled={isStartingPreSession}>
+            <Button size="sm" onClick={() => void handleStartWithPreSession()} disabled={isStartingPreSession} className="text-xs gap-1.5">
               {isStartingPreSession ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Starting…</>
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" />Starting…</>
               ) : (
                 <>Start Session</>
               )}

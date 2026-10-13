@@ -682,11 +682,7 @@ const StudentDiagnosticAssessment = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar
-        items={
-          user?.needs_assessment
-            ? studentNavItems.filter((item) => item.path === "/student/diagnostic-assessment")
-            : studentNavItems
-        }
+        items={studentNavItems}
         userType="student"
         userName={userName}
         isOpen={sidebarOpen}
@@ -696,7 +692,7 @@ const StudentDiagnosticAssessment = () => {
       <div className="lg:pl-72 pl-0">
         <DashboardHeader
           title="Wellness check-in"
-          onMenuClick={user?.needs_assessment ? undefined : () => setSidebarOpen(true)}
+          onMenuClick={() => setSidebarOpen(true)}
         />
 
         <main
@@ -717,8 +713,8 @@ const StudentDiagnosticAssessment = () => {
               onSelectMode={handleModeChange}
               onStart={handleStartAssessment}
               onRetry={() => void loadQuestionnaire()}
-              canGoBack={!user?.needs_assessment}
-              onBack={user?.needs_assessment ? undefined : () => navigate("/student/dashboard")}
+              canGoBack={true}
+              onBack={() => navigate("/student/dashboard")}
             />
           )}
 

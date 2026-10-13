@@ -38,6 +38,7 @@ import {
 } from "@/lib/api";
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
+import { CounselorPreSessionCard } from "@/components/assessment/CounselorPreSessionCard";
 import {
   isAnonymousIdentityMaskedFromViewer,
   resolveCounselorStudentDisplayName,
@@ -1490,19 +1491,18 @@ const CounselorVideo = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Session Intel</p>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-muted-foreground">Status</span>
-                        <span className="font-medium text-emerald-500">Connected</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-secondary/30">
-                        <span className="text-muted-foreground">Mode</span>
-                        <span className="font-medium">{isAudioOnly ? "Audio only" : "Video + Audio"}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <CounselorPreSessionCard
+                    studentId={activeSession?.student_id}
+                    appointmentId={activeSession?.id}
+                    sessionId={counselingSessionId}
+                    studentName={remoteParticipantName}
+                    onInsertToNotes={(clinicalSummaryText) => {
+                      setNoteText((prev) => {
+                        const trimmed = prev.trim();
+                        return trimmed ? `${trimmed}\n\n${clinicalSummaryText}` : clinicalSummaryText;
+                      });
+                    }}
+                  />
 
                   <div className="space-y-2 flex-1 flex flex-col">
                     <div className="flex items-center justify-between gap-2">

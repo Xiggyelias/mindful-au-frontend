@@ -14,6 +14,7 @@ import {
   Video,
   VideoOff,
   WifiOff,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PreSessionPulseModal } from "@/components/assessment/PreSessionPulseModal";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
@@ -93,6 +95,7 @@ const formatScheduleLabel = (scheduledAt?: string | null): string => {
 
 const StudentVideoCall = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [showPreSessionModal, setShowPreSessionModal] = useState(() => searchParams.get("checkin") === "1");
   const autoStartedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -1231,6 +1234,17 @@ const StudentVideoCall = () => {
                             {activeAppointment && isAnonymousBookingForParticipant(activeAppointment) && (
                               <AnonymousModeIndicator variant="badge" />
                             )}
+                            {!isConnected && activeAppointment && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setShowPreSessionModal(true)}
+                                className="inline-flex h-8 w-fit items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-3 text-xs font-medium backdrop-blur-md shadow-md transition-all"
+                              >
+                                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                                30s Check-In
+                              </Button>
+                            )}
                           </div>
 
                           <div className="flex flex-col items-end gap-1.5">
@@ -1525,6 +1539,16 @@ const StudentVideoCall = () => {
           </div>
         </main>
       </div>
+
+      <PreSessionPulseModal
+        isOpen={showPreSessionModal}
+        onClose={() => setShowPreSessionModal(false)}
+        appointmentId={activeAppointmentId}
+        counselorName={remoteParticipantName}
+        onSuccess={() => {
+          setShowPreSessionModal(false);
+        }}
+      />
     </div>
   );
 };

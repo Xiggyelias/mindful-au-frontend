@@ -2165,6 +2165,45 @@ class ApiClient {
     return response.data;
   }
 
+  // Pre-Session Pulse Check-In
+  async submitPreSessionCheckIn(data: {
+    mood: string;
+    mood_score: number;
+    energy_level: number;
+    stress_level: number;
+    primary_concerns?: string[];
+    session_goal?: string;
+    student_notes?: string;
+    appointment_id?: number | string;
+    session_id?: number | string;
+  }) {
+    const response = await this.client.post('/pre-session-check-in', data);
+    return response.data;
+  }
+
+  async getLatestPreSessionCheckIn(params?: {
+    student_id?: number | string;
+    appointment_id?: number | string;
+    session_id?: number | string;
+  }) {
+    const response = await this.client.get('/pre-session-check-in/latest', { params });
+    return response.data;
+  }
+
+  async getPreSessionCheckInHistory(studentId?: number | string) {
+    const params = studentId ? { student_id: studentId } : {};
+    const response = await this.client.get('/pre-session-check-in/history', { params });
+    return response.data;
+  }
+
+  async requestPreSessionCheckIn(data: {
+    student_id: number | string;
+    appointment_id?: number | string;
+  }) {
+    const response = await this.client.post('/pre-session-check-in/request', data);
+    return response.data;
+  }
+
   async getStudentWellnessSummary(studentId?: number) {
     const params = studentId ? { student_id: studentId } : {};
     const response = await this.client.get('/student-wellness/summary', { params });
