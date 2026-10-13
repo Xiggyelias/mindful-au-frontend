@@ -47,7 +47,6 @@ import {
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
   isAnonymousBookingForParticipant,
-  isProfileAnonymousMode,
 } from "@/lib/anonymousMode";
 import { CHAT_ANONYMITY_SYNC_EVENT } from "@/lib/chatRealtimeEvents";
 import { useProfileAnonymousMode } from "@/hooks/useProfileAnonymousMode";
@@ -364,7 +363,9 @@ const StudentVideoCall = () => {
 
     return getVideoCallWindowStatus(
       activeAppointment.scheduled_at,
-      activeAppointment.duration_minutes
+      activeAppointment.duration_minutes,
+      undefined,
+      Boolean(activeAppointment.is_emergency)
     );
   }, [activeAppointment]);
 
@@ -625,7 +626,9 @@ const StudentVideoCall = () => {
 
       const callWindow = getVideoCallWindowStatus(
         activeAppointment.scheduled_at,
-        activeAppointment.duration_minutes
+        activeAppointment.duration_minutes,
+        undefined,
+        Boolean(activeAppointment.is_emergency)
       );
 
       if (!callWindow.canStart) {
@@ -645,25 +648,7 @@ const StudentVideoCall = () => {
 
       setIsStartingMode(mode);
 
-      // Revealing lifts the anonymous audio-only restriction, so the mode has to be derived
-      // from the row as it stands *after* the reveal — the pre-reveal copy still reads
-      // audio-only and would ask the server for an audio call we no longer want.
-      let callRow: typeof activeAppointment = activeAppointment;
-      if (
-        isAnonymousBookingForParticipant(activeAppointment) &&
-        !isProfileAnonymousMode(user?.profile?.anonymous_mode)
-      ) {
-        try {
-          const revealed = await api.revealAppointmentIdentity(activeAppointmentId);
-          if (revealed?.appointment) {
-            callRow = revealed.appointment as typeof activeAppointment;
-          }
-          await loadUpcomingVideoAppointments();
-        } catch {
-          /* authorize will still enforce server rules */
-        }
-      }
-
+      const callRow = activeAppointment;
       const requestedEffectiveMode: CallMode = isAppointmentAudioOnly(callRow) ? "audio" : mode;
       setIsStartingMode(requestedEffectiveMode);
 
@@ -754,12 +739,11 @@ const StudentVideoCall = () => {
       activeAppointment,
       activeAppointmentId,
       cancelOutgoingCall,
+      endCall,
       isOnline,
       isSignalingReady,
-      loadUpcomingVideoAppointments,
       startAudioCall,
       startCall,
-      user?.profile?.anonymous_mode,
     ]
   );
 
@@ -947,7 +931,9 @@ const StudentVideoCall = () => {
 
     const callWindow = getVideoCallWindowStatus(
       activeAppointment.scheduled_at,
-      activeAppointment.duration_minutes
+      activeAppointment.duration_minutes,
+      undefined,
+      Boolean(activeAppointment.is_emergency)
     );
 
     if (!callWindow.canStart) {
@@ -1477,7 +1463,7 @@ const StudentVideoCall = () => {
                     >
                       {isUpdatingAnonymousMode
                         ? "Updating..."
-                        : profileAnonymousMode
+                        : (activeAppointment ? activeAppointmentAnonymousBooking : profileAnonymousMode)
                         ? "Anonymous Mode"
                         : "Identified Mode"}
                     </Button>
@@ -1508,7 +1494,9 @@ const StudentVideoCall = () => {
                       const isActive = activeAppointmentId === appointmentId;
                       const callWindow = getVideoCallWindowStatus(
                         appointment.scheduled_at,
-                        appointment.duration_minutes
+                        appointment.duration_minutes,
+                        undefined,
+                        Boolean(appointment.is_emergency)
                       );
                       const isBusy = isBusyWithOtherAppointment(appointmentId);
 

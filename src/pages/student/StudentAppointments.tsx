@@ -609,9 +609,8 @@ const StudentAppointments = () => {
             ? null
             : combinedSlots.find((slot) => {
                 if (slot.status !== "available") return false;
-                if (new Date(slot.start_time).getTime() <= Date.now()) return false;
-                const h = Number(formatInDisplayZone(new Date(slot.start_time), "H"));
-                return h !== 12;
+                const startMs = new Date(slot.start_time).getTime();
+                return startMs > Date.now() - 2 * 60 * 1000;
               })
         );
         if (targetSlot) {
@@ -660,31 +659,37 @@ const StudentAppointments = () => {
   const slotDays = useMemo(() => {
     const grouped = new Map<string, CounselorSlot[]>();
     slots.forEach((slot) => {
-      if (!slot.slot_date) return;
-      const existing = grouped.get(slot.slot_date) ?? [];
+      const dateKey = slot.start_time
+        ? formatInDisplayZone(new Date(slot.start_time), "yyyy-MM-dd")
+        : slot.slot_date;
+      if (!dateKey) return;
+      const existing = grouped.get(dateKey) ?? [];
       existing.push(slot);
-      grouped.set(slot.slot_date, existing);
+      grouped.set(dateKey, existing);
     });
+
+    const cutoffMs = Date.now() - 2 * 60 * 1000;
 
     return Array.from(grouped.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, daySlots]) => ({
-        date,
-        label: new Date(`${date}T00:00:00`).toLocaleDateString([], {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        }),
-        slots: daySlots
-          .filter((slot) => {
-            if (slot.status !== "available") return false;
-            if (new Date(slot.start_time).getTime() <= Date.now()) return false;
-            // Exclude 12:00 PM – 1:00 PM (lunch break — never bookable)
-            const displayHour = Number(formatInDisplayZone(new Date(slot.start_time), "H"));
-            return displayHour !== 12;
-          })
-          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-      }))
+      .map(([date, daySlots]) => {
+        const sampleDate = daySlots[0]?.start_time
+          ? new Date(daySlots[0].start_time)
+          : new Date(`${date}T12:00:00Z`);
+        const label = formatInDisplayZone(sampleDate, "EEE, MMM d, yyyy");
+
+        return {
+          date,
+          label,
+          slots: daySlots
+            .filter((slot) => {
+              if (slot.status !== "available") return false;
+              const startMs = new Date(slot.start_time).getTime();
+              return startMs > cutoffMs;
+            })
+            .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+        };
+      })
       .filter((day) => day.slots.length > 0);
   }, [slots]);
 
@@ -1606,7 +1611,7 @@ const StudentAppointments = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {day.slots.map((slot: CounselorSlot) => {
-                                const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now();
+                                const isAvailable = slot.status === "available" && new Date(slot.start_time).getTime() > Date.now() - 2 * 60 * 1000;
                                 const isSelected = Number(slot.id) === Number(selectedSlotId);
                                 return (
                                   <button
@@ -1869,6 +1874,24 @@ const StudentAppointments = () => {
                     >
                       {isLoadingEmergencyRequests ? "Refreshing..." : "Refresh"}
                     </Button>
+                    {isEmergencyAppointmentScheduled && (() => {
+                      const activeEmergencyApt = appointments.find(
+                        (apt) => Boolean(apt.is_emergency) && (apt.status === "scheduled" || apt.status === "confirmed")
+                      );
+                      if (!activeEmergencyApt) return null;
+                      return (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="gap-1.5 font-semibold shadow-md animate-pulse"
+                          onClick={() => openVideoCallRoom(activeEmergencyApt)}
+                        >
+                          <Video className="h-4 w-4" />
+                          Join Call Now
+                        </Button>
+                      );
+                    })()}
                     {isEmergencyAssigned && (
                       <Button
                         type="button"
@@ -1998,7 +2021,12 @@ const StudentAppointments = () => {
               const status = String(apt.status || "").toLowerCase();
               const videoWindow =
                 !isPhysical && isVideoEnabledAppointment(apt.notes)
-                  ? getVideoCallWindowStatus(apt.scheduled_at, apt.duration_minutes)
+                  ? getVideoCallWindowStatus(
+                      apt.scheduled_at,
+                      apt.duration_minutes,
+                      undefined,
+                      Boolean(apt.is_emergency)
+                    )
                   : null;
               const showVideoJoin =
                 !isPhysical &&

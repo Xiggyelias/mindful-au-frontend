@@ -223,7 +223,8 @@ export function getAppointmentWhereLabel(notes?: string | null): string {
 export const getVideoCallWindowStatus = (
   scheduledAt: string | Date | null | undefined,
   durationMinutes?: number | null,
-  now = new Date()
+  now = new Date(),
+  isEmergency = false
 ): VideoCallWindowStatus => {
   if (!scheduledAt) {
     return {
@@ -251,12 +252,17 @@ export const getVideoCallWindowStatus = (
   }
 
   const safeDurationMinutes = normalizeVideoCallDuration(durationMinutes);
-  const callOpensAtMs =
-    scheduledAtMs - VIDEO_CALL_LIMITS.joinEarlyMinutes * 60 * 1_000;
-  const callClosesAtMs =
+  const nowMs = now.getTime();
+  const callOpensAtMs = isEmergency
+    ? Math.min(nowMs - 60_000, scheduledAtMs - VIDEO_CALL_LIMITS.joinEarlyMinutes * 60 * 1_000)
+    : scheduledAtMs - VIDEO_CALL_LIMITS.joinEarlyMinutes * 60 * 1_000;
+  let callClosesAtMs =
     scheduledAtMs +
     (safeDurationMinutes + VIDEO_CALL_LIMITS.joinLateGraceMinutes) * 60 * 1_000;
-  const nowMs = now.getTime();
+
+  if (isEmergency && callClosesAtMs <= nowMs) {
+    callClosesAtMs = nowMs + (safeDurationMinutes + VIDEO_CALL_LIMITS.joinLateGraceMinutes) * 60 * 1_000;
+  }
 
   if (nowMs < callOpensAtMs) {
     const startsInSeconds = Math.ceil((callOpensAtMs - nowMs) / 1_000);

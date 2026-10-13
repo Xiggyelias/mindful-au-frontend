@@ -240,7 +240,9 @@ const CounselorVideo = () => {
           if (!(st === "scheduled" || st === "confirmed")) return false;
           const callWindow = getVideoCallWindowStatus(
             apt.scheduled_at,
-            apt.duration_minutes
+            apt.duration_minutes,
+            undefined,
+            Boolean(apt.is_emergency)
           );
           return !callWindow.isExpired;
         })
@@ -447,7 +449,9 @@ const CounselorVideo = () => {
     if (!activeSession) return null;
     return getVideoCallWindowStatus(
       activeSession.scheduled_at,
-      activeSession.duration_minutes
+      activeSession.duration_minutes,
+      undefined,
+      Boolean(activeSession.is_emergency)
     );
   }, [activeSession]);
 
@@ -466,7 +470,9 @@ const CounselorVideo = () => {
 
       const callWindow = getVideoCallWindowStatus(
         session.scheduled_at,
-        session.duration_minutes
+        session.duration_minutes,
+        undefined,
+        Boolean(session.is_emergency)
       );
 
       if (!callWindow.canStart) {
@@ -841,7 +847,9 @@ const CounselorVideo = () => {
 
     const callWindow = getVideoCallWindowStatus(
       activeSession.scheduled_at,
-      activeSession.duration_minutes
+      activeSession.duration_minutes,
+      undefined,
+      Boolean(activeSession.is_emergency)
     );
 
     if (!callWindow.canStart) {
@@ -1493,7 +1501,9 @@ const CounselorVideo = () => {
                       const sessionAudioOnly = isAppointmentAudioOnly(session);
                       const callWindow = getVideoCallWindowStatus(
                         session.scheduled_at,
-                        session.duration_minutes
+                        session.duration_minutes,
+                        undefined,
+                        Boolean(session.is_emergency)
                       );
                       const isBusyWithOtherCall = Boolean(
                         localStream && activeSessionId && activeSessionId !== sessionId
