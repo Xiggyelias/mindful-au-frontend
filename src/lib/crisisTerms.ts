@@ -3,6 +3,7 @@
  * client-side scans align with server verification on POST /sessions/{id}/crisis-signal.
  */
 export const CRISIS_TERMS: readonly string[] = [
+  // Explicit self-harm/suicide signals
   "suicide",
   "kill myself",
   "end my life",
@@ -12,15 +13,42 @@ export const CRISIS_TERMS: readonly string[] = [
   "wish i were dead",
   "better off without me",
   "take my life",
+  "take my own life",
   "dont want to live",
   "sleeping pills",
   "overdose",
   "goodbye everyone",
   "no more pain",
   "done with life",
+  "cutting myself",
   "cutting",
+  "cut myself",
   "bleeding",
   "hanging",
+  "hanging myself",
+  "slit my wrist",
+  "shoot myself",
+  "drown myself",
+  "bleed out",
+  // Additional high-risk university crisis phrases
+  "want to die",
+  "don t want to be here",
+  "not worth living",
+  "life is not worth",
+  "ending it all",
+  "end it all",
+  "rather be dead",
+  "die by suicide",
+  "suicidal thoughts",
+  "suicidal ideation",
+  "no reason to live",
+  "give up on life",
+  "make it stop forever",
+  "just want it all to end",
+  "leave everything behind",
+  "nobody would miss me",
+  "tired of being alive",
+  "can t keep living like this",
 ] as const;
 
 function normalizeText(text: string): string {

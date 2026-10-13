@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Shield,
@@ -31,6 +31,7 @@ const formatDateTime = (value?: string | null) => {
 type DashboardCounselorPresenceItem = {
   id: number;
   name: string;
+  role?: string;
   status: "Offline" | "Available" | "In Session";
   sessions: number;
 };
@@ -60,6 +61,7 @@ type AdminDashboardData = {
   overview?: {
     total_students?: number;
     total_counselors?: number;
+    total_peer_counselors?: number;
     active_sessions?: number;
     pending_appointments?: number;
   };
@@ -494,7 +496,18 @@ const AdminDashboard = () => {
                           </span>
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-foreground">{counselor.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground">{counselor.name}</p>
+                            {counselor.role && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                counselor.role === "Peer Counselor"
+                                  ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                                  : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                              }`}>
+                                {counselor.role}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground">{counselor.sessions} sessions today</p>
                         </div>
                         <span

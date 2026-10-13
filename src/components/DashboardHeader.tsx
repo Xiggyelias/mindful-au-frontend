@@ -116,6 +116,10 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     }
 
     const appointmentId = Number((meta as { appointment_id?: unknown }).appointment_id);
+    const kind = String((meta as { kind?: unknown }).kind || "").trim();
+    if (kind === "incoming_call") {
+      return role === "counselor" ? "/counselor/video" : "/student/video-call";
+    }
     if (Number.isFinite(appointmentId) && appointmentId > 0) {
       if (basePath === "/admin") return "/admin/alerts";
       if (basePath === "/peer") return "/peer/dashboard";

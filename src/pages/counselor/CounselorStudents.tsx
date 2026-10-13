@@ -23,6 +23,7 @@ import {
   Check,
   UserPlus,
   ClipboardList,
+  Sparkles,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -515,6 +516,29 @@ const CounselorStudents = () => {
     }
   };
 
+  const handleAutoSelectPeer = (studentId: number) => {
+    const availablePeers = peerOptions.filter((p: any) => p?.is_available !== false);
+    if (availablePeers.length === 0) {
+      toast.error("No peer counselors are currently available for assignment.");
+      return;
+    }
+    const sorted = [...availablePeers].sort((a: any, b: any) => {
+      const onlineA = a?.is_online ? 1 : 0;
+      const onlineB = b?.is_online ? 1 : 0;
+      if (onlineB !== onlineA) return onlineB - onlineA;
+      const casesA = Number(a?.active_cases_count || 0);
+      const casesB = Number(b?.active_cases_count || 0);
+      return casesA - casesB;
+    });
+    const bestPeer = sorted[0];
+    if (bestPeer) {
+      setSelectedPeerByStudent((prev) => ({ ...prev, [studentId]: String(bestPeer.id) }));
+      const name = bestPeer?.profile?.full_name || bestPeer?.email || `Peer #${bestPeer.id}`;
+      const cases = Number(bestPeer?.active_cases_count || 0);
+      toast.info(`Auto-selected optimal peer: ${name} (${cases} active ${cases === 1 ? "case" : "cases"}). Click Assign to confirm.`);
+    }
+  };
+
   const handleAssignAssessment = async (studentId: number, studentName: string) => {
     try {
       setAssigningAssessmentStudentId(studentId);
@@ -942,7 +966,7 @@ const CounselorStudents = () => {
                               </span>
 
                               <select
-                                className="h-8 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-[160px] max-w-[260px]"
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-[160px] max-w-[280px]"
                                 value={
                                   selectedPeerByStudent[student.id] ??
                                   (student.assignedPeerCounselorId ? String(student.assignedPeerCounselorId) : "")
@@ -959,13 +983,28 @@ const CounselorStudents = () => {
                                 {peerOptions.map((peer: any) => {
                                   const label = peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`;
                                   const online = Boolean(peer?.is_online);
+                                  const available = peer?.is_available !== false;
+                                  const cases = Number(peer?.active_cases_count || 0);
                                   return (
-                                    <option key={peer.id} value={String(peer.id)}>
-                                      {online ? "● " : "○ "}{label}
+                                    <option key={peer.id} value={String(peer.id)} disabled={!available}>
+                                      {available ? (online ? "● " : "○ ") : "⚠ "}
+                                      {label} {available ? `(${online ? "Online" : "Offline"} · ${cases} ${cases === 1 ? "case" : "cases"})` : "(Unavailable)"}
                                     </option>
                                   );
                                 })}
                               </select>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                                onClick={() => handleAutoSelectPeer(student.id)}
+                                disabled={assigningStudentId !== null || student.riskLevel !== "low"}
+                                title="Auto-select the most available, least-loaded peer counselor"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Auto-Pick
+                              </Button>
 
                               <Button
                                 size="sm"

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -236,6 +236,18 @@ const PeerDashboard = () => {
                   onClick={() => navigate("/peer/ethics")}
                 >
                   Open Ethics Guidelines
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full flex items-center justify-between"
+                  onClick={() => navigate("/peer/escalations")}
+                >
+                  <span>View Escalation Trail</span>
+                  {Boolean(data?.stats?.escalated_cases) && (
+                    <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
+                      {data?.stats?.escalated_cases}
+                    </span>
+                  )}
                 </Button>
               </CardContent>
             </Card>

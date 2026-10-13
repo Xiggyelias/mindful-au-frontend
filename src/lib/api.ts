@@ -1189,6 +1189,16 @@ class ApiClient {
     return response.data;
   }
 
+  async getAllEscalations() {
+    const response = await this.client.get('/escalations');
+    return response.data;
+  }
+
+  async resolveEscalation(id: number | string) {
+    const response = await this.client.post(`/escalations/${id}/resolve`);
+    return response.data;
+  }
+
   async panicEscalateSession(
     sessionId: number | string,
     data?: { reason?: string; location?: string }

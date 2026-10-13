@@ -68,6 +68,10 @@ export function resolveNotificationRoute(
   }
 
   const appointmentId = Number(meta.appointment_id);
+  const kind = String(meta.kind || "").trim();
+  if (kind === "incoming_call") {
+    return role === "counselor" ? "/counselor/video" : "/student/video-call";
+  }
   if (Number.isFinite(appointmentId) && appointmentId > 0) {
     if (basePath === "/admin") return "/admin/alerts";
     if (basePath === "/peer") return "/peer/dashboard";

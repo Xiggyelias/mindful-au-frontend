@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -12,6 +12,7 @@ import {
   UserCheck,
   HeartHandshake,
   Clock,
+  Sparkles,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -482,6 +483,29 @@ const AdminStudents = () => {
     } finally {
       setAssigningStudentId(null);
       setPeerAssignmentAction(null);
+    }
+  };
+
+  const handleAutoSelectPeer = (studentId: number) => {
+    const availablePeers = peerOptions.filter((p: any) => p?.is_available !== false);
+    if (availablePeers.length === 0) {
+      toast.error("No peer counselors are currently available for assignment.");
+      return;
+    }
+    const sorted = [...availablePeers].sort((a: any, b: any) => {
+      const onlineA = a?.is_online ? 1 : 0;
+      const onlineB = b?.is_online ? 1 : 0;
+      if (onlineB !== onlineA) return onlineB - onlineA;
+      const casesA = Number(a?.active_cases_count || 0);
+      const casesB = Number(b?.active_cases_count || 0);
+      return casesA - casesB;
+    });
+    const bestPeer = sorted[0];
+    if (bestPeer) {
+      setSelectedPeerByStudent((prev) => ({ ...prev, [studentId]: String(bestPeer.id) }));
+      const name = bestPeer?.profile?.full_name || bestPeer?.email || `Peer #${bestPeer.id}`;
+      const cases = Number(bestPeer?.active_cases_count || 0);
+      toast.info(`Auto-selected optimal peer: ${name} (${cases} active ${cases === 1 ? "case" : "cases"}). Click Assign to confirm.`);
     }
   };
 
@@ -1022,7 +1046,7 @@ const AdminStudents = () => {
                                   )}
                                   <div className="flex items-center gap-1.5">
                                     <select
-                                      className="h-7 w-28 rounded-lg border border-border/80 bg-background px-1.5 text-[11px] font-medium text-foreground focus:ring-1 focus:ring-primary/20 focus:border-primary/50"
+                                      className="h-7 w-36 rounded-lg border border-border/80 bg-background px-1.5 text-[11px] font-medium text-foreground focus:ring-1 focus:ring-primary/20 focus:border-primary/50"
                                       value={String(selectedPeerId || "")}
                                       onChange={(e) =>
                                         setSelectedPeerByStudent((prev) => ({
@@ -1033,12 +1057,30 @@ const AdminStudents = () => {
                                       disabled={assigningStudentId !== null}
                                     >
                                       <option value="">Select peer</option>
-                                      {peerOptions.map((peer: any) => (
-                                        <option key={peer.id} value={String(peer.id)}>
-                                          {peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`}
-                                        </option>
-                                      ))}
+                                      {peerOptions.map((peer: any) => {
+                                        const label = peer?.profile?.full_name || peer?.email || `Peer #${peer.id}`;
+                                        const online = Boolean(peer?.is_online);
+                                        const available = peer?.is_available !== false;
+                                        const cases = Number(peer?.active_cases_count || 0);
+                                        return (
+                                          <option key={peer.id} value={String(peer.id)} disabled={!available}>
+                                            {available ? (online ? "● " : "○ ") : "⚠ "}
+                                            {label} {available ? `(${online ? "Online" : "Offline"} · ${cases} ${cases === 1 ? "case" : "cases"})` : "(Unavailable)"}
+                                          </option>
+                                        );
+                                      })}
                                     </select>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-[10px] px-1.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 transition-colors shrink-0 gap-0.5"
+                                      disabled={assigningStudentId !== null || student.riskLevel !== "low"}
+                                      onClick={() => handleAutoSelectPeer(student.id)}
+                                      title="Auto-select optimal peer counselor"
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                      Auto
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="secondary"

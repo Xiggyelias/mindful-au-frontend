@@ -53,7 +53,25 @@ type EmergencyRequestAlert = {
   assignee_name?: string | null;
 };
 
-type AlertItem = PanicAlert | RiskAlert | EmergencyRequestAlert;
+type EscalationAlert = {
+  id: number;
+  type: "escalation";
+  title: string;
+  message: string;
+  created_at: string;
+  resolved_at?: string | null;
+  status: "active" | "resolved";
+  session_id: number;
+  student_id?: number;
+  student_name: string;
+  escalated_by_name: string;
+  escalated_to?: string;
+  escalation_type: string;
+  severity: "low" | "medium" | "high" | "critical";
+  reason?: string;
+};
+
+type AlertItem = PanicAlert | RiskAlert | EmergencyRequestAlert | EscalationAlert;
 
 function extractLatLngFromLocation(raw: string | null | undefined): string | null {
   if (raw == null || typeof raw !== "string") return null;
@@ -126,6 +144,7 @@ const AdminAlerts = () => {
   const [alerts, setAlerts] = useState<PanicAlert[]>([]);
   const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
   const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequestAlert[]>([]);
+  const [escalations, setEscalations] = useState<EscalationAlert[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRespondingId, setIsRespondingId] = useState<number | null>(null);
   const [isTakingId, setIsTakingId] = useState<number | null>(null);
@@ -136,10 +155,11 @@ const AdminAlerts = () => {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const [panicLogs, diagnosticsResponse, emergencyResponse] = await Promise.all([
+      const [panicLogs, diagnosticsResponse, emergencyResponse, escalationResponse] = await Promise.all([
         api.getPanicLogs(),
         api.getAIDiagnostics().catch(() => []),
         api.getEmergencyRequests().catch(() => []),
+        api.getAllEscalations().catch(() => []),
       ]);
 
       // Backend returns either an array (non-paginated) or a PaginationPayload
@@ -235,9 +255,28 @@ const AdminAlerts = () => {
         };
       });
 
+      const mappedEscalations: EscalationAlert[] = (Array.isArray(escalationResponse) ? escalationResponse : []).map((row: any) => ({
+        id: Number(row.id),
+        type: "escalation",
+        title: row.escalation_type === "urgent_flag" ? "🚨 Urgent Concern Flagged" : "Case Escalated by Peer",
+        message: `Peer (${row.escalated_by_name || "Peer Counselor"}) escalated case for ${row.student_name || "Student"} (Session #${row.session_id})${row.reason ? `: ${row.reason}` : ""}`,
+        created_at: String(row.created_at || ""),
+        resolved_at: row.resolved_at || null,
+        status: row.resolved ? "resolved" : "active",
+        session_id: Number(row.session_id),
+        student_id: row.student_id ? Number(row.student_id) : undefined,
+        student_name: row.student_name || "Student",
+        escalated_by_name: row.escalated_by_name || "Peer Counselor",
+        escalated_to: row.escalated_to || undefined,
+        escalation_type: row.escalation_type || "peer_to_counselor",
+        severity: row.severity || "high",
+        reason: row.reason || undefined,
+      }));
+
       setAlerts(mappedPanic);
       setRiskAlerts(mappedRisk);
       setEmergencyRequests(mappedEmergency);
+      setEscalations(mappedEscalations);
     } catch (error: any) {
       const message = error?.response?.data?.message || "Failed to load alerts";
       setErrorMessage(message);
@@ -281,24 +320,25 @@ const AdminAlerts = () => {
   }, [user, loadAlerts]);
 
   const allAlerts = useMemo<AlertItem[]>(() => {
-    return [...emergencyRequests, ...alerts, ...riskAlerts].sort(
+    return [...emergencyRequests, ...alerts, ...riskAlerts, ...escalations].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  }, [alerts, emergencyRequests, riskAlerts]);
+  }, [alerts, emergencyRequests, riskAlerts, escalations]);
 
   const counts = useMemo(() => {
     const today = new Date().toDateString();
     const activeEmergencies =
       alerts.filter((a) => a.status === "active").length +
-      emergencyRequests.filter((a) => a.status === "queued" || a.status === "assigned").length;
-    const resolvedToday = [...alerts, ...emergencyRequests].filter(
+      emergencyRequests.filter((a) => a.status === "queued" || a.status === "assigned").length +
+      escalations.filter((a) => a.status === "active").length;
+    const resolvedToday = [...alerts, ...emergencyRequests, ...escalations].filter(
       (a) => a.resolved_at && new Date(a.resolved_at).toDateString() === today
     ).length;
     const riskAlertsToday = riskAlerts.filter(
       (a) => new Date(a.created_at).toDateString() === today
     ).length;
     return { activeEmergencies, resolvedToday, riskAlertsToday };
-  }, [alerts, emergencyRequests, riskAlerts]);
+  }, [alerts, emergencyRequests, riskAlerts, escalations]);
 
   const formatTimeAgo = (dateString?: string) => {
     if (!dateString) return "unknown time";
@@ -323,18 +363,37 @@ const AdminAlerts = () => {
     if (type === "emergency") {
       return <AlertTriangle className="h-5 w-5 text-destructive" />;
     }
+    if (type === "escalation") {
+      return <AlertTriangle className="h-5 w-5 text-orange-500" />;
+    }
     return <Brain className="h-5 w-5 text-warning" />;
   };
 
   const isAlertActive = (alert: AlertItem): boolean => {
     if (alert.type === "risk") return true;
     if (alert.type === "panic") return alert.status === "active";
+    if (alert.type === "escalation") return alert.status === "active";
     return alert.status === "queued" || alert.status === "assigned";
   };
 
   const handleRespond = async (alert: AlertItem) => {
     if (alert.type === "risk") {
       navigate("/admin/ai-reports");
+      return;
+    }
+
+    if (alert.type === "escalation") {
+      try {
+        setIsRespondingId(alert.id);
+        await api.resolveEscalation(alert.id);
+        toast.success("Escalation marked as resolved");
+        await loadAlerts();
+      } catch (error: any) {
+        const message = error?.response?.data?.message || "Failed to resolve escalation";
+        toast.error(message);
+      } finally {
+        setIsRespondingId(null);
+      }
       return;
     }
 
@@ -469,7 +528,7 @@ const AdminAlerts = () => {
                         key={alert.id}
                         className={`p-4 rounded-xl border-l-4 ${
                           isAlertActive(alert)
-                            ? alert.type === "panic" || alert.type === "emergency"
+                            ? alert.type === "panic" || alert.type === "emergency" || alert.type === "escalation"
                               ? "bg-destructive/10 border-destructive"
                               : "bg-warning/10 border-warning"
                             : "bg-secondary/30 border-muted"
@@ -481,6 +540,16 @@ const AdminAlerts = () => {
                             <div>
                               <p className="font-medium text-foreground">{alert.title}</p>
                               <p className="text-sm text-muted-foreground">{alert.message}</p>
+                              {alert.type === "escalation" && (
+                                <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">Peer: {alert.escalated_by_name}</span>
+                                  {alert.severity && (
+                                    <span className="capitalize px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-semibold">
+                                      {alert.severity} priority
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               {(alert.type === "panic" || alert.type === "emergency") && alert.student_detail_line ? (
                                 <p className="text-xs text-foreground/90 mt-1 font-mono bg-secondary/40 rounded-md px-2 py-1 inline-block max-w-full break-all">
                                   {alert.student_detail_line}
@@ -503,7 +572,7 @@ const AdminAlerts = () => {
                             <span
                               className={`px-3 py-1 rounded-full text-xs font-medium ${
                                 isAlertActive(alert)
-                                  ? alert.type === "panic" || alert.type === "emergency"
+                                  ? alert.type === "panic" || alert.type === "emergency" || alert.type === "escalation"
                                     ? "bg-destructive/20 text-destructive"
                                     : "bg-warning/20 text-warning"
                                   : "bg-success/20 text-success"
@@ -512,7 +581,7 @@ const AdminAlerts = () => {
                               {alert.status}
                             </span>
 
-                            {(alert.type === "panic" || alert.type === "emergency") && alert.student_id ? (
+                            {(alert.type === "panic" || alert.type === "emergency" || alert.type === "escalation") && alert.student_id ? (
                               <Button
                                 size="sm"
                                 variant="outline"
