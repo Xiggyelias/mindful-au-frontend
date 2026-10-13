@@ -1312,9 +1312,7 @@ const StudentVideoCall = () => {
                                 </div>
                               ) : activeWindowStatus?.canStart && !localStream ? (
                                 <p className="text-xs font-medium uppercase tracking-[0.24em] text-emerald-200/80">
-                                  {audioOnlyAppointment
-                                    ? "Tap start audio below when you are ready"
-                                    : "Tap start video below when you are ready"}
+                                  Tap start video below when you are ready
                                 </p>
                               ) : null}
                             </div>
@@ -1354,7 +1352,7 @@ const StudentVideoCall = () => {
                                       : "bg-white/10 hover:bg-white/20"
                                   )}
                                   onClick={handleToggleVideo}
-                                  disabled={!localStream || audioOnlyAppointment}
+                                  disabled={!localStream}
                                 >
                                   {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
                                 </Button>
@@ -1401,43 +1399,25 @@ const StudentVideoCall = () => {
                                 </Button>
                               </>
                             ) : (
-                              <>
-                                {!audioOnlyAppointment && (
-                                  <Button
-                                    variant="default"
-                                    size="lg"
-                                    className="h-14 rounded-full bg-emerald-500 px-6 text-white shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
-                                    onClick={handleStartCall}
-                                    disabled={!canStartSelectedCall || isConnecting}
-                                  >
-                                    {isStartingMode === "video" ? (
-                                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                    ) : (
-                                      <Video className="mr-2 h-5 w-5" />
-                                    )}
-                                    {isStartingMode === "video" ? "Starting..." : "Start Video"}
-                                  </Button>
-                                )}
-                                <Button
-                                  variant={audioOnlyAppointment ? "default" : "ghost"}
-                                  size="lg"
-                                  className={cn(
-                                    "h-14 rounded-full px-6 text-white",
-                                    audioOnlyAppointment
-                                      ? "bg-emerald-500 shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400"
-                                      : "border border-white/10 bg-white/10 hover:bg-white/20"
-                                  )}
-                                  onClick={handleStartAudioCall}
-                                  disabled={!canStartSelectedCall || isConnecting}
-                                >
-                                  {isStartingMode === "audio" ? (
+                              <Button
+                                variant="default"
+                                size="lg"
+                                className="h-14 rounded-full bg-emerald-500 px-8 text-white shadow-[0_18px_45px_-18px_rgba(16,185,129,0.75)] hover:bg-emerald-400 font-semibold"
+                                onClick={handleStartCall}
+                                disabled={!canStartSelectedCall || isConnecting}
+                              >
+                                {isStartingMode === "video" || isConnecting ? (
+                                  <>
                                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                  ) : (
-                                    <Mic className="mr-2 h-5 w-5" />
-                                  )}
-                                  {isStartingMode === "audio" ? "Starting..." : "Start audio call"}
-                                </Button>
-                              </>
+                                    Connecting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Video className="mr-2 h-5 w-5" />
+                                    Start Video Call
+                                  </>
+                                )}
+                              </Button>
                             )}
                           </div>
                         </div>

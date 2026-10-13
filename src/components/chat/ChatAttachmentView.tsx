@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, FileText, Loader2, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VoiceMemoPlayer } from "@/components/chat/VoiceMemoPlayer";
+import { ChatMediaLightbox } from "@/components/chat/ChatMediaLightbox";
 import type { ChatMessage } from "@/hooks/useEncryptedChat";
 import { api } from "@/lib/api";
 import {
@@ -27,6 +28,7 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
   const [downloading, setDownloading] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   // Authenticated blob URL used in place of the raw public file_url for voice memos.
   const [voiceAuthBlobUrl, setVoiceAuthBlobUrl] = useState<string | null>(null);
   const [voiceBlobLoading, setVoiceBlobLoading] = useState(false);
@@ -155,6 +157,13 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     }
   }, [messageId, msg.message_type, msg.isUploading, msg.localBlobUrl, revokeVoiceObjectUrl, voiceAuthBlobUrl]);
 
+  // Eagerly load the voice note audio stream on mount so the voice memo is ready to play immediately
+  useEffect(() => {
+    if (kind === "audio" && !msg.localBlobUrl && !voiceAuthBlobUrl && Number.isInteger(messageId) && messageId > 0) {
+      void loadVoiceAudio();
+    }
+  }, [kind, msg.localBlobUrl, voiceAuthBlobUrl, messageId, loadVoiceAudio]);
+
   const handleDownload = async () => {
     if (Number.isInteger(messageId) && messageId > 0) {
       setDownloading(true);
@@ -278,26 +287,57 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
             {downloadControl}
           </div>
         ) : (
-          <a
-            href={att.download_url || att.url || resolvedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              "block overflow-hidden rounded-2xl border transition-all hover:ring-2",
-              isOutgoing
-                ? "border-primary-foreground/30 hover:ring-primary-foreground/35"
-                : "border-border/50 hover:ring-primary/20"
-            )}
-          >
-            <img
-              key={activePreviewUrl}
+          <>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsLightboxOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsLightboxOpen(true);
+                }
+              }}
+              className={cn(
+                "group relative block overflow-hidden rounded-2xl border cursor-pointer transition-all duration-200 hover:shadow-md",
+                isOutgoing
+                  ? "border-primary-foreground/30 hover:ring-2 hover:ring-primary-foreground/40"
+                  : "border-border/50 hover:ring-2 hover:ring-primary/30"
+              )}
+              title="Click to view full image"
+            >
+              <img
+                key={activePreviewUrl}
+                src={activePreviewUrl}
+                alt={att.file_name}
+                className="max-h-80 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                loading="lazy"
+                onError={() => { setTimeout(() => void handleImageError(), 400); }}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white rounded-full p-2.5 backdrop-blur-sm shadow-lg">
+                  <Maximize2 className="h-4 w-4" />
+                </span>
+              </div>
+            </div>
+
+            <ChatMediaLightbox
+              isOpen={isLightboxOpen}
+              onClose={() => setIsLightboxOpen(false)}
               src={activePreviewUrl}
               alt={att.file_name}
-              className="max-h-80 w-full object-cover"
-              loading="lazy"
-              onError={() => { setTimeout(() => void handleImageError(), 400); }}
+              fileName={att.file_name}
+              fileSize={hasSize ? formatChatFileSize(att.file_size) : undefined}
+              senderName={isOutgoing ? "You" : undefined}
+              caption={msg.content && msg.content !== att.file_name && msg.content !== "Attachment" ? msg.content : undefined}
+              onDownload={() => void handleDownload()}
+              isDownloading={downloading}
             />
-          </a>
+          </>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -348,7 +388,8 @@ export function ChatAttachmentView({ message: msg, isOutgoing, uploadProgress = 
     // it skips the backend's video/webm -> audio/webm MIME correction, and a
     // direct S3 link may be unreachable from networks that block the storage
     // host outright. isLoadingAudio covers the gap while the stream fetch runs.
-    const playbackSrc = (msg.localBlobUrl || voiceAuthBlobUrl || "").trim();
+    const fallbackAudioSrc = (resolvedUrl || att.url || msg.file_url || "").trim();
+    const playbackSrc = (voiceAuthBlobUrl || msg.localBlobUrl || fallbackAudioSrc).trim();
 
     return (
       <VoiceMemoPlayer

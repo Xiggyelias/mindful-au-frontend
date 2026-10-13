@@ -193,80 +193,8 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     return null;
   };
 
-  const activeEmergencyAlerts = notifications.filter(n => {
-    if (n.read) return false;
-    const t = (n.title || "").toLowerCase();
-    const m = (n.message || "").toLowerCase();
-    return (
-      n.type === "panic" ||
-      t.includes("panic") ||
-      t.includes("emergency") ||
-      t.includes("escalation") ||
-      t.includes("crisis") ||
-      t.includes("alert") ||
-      t.includes("risk") ||
-      m.includes("panic") ||
-      m.includes("emergency") ||
-      m.includes("escalat") ||
-      m.includes("crisis") ||
-      m.includes("alert") ||
-      m.includes("risk")
-    );
-  });
-
   return (
     <div className="sticky top-0 z-30 flex flex-col w-full">
-      {activeEmergencyAlerts.length > 0 && (
-        (() => {
-          const latestAlert = activeEmergencyAlerts[0];
-          const destination = resolveNotificationDestination(latestAlert);
-          return (
-            <div 
-              id={`overhead-alert-${latestAlert.id}`}
-              className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white px-4 py-2 text-sm flex items-center justify-between gap-3 shadow-lg border-b border-red-700 animate-in slide-in-from-top duration-300 z-50 relative"
-            >
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                </span>
-                <span className="font-bold tracking-wider text-[11px] bg-white/20 px-1.5 py-0.5 rounded uppercase shrink-0">
-                  Emergency Alert
-                </span>
-                <p className="font-medium truncate text-xs sm:text-sm">
-                  <span className="font-semibold">{latestAlert.title}:</span> {latestAlert.message}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {destination && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2.5 text-xs bg-white text-red-600 hover:bg-white/90 hover:text-red-700 font-semibold shadow-sm transition-all"
-                    onClick={() => {
-                      void markAsRead(latestAlert.id);
-                      navigate(destination);
-                    }}
-                  >
-                    View Alert
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                  aria-label="Dismiss alert"
-                  onClick={() => void markAsRead(latestAlert.id)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          );
-        })()
-      )}
       <header className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-background/80 px-3 py-3 backdrop-blur-lg sm:gap-4 sm:p-4 lg:p-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Button

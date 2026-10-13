@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, getApiErrorMessage, isApiNetworkError } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -149,7 +149,7 @@ const normalizeNotificationPayload = (value: unknown): NotificationsState => {
   return { notifications: [], unreadCount: 0 };
 };
 
-export const useNotifications = () => {
+function useNotificationsInternal() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [decryptedLines, setDecryptedLines] = useState<Record<number, string>>({});
@@ -469,4 +469,26 @@ export const useNotifications = () => {
     markAllAsRead,
     deleteNotification,
   };
-};
+}
+
+export type NotificationsContextType = ReturnType<typeof useNotificationsInternal>;
+
+const NotificationsContext = createContext<NotificationsContextType | null>(null);
+
+export function NotificationProvider({ children }: { children: ReactNode }) {
+  const value = useNotificationsInternal();
+  return (
+    <NotificationsContext.Provider value={value}>
+      {children}
+    </NotificationsContext.Provider>
+  );
+}
+
+export function useNotifications(): NotificationsContextType {
+  const context = useContext(NotificationsContext);
+  if (context) {
+    return context;
+  }
+  return useNotificationsInternal();
+}
+

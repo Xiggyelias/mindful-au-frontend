@@ -1149,6 +1149,28 @@ class ApiClient {
     return response.data;
   }
 
+  async recordWalkInSession(data: {
+    student_id?: number | null;
+    visitor_name?: string;
+    visitor_identifier?: string;
+    consultation_mode: 'in_person_walkin' | 'physical_emergency' | 'unscheduled_visit' | 'follow_up_in_person';
+    chief_complaint?: string;
+    risk_level?: 'low' | 'medium' | 'high' | 'critical';
+    notes: string;
+    action_taken?: string;
+    started_at?: string;
+    duration_minutes?: number;
+    is_anonymous?: boolean;
+  }) {
+    const response = await this.client.post('/sessions/walk-in', data);
+    return response.data;
+  }
+
+  async getSessionForAppointment(appointmentId: string | number) {
+    const response = await this.client.get(`/appointments/${appointmentId}/session`);
+    return response.data;
+  }
+
   async assignPeerCounselor(sessionId: number | string, peerCounselorId: number | string) {
     const response = await this.client.post(`/sessions/${sessionId}/assign-peer`, {
       peer_counselor_id: Number(peerCounselorId),
@@ -1804,7 +1826,7 @@ class ApiClient {
       };
 
       if (status === 500 || status === 502 || status === 503 || status === 504) {
-        fail('Video call service is temporarily unavailable. Please try again in a few moments.');
+        fail(fromApi || 'Video call service is temporarily unavailable. Please try again in a few moments.');
       }
       if (status === 404) {
         fail('Appointment not found or has expired.');

@@ -10,6 +10,10 @@ import {
   Search,
   Mic,
   SlidersHorizontal,
+  Building,
+  Plus,
+  ShieldAlert,
+  UserCheck,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { format, formatDistanceToNow } from "date-fns";
@@ -22,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { WalkInConsultationModal } from "@/components/counselor/WalkInConsultationModal";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import {
@@ -67,7 +72,7 @@ type CounselorSessionNoteRow = {
   hasClinicalNote: boolean;
 };
 
-type NotesFilter = "all" | "with_notes" | "without_notes" | "high_risk";
+type NotesFilter = "all" | "walk_in" | "online" | "with_notes" | "without_notes" | "high_risk";
 
 function extractSessionsPayload(data: unknown): ApiSessionBlob[] {
   if (Array.isArray(data)) return data as ApiSessionBlob[];
@@ -154,6 +159,7 @@ const CounselorNotes = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
+  const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
 
   const { user, role } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split("@")[0] || "Counselor";
@@ -184,6 +190,34 @@ const CounselorNotes = () => {
     [sessions, selectedSessionId]
   );
 
+  const handleSelectSession = async (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    const found = sessions.find((s) => s.id === sessionId);
+    if (found) {
+      setNoteText(found.notes || "");
+    }
+    try {
+      const fresh = await api.getSession(sessionId);
+      const freshNote = fresh?.data?.notes ?? fresh?.notes;
+      if (typeof freshNote === "string") {
+        setNoteText(freshNote);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  notes: freshNote,
+                  hasClinicalNote: freshNote.trim().length > 0,
+                }
+              : s
+          )
+        );
+      }
+    } catch {
+      // Retain already loaded note
+    }
+  };
+
   useEffect(() => {
     if (selectedSession) {
       setNoteText(selectedSession.notes || "");
@@ -198,8 +232,19 @@ const CounselorNotes = () => {
       const haystack = `${row.studentLabel} ${row.notes} ${row.id} ${row.status} ${row.sessionType}`.toLowerCase();
       const matchesSearch = !q || haystack.includes(q);
       const isHighRisk = row.riskLevel === "high" || row.riskLevel === "critical";
+      const isWalkIn =
+        row.sessionType === "in_person" ||
+        row.sessionType === "physical" ||
+        row.sessionType === "emergency";
+      const isOnline =
+        row.sessionType === "chat" ||
+        row.sessionType === "video" ||
+        row.sessionType === "voice";
+
       const matchesFilter =
         notesFilter === "all" ||
+        (notesFilter === "walk_in" && isWalkIn) ||
+        (notesFilter === "online" && isOnline) ||
         (notesFilter === "with_notes" && row.hasClinicalNote) ||
         (notesFilter === "without_notes" && !row.hasClinicalNote) ||
         (notesFilter === "high_risk" && isHighRisk);
@@ -213,8 +258,15 @@ const CounselorNotes = () => {
     const highRisk = sessions.filter(
       (s) => s.riskLevel === "high" || s.riskLevel === "critical"
     ).length;
+    const walkIns = sessions.filter(
+      (s) =>
+        s.sessionType === "in_person" ||
+        s.sessionType === "physical" ||
+        s.sessionType === "emergency"
+    ).length;
     return {
       total: sessions.length,
+      walkIns,
       withNotes,
       withoutNotes: Math.max(0, sessions.length - withNotes),
       highRisk,
@@ -271,10 +323,11 @@ const CounselorNotes = () => {
     }
   };
 
-  const insertTemplate = (type: "soap" | "dap" | "basic") => {
+  const insertTemplate = (type: "soap" | "dap" | "crisis" | "basic") => {
     const templates = {
       soap: "S (Subjective): \nO (Objective): \nA (Assessment): \nP (Plan): ",
       dap: "D (Data): \nA (Assessment): \nP (Plan): ",
+      crisis: "CHIEF COMPLAINT:\n\nRISK & SAFETY ASSESSMENT:\n\nCLINICAL ACTIONS TAKEN:\n\nSAFETY & FOLLOW-UP PLAN:",
       basic: "Observations: \n\nInterventions: \n\nPlan: ",
     };
     setNoteText((prev) => (prev ? prev + "\n\n" + templates[type] : templates[type]));
@@ -294,11 +347,17 @@ const CounselorNotes = () => {
         <DashboardHeader title="Session Notes" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Card variant="glass" className="border-border/40">
               <CardContent className="pt-5">
                 <p className="text-2xl font-bold text-foreground">{noteStats.total}</p>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">Total sessions</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass" className="border-border/40">
+              <CardContent className="pt-5">
+                <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">{noteStats.walkIns}</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Walk-in / Physical</p>
               </CardContent>
             </Card>
             <Card variant="glass" className="border-border/40">
@@ -321,80 +380,116 @@ const CounselorNotes = () => {
             </Card>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold tracking-tight">Session notes</h2>
               <p className="text-sm text-muted-foreground">
-                Read and edit clinical notes tied to each counseling session (same field as Messages / video
-                session metadata).
+                Document and review clinical notes for online appointments and physical walk-in emergency consultations.
               </p>
             </div>
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by student, note text, or session ID..."
-                  className="pl-9 bg-background/50 border-border/40 focus:bg-background transition-all"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+            {canEditNotes && (
               <Button
                 type="button"
-                variant={notesFilter === "all" ? "default" : "outline"}
-                className="shrink-0"
-                onClick={() => setNotesFilter("all")}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md shrink-0 flex items-center gap-2"
+                onClick={() => setIsWalkInModalOpen(true)}
               >
-                <SlidersHorizontal className="h-4 w-4 mr-2" />
-                All
+                <Plus className="h-4 w-4" />
+                Record Walk-In / Physical Note
               </Button>
-              <Button
-                type="button"
-                variant={notesFilter === "with_notes" ? "default" : "outline"}
-                className="shrink-0"
-                onClick={() => setNotesFilter("with_notes")}
-              >
-                With notes
-              </Button>
-              <Button
-                type="button"
-                variant={notesFilter === "without_notes" ? "default" : "outline"}
-                className="shrink-0"
-                onClick={() => setNotesFilter("without_notes")}
-              >
-                Needs notes
-              </Button>
-              <Button
-                type="button"
-                variant={notesFilter === "high_risk" ? "default" : "outline"}
-                className="shrink-0"
-                onClick={() => setNotesFilter("high_risk")}
-              >
-                High risk
-              </Button>
-              {(searchQuery || notesFilter !== "all") && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="shrink-0"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setNotesFilter("all");
-                  }}
-                >
-                  Clear
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isLoading}
-                className="shrink-0"
-                onClick={() => void loadSessions()}
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
-              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[240px] md:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search student, notes, ID..."
+                className="pl-9 bg-background/50 border-border/40 focus:bg-background transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
+            <Button
+              type="button"
+              variant={notesFilter === "all" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("all")}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+              All
+            </Button>
+            <Button
+              type="button"
+              variant={notesFilter === "walk_in" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("walk_in")}
+            >
+              <Building className="h-3.5 w-3.5 mr-1.5" />
+              Walk-Ins ({noteStats.walkIns})
+            </Button>
+            <Button
+              type="button"
+              variant={notesFilter === "online" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("online")}
+            >
+              Online
+            </Button>
+            <Button
+              type="button"
+              variant={notesFilter === "with_notes" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("with_notes")}
+            >
+              With notes
+            </Button>
+            <Button
+              type="button"
+              variant={notesFilter === "without_notes" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("without_notes")}
+            >
+              Needs notes
+            </Button>
+            <Button
+              type="button"
+              variant={notesFilter === "high_risk" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setNotesFilter("high_risk")}
+            >
+              High risk
+            </Button>
+            {(searchQuery || notesFilter !== "all") && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  setSearchQuery("");
+                  setNotesFilter("all");
+                }}
+              >
+                Clear
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              className="shrink-0 ml-auto"
+              onClick={() => void loadSessions()}
+            >
+              {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Refresh
+            </Button>
           </div>
 
           {!canEditNotes ? (
@@ -445,7 +540,7 @@ const CounselorNotes = () => {
                               ? "bg-primary/10 border border-primary/20"
                               : "hover:bg-secondary/40 border border-transparent"
                           )}
-                          onClick={() => setSelectedSessionId(row.id)}
+                          onClick={() => void handleSelectSession(row.id)}
                         >
                           <div className="flex justify-between items-start mb-1 gap-2">
                             <span className={cn(
@@ -469,28 +564,46 @@ const CounselorNotes = () => {
                               <span className="truncate">{formatRelativeUpdated(row.updatedAtIso)}</span>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              {row.sessionType === "video" ? (
+                              {row.sessionType === "in_person" || row.sessionType === "physical" ? (
+                                <Building className="h-3 w-3 text-teal-600 dark:text-teal-400" />
+                              ) : row.sessionType === "emergency" ? (
+                                <ShieldAlert className="h-3 w-3 text-destructive" />
+                              ) : row.sessionType === "video" ? (
                                 <Video className="h-3 w-3 text-purple-500" />
                               ) : row.sessionType === "voice" ? (
                                 <Mic className="h-3 w-3 text-amber-500" />
                               ) : (
                                 <MessageSquare className="h-3 w-3 text-blue-500" />
                               )}
-                              <span className="capitalize">{row.sessionType}</span>
+                              <span className="capitalize">
+                                {row.sessionType === "in_person" || row.sessionType === "physical"
+                                  ? "Walk-In"
+                                  : row.sessionType}
+                              </span>
                             </div>
                           </div>
-                          <Badge
-                            className={cn(
-                              "mt-2 text-[10px] px-1.5 py-0 uppercase font-bold w-fit border",
-                              row.riskLevel === "critical"
-                                ? "bg-destructive/20 text-destructive border-destructive/20"
-                                : row.riskLevel === "high"
-                                  ? "bg-orange-500/20 text-orange-500 border-orange-500/20"
-                                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            <Badge
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 uppercase font-bold w-fit border",
+                                row.riskLevel === "critical"
+                                  ? "bg-destructive/20 text-destructive border-destructive/20"
+                                  : row.riskLevel === "high"
+                                    ? "bg-orange-500/20 text-orange-500 border-orange-500/20"
+                                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                              )}
+                            >
+                              Risk: {row.riskLevel || "low"}
+                            </Badge>
+                            {(row.sessionType === "in_person" || row.sessionType === "physical") && (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 border-teal-500/30 text-teal-700 dark:text-teal-300 bg-teal-500/10 uppercase"
+                              >
+                                In-Person
+                              </Badge>
                             )}
-                          >
-                            Risk: {row.riskLevel || "low"}
-                          </Badge>
+                          </div>
                           {selectedSessionId === row.id ? (
                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
                           ) : null}
@@ -547,7 +660,21 @@ const CounselorNotes = () => {
 
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="outline" className="uppercase text-[10px]">{selectedSession.status}</Badge>
-                        <Badge variant="outline" className="uppercase text-[10px]">{selectedSession.sessionType}</Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "uppercase text-[10px] flex items-center gap-1",
+                            (selectedSession.sessionType === "in_person" || selectedSession.sessionType === "physical") &&
+                              "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30 font-semibold"
+                          )}
+                        >
+                          {(selectedSession.sessionType === "in_person" || selectedSession.sessionType === "physical") && (
+                            <Building className="h-3 w-3" />
+                          )}
+                          {selectedSession.sessionType === "in_person" || selectedSession.sessionType === "physical"
+                            ? "Walk-In / Physical Consultation"
+                            : selectedSession.sessionType}
+                        </Badge>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -584,6 +711,16 @@ const CounselorNotes = () => {
                           onClick={() => insertTemplate("dap")}
                         >
                           DAP
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="text-[10px] uppercase font-bold tracking-tight text-destructive hover:text-destructive"
+                          disabled={!canEditNotes}
+                          onClick={() => insertTemplate("crisis")}
+                        >
+                          Crisis / Triage
                         </Button>
                         <Button
                           variant="outline"
@@ -671,6 +808,17 @@ const CounselorNotes = () => {
           </div>
         </main>
       </div>
+
+      <WalkInConsultationModal
+        open={isWalkInModalOpen}
+        onOpenChange={setIsWalkInModalOpen}
+        onSuccess={(newSession) => {
+          void loadSessions();
+          if (newSession?.id) {
+            void handleSelectSession(String(newSession.id));
+          }
+        }}
+      />
     </div>
   );
 };

@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { NotificationProvider } from "@/hooks/useNotifications";
+import { GlobalOverheadNotificationHost } from "@/components/notifications/GlobalOverheadNotificationHost";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { BandwidthProvider } from "@/hooks/useBandwidthMode";
 import { ConfirmDialogProvider } from "@/hooks/useConfirm";
@@ -157,8 +159,10 @@ const App = () => {
             }}
           >
             <AuthProvider>
-              <ConfirmDialogProvider>
-              <ChatIncomingNotificationHost />
+              <NotificationProvider>
+                <ConfirmDialogProvider>
+                <GlobalOverheadNotificationHost />
+                <ChatIncomingNotificationHost />
               <IncomingCallHost />
               <FloatingCallDock />
               <PushNotificationPrompt />
@@ -443,7 +447,8 @@ const App = () => {
               </Suspense>
               </ErrorBoundary>
               </ConfirmDialogProvider>
-            </AuthProvider>
+            </NotificationProvider>
+          </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>
       </BandwidthProvider>

@@ -1170,7 +1170,7 @@ const StudentAppointments = () => {
       params.set("counselor_id", String(apt.counselor_id));
     }
 
-    if (isVideoEnabledAppointment(apt.notes)) {
+    if (Boolean(apt.is_emergency) || isVideoEnabledAppointment(apt.notes)) {
       params.set("mode", isAppointmentAudioOnly(apt) ? "audio" : "video");
     }
 

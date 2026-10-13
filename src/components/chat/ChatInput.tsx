@@ -103,6 +103,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     fileInputRef,
   }) => {
     const [micState, setMicState] = useState<MicGestureState>("idle");
+    const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
     const micStateRef = useRef<MicGestureState>("idle");
     const holdStartYRef = useRef<number | null>(null);
     const holdStartXRef = useRef<number | null>(null);
@@ -112,6 +113,23 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const LOCK_UP_PX = 60;
     const CANCEL_LEFT_PX = 60;
     const TAP_TO_LOCK_MS = 220;
+
+    const triggerPickerWithAccept = (acceptFilter: string) => {
+      setIsAttachMenuOpen(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.accept = acceptFilter;
+        fileInputRef.current.click();
+      } else {
+        onAttachClick();
+      }
+    };
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onFileSelect(e);
+      if (fileInputRef.current) {
+        fileInputRef.current.accept = CHAT_ATTACHMENT_ACCEPT;
+      }
+    };
 
     const setMicGestureState = (nextState: MicGestureState) => {
       micStateRef.current = nextState;
@@ -270,18 +288,89 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               /* Hold recording: nothing on the left — full width for pill */
               null
             ) : allowAttachments ? (
-              /* Idle: attach button */
+              /* Idle: WhatsApp attachment popover */
               <div className="flex shrink-0 items-center">
-                <Button
-                  type="button" variant="ghost" size="icon"
-                  className="h-9 w-9 rounded-full text-muted-foreground/70 hover:bg-primary/8 hover:text-primary sm:h-10 sm:w-10"
-                  onClick={onAttachClick} aria-label="Attach file"
-                >
-                  <Paperclip className="h-5 w-5" />
-                </Button>
+                <Popover open={isAttachMenuOpen} onOpenChange={setIsAttachMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-9 w-9 rounded-full text-muted-foreground/70 transition-all duration-200 hover:bg-primary/10 hover:text-primary sm:h-10 sm:w-10",
+                        isAttachMenuOpen && "bg-primary/15 text-primary rotate-45"
+                      )}
+                      aria-label="Attach file or media"
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="top"
+                    align="start"
+                    sideOffset={10}
+                    className="w-56 p-2 rounded-2xl bg-popover/95 backdrop-blur-xl border border-border/60 shadow-2xl animate-in zoom-in-95 duration-150"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => triggerPickerWithAccept("image/*,video/*")}
+                        className="flex items-center gap-3 w-full px-2.5 py-2 rounded-xl text-left transition-colors hover:bg-muted/80 group"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 text-white shadow-sm transition-transform group-hover:scale-105">
+                          <ImageIcon className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-semibold text-foreground">Photos & Videos</span>
+                          <span className="text-[10px] text-muted-foreground">Share images or clips</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => triggerPickerWithAccept(CHAT_ATTACHMENT_ACCEPT)}
+                        className="flex items-center gap-3 w-full px-2.5 py-2 rounded-xl text-left transition-colors hover:bg-muted/80 group"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-semibold text-foreground">Document</span>
+                          <span className="text-[10px] text-muted-foreground">PDF, docs, text files</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsAttachMenuOpen(false);
+                          setMicGestureState("locked");
+                          try {
+                            await onVoiceStart();
+                          } catch (err) {
+                            setMicGestureState("idle");
+                            onVoiceError?.(err instanceof Error ? err : new Error("Could not access microphone."));
+                          }
+                        }}
+                        className="flex items-center gap-3 w-full px-2.5 py-2 rounded-xl text-left transition-colors hover:bg-muted/80 group"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-sm transition-transform group-hover:scale-105">
+                          <Mic className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-semibold text-foreground">Voice Note</span>
+                          <span className="text-[10px] text-muted-foreground">Record hands-free note</span>
+                        </div>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <input
-                  type="file" ref={fileInputRef} className="hidden"
-                  accept={CHAT_ATTACHMENT_ACCEPT} onChange={onFileSelect}
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept={CHAT_ATTACHMENT_ACCEPT}
+                  onChange={handleFileInputChange}
                 />
               </div>
             ) : (

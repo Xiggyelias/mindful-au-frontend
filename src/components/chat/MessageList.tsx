@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck } from "lucide-react";
+import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
@@ -19,8 +19,8 @@ import { ChatMessage, ENCRYPTED_FALLBACK } from "@/hooks/useEncryptedChat";
 import { useVirtuosoFirstItemIndex } from "@/hooks/useVirtuosoFirstItemIndex";
 import { Session } from "@/hooks/useChatSession";
 
-
-const formatTimeLabel = (dateString: string): string => {
+/** Returns WhatsApp-style centered date headers: "Today", "Yesterday", or full formatted date. */
+const formatDateGroupLabel = (dateString: string): string => {
   try {
     const d = new Date(dateString);
     if (Number.isNaN(d.getTime())) return "";
@@ -29,21 +29,31 @@ const formatTimeLabel = (dateString: string): string => {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const isYesterday = d.toDateString() === yesterday.toDateString();
-    if (isToday) return formatInDisplayZone(d, "h:mm a");
-    if (isYesterday) return `Yesterday · ${formatInDisplayZone(d, "h:mm a")}`;
-    return formatInDisplayZone(d, "MMM d · h:mm a");
+    if (isToday) return "Today";
+    if (isYesterday) return "Yesterday";
+    return formatInDisplayZone(d, "EEEE, MMMM d, yyyy");
   } catch {
     return "";
   }
 };
 
-/** Key used for time-header grouping — includes the date so same-time messages
- *  on different days each get their own header. */
-const makeTimeGroupKey = (dateString: string): string => {
+/** Calendar-day key for grouping messages into distinct days. */
+const makeDateGroupKey = (dateString: string): string => {
   try {
     const d = new Date(dateString);
     if (Number.isNaN(d.getTime())) return "";
-    return formatInDisplayZone(d, "yyyy-MM-dd h:mm a");
+    return formatInDisplayZone(d, "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
+};
+
+/** Formats message timestamp in user's timezone: e.g. "3:45 PM". */
+const formatMessageTimestamp = (dateString: string): string => {
+  try {
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return "";
+    return formatInDisplayZone(d, "h:mm a");
   } catch {
     return "";
   }
@@ -144,10 +154,12 @@ const MessageBubble = React.memo(
           isMe ? "items-end" : "items-start"
         )}
       >
-        {showTime && (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">
-            {timeLabel}
-          </span>
+        {showTime && timeLabel && (
+          <div className="flex w-full justify-center my-3 select-none">
+            <span className="rounded-full bg-muted/80 backdrop-blur-md px-3.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs border border-border/50">
+              {timeLabel}
+            </span>
+          </div>
         )}
         <div className={cn("flex w-full items-end gap-2", isMe ? "justify-end" : "justify-start")}>
           {!isMe && (
@@ -226,16 +238,19 @@ const MessageBubble = React.memo(
             </div>
           </div>
         </div>
-        {isMe && (
-          <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1">
+        {isMe ? (
+          <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-end pr-1 select-none">
             <div className="flex items-center gap-1.5 px-0.5">
+              <span className="text-[10px] font-medium text-muted-foreground/70">
+                {formatMessageTimestamp(msg.created_at)}
+              </span>
               <span
                 className={cn(
                   "inline-flex items-center",
                   msg.delivery_status === "failed"
                     ? "text-destructive"
                     : msg.seen_at || msg.delivery_status === "read"
-                    ? "text-emerald-500"
+                    ? "text-sky-500"
                     : "text-muted-foreground/60"
                 )}
                 aria-label={deliveryLabel(msg)}
@@ -246,17 +261,23 @@ const MessageBubble = React.memo(
                 ) : msg.delivery_status === "failed" ? (
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
                 ) : msg.seen_at || msg.delivery_status === "read" ? (
-                  /* Double blue/green tick — message was read */
+                  /* WhatsApp double blue tick — read */
                   <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 ) : msg.delivery_status === "delivered" ? (
-                  /* Double grey tick — delivered to device, not yet read */
+                  /* Double grey tick — delivered to device */
                   <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 ) : (
-                  /* Single grey tick — sent/saved on server only */
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  /* Single grey tick — sent/saved on server */
+                  <Check className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 )}
               </span>
             </div>
+          </div>
+        ) : (
+          <div className="mt-1 flex w-full max-w-[85%] lg:max-w-[70%] justify-start pl-1 select-none">
+            <span className="text-[10px] font-medium text-muted-foreground/70">
+              {formatMessageTimestamp(msg.created_at)}
+            </span>
           </div>
         )}
       </div>
@@ -558,7 +579,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     return (
       <div ref={messageScrollAreaRef} onScroll={handlePlainScroll} className="h-full flex-1 relative overflow-auto flex flex-col min-h-0">
         <div className="px-4 pt-3 lg:px-6">
-          {hasOlderMessages && (
+          {hasOlderMessages ? (
             <div className="flex justify-center pb-4 pt-2">
               <Button
                 variant="ghost"
@@ -576,12 +597,20 @@ export const MessageList: React.FC<MessageListProps> = ({
                 {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
               </Button>
             </div>
+          ) : (
+            /* WhatsApp-style end-to-end encryption assurance badge at conversation start */
+            <div className="mx-auto flex max-w-md items-center justify-center my-3 px-2 select-none">
+              <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 text-center text-[11px] leading-relaxed text-amber-800 dark:text-amber-300 shadow-xs">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Messages and calls are end-to-end encrypted. No one outside this consultation can read or listen to them.</span>
+              </div>
+            </div>
           )}
           {messages.map((msg, idx) => {
             const prev = idx > 0 ? messages[idx - 1] ?? null : null;
             const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
-            const timeLabel = formatTimeLabel(msg.created_at);
-            const showTime = idx === 0 || !prev || makeTimeGroupKey(prev.created_at) !== makeTimeGroupKey(msg.created_at);
+            const timeLabel = formatDateGroupLabel(msg.created_at);
+            const showTime = idx === 0 || !prev || makeDateGroupKey(prev.created_at) !== makeDateGroupKey(msg.created_at);
             const isDeleting = deletingMessageIds.has(msg.id);
             return (
               <div
@@ -655,28 +684,36 @@ export const MessageList: React.FC<MessageListProps> = ({
         defaultItemHeight={88}
         startReached={handleStartReached}
         components={{
-          Header: () =>
-            hasOlderMessages ? (
-              <div className="flex justify-center pb-4 pt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void onLoadOlder()}
-                  disabled={isLoadingOlderMessages}
-                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
-                  aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
-                >
-                  {isLoadingOlderMessages ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-2" />
-                  ) : (
-                    <MessageSquare className="h-3 w-3 mr-2" />
-                  )}
-                  {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
-                </Button>
+          Header: () => (
+            <div className="space-y-3 pb-2">
+              {hasOlderMessages ? (
+                <div className="flex justify-center pb-2 pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void onLoadOlder()}
+                    disabled={isLoadingOlderMessages}
+                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
+                    aria-label={isLoadingOlderMessages ? "Loading older messages" : "Load older messages"}
+                  >
+                    {isLoadingOlderMessages ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                    ) : (
+                      <MessageSquare className="h-3 w-3 mr-2" />
+                    )}
+                    {isLoadingOlderMessages ? "Loading history..." : "Load older messages"}
+                  </Button>
+                </div>
+              ) : null}
+              {/* WhatsApp-style end-to-end encryption assurance badge at conversation start */}
+              <div className="mx-auto flex max-w-md items-center justify-center my-3 px-2 select-none">
+                <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 text-center text-[11px] leading-relaxed text-amber-800 dark:text-amber-300 shadow-xs">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>Messages and calls are end-to-end encrypted. No one outside this consultation can read or listen to them.</span>
+                </div>
               </div>
-            ) : (
-              <div className="h-2 shrink-0" aria-hidden />
-            ),
+            </div>
+          ),
           Footer: () => (
             <div className="space-y-6 pb-6 motion-reduce:animate-none">
               {isPeerTyping && (
@@ -699,9 +736,9 @@ export const MessageList: React.FC<MessageListProps> = ({
           const dataIndex = index - firstItemIndex;
           const prev = dataIndex > 0 ? messages[dataIndex - 1] ?? null : null;
           const isMe = user?.id != null && String(msg.sender_id) === String(user.id);
-          const timeLabel = formatTimeLabel(msg.created_at);
+          const timeLabel = formatDateGroupLabel(msg.created_at);
           const showTime =
-            dataIndex === 0 || !prev || makeTimeGroupKey(prev.created_at) !== makeTimeGroupKey(msg.created_at);
+            dataIndex === 0 || !prev || makeDateGroupKey(prev.created_at) !== makeDateGroupKey(msg.created_at);
           const isDeleting = deletingMessageIds.has(msg.id);
 
           return (

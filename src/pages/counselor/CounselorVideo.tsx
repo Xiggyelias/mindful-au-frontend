@@ -15,6 +15,8 @@ import {
   RefreshCw,
   Loader2,
   WifiOff,
+  Check,
+  Save,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -117,6 +119,7 @@ const CounselorVideo = () => {
   const [lastSavedText, setLastSavedText] = useState<string>("");
   const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const requestedAppointmentId = useMemo(() => {
@@ -379,58 +382,114 @@ const CounselorVideo = () => {
 
   const loadActiveSessionNote = useCallback(async () => {
     if (!activeSession) return;
+    const draftKey = `counselor_video_note_draft_${activeSession.id}`;
     try {
-      const payload = await api.getSessions({ status: 'active', limit: 50 });
-      const sessionsList = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
-      const matched = sessionsList.find(
-        (s: any) =>
-          s.session_type === 'video' &&
-          Number(s.student_id) === Number(activeSession.student_id) &&
-          Number(s.counselor_id) === Number(activeSession.counselor_id)
-      );
-      if (matched) {
-        const sId = Number(matched.id);
+      // 1. Fetch or establish the server counseling session for this appointment
+      const sessionData = await api.getSessionForAppointment(activeSession.id) as any;
+      if (sessionData?.id) {
+        const sId = Number(sessionData.id);
         setCounselingSessionId(sId);
-        const initialNotes = typeof matched.notes === 'string' ? matched.notes : '';
-        setNoteText(initialNotes);
-        setLastSavedText(initialNotes);
+        const serverNotes = typeof sessionData.notes === 'string' ? sessionData.notes : '';
+
+        // Check for an unsaved local draft in localStorage
+        const localDraft = localStorage.getItem(draftKey);
+        if (localDraft && localDraft.trim() !== '' && localDraft.trim() !== serverNotes.trim()) {
+          setNoteText(localDraft);
+          setLastSavedText(serverNotes);
+          toast.info("Restored unsaved note draft from this session");
+        } else {
+          setNoteText(serverNotes);
+          setLastSavedText(serverNotes);
+        }
+        return;
       }
     } catch (err) {
-      if (import.meta.env.DEV) console.error("Failed to load active session notes:", err);
+      if (import.meta.env.DEV) console.error("Failed to load active session note:", err);
+      // Fallback: check localStorage for draft
+      const localDraft = localStorage.getItem(draftKey);
+      if (localDraft) {
+        setNoteText(localDraft);
+      }
     }
   }, [activeSession]);
 
+  // Load note when appointment changes (does NOT wipe notes on transient WebRTC disconnects)
   useEffect(() => {
-    if (isConnected && activeSession) {
+    if (activeSession) {
       void loadActiveSessionNote();
-    } else {
-      setCounselingSessionId(null);
-      setNoteText("");
-      setLastSavedText("");
     }
-  }, [isConnected, activeSession, loadActiveSessionNote]);
+  }, [activeSession?.id, loadActiveSessionNote]);
 
+  // Keep local draft resilient against browser refresh or connection drops
+  useEffect(() => {
+    if (!activeSession) return;
+    const draftKey = `counselor_video_note_draft_${activeSession.id}`;
+    if (noteText && noteText.trim() !== '' && noteText !== lastSavedText) {
+      try {
+        localStorage.setItem(draftKey, noteText);
+      } catch {
+        /* storage quota / private mode */
+      }
+    } else if (noteText === lastSavedText) {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [noteText, lastSavedText, activeSession]);
+
+  // Debounced auto-save while the video call progresses
   useEffect(() => {
     if (counselingSessionId === null) return;
     if (noteText === lastSavedText) return;
 
-    const delay = 1500;
+    const delay = 1200;
     const timer = setTimeout(async () => {
       try {
         setIsSavingNote(true);
         setNoteSaveError(null);
         await api.updateSessionNote(counselingSessionId, noteText);
         setLastSavedText(noteText);
+        setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        if (activeSession) {
+          localStorage.removeItem(`counselor_video_note_draft_${activeSession.id}`);
+        }
       } catch (err) {
         if (import.meta.env.DEV) console.error("Failed to auto-save notes:", err);
-        setNoteSaveError("Failed to save note");
+        setNoteSaveError("Failed to auto-save note");
       } finally {
         setIsSavingNote(false);
       }
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [noteText, lastSavedText, counselingSessionId]);
+  }, [noteText, lastSavedText, counselingSessionId, activeSession]);
+
+  const handleManualSaveNote = useCallback(async () => {
+    if (counselingSessionId === null || isSavingNote) return;
+    const trimmed = noteText.trim();
+    if (trimmed === "") {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    try {
+      setIsSavingNote(true);
+      setNoteSaveError(null);
+      await api.updateSessionNote(counselingSessionId, noteText);
+      setLastSavedText(noteText);
+      setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      if (activeSession) {
+        localStorage.removeItem(`counselor_video_note_draft_${activeSession.id}`);
+      }
+      toast.success("Session note saved");
+    } catch {
+      setNoteSaveError("Failed to save note");
+      toast.error("Failed to save note. Please check your connection.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  }, [counselingSessionId, isSavingNote, noteText, activeSession]);
 
   useEffect(() => {
     if (upcomingSessions.length === 0) {
@@ -557,6 +616,20 @@ const CounselorVideo = () => {
     const sessionIdToEnd = activeSessionId;
     const activeRow = upcomingSessions.find((item) => String(item.id) === sessionIdToEnd);
     const studentId = Number(activeRow?.student_id);
+
+    // Eagerly flush any unsaved note draft before ending the call
+    if (counselingSessionId && noteText !== lastSavedText && noteText.trim() !== "") {
+      try {
+        await api.updateSessionNote(counselingSessionId, noteText);
+        setLastSavedText(noteText);
+        setLastSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        if (sessionIdToEnd) {
+          localStorage.removeItem(`counselor_video_note_draft_${sessionIdToEnd}`);
+        }
+      } catch {
+        /* best effort */
+      }
+    }
 
     endCall();
     setIsMuted(false);
@@ -727,6 +800,9 @@ const CounselorVideo = () => {
         authorization = (await api.authorizeVideoCall(activeSessionId, {
           call_type: requestedCallType,
         })) as VideoCallAuthorization;
+        if ((authorization as any)?.session_id) {
+          setCounselingSessionId(Number((authorization as any).session_id));
+        }
       } catch (err: unknown) {
         beganSessionStartRef.current = null;
         setPendingSessionStartId(null);
@@ -1429,39 +1505,97 @@ const CounselorVideo = () => {
                   </div>
 
                   <div className="space-y-2 flex-1 flex flex-col">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                      Session Notes
-                      <span className="normal-case font-normal text-muted-foreground/60">
-                        {isSavingNote ? (
-                          <span className="flex items-center gap-1">
-                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                            Auto-saving...
-                          </span>
-                        ) : noteSaveError ? (
-                          <span className="text-destructive">{noteSaveError}</span>
-                        ) : noteText !== lastSavedText && noteText !== "" ? (
-                          <span>Unsaved changes...</span>
-                        ) : noteText === "" && lastSavedText === "" ? (
-                          <span>Ready</span>
-                        ) : (
-                          <span className="text-emerald-500 font-semibold">Auto-saved</span>
-                        )}
-                      </span>
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Session Notes
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-normal">
+                          {isSavingNote ? (
+                            <span className="flex items-center gap-1 text-primary font-medium">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Auto-saving...
+                            </span>
+                          ) : noteSaveError ? (
+                            <span className="text-destructive font-medium flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              {noteSaveError}
+                            </span>
+                          ) : noteText !== lastSavedText && noteText !== "" ? (
+                            <span className="text-amber-500 font-medium flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Draft unsaved...
+                            </span>
+                          ) : lastSavedAt ? (
+                            <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                              <Check className="h-3 w-3" />
+                              Saved {lastSavedAt}
+                            </span>
+                          ) : noteText !== "" ? (
+                            <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                              <Check className="h-3 w-3" />
+                              Saved
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60">Ready</span>
+                          )}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void handleManualSaveNote()}
+                          disabled={isSavingNote || noteText === lastSavedText || noteText.trim() === ""}
+                          className="h-6 px-2 text-[10px] gap-1 hover:bg-primary/10 hover:text-primary transition-colors shrink-0"
+                          title="Save note now"
+                        >
+                          <Save className="h-3 w-3" />
+                          Save Now
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <span className="text-muted-foreground/70 shrink-0 font-medium">Templates:</span>
+                      <button
+                        type="button"
+                        onClick={() => setNoteText((prev) => (prev ? prev + "\n\nS: \nO: \nA: \nP: " : "S (Subjective): \nO (Objective): \nA (Assessment): \nP (Plan): "))}
+                        className="px-1.5 py-0.5 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors font-mono"
+                      >
+                        SOAP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNoteText((prev) => (prev ? prev + "\n\nD: \nA: \nP: " : "D (Data): \nA (Assessment): \nP (Plan): "))}
+                        className="px-1.5 py-0.5 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors font-mono"
+                      >
+                        DAP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNoteText((prev) => (prev ? prev + "\n\nEmergency Triage / Crisis Safety Observations:\n" : "Emergency Triage / Crisis Safety Observations:\n- Mental Status: \n- Risk Factors: \n- Interventions: \n- Follow-up Plan: "))}
+                        className="px-1.5 py-0.5 rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors font-mono"
+                      >
+                        Crisis
+                      </button>
+                    </div>
+
                     <textarea
-                      className="w-full flex-1 min-h-[200px] p-4 rounded-2xl bg-secondary/20 border border-border/40 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
-                      placeholder="Type your session observations here..."
+                      className="w-full flex-1 min-h-[220px] p-3.5 rounded-2xl bg-secondary/20 border border-border/40 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/40 leading-relaxed font-sans"
+                      placeholder="Document clinical observations, mental state, and interventions..."
                       value={noteText}
                       maxLength={5000}
                       onChange={(e) => setNoteText(e.target.value)}
                     />
-                    <p className={`text-[10px] text-right tabular-nums ${noteText.length > 4500 ? (noteText.length >= 5000 ? "text-destructive" : "text-warning") : "text-muted-foreground/50"}`}>
-                      {noteText.length}/5000
-                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground/60 px-0.5">
+                      <span>Encrypted & auto-saved to session record</span>
+                      <span className={`tabular-nums ${noteText.length > 4500 ? (noteText.length >= 5000 ? "text-destructive font-bold" : "text-amber-500 font-semibold") : ""}`}>
+                        {noteText.length}/5000
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="pt-2">
-                    <Button variant="outline" className="w-full justify-start gap-2 h-11 rounded-xl text-xs" onClick={() => navigate("/counselor/notes")}>
+                    <Button variant="outline" className="w-full justify-start gap-2 h-10 rounded-xl text-xs" onClick={() => navigate("/counselor/notes")}>
                       <FileText className="h-4 w-4" />
                       View Past Notes
                     </Button>
@@ -1561,13 +1695,12 @@ const CounselorVideo = () => {
                             {callWindow.message}
                           </p>
 
-                          <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="mt-3">
                             <Button
                               size="sm"
-                              className="w-full gap-1 h-8 text-[11px]"
+                              className="w-full gap-1.5 h-8.5 text-xs font-semibold shadow-sm"
                               onClick={() => handleStartSession(sessionId, "video")}
                               disabled={
-                                sessionAudioOnly ||
                                 isBusyWithOtherCall ||
                                 isStarting ||
                                 !callWindow.canStart ||
@@ -1577,32 +1710,19 @@ const CounselorVideo = () => {
                             >
                               {isStarting && pendingCallMode === "video" ? (
                                 <>
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                  ...
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Starting...
                                 </>
                               ) : isActive && isConnected ? (
-                                "Live"
+                                <>
+                                  <Video className="h-3.5 w-3.5 text-emerald-400" />
+                                  Live in Call
+                                </>
                               ) : (
-                                "Video"
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full gap-1 h-8 text-[11px]"
-                              onClick={() => handleStartSession(sessionId, "audio")}
-                              disabled={
-                                isBusyWithOtherCall ||
-                                isStarting ||
-                                !callWindow.canStart ||
-                                !isOnline ||
-                                isIncomingCall
-                              }
-                            >
-                              {isStarting && pendingCallMode === "audio" ? (
-                                "..."
-                              ) : (
-                                "Audio"
+                                <>
+                                  <Video className="h-3.5 w-3.5" />
+                                  Start Video Call
+                                </>
                               )}
                             </Button>
                           </div>

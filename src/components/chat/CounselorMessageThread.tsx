@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Loader2, Trash2, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck } from "lucide-react";
+import { Loader2, Trash2, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,27 @@ const formatMessageTime = (dateString?: string) => {
   return formatInDisplayZone(d, "MMM d, h:mm a");
 };
 
+/** Formats centered WhatsApp date group chips. */
+const formatDateGroupLabel = (dateString?: string): string => {
+  const d = parseBackendDateThread(dateString);
+  if (!d) return "";
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  if (isToday) return "Today";
+  if (isYesterday) return "Yesterday";
+  return formatInDisplayZone(d, "EEEE, MMMM d, yyyy");
+};
+
+/** Calendar-day key for grouping messages into days. */
+const makeDateGroupKey = (dateString?: string): string => {
+  const d = parseBackendDateThread(dateString);
+  if (!d) return "";
+  return formatInDisplayZone(d, "yyyy-MM-dd");
+};
+
 const deliveryLabel = (msg: ChatMessage) => {
   if (msg.delivery_status === "sending") return "Sending";
   if (msg.delivery_status === "failed") return "Failed";
@@ -61,6 +82,8 @@ type RowProps = {
   canModerateChat: boolean;
   onDeleteMessage: (id: number) => void | Promise<void>;
   renderMessageContent: (msg: ChatMessage, isOutgoing: boolean) => React.ReactNode;
+  showDateDivider?: boolean;
+  dateDividerLabel?: string;
 };
 
 const CounselorMessageRow = React.memo(
@@ -76,6 +99,8 @@ const CounselorMessageRow = React.memo(
     canModerateChat,
     onDeleteMessage,
     renderMessageContent,
+    showDateDivider,
+    dateDividerLabel,
   }: RowProps) {
     const isMineById = Boolean(currentUserId) && String(msg.sender_id) === String(currentUserId);
     const senderRole = normalizeChatRole(
@@ -98,9 +123,17 @@ const CounselorMessageRow = React.memo(
     const roleLabel = chatRoleLabel(senderRole);
 
     return (
-      <div
-        className={cn("flex w-full min-w-0 items-end gap-2.5", isMine ? "justify-end" : "justify-start")}
-      >
+      <div className="flex flex-col w-full">
+        {showDateDivider && dateDividerLabel && (
+          <div className="flex w-full justify-center my-3 select-none">
+            <span className="rounded-full bg-muted/80 backdrop-blur-md px-3.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs border border-border/50">
+              {dateDividerLabel}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn("flex w-full min-w-0 items-end gap-2.5", isMine ? "justify-end" : "justify-start")}
+        >
         {!isMine && (
           <div className="flex w-9 shrink-0 justify-center">
             {showAvatar ? (
@@ -176,16 +209,16 @@ const CounselorMessageRow = React.memo(
               </Button>
             ) : null}
           </div>
-          <div className="flex items-center gap-1.5 px-0.5">
-            <span className="text-[10px] font-medium text-muted-foreground">{formatMessageTime(msg.created_at)}</span>
+          <div className="flex items-center gap-1.5 px-0.5 select-none">
+            <span className="text-[10px] font-medium text-muted-foreground/70">{formatMessageTime(msg.created_at)}</span>
             {isMine && (
               <span
                 className={cn(
-                  "inline-flex items-center text-[0px]",
+                  "inline-flex items-center",
                   msg.delivery_status === "failed"
                     ? "text-destructive"
                     : msg.seen_at || msg.delivery_status === "read"
-                    ? "text-emerald-500"
+                    ? "text-sky-500"
                     : "text-muted-foreground/50"
                 )}
                 aria-label={deliveryLabel(msg)}
@@ -195,21 +228,28 @@ const CounselorMessageRow = React.memo(
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                 ) : msg.delivery_status === "failed" ? (
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                ) : msg.seen_at || msg.delivery_status === "read" || msg.delivery_status === "delivered" ? (
+                ) : msg.seen_at || msg.delivery_status === "read" ? (
+                  /* WhatsApp double blue tick — read */
                   <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : msg.delivery_status === "delivered" ? (
+                  /* Double grey tick — delivered to device */
+                  <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 ) : (
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  /* Single grey tick — sent/saved on server */
+                  <Check className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 )}
-                {msg.seen_at ? "✓✓" : "✓"}
               </span>
             )}
           </div>
         </div>
       </div>
+      </div>
     );
   },
   (prev, next) =>
     prev.msg.id === next.msg.id &&
+    prev.showDateDivider === next.showDateDivider &&
+    prev.dateDividerLabel === next.dateDividerLabel &&
     prev.msg.seen_at === next.msg.seen_at &&
     prev.msg.decryptedContent === next.msg.decryptedContent &&
     prev.msg.e2eVisual === next.msg.e2eVisual &&
@@ -350,29 +390,37 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
         increaseViewportBy={{ top: 280, bottom: 400 }}
         startReached={handleStartReached}
         components={{
-          Header: () =>
-            hasOlderMessages ? (
-              <div className="mx-auto flex w-full max-w-3xl justify-center px-3 pt-2 md:max-w-none md:px-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void onLoadOlder()}
-                  disabled={isLoadingOlderMessages}
-                >
-                  {isLoadingOlderMessages ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading older...
-                    </span>
-                  ) : (
-                    "Load older messages"
-                  )}
-                </Button>
+          Header: () => (
+            <div className="space-y-3 pb-2">
+              {hasOlderMessages ? (
+                <div className="mx-auto flex w-full max-w-3xl justify-center px-3 pt-2 md:max-w-none md:px-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onLoadOlder()}
+                    disabled={isLoadingOlderMessages}
+                  >
+                    {isLoadingOlderMessages ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading older...
+                      </span>
+                    ) : (
+                      "Load older messages"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+              {/* WhatsApp-style end-to-end encryption assurance badge */}
+              <div className="mx-auto flex max-w-md items-center justify-center my-3 px-3 select-none">
+                <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 text-center text-[11px] leading-relaxed text-amber-800 dark:text-amber-300 shadow-xs">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>Messages and calls are end-to-end encrypted. No one outside this consultation can read or listen to them.</span>
+                </div>
               </div>
-            ) : (
-              <div className="h-1 shrink-0" aria-hidden />
-            ),
+            </div>
+          ),
           Footer: () => (
             <div className="mx-auto w-full max-w-3xl space-y-3 px-3 md:max-w-none md:px-6 lg:py-2 motion-reduce:animate-none">
               {isPeerTyping && (
@@ -413,6 +461,9 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
           const prev = dataIndex > 0 ? messages[dataIndex - 1] ?? null : null;
           const prevSenderId = prev ? String(prev.sender_id) : null;
           const isDeleting = deletingMessageIds.has(msg.id);
+          const showDateDivider =
+            dataIndex === 0 || !prev || makeDateGroupKey(prev.created_at) !== makeDateGroupKey(msg.created_at);
+          const dateDividerLabel = formatDateGroupLabel(msg.created_at);
           return (
             <div className="mx-auto w-full max-w-3xl px-3 py-1.5 md:max-w-none md:px-6">
               <CounselorMessageRow
@@ -427,6 +478,8 @@ export const CounselorMessageThread: React.FC<CounselorMessageThreadProps> = ({
                 canModerateChat={canModerateChat}
                 onDeleteMessage={onDeleteMessage}
                 renderMessageContent={renderMessageContent}
+                showDateDivider={showDateDivider}
+                dateDividerLabel={dateDividerLabel}
               />
             </div>
           );
