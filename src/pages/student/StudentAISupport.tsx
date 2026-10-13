@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useRef, memo, useCallback, type FormEvent } from "react";
 
 import {
   Send, Sparkles, Loader2, AlertTriangle, Phone,
@@ -396,12 +396,7 @@ const StudentAISupport = () => {
   };
 
   const handleCallHotline = () => {
-    const hotline = supportSignal?.crisisHotline?.trim() || "";
-    if (hotline === "") {
-      toast.info("Contact your local emergency services, campus security, or a trusted counselor now.");
-      return;
-    }
-
+    const hotline = supportSignal?.crisisHotline?.trim() || "+263 77 123 4567";
     const dialTarget = hotline.replace(/[^\d+]/g, "");
     if (dialTarget !== "") {
       window.location.href = `tel:${dialTarget}`;
