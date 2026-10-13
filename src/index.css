@@ -155,16 +155,24 @@
 
   .glass-card {
     @apply glass rounded-2xl p-6 transition-all duration-300;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .glass-card:hover {
+    transform: translateY(-2px);
     background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.12), hsla(0, 0%, 100%, 0.04));
     box-shadow: var(--shadow-glow-sm);
   }
 
   .btn-primary-glow {
-    @apply relative overflow-hidden;
+    @apply relative overflow-hidden transition-all duration-300;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-glow-sm);
+  }
+
+  .btn-primary-glow:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-glow);
   }
 
   .btn-primary-glow::before {
@@ -191,16 +199,16 @@
   }
 
   .animate-slide-up {
-    animation: slide-up 0.6s ease-out forwards;
+    animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .animate-fade-in {
-    animation: fade-in 0.5s ease-out forwards;
+    animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .portal-card {
     @apply glass-card cursor-pointer transform;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .portal-card:hover {
@@ -209,7 +217,74 @@
   }
 
   .input-glass {
-    @apply glass bg-secondary/50 border-border/50 focus:border-primary/50 focus:ring-primary/20;
+    @apply glass bg-secondary/50 border-border/50 focus:border-primary/50 focus:ring-primary/20 transition-all duration-200;
+  }
+
+  /* Gliding utility classes */
+  .glide-card {
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, background-color 0.2s ease;
+  }
+
+  .glide-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -4px hsla(0, 0%, 0%, 0.12), 0 0 16px -2px hsla(351, 70%, 38%, 0.1);
+  }
+
+  .glide-hover {
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .glide-hover:hover {
+    transform: translateY(-1.5px);
+  }
+
+  .tap-spring {
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .tap-spring:active {
+    transform: scale(0.975);
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--secondary) / 0.3) 25%,
+      hsl(var(--secondary) / 0.7) 50%,
+      hsl(var(--secondary) / 0.3) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite ease-in-out;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fluid, sleek, modern scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.22);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
 

@@ -185,19 +185,25 @@ const PeerDashboard = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 {loading ? (
-                  <p className="text-sm text-muted-foreground">Loading assigned chats...</p>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 rounded-xl bg-secondary/30 skeleton-shimmer" />
+                    ))}
+                  </div>
                 ) : !data?.recent_sessions?.length ? (
-                  <p className="text-sm text-muted-foreground">No assigned chats yet.</p>
+                  <div className="text-center py-8 rounded-xl border border-dashed border-border/60 bg-secondary/10">
+                    <p className="text-sm text-muted-foreground">No assigned chats yet.</p>
+                  </div>
                 ) : (
                   data.recent_sessions.map((row) => (
                     <button
                       key={row.id}
                       onClick={() => navigate(`/peer/chats?session=${row.id}`)}
-                      className="w-full text-left rounded-xl border border-border/60 bg-secondary/20 p-4 hover:bg-secondary/40 transition-colors"
+                      className="w-full text-left rounded-xl border border-border/60 bg-secondary/20 p-4 hover:bg-secondary/40 glide-hover tap-spring transition-all duration-200"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium text-foreground truncate">{row.student_label}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                        <span className={`text-xs px-2.5 py-0.5 rounded-full capitalize font-medium ${
                           row.status === "active"
                             ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                             : row.status === "pending"

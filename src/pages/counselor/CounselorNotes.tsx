@@ -535,9 +535,9 @@ const CounselorNotes = () => {
                           key={row.id}
                           type="button"
                           className={cn(
-                            "w-full text-left p-3 rounded-xl transition-all group relative overflow-hidden",
+                            "w-full text-left p-3 rounded-xl transition-all duration-200 group relative overflow-hidden glide-hover tap-spring",
                             selectedSessionId === row.id
-                              ? "bg-primary/10 border border-primary/20"
+                              ? "bg-primary/10 border border-primary/20 shadow-sm"
                               : "hover:bg-secondary/40 border border-transparent"
                           )}
                           onClick={() => void handleSelectSession(row.id)}

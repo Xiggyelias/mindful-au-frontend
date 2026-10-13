@@ -440,14 +440,20 @@ const CounselorDashboard = () => {
               <CardContent>
                 <div className="space-y-3">
                   {isLoading ? (
-                    <p className="text-muted-foreground text-sm">Loading today&apos;s schedule...</p>
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-16 rounded-xl bg-secondary/30 skeleton-shimmer" />
+                      ))}
+                    </div>
                   ) : todaysAppointments.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No sessions scheduled for today.</p>
+                    <div className="text-center py-8 rounded-xl border border-dashed border-border/60 bg-secondary/10">
+                      <p className="text-muted-foreground text-sm">No sessions scheduled for today.</p>
+                    </div>
                   ) : (
                     todaysAppointments.map((apt) => (
                       <div
                         key={apt.id}
-                        className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30"
+                        className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 glide-hover tap-spring transition-all duration-200"
                       >
                         <div className="text-center min-w-[90px]">
                           <p className="text-sm font-medium text-foreground tabular-nums">

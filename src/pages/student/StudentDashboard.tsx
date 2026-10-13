@@ -390,12 +390,12 @@ const StudentDashboard = () => {
           {/* Featured Services / Quick Actions */}
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <Card
-              className="group cursor-pointer border-none bg-gradient-to-br from-primary/5 to-transparent hover:from-primary/10 transition-all duration-500 rounded-3xl"
+              className="group cursor-pointer border-none bg-gradient-to-br from-primary/5 to-transparent hover:from-primary/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
               onClick={() => navigate("/student/chat")}
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-              <MessageSquare className="h-8 w-8 text-primary" />
+                  <MessageSquare className="h-8 w-8 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-bold text-lg mb-1">Talk to Someone</h3>
@@ -405,7 +405,7 @@ const StudentDashboard = () => {
             </Card>
 
             <Card
-              className="group cursor-pointer border-none bg-gradient-to-br from-info/5 to-transparent hover:from-info/10 transition-all duration-500 rounded-3xl"
+              className="group cursor-pointer border-none bg-gradient-to-br from-info/5 to-transparent hover:from-info/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
               onClick={() => navigate("/student/ai-support")}
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
@@ -420,7 +420,7 @@ const StudentDashboard = () => {
             </Card>
 
             <Card
-              className="group cursor-pointer border-none bg-gradient-to-br from-success/5 to-transparent hover:from-success/10 transition-all duration-500 rounded-3xl"
+              className="group cursor-pointer border-none bg-gradient-to-br from-success/5 to-transparent hover:from-success/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
               onClick={() => navigate("/student/wellness")}
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
@@ -435,16 +435,16 @@ const StudentDashboard = () => {
             </Card>
 
             <Card
-              className="group cursor-pointer border-none bg-gradient-to-br from-warning/5 to-transparent hover:from-warning/10 transition-all duration-500 rounded-3xl"
+              className="group cursor-pointer border-none bg-gradient-to-br from-warning/5 to-transparent hover:from-warning/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
               onClick={() => navigate("/student/appointments")}
             >
               <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-warning/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-              <Calendar className="h-8 w-8 text-warning" />
+                  <Calendar className="h-8 w-8 text-warning" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg mb-1">Schedule</h3>
-                  <p className="text-sm text-muted-foreground">Book or manage your upcoming sessions</p>
+                  <h3 className="font-bold text-lg mb-1">Book Session</h3>
+                  <p className="text-sm text-muted-foreground">Schedule confidential 1-on-1 counseling</p>
                 </div>
               </CardContent>
             </Card>
@@ -594,7 +594,7 @@ const StudentDashboard = () => {
                     </div>
                   ) : (
                     upcomingAppointments.map((apt) => (
-                      <div key={apt.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 transition-colors duration-300">
+                      <div key={apt.id} className="group flex items-center gap-4 p-4 rounded-2xl bg-secondary/40 hover:bg-secondary/60 glide-hover tap-spring transition-all duration-300">
                         <div className="h-14 w-14 rounded-2xl bg-primary/10 flex flex-col items-center justify-center text-primary border border-primary/20">
                           {apt.scheduled_at ? (() => {
                             try {

@@ -854,10 +854,10 @@ const CounselorStudents = () => {
                     return (
                       <div
                         key={student.id}
-                        className={`rounded-xl border bg-card overflow-hidden transition-all ${
+                        className={`rounded-xl border bg-card overflow-hidden transition-all duration-300 glide-hover ${
                           highlightedStudentId === Number(student.id)
                             ? "ring-2 ring-destructive/70 shadow-lg shadow-destructive/10"
-                            : "border-border/50 hover:border-border hover:shadow-sm"
+                            : "border-border/50 hover:border-border/80 hover:shadow-md"
                         }`}
                       >
                         {/* Header Row: Student Info + Status Badges */}
