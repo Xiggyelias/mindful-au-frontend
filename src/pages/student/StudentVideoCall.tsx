@@ -15,6 +15,7 @@ import {
   VideoOff,
   WifiOff,
   Sparkles,
+  Check,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -101,6 +102,16 @@ const StudentVideoCall = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [activeAppointmentId, setActiveAppointmentId] = useState<string | null>(null);
+  const [checkedInCalls, setCheckedInCalls] = useState<Set<number>>(() => {
+    try {
+      const raw = sessionStorage.getItem("pre_session_checked_in_apt_ids");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr.map(Number));
+      }
+    } catch {}
+    return new Set<number>();
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [authorizedDurationMinutes, setAuthorizedDurationMinutes] = useState<number | null>(null);
@@ -266,6 +277,18 @@ const StudentVideoCall = () => {
         .slice(0, 5);
 
       setUpcomingAppointments(availableNow);
+      setCheckedInCalls((prev) => {
+        const next = new Set(prev);
+        for (const item of availableNow) {
+          if (item.has_pre_session_check_in || item.pre_session_check_in) {
+            next.add(Number(item.id));
+          }
+        }
+        try {
+          sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
+        } catch {}
+        return next;
+      });
       if (availableNow.length === 0) {
         setActiveAppointmentId(null);
         return;
@@ -318,6 +341,15 @@ const StudentVideoCall = () => {
     () => upcomingAppointments.find((appointment) => String(appointment.id) === activeAppointmentId),
     [activeAppointmentId, upcomingAppointments]
   );
+
+  const isCheckedIn = useMemo(() => {
+    if (!activeAppointment) return false;
+    return Boolean(
+      checkedInCalls.has(Number(activeAppointment.id)) ||
+      activeAppointment.has_pre_session_check_in ||
+      activeAppointment.pre_session_check_in
+    );
+  }, [activeAppointment, checkedInCalls]);
 
   const audioOnlyAppointment = useMemo(
     () => isAppointmentAudioOnly(activeAppointment ?? null),
@@ -1247,10 +1279,24 @@ const StudentVideoCall = () => {
                                 type="button"
                                 size="sm"
                                 onClick={() => setShowPreSessionModal(true)}
-                                className="inline-flex h-8 w-fit items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-3 text-xs font-medium backdrop-blur-md shadow-md transition-all"
+                                className={cn(
+                                  "inline-flex h-8 w-fit items-center gap-1.5 rounded-full px-3 text-xs font-medium backdrop-blur-md shadow-md transition-all",
+                                  isCheckedIn
+                                    ? "border border-emerald-400/40 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200"
+                                    : "border border-amber-400/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                                )}
                               >
-                                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                                30s Check-In
+                                {isCheckedIn ? (
+                                  <>
+                                    <Check className="h-3.5 w-3.5 text-emerald-300" />
+                                    Checked In
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                                    30s Check-In
+                                  </>
+                                )}
                               </Button>
                             )}
                           </div>
@@ -1553,8 +1599,29 @@ const StudentVideoCall = () => {
         onClose={() => setShowPreSessionModal(false)}
         appointmentId={activeAppointmentId}
         counselorName={remoteParticipantName}
-        onSuccess={() => {
+        onSuccess={(checkInData) => {
           setShowPreSessionModal(false);
+          const checkedId = Number(activeAppointmentId || checkInData?.check_in?.appointment_id);
+          if (checkedId) {
+            setCheckedInCalls((prev) => {
+              const next = new Set(prev).add(checkedId);
+              try {
+                sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
+              } catch {}
+              return next;
+            });
+            setUpcomingAppointments((prev) =>
+              prev.map((a) =>
+                a.id === checkedId
+                  ? {
+                      ...a,
+                      has_pre_session_check_in: true,
+                      pre_session_check_in: checkInData?.check_in ?? a.pre_session_check_in ?? true,
+                    }
+                  : a
+              )
+            );
+          }
         }}
       />
     </div>

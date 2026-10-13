@@ -91,6 +91,8 @@ export interface Appointment {
   call_type?: string | null;
   notes?: string;
   cancellation_reason?: string;
+  has_pre_session_check_in?: boolean;
+  pre_session_check_in?: any;
   created_at?: string;
   updated_at?: string;
   student?: {

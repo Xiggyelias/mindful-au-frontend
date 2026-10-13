@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,42 @@ export const PreSessionPulseModal = ({
   const [sessionGoal, setSessionGoal] = useState<string>("coping_tools");
   const [studentNotes, setStudentNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExistingCheckIn, setIsExistingCheckIn] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep(1);
+    setIsExistingCheckIn(false);
+    let isSubscribed = true;
+
+    if (appointmentId || sessionId) {
+      void (async () => {
+        try {
+          const res = await api.getLatestPreSessionCheckIn({
+            appointment_id: appointmentId ? Number(appointmentId) : undefined,
+            session_id: sessionId ? Number(sessionId) : undefined,
+          });
+          if (isSubscribed && res?.check_in) {
+            const c = res.check_in;
+            setIsExistingCheckIn(true);
+            if (c.mood) setMood(c.mood);
+            if (c.mood_score) setMoodScore(Number(c.mood_score));
+            if (c.energy_level) setEnergyLevel(Number(c.energy_level));
+            if (c.stress_level) setStressLevel(Number(c.stress_level));
+            if (Array.isArray(c.primary_concerns)) setSelectedConcerns(c.primary_concerns);
+            if (c.session_goal) setSessionGoal(c.session_goal);
+            if (c.student_notes) setStudentNotes(c.student_notes);
+          }
+        } catch {
+          // ignore error and proceed with defaults
+        }
+      })();
+    }
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [isOpen, appointmentId, sessionId]);
 
   const toggleConcern = (tag: string) => {
     setSelectedConcerns((prev) =>
@@ -100,7 +136,11 @@ export const PreSessionPulseModal = ({
         session_id: sessionId ? Number(sessionId) : undefined,
       });
 
-      toast.success("Pre-session check-in sent to your counselor! ✨");
+      toast.success(
+        isExistingCheckIn
+          ? "Pre-session check-in updated! ✨"
+          : "Pre-session check-in sent to your counselor! ✨"
+      );
       onSuccess?.(res);
       onClose();
     } catch (err) {
@@ -123,7 +163,9 @@ export const PreSessionPulseModal = ({
               <div>
                 <DialogTitle className="text-base font-semibold">Pre-Session Pulse</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Takes 30 seconds · Helps {counselorName || "your counselor"} support you today
+                  {isExistingCheckIn
+                    ? `Check-in received · Review or update your pulse anytime before meeting`
+                    : `Takes 30 seconds · Helps ${counselorName || "your counselor"} support you today`}
                 </DialogDescription>
               </div>
             </div>
@@ -435,7 +477,7 @@ export const PreSessionPulseModal = ({
               ) : (
                 <>
                   <Check className="h-3.5 w-3.5" />
-                  Send Check-In
+                  {isExistingCheckIn ? "Update Check-In" : "Send Check-In"}
                 </>
               )}
             </Button>

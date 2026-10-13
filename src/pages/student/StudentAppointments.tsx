@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Appointment } from "@/hooks/useChatSession";
-import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Mic, Plus, Clock, Shield, Video, Calendar, Sparkles, Check } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -128,6 +128,16 @@ const StudentAppointments = () => {
     () => new URLSearchParams(location.search).get("checkin") === "1"
   );
   const [selectedCheckInAppointment, setSelectedCheckInAppointment] = useState<Appointment | null>(null);
+  const [checkedInAptIds, setCheckedInAptIds] = useState<Set<number>>(() => {
+    try {
+      const raw = sessionStorage.getItem("pre_session_checked_in_apt_ids");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr.map(Number));
+      }
+    } catch {}
+    return new Set<number>();
+  });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [appointmentTotalPages, setAppointmentTotalPages] = useState(1);
@@ -290,6 +300,18 @@ const StudentAppointments = () => {
               : normalized.length;
 
           setAppointments(normalized);
+          setCheckedInAptIds((prev) => {
+            const next = new Set(prev);
+            for (const item of normalized) {
+              if (item.has_pre_session_check_in || item.pre_session_check_in) {
+                next.add(Number(item.id));
+              }
+            }
+            try {
+              sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
           setAppointmentTotalPages(nextTotalPages);
           setAppointmentTotalItems(nextTotal);
           if (!pagedPayload && appointmentPageRef.current !== 1) {
@@ -2093,34 +2115,58 @@ const StudentAppointments = () => {
                         >
                           {apt.status}
                         </span>
-                        {(status === "scheduled" || status === "confirmed") && (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1 border-primary/30 text-primary hover:bg-primary/10 text-xs"
-                              onClick={() => {
-                                setSelectedCheckInAppointment(apt);
-                                setShowPreSessionModal(true);
-                              }}
-                            >
-                              <Sparkles className="h-3 w-3" />
-                              Check In
-                            </Button>
-                            {showVideoJoin && (
-                              <Button size="sm" onClick={() => openVideoCallRoom(apt)}>
-                                Join
+                        {(status === "scheduled" || status === "confirmed") && (() => {
+                          const isCheckedIn = Boolean(
+                            checkedInAptIds.has(Number(apt.id)) ||
+                            apt.has_pre_session_check_in ||
+                            apt.pre_session_check_in
+                          );
+
+                          return (
+                            <div className="flex items-center gap-2">
+                              {isCheckedIn ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30 dark:bg-emerald-500/15 text-xs font-medium transition-colors"
+                                  onClick={() => {
+                                    setSelectedCheckInAppointment(apt);
+                                    setShowPreSessionModal(true);
+                                  }}
+                                  title="Check-in completed. Click to review or update your pulse."
+                                >
+                                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                  Checked In
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1 border-primary/30 text-primary hover:bg-primary/10 text-xs"
+                                  onClick={() => {
+                                    setSelectedCheckInAppointment(apt);
+                                    setShowPreSessionModal(true);
+                                  }}
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                  Check In
+                                </Button>
+                              )}
+                              {showVideoJoin && (
+                                <Button size="sm" onClick={() => openVideoCallRoom(apt)}>
+                                  Join
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => openCancelDialog(apt)}
+                              >
+                                Cancel
                               </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => openCancelDialog(apt)}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        )}
+                            </div>
+                          );
+                        })()}
                         {status === "completed" && (
                           <p className="text-xs font-medium text-success">Session completed</p>
                         )}
@@ -2142,8 +2188,29 @@ const StudentAppointments = () => {
         }}
         appointmentId={selectedCheckInAppointment?.id}
         counselorName={selectedCheckInAppointment?.counselor?.profile?.full_name || undefined}
-        onSuccess={() => {
+        onSuccess={(checkInData) => {
           setShowPreSessionModal(false);
+          const checkedId = Number(selectedCheckInAppointment?.id || checkInData?.check_in?.appointment_id);
+          if (checkedId) {
+            setCheckedInAptIds((prev) => {
+              const next = new Set(prev).add(checkedId);
+              try {
+                sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
+              } catch {}
+              return next;
+            });
+            setAppointments((prev) =>
+              prev.map((a) =>
+                a.id === checkedId
+                  ? {
+                      ...a,
+                      has_pre_session_check_in: true,
+                      pre_session_check_in: checkInData?.check_in ?? a.pre_session_check_in ?? true,
+                    }
+                  : a
+              )
+            );
+          }
           setSelectedCheckInAppointment(null);
         }}
       />
