@@ -209,6 +209,13 @@ function useNotificationsInternal() {
           );
           if (hasPrimedNotificationCacheRef.current && newUnreadNotifications.length > 0) {
             newUnreadNotifications.slice(0, 3).forEach((notification) => {
+              if (
+                notification.meta?.chat_session_id ||
+                notification.meta?.chat_message_id ||
+                /new.*message/i.test(notification.title)
+              ) {
+                return;
+              }
               if (notification.title === "New appointment request") {
                 playMessageNotificationSound();
                 toast.success(notification.title, {

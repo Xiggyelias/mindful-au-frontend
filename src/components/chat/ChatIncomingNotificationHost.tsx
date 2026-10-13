@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
-import { X } from "lucide-react";
+import { MessageSquare, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -63,11 +63,13 @@ function formatToastTime(iso: string): string {
   }
 }
 
-function groupDigestRows(rows: DigestRow[]): ToastItem[] {
+function groupDigestRows(rows: DigestRow[], currentActiveSessionId?: number | null): ToastItem[] {
   const bySession = new Map<number, DigestRow[]>();
   for (const row of rows) {
     const sid = Number(row.session_id);
     if (!Number.isFinite(sid) || sid <= 0) continue;
+    // Suppress in-app toast if the user is already viewing this exact session
+    if (currentActiveSessionId && sid === currentActiveSessionId) continue;
     const list = bySession.get(sid) ?? [];
     list.push(row);
     bySession.set(sid, list);
@@ -82,8 +84,8 @@ function groupDigestRows(rows: DigestRow[]): ToastItem[] {
     const preview = truncatePreview(String(last.preview || ""));
     const previewLine =
       count > 1
-        ? `${sender}: ${preview} · ${count} new messages`
-        : `${sender}: ${preview}`;
+        ? `${preview} · ${count} new messages`
+        : preview;
     const decryptHint =
       last.is_encrypted === true &&
       Number.isFinite(Number(last.message_id)) &&
@@ -123,13 +125,11 @@ async function enhanceToastItemsWithDecrypt(uid: number, items: ToastItem[]): Pr
       }
       const previewLine = String(item.previewLine || "");
       const firstSep = previewLine.indexOf(" · ");
-      const colon = previewLine.indexOf(": ");
-      const name = colon >= 0 ? previewLine.slice(0, colon) : item.headline;
       if (firstSep === -1) {
-        return { ...item, previewLine: `${name}: ${plain}` };
+        return { ...item, previewLine: plain };
       }
       const tail = previewLine.slice(firstSep);
-      return { ...item, previewLine: `${name}: ${plain}${tail}` };
+      return { ...item, previewLine: `${plain}${tail}` };
     })
   );
 }
@@ -184,6 +184,36 @@ function isDigestRateLimited(error: unknown): boolean {
 export function ChatIncomingNotificationHost() {
   const { user, role } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Detect currently active chat session to avoid toast collisions in the active thread
+  const currentActiveSessionId = useMemo(() => {
+    const isChatRoute =
+      location.pathname.startsWith("/student/chat") ||
+      location.pathname.startsWith("/counselor/messages") ||
+      location.pathname.startsWith("/peer/chats");
+    if (!isChatRoute) return null;
+    const sid = new URLSearchParams(location.search).get("session");
+    const num = Number(sid);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }, [location.pathname, location.search]);
+
+  const currentActiveSessionIdRef = useRef<number | null>(currentActiveSessionId);
+  currentActiveSessionIdRef.current = currentActiveSessionId;
+
+  // Track if GlobalOverheadNotificationHost is actively mounted to clear clearance
+  const [hasOverheadBanner, setHasOverheadBanner] = useState(false);
+
+  useEffect(() => {
+    const checkOverhead = () => {
+      setHasOverheadBanner(document.documentElement.dataset.overheadActive === "true");
+    };
+    checkOverhead();
+    const observer = new MutationObserver(checkOverhead);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-overhead-active"] });
+    return () => observer.disconnect();
+  }, []);
+
   const afterIdRef = useRef(0);
   const bootstrappedRef = useRef(false);
   const inFlightRef = useRef(false);
@@ -290,14 +320,21 @@ export function ChatIncomingNotificationHost() {
         const sessionIds = rows.map((r) => Number(r.session_id)).filter((id) => Number.isFinite(id) && id > 0);
         dispatchChatIncomingDigest(sessionIds);
 
-        const batchKey = [...rows]
-          .map((r) => Number(r.id))
-          .filter((id) => Number.isFinite(id))
-          .sort((a, b) => a - b)
-          .join(",");
-        playChatNotificationSound({ batchKey });
+        const hasExternalSessionRows = rows.some((r) => {
+          const sid = Number(r.session_id);
+          return !currentActiveSessionIdRef.current || sid !== currentActiveSessionIdRef.current;
+        });
 
-        let grouped = groupDigestRows(rows);
+        if (hasExternalSessionRows) {
+          const batchKey = [...rows]
+            .map((r) => Number(r.id))
+            .filter((id) => Number.isFinite(id))
+            .sort((a, b) => a - b)
+            .join(",");
+          playChatNotificationSound({ batchKey });
+        }
+
+        let grouped = groupDigestRows(rows, currentActiveSessionIdRef.current);
         const uid = Number(user?.id);
         if (Number.isFinite(uid) && uid > 0) {
           grouped = await enhanceToastItemsWithDecrypt(uid, grouped);
@@ -307,7 +344,7 @@ export function ChatIncomingNotificationHost() {
           try {
             for (const g of grouped.slice(0, 2)) {
               void new Notification("New message", {
-                body: g.previewLine,
+                body: `${g.headline}: ${g.previewLine}`,
                 tag: `chat-${g.sessionId}`,
                 icon: "/assets/icons/notify-192.png",
                 badge: "/assets/icons/notify-badge-96.png",
@@ -377,8 +414,9 @@ export function ChatIncomingNotificationHost() {
   return (
     <div
       className={cn(
-        "fixed top-0 left-0 right-0 z-[100] flex flex-col items-center gap-2 pointer-events-none",
-        "pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-4"
+        "fixed left-0 right-0 z-[110] flex flex-col items-center gap-2 pointer-events-none transition-all duration-300",
+        hasOverheadBanner ? "top-14 pt-1" : "top-3 sm:top-4",
+        "px-3 sm:px-4"
       )}
     >
       {toasts.map((item) => (
@@ -390,25 +428,28 @@ export function ChatIncomingNotificationHost() {
             dismiss(item.key);
           }}
           className={cn(
-            "pointer-events-auto w-full max-w-md animate-in slide-in-from-top-2 fade-in duration-300",
-            "rounded-2xl border border-zinc-800/90 border-l-4 border-l-red-600 bg-zinc-950/98 text-left",
-            "shadow-xl shadow-black/50 backdrop-blur-md transition hover:bg-black"
+            "pointer-events-auto w-full max-w-md animate-in slide-in-from-top-3 fade-in duration-300",
+            "rounded-2xl border border-indigo-500/30 border-l-4 border-l-indigo-500 bg-zinc-950/95 text-left",
+            "shadow-2xl shadow-indigo-950/40 backdrop-blur-md transition-all hover:bg-zinc-900 hover:border-indigo-500/50"
           )}
         >
-          <div className="flex gap-3 p-3.5">
+          <div className="flex items-center gap-3 p-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25">
+              <MessageSquare className="h-5 w-5" />
+            </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-white truncate">{item.headline}</p>
                 {item.timeLabel ? (
                   <span className="shrink-0 text-[11px] text-zinc-400 tabular-nums">{item.timeLabel}</span>
                 ) : null}
               </div>
-              <p className="mt-1 text-xs leading-snug text-zinc-300 line-clamp-2">{item.previewLine}</p>
+              <p className="mt-0.5 text-xs leading-snug text-zinc-300 line-clamp-1">{item.previewLine}</p>
             </div>
             <span
               role="button"
               tabIndex={0}
-              className="shrink-0 rounded-full p-1 text-zinc-500 hover:text-white hover:bg-white/10"
+              className="shrink-0 rounded-full p-1 text-zinc-500 hover:text-white hover:bg-white/10 transition"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

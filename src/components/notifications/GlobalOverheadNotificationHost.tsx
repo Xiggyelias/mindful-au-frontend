@@ -193,6 +193,7 @@ export function GlobalOverheadNotificationHost() {
       /appointment|booking/i.test(text);
 
     const isMessage =
+      Boolean(alert.meta?.chat_session_id || alert.meta?.chat_message_id) ||
       /message|chat|voice note/i.test(text);
 
     return {
@@ -206,7 +207,8 @@ export function GlobalOverheadNotificationHost() {
 
   // Filter notifications for overhead display:
   // - High-priority (panic/emergency/incoming call invites) are ALWAYS shown while unread.
-  // - Standard notifications are shown only if fresh (within last 48 hours).
+  // - Routine chat messages are NEVER shown overhead (handled live by ChatIncomingNotificationHost).
+  // - Standard notices (appointments, diagnostics, etc.) are shown only if fresh (within last 48 hours).
   // - Capped at top 5 to avoid overwhelming the user with stale historical notices.
   const activeAlerts = useMemo(() => {
     if (!user?.id || isPublicPage) return [];
@@ -215,6 +217,9 @@ export function GlobalOverheadNotificationHost() {
       if (n.read || dismissedLocallyIds.has(n.id)) return false;
       const cat = getAlertCategory(n);
       if (cat.isEmergency || cat.isCallInvite) return true;
+      // Chat messages are handled exclusively with live toasts by ChatIncomingNotificationHost;
+      // they must never hijack or clutter the global overhead banner.
+      if (cat.isMessage) return false;
       const createdAtMs = n.created_at ? new Date(n.created_at).getTime() : 0;
       return createdAtMs >= cutoff;
     }).slice(0, 5);
@@ -235,6 +240,18 @@ export function GlobalOverheadNotificationHost() {
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     });
   }, [activeAlerts]);
+
+  // Expose whether overhead banner is actively mounted so floating hosts can adjust clearance
+  useEffect(() => {
+    if (sortedAlerts.length > 0 && !isPublicPage) {
+      document.documentElement.dataset.overheadActive = "true";
+    } else {
+      delete document.documentElement.dataset.overheadActive;
+    }
+    return () => {
+      delete document.documentElement.dataset.overheadActive;
+    };
+  }, [sortedAlerts.length, isPublicPage]);
 
   // Keep active index in bounds
   useEffect(() => {
