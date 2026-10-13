@@ -206,24 +206,56 @@ export function GlobalOverheadNotificationHost() {
   };
 
   // Filter notifications for overhead display:
-  // - High-priority (panic/emergency/incoming call invites) are ALWAYS shown while unread.
+  // - High-priority (panic/emergency/fresh incoming call invites) are shown while unread.
   // - Routine chat messages are NEVER shown overhead (handled live by ChatIncomingNotificationHost).
+  // - Incoming call invites MUST be fresh (within 60s) and deduplicated per appointment.
   // - Standard notices (appointments, diagnostics, etc.) are shown only if fresh (within last 48 hours).
-  // - Capped at top 5 to avoid overwhelming the user with stale historical notices.
   const activeAlerts = useMemo(() => {
     if (!user?.id || isPublicPage) return [];
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    const now = Date.now();
+    const cutoff = now - 48 * 60 * 60 * 1000;
+    const CALL_RING_TTL_MS = 60_000;
+
+    const currentSearchParams = new URLSearchParams(location.search);
+    const currentPageAppointmentId = Number(currentSearchParams.get("appointment_id"));
+    const isOnCallPage = location.pathname.includes("/video") || location.pathname.includes("/call");
+
+    const seenCallAptIds = new Set<number>();
+
     return notifications.filter((n) => {
       if (n.read || dismissedLocallyIds.has(n.id)) return false;
       const cat = getAlertCategory(n);
-      if (cat.isEmergency || cat.isCallInvite) return true;
+      const createdAtMs = n.created_at ? new Date(n.created_at).getTime() : 0;
+
+      if (cat.isCallInvite) {
+        // A call invite older than 60 seconds is expired and must never show as an active ring banner
+        if (createdAtMs > 0 && now - createdAtMs > CALL_RING_TTL_MS) {
+          return false;
+        }
+
+        const aptId = Number(n.meta?.appointment_id);
+        // Do not display overhead incoming banner if user is already inside this exact appointment's room
+        if (isOnCallPage && Number.isFinite(aptId) && aptId > 0 && aptId === currentPageAppointmentId) {
+          return false;
+        }
+
+        // Deduplicate: only show one incoming invite per appointment to prevent duplicate/overlapping banners
+        if (Number.isFinite(aptId) && aptId > 0) {
+          if (seenCallAptIds.has(aptId)) return false;
+          seenCallAptIds.add(aptId);
+        }
+        return true;
+      }
+
+      if (cat.isEmergency) return true;
+
       // Chat messages are handled exclusively with live toasts by ChatIncomingNotificationHost;
       // they must never hijack or clutter the global overhead banner.
       if (cat.isMessage) return false;
-      const createdAtMs = n.created_at ? new Date(n.created_at).getTime() : 0;
+
       return createdAtMs >= cutoff;
     }).slice(0, 5);
-  }, [notifications, user?.id, isPublicPage, dismissedLocallyIds]);
+  }, [notifications, user?.id, isPublicPage, dismissedLocallyIds, location.pathname, location.search]);
 
   // Sort: Emergency & Panic first, then call alerts, then other notices
   const sortedAlerts = useMemo(() => {

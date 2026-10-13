@@ -84,11 +84,13 @@ export function CounselorIncomingCallBanner({
     if (isTerminalCallSignal(payload)) {
       logCallSignal("counselor: call ended remotely", payload);
       removeCallByAppointmentLocal(payload.appointment_id);
+      stopCallRingtone();
       return;
     }
     if (isAcceptedCallSignal(payload)) {
       // A call this counselor placed was answered — stop showing it as incoming.
       removeCallByAppointmentLocal(payload.appointment_id);
+      stopCallRingtone();
       return;
     }
     logCallSignal("counselor: RINGING", payload);

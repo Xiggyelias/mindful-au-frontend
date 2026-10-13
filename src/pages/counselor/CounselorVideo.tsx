@@ -565,6 +565,7 @@ const CounselorVideo = () => {
   const cancelOutgoingCall = useCallback(
     async (appointmentIdToCancel: string) => {
       endCall();
+      stopCallRingtone();
       setPendingSessionStartId(null);
       setPendingCallMode("video");
       setOutgoingCallMode(null);
@@ -598,7 +599,12 @@ const CounselorVideo = () => {
       try {
         const result = await api.endVideoCall(appointmentIdToEnd);
         sessionStillOpen = Boolean(result?.session_still_open);
-        if (!sessionStillOpen && result?.appointment_status === "completed") {
+        const isCompleted =
+          !sessionStillOpen ||
+          result?.appointment_status === "completed" ||
+          (result as any)?.appointment?.status === "completed" ||
+          (result as any)?.appointment_marked_completed;
+        if (isCompleted) {
           removeSessionFromQueue(appointmentIdToEnd);
         }
       } catch {
@@ -633,6 +639,7 @@ const CounselorVideo = () => {
     }
 
     endCall();
+    stopCallRingtone();
     setIsMuted(false);
     setPendingSessionStartId(null);
     setPendingCallMode("video");
@@ -707,6 +714,7 @@ const CounselorVideo = () => {
 
       logCallSignal("counselor: outgoing call ended -> ENDED", payload);
       endCall();
+      stopCallRingtone();
       setPendingSessionStartId(null);
       setPendingCallMode("video");
       setOutgoingCallMode(null);

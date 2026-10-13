@@ -576,7 +576,12 @@ const StudentVideoCall = () => {
       try {
         const result = await api.endVideoCall(appointmentIdToEnd);
         sessionStillOpen = Boolean(result?.session_still_open);
-        if (!sessionStillOpen && result?.appointment_status === "completed") {
+        const isCompleted =
+          !sessionStillOpen ||
+          result?.appointment_status === "completed" ||
+          (result as any)?.appointment?.status === "completed" ||
+          (result as any)?.appointment_marked_completed;
+        if (isCompleted) {
           removeAppointmentFromQueue(appointmentIdToEnd);
         }
       } catch {
@@ -602,6 +607,7 @@ const StudentVideoCall = () => {
   const cancelOutgoingCall = useCallback(
     async (appointmentIdToCancel: string) => {
       endCall();
+      stopCallRingtone();
       setIsStartingMode(null);
       setOutgoingCallMode(null);
       setAuthorizedDurationMinutes(null);
@@ -786,6 +792,7 @@ const StudentVideoCall = () => {
     const counselorId = Number(activeRow?.counselor_id);
 
     endCall();
+    stopCallRingtone();
     setIsMuted(false);
     setIsStartingMode(null);
     setOutgoingCallMode(null);
@@ -844,6 +851,7 @@ const StudentVideoCall = () => {
 
       logCallSignal("student: outgoing call ended -> ENDED", payload);
       endCall();
+      stopCallRingtone();
       setIsStartingMode(null);
       setOutgoingCallMode(null);
       setAuthorizedDurationMinutes(null);

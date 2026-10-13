@@ -450,12 +450,24 @@ export function stopCallRingtone(owner?: CallRingtoneOwner) {
   clearRingStopTimer();
   clearHtml5RingRamp();
 
-  fadeOutRingElement(audioCallPlayer);
-  fadeOutRingElement(videoCallPlayer);
+  // If force stopping for all owners, pause and reset IMMEDIATELY without lingering fade
+  if (!owner) {
+    try {
+      audioCallPlayer.pause();
+      audioCallPlayer.currentTime = 0;
+      videoCallPlayer.pause();
+      videoCallPlayer.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  } else {
+    fadeOutRingElement(audioCallPlayer);
+    fadeOutRingElement(videoCallPlayer);
+  }
 
   const ctx = getAudioContext();
   const needsTimer = Boolean(
-    ctx && (ringGainByEl.get(audioCallPlayer) || ringGainByEl.get(videoCallPlayer))
+    owner && ctx && (ringGainByEl.get(audioCallPlayer) || ringGainByEl.get(videoCallPlayer))
   );
   if (needsTimer) {
     ringStopTimer = window.setTimeout(() => {

@@ -81,11 +81,13 @@ export function StudentIncomingCallBanner({
     if (isTerminalCallSignal(payload)) {
       logCallSignal("student: call ended remotely", payload);
       removeCallByAppointmentLocal(payload.appointment_id);
+      stopCallRingtone();
       return;
     }
     if (isAcceptedCallSignal(payload)) {
       // A call this student placed was answered elsewhere — nothing to ring for.
       removeCallByAppointmentLocal(payload.appointment_id);
+      stopCallRingtone();
       return;
     }
     logCallSignal("student: RINGING", payload);

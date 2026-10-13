@@ -194,6 +194,9 @@ export function useIncomingCalls<T extends IncomingCallBase>({
       clearAutoDismiss(callId);
       setCalls((prev) => {
         const next = prev.filter((c) => c.id !== callId);
+        if (next.length === 0) {
+          stopCallRingtone();
+        }
         return next.length === prev.length ? prev : next;
       });
     },
@@ -215,6 +218,9 @@ export function useIncomingCalls<T extends IncomingCallBase>({
           seenIdsRef.current.delete(c.id);
           return false;
         });
+        if (next.length === 0) {
+          stopCallRingtone();
+        }
         return next.length === prev.length ? prev : next;
       });
     },
