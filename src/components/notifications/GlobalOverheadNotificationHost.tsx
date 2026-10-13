@@ -3,9 +3,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { 
   AlertTriangle, 
   Bell, 
+  Calendar,
   CheckCheck, 
   ChevronLeft, 
   ChevronRight, 
+  MessageSquare,
   PhoneCall, 
   ShieldAlert, 
   Video, 
@@ -164,29 +166,71 @@ export function GlobalOverheadNotificationHost() {
   const [dismissedLocallyIds, setDismissedLocallyIds] = useState<Set<number>>(new Set());
   const soundPlayedIdsRef = useRef<Set<number>>(new Set());
 
-  // Filter unread notifications that haven't been dismissed locally in this view session
-  const activeAlerts = useMemo(() => {
-    if (!user?.id) return [];
-    return notifications.filter((n) => !n.read && !dismissedLocallyIds.has(n.id));
-  }, [notifications, user?.id, dismissedLocallyIds]);
+  // Do NOT render on public or unauthenticated pages (Landing page, login, register, OAuth callbacks)
+  const isPublicPage =
+    location.pathname === "/" ||
+    location.pathname.startsWith("/oauth") ||
+    location.pathname.includes("/login") ||
+    location.pathname.includes("/register");
 
-  // Sort: Emergency & Panic first, then call alerts, then other unread notices
+  // Helper to categorize alerts accurately
+  const getAlertCategory = (alert: AppNotification) => {
+    const text = (alert.title + " " + alert.message).toLowerCase();
+    const metaKind = String(alert.meta?.kind || "").toLowerCase();
+
+    const isEmergency =
+      alert.type === "panic" ||
+      /panic|emergency|crisis|escalat|critical/i.test(text);
+
+    const isCallInvite =
+      (metaKind === "incoming_call" || alert.type === "call" || /incoming (call|video|audio)|calling you|video call starting/i.test(text)) &&
+      !/completed|cancelled|ended|missed/i.test(text);
+
+    const isAppointmentCompleted =
+      /appointment completed|session completed/i.test(text);
+
+    const isAppointment =
+      /appointment|booking/i.test(text);
+
+    const isMessage =
+      /message|chat|voice note/i.test(text);
+
+    return {
+      isEmergency,
+      isCallInvite,
+      isAppointmentCompleted,
+      isAppointment,
+      isMessage,
+    };
+  };
+
+  // Filter notifications for overhead display:
+  // - High-priority (panic/emergency/incoming call invites) are ALWAYS shown while unread.
+  // - Standard notifications are shown only if fresh (within last 48 hours).
+  // - Capped at top 5 to avoid overwhelming the user with stale historical notices.
+  const activeAlerts = useMemo(() => {
+    if (!user?.id || isPublicPage) return [];
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    return notifications.filter((n) => {
+      if (n.read || dismissedLocallyIds.has(n.id)) return false;
+      const cat = getAlertCategory(n);
+      if (cat.isEmergency || cat.isCallInvite) return true;
+      const createdAtMs = n.created_at ? new Date(n.created_at).getTime() : 0;
+      return createdAtMs >= cutoff;
+    }).slice(0, 5);
+  }, [notifications, user?.id, isPublicPage, dismissedLocallyIds]);
+
+  // Sort: Emergency & Panic first, then call alerts, then other notices
   const sortedAlerts = useMemo(() => {
     return [...activeAlerts].sort((a, b) => {
-      const isEmergencyA =
-        a.type === "panic" ||
-        /panic|emergency|crisis|escalat|critical/i.test(a.title + " " + a.message);
-      const isEmergencyB =
-        b.type === "panic" ||
-        /panic|emergency|crisis|escalat|critical/i.test(b.title + " " + b.message);
+      const catA = getAlertCategory(a);
+      const catB = getAlertCategory(b);
 
-      if (isEmergencyA && !isEmergencyB) return -1;
-      if (!isEmergencyA && isEmergencyB) return 1;
+      if (catA.isEmergency && !catB.isEmergency) return -1;
+      if (!catA.isEmergency && catB.isEmergency) return 1;
 
-      const isCallA = /call|appointment/i.test(a.title + " " + a.message);
-      const isCallB = /call|appointment/i.test(b.title + " " + b.message);
-      if (isCallA && !isCallB) return -1;
-      if (!isCallA && isCallB) return 1;
+      if (catA.isCallInvite && !catB.isCallInvite) return -1;
+      if (!catA.isCallInvite && catB.isCallInvite) return 1;
 
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     });
@@ -207,11 +251,8 @@ export function GlobalOverheadNotificationHost() {
       if (!soundPlayedIdsRef.current.has(alert.id)) {
         soundPlayedIdsRef.current.add(alert.id);
 
-        const isEmergency =
-          alert.type === "panic" ||
-          /panic|emergency|crisis|escalat|critical/i.test(alert.title + " " + alert.message);
-
-        if (isEmergency) {
+        const cat = getAlertCategory(alert);
+        if (cat.isEmergency) {
           playEmergencyAlertSound();
           if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
             try {
@@ -220,26 +261,20 @@ export function GlobalOverheadNotificationHost() {
               // ignore
             }
           }
-        } else if (/call|appointment/i.test(alert.title + " " + alert.message)) {
+        } else if (cat.isCallInvite) {
           playMessageNotificationSound();
         }
       }
     }
   }, [sortedAlerts]);
 
-  if (!user?.id || sortedAlerts.length === 0) {
+  if (!user?.id || isPublicPage || sortedAlerts.length === 0) {
     return null;
   }
 
   const currentAlert = sortedAlerts[activeIndex] || sortedAlerts[0];
   const destination = resolveNotificationRoute(currentAlert, role, location.pathname);
-
-  const isEmergency =
-    currentAlert.type === "panic" ||
-    /panic|emergency|crisis|escalat|critical/i.test(currentAlert.title + " " + currentAlert.message);
-
-  const isCallOrAppointment =
-    /call|appointment|session/i.test(currentAlert.title + " " + currentAlert.message);
+  const cat = getAlertCategory(currentAlert);
 
   const handleDismiss = (id: number) => {
     setDismissedLocallyIds((prev) => new Set(prev).add(id));
@@ -265,10 +300,12 @@ export function GlobalOverheadNotificationHost() {
       aria-label="Overhead notifications"
       className={cn(
         "fixed top-0 inset-x-0 z-[120] w-full text-white shadow-2xl transition-all duration-300 animate-in slide-in-from-top-4",
-        isEmergency
+        cat.isEmergency
           ? "bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-b-2 border-red-800"
-          : isCallOrAppointment
+          : cat.isCallInvite
           ? "bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 border-b border-amber-800"
+          : cat.isAppointmentCompleted
+          ? "bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 border-b border-emerald-900/50"
           : "bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-indigo-900/50"
       )}
     >
@@ -277,22 +314,31 @@ export function GlobalOverheadNotificationHost() {
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           {/* Beacon */}
           <span className="relative flex h-2.5 w-2.5 shrink-0">
-            {isEmergency ? (
+            {cat.isEmergency ? (
               <>
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-90" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
               </>
+            ) : cat.isCallInvite ? (
+              <>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300 opacity-90" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-300" />
+              </>
             ) : (
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-200" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-300" />
             )}
           </span>
 
           {/* Icon + Badge */}
           <div className="flex shrink-0 items-center gap-1.5">
-            {isEmergency ? (
+            {cat.isEmergency ? (
               <ShieldAlert className="h-4 w-4 shrink-0 text-white animate-pulse" />
-            ) : isCallOrAppointment ? (
-              <Video className="h-4 w-4 shrink-0 text-white" />
+            ) : cat.isCallInvite ? (
+              <Video className="h-4 w-4 shrink-0 text-white animate-bounce" />
+            ) : cat.isAppointmentCompleted || cat.isAppointment ? (
+              <Calendar className="h-4 w-4 shrink-0 text-white" />
+            ) : cat.isMessage ? (
+              <MessageSquare className="h-4 w-4 shrink-0 text-indigo-200" />
             ) : (
               <Bell className="h-4 w-4 shrink-0 text-indigo-200" />
             )}
@@ -301,17 +347,27 @@ export function GlobalOverheadNotificationHost() {
               variant="outline"
               className={cn(
                 "border-white/30 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                isEmergency
+                cat.isEmergency
                   ? "bg-white/20 text-white"
-                  : isCallOrAppointment
+                  : cat.isCallInvite
                   ? "bg-amber-950/40 text-amber-100"
+                  : cat.isAppointmentCompleted
+                  ? "bg-emerald-900/40 text-emerald-100 border-emerald-500/30"
+                  : cat.isAppointment
+                  ? "bg-sky-900/40 text-sky-100 border-sky-500/30"
                   : "bg-indigo-900/40 text-indigo-100"
               )}
             >
-              {isEmergency
+              {cat.isEmergency
                 ? "Emergency Alert"
-                : isCallOrAppointment
-                ? "Call Alert"
+                : cat.isCallInvite
+                ? "Incoming Call"
+                : cat.isAppointmentCompleted
+                ? "Appointment Completed"
+                : cat.isAppointment
+                ? "Appointment"
+                : cat.isMessage
+                ? "Message"
                 : "Notice"}
             </Badge>
           </div>
@@ -366,15 +422,25 @@ export function GlobalOverheadNotificationHost() {
               size="sm"
               className={cn(
                 "h-7 px-3 text-xs font-bold shadow-md transition-all rounded-full",
-                isEmergency
+                cat.isEmergency
                   ? "bg-white text-red-600 hover:bg-white/90 hover:text-red-700"
-                  : isCallOrAppointment
+                  : cat.isCallInvite
                   ? "bg-white text-amber-800 hover:bg-white/90 hover:text-amber-900"
+                  : cat.isAppointmentCompleted
+                  ? "bg-emerald-500 text-white hover:bg-emerald-400"
                   : "bg-indigo-500 text-white hover:bg-indigo-400"
               )}
               onClick={() => handleActionClick(currentAlert)}
             >
-              {isEmergency ? "Respond Now" : isCallOrAppointment ? "Join / View" : "Open"}
+              {cat.isEmergency
+                ? "Respond Now"
+                : cat.isCallInvite
+                ? "Join Call"
+                : cat.isAppointmentCompleted
+                ? "View Summary"
+                : cat.isAppointment
+                ? "View Schedule"
+                : "Open"}
             </Button>
           )}
 
