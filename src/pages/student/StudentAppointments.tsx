@@ -118,6 +118,11 @@ function isHttpServerError(error: unknown): boolean {
 }
 
 const StudentAppointments = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPreSessionModal, setShowPreSessionModal] = useState(
     () => new URLSearchParams(location.search).get("checkin") === "1"
@@ -163,11 +168,7 @@ const StudentAppointments = () => {
   const lastCounselorsLoadAtRef = useRef(0);
   const appointmentPageRef = useRef(appointmentPage);
   const hasInitiallyLoadedRef = useRef(false);
-  const { toast } = useToast();
 
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
   const preselectedSlotIdRef = useRef<number | null>(null);
   // Holds the counselor ID pinned by openBookingForAssignedCounselor so the
   // auto-select effect cannot override it when counselorMatches arrives later.
