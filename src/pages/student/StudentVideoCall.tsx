@@ -924,6 +924,28 @@ const StudentVideoCall = () => {
     void cancelOutgoingCall(abandoned);
   }, [activeAppointmentId, cancelOutgoingCall, isConnected, isConnecting, localStream, outgoingCallMode]);
 
+  /**
+   * WhatsApp-style call ring duration cutoff: an outgoing call rings for up to 35 seconds.
+   * If unanswered, it terminates cleanly: stops ringtone, clears outgoing state, and frees
+   * the participant so they can dial again without overlap or busy errors.
+   */
+  useEffect(() => {
+    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+    if (!isRingingOut || !activeAppointmentId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      stopCallRingtone();
+      void cancelOutgoingCall(activeAppointmentId);
+      toast.info("No answer. Call ended. You can call again.");
+    }, VIDEO_CALL_LIMITS.ringTimeoutMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeAppointmentId, cancelOutgoingCall, isConnecting, localStream, outgoingCallMode]);
+
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
       setRejoinSecondsLeft(null);
@@ -960,14 +982,20 @@ const StudentVideoCall = () => {
     if (!activeAppointment || !activeAppointmentId) return;
     if (localStream || isConnecting || isStartingMode) return;
     if (!isSignalingReady || !isOnline) return;
-    // If the counselor is already calling us on the WebRTC channel and we navigated here
-    // via Accept (autostart=1), accept their incoming WebRTC request directly instead of
-    // stalling on a second IncomingCallOverlay or placing a conflicting outgoing call.
-    if (isIncomingCall) {
+
+    const isAcceptedAction = searchParams.get("action") === "accept";
+    const explicitCallerId =
+      searchParams.get("caller_id") || String(activeAppointment.counselor_id || "");
+
+    // If navigated here via Accept (action=accept or isIncomingCall), accept the counselor's incoming call directly.
+    // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
+    if (isAcceptedAction || isIncomingCall) {
       autoStartedRef.current = true;
-      void acceptIncomingCall();
+      void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("autostart");
+      nextParams.delete("action");
+      nextParams.delete("caller_id");
       setSearchParams(nextParams, { replace: true });
       return;
     }

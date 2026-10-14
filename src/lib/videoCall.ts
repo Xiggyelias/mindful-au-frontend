@@ -6,7 +6,11 @@ export const VIDEO_CALL_LIMITS = {
   defaultDurationMinutes: 60,
   joinEarlyMinutes: 15,
   joinLateGraceMinutes: 15,
-  connectionTimeoutMs: 45_000,
+  /**
+   * WhatsApp-style call ring timeout: calls ring for 35 seconds before stopping
+   * sound and transitioning to "No answer / User unavailable".
+   */
+  connectionTimeoutMs: 35_000,
   /**
    * How long an unanswered call rings before it counts as missed. Must match
    * `CallCoordinator::RING_TTL_SECONDS` on the backend: the countdown ring on the incoming
@@ -14,7 +18,7 @@ export const VIDEO_CALL_LIMITS = {
    * deadline, and a shorter client timeout would report "declined" for calls the server was
    * still ringing.
    */
-  ringTimeoutMs: 45_000,
+  ringTimeoutMs: 35_000,
 } as const;
 
 const DEFAULT_STUN_SERVERS = [
@@ -23,7 +27,28 @@ const DEFAULT_STUN_SERVERS = [
   "stun:stun2.l.google.com:19302",
   "stun:stun3.l.google.com:19302",
   "stun:stun4.l.google.com:19302",
+  "stun:stun.cloudflare.com:3478",
+  "stun:stun.services.mozilla.com:3478",
 ] as const;
+
+/**
+ * Public WebRTC relay servers used when no custom TURN server is configured in env.
+ * Essential for NAT traversal across different mobile networks / cellular data (20+ km away).
+ */
+const PUBLIC_RELAY_SERVERS: RTCIceServer[] = [
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turns:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+];
+
+const isDummyUrl = (url: string): boolean =>
+  /example\.com|your-turn|change-me/i.test(url);
 
 const normalizeIceServer = (value: unknown): RTCIceServer | null => {
   if (!value || typeof value !== "object") {
@@ -32,21 +57,19 @@ const normalizeIceServer = (value: unknown): RTCIceServer | null => {
 
   const candidate = value as RTCIceServer;
   const rawUrls = candidate.urls;
-  const urls = Array.isArray(rawUrls)
+  const urls = (Array.isArray(rawUrls)
     ? rawUrls.map((item) => String(item).trim()).filter(Boolean)
     : typeof rawUrls === "string"
-    ? rawUrls.trim()
-    : "";
+    ? [rawUrls.trim()]
+    : []
+  ).filter((url) => !isDummyUrl(url));
 
-  if (
-    (Array.isArray(urls) && urls.length === 0) ||
-    (!Array.isArray(urls) && !urls)
-  ) {
+  if (urls.length === 0) {
     return null;
   }
 
   return {
-    urls,
+    urls: urls.length === 1 ? urls[0] : urls,
     username:
       typeof candidate.username === "string" && candidate.username.trim()
         ? candidate.username.trim()
@@ -62,7 +85,7 @@ const parseCsvUrls = (value?: string) =>
   (value || "")
     .split(",")
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter((item) => Boolean(item) && !isDummyUrl(item));
 
 const getFallbackIceServers = (): RTCIceServer[] => {
   const stunUrls = parseCsvUrls(import.meta.env.VITE_WEBRTC_STUN_URLS);
@@ -76,14 +99,16 @@ const getFallbackIceServers = (): RTCIceServer[] => {
     },
   ];
 
-  if (turnUrls.length > 0 && turnUsername && turnCredential) {
+  if (turnUrls.length > 0 && turnUsername && turnCredential && !isDummyUrl(turnUsername)) {
     servers.push({
       urls: turnUrls,
       username: turnUsername,
       credential: turnCredential,
     });
-  } else if (turnUrls.length > 0) {
-    console.warn("Relay (TURN) URLs provided but username or credential missing. Relay will be unavailable.");
+  } else {
+    // If no custom TURN server is specified, provide the public open relay
+    // to guarantee connectivity across distant cellular/carrier NAT networks.
+    servers.push(...PUBLIC_RELAY_SERVERS);
   }
 
   return servers;
@@ -105,7 +130,16 @@ export const getWebRtcIceServers = (): RTCIceServer[] => {
       .map((server) => normalizeIceServer(server))
       .filter((server): server is RTCIceServer => server !== null);
 
-    return validServers.length > 0 ? validServers : getFallbackIceServers();
+    if (validServers.length === 0) {
+      return getFallbackIceServers();
+    }
+
+    // If configured servers contain only STUN without TURN relay, append fallback relay
+    if (!hasRelayIceServer(validServers)) {
+      validServers.push(...PUBLIC_RELAY_SERVERS);
+    }
+
+    return validServers;
   } catch (error) {
     console.warn("Invalid VITE_WEBRTC_ICE_SERVERS value. Falling back to default ICE servers.", error);
     return getFallbackIceServers();

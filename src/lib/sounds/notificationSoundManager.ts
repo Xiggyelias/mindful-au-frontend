@@ -432,6 +432,17 @@ const ringOwners = new Set<string>();
 
 export type CallRingtoneOwner = "incoming-banner" | "call-page";
 
+/** Maximum time a ringtone is permitted to play continuously (WhatsApp-style hard cutoff). */
+const MAX_RING_SOUND_DURATION_MS = 35_500;
+let ringDurationWatchdogTimer: number | null = null;
+
+const clearRingWatchdog = () => {
+  if (ringDurationWatchdogTimer !== null) {
+    window.clearTimeout(ringDurationWatchdogTimer);
+    ringDurationWatchdogTimer = null;
+  }
+};
+
 /**
  * Stop the ring for one owner. The sound only actually stops once no owner wants it.
  * Called without an owner it force-stops for everyone (teardown / global mute paths).
@@ -446,6 +457,7 @@ export function stopCallRingtone(owner?: CallRingtoneOwner) {
     ringOwners.clear();
   }
 
+  clearRingWatchdog();
   stopFallbackRing();
   clearRingStopTimer();
   clearHtml5RingRamp();
@@ -505,6 +517,12 @@ export function startCallRingtone(kind: "audio" | "video", owner: CallRingtoneOw
   void getAudioContext()?.resume().catch(() => undefined);
   clearRingStopTimer();
   clearHtml5RingRamp();
+  clearRingWatchdog();
+
+  // WhatsApp-style auto-cutoff: ringtone ceases automatically after 35 seconds
+  ringDurationWatchdogTimer = window.setTimeout(() => {
+    stopCallRingtone();
+  }, MAX_RING_SOUND_DURATION_MS);
 
   const el = kind === "video" ? videoCallPlayer : audioCallPlayer;
   const other = kind === "video" ? audioCallPlayer : videoCallPlayer;

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Phone, PhoneOff, Video, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, getApiErrorMessage } from "@/lib/api";
@@ -96,6 +96,11 @@ export function StudentIncomingCallBanner({
 
   const engineRingingSessionId = useEngineRingingSessionId();
 
+  const location = useLocation();
+  const currentUrlAppointmentId = location.pathname.includes("/video")
+    ? new URLSearchParams(location.search).get("appointment_id")
+    : null;
+
   const handleAccept = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
     try {
@@ -105,6 +110,8 @@ export function StudentIncomingCallBanner({
       const params = new URLSearchParams({
         appointment_id: String(call.appointment_id),
         autostart: "1",
+        action: "accept",
+        caller_id: String(call.counselor_id),
         mode: effectiveWebRtcCallMode(call),
       });
       if (call.counselor_id) {
@@ -138,10 +145,16 @@ export function StudentIncomingCallBanner({
 
   // The call page for this appointment is already ringing over its own signaling
   // channel and its overlay answers there — don't stack a second identical overlay
-  // on top of it.
-  const visibleCalls = engineRingingSessionId
-    ? calls.filter((c) => String(c.appointment_id) !== String(engineRingingSessionId))
-    : calls;
+  // on top of it. Also never show an incoming call banner for the appointment currently open in video.
+  const visibleCalls = calls.filter((c) => {
+    if (engineRingingSessionId && String(c.appointment_id) === String(engineRingingSessionId)) {
+      return false;
+    }
+    if (currentUrlAppointmentId && String(c.appointment_id) === String(currentUrlAppointmentId)) {
+      return false;
+    }
+    return true;
+  });
 
   if (!enabled || visibleCalls.length === 0) {
     return null;

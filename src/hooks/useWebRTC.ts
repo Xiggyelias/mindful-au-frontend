@@ -6,6 +6,7 @@ import {
   getWebRtcIceServers,
   hasRelayIceServer,
 } from "@/lib/videoCall";
+import { stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 interface WebRTCState {
   localStream: MediaStream | null;
@@ -482,8 +483,9 @@ const startEnginePendingCallTimeout = () => {
     }
 
     engine.pendingCallRequest = null;
+    stopCallRingtone();
     cleanupEngineCall(false);
-    setEngineConnectionError("No one answered the call. Please try again.");
+    setEngineConnectionError("No answer. Call ended.");
   }, VIDEO_CALL_LIMITS.connectionTimeoutMs);
 };
 
@@ -976,6 +978,8 @@ const cleanupEngineCall = (broadcastEnd = true, clearMedia = true) => {
   engine.localSpeakingSince = null;
   engine.remoteSpeakingSince = null;
 
+  stopCallRingtone();
+
   if (clearMedia) {
     clearEngineMedia();
   }
@@ -1132,17 +1136,36 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
         return;
       }
 
-      if (currentState.isConnected || currentState.isConnecting || engine.localStream) {
-        void engine.channel?.send({
-          type: "broadcast",
-          event: "call-rejected",
-          payload: {
-            senderId: normalizedUserId,
-            targetId: normalizedSenderId,
-            reason: "busy",
-          },
-        });
+      if (currentState.isConnected) {
+        // If already connected to this peer, ignore duplicate broadcast; only reject if busy with another party
+        if (engine.remotePeerId && engine.remotePeerId !== normalizedSenderId) {
+          void engine.channel?.send({
+            type: "broadcast",
+            event: "call-rejected",
+            payload: {
+              senderId: normalizedUserId,
+              targetId: normalizedSenderId,
+              reason: "busy",
+            },
+          });
+        }
         return;
+      }
+
+      if (currentState.isConnecting) {
+        // If we are already in the process of connecting with this peer, answer with call-accepted
+        if (!engine.remotePeerId || engine.remotePeerId === normalizedSenderId) {
+          engine.remotePeerId = normalizedSenderId;
+          void engine.channel?.send({
+            type: "broadcast",
+            event: "call-accepted",
+            payload: {
+              senderId: normalizedUserId,
+              targetId: normalizedSenderId,
+            },
+          });
+          return;
+        }
       }
 
       setEngineState((prev) => ({
@@ -1733,67 +1756,93 @@ export const useWebRTC = (sessionId: string, userId: string) => {
     ]
   );
 
-  const acceptIncomingCall = useCallback(async () => {
-    const incomingCallerId = engine.state.incomingCallerId;
-    const incomingAudioOnly = Boolean(engine.state.incomingAudioOnly);
-    ensureEngineChannel(sessionId, userId);
-    if (!incomingCallerId || !engine.channel) {
-      return false;
-    }
+  const acceptIncomingCall = useCallback(
+    async (explicitCallerId?: string, audioOnlyOverride?: boolean) => {
+      const incomingCallerId = explicitCallerId || engine.state.incomingCallerId;
+      const incomingAudioOnly = audioOnlyOverride ?? Boolean(engine.state.incomingAudioOnly);
+      ensureEngineChannel(sessionId, userId);
+      if (!incomingCallerId || !engine.channel) {
+        return false;
+      }
 
-    clearPersistedActiveCall();
-    setEngineState((prev) => ({
-      ...prev,
-      isIncomingCall: false,
-      incomingCallerId: null,
-      incomingAudioOnly: false,
-      isConnecting: true,
-      isDisconnected: false,
-      rejoinDeadline: null,
-      error: null,
-      notice: null,
-    }));
-
-    const stream = await initializeEngineMedia(incomingAudioOnly);
-    if (!stream) {
+      clearPersistedActiveCall();
       setEngineState((prev) => ({
         ...prev,
-        isConnecting: false,
         isIncomingCall: false,
         incomingCallerId: null,
         incomingAudioOnly: false,
+        isConnecting: true,
+        isDisconnected: false,
+        rejoinDeadline: null,
+        error: null,
+        notice: null,
       }));
+
+      const stream = await initializeEngineMedia(incomingAudioOnly);
+      if (!stream) {
+        setEngineState((prev) => ({
+          ...prev,
+          isConnecting: false,
+          isIncomingCall: false,
+          incomingCallerId: null,
+          incomingAudioOnly: false,
+        }));
+        await engine.channel.send({
+          type: "broadcast",
+          event: "call-rejected",
+          payload: {
+            senderId: String(userId || ""),
+            targetId: incomingCallerId,
+            reason: "media-unavailable",
+          },
+        });
+        return false;
+      }
+
+      // Set up peer connection and remote peer ID *before* sending call-accepted
+      // so the offer handler can find an existing connection instead of creating a duplicate.
+      const connection =
+        engine.peerConnection && engine.peerConnection.signalingState !== "closed"
+          ? engine.peerConnection
+          : createEngineFreshPeerConnection();
+      attachEngineLocalTracks(connection, stream);
+      engine.remotePeerId = incomingCallerId;
+
       await engine.channel.send({
         type: "broadcast",
-        event: "call-rejected",
+        event: "call-accepted",
         payload: {
           senderId: String(userId || ""),
           targetId: incomingCallerId,
-          reason: "media-unavailable",
         },
       });
-      return false;
-    }
 
-    // Set up peer connection and remote peer ID *before* sending call-accepted
-    // so the offer handler can find an existing connection instead of creating a duplicate.
-    const connection =
-      engine.peerConnection && engine.peerConnection.signalingState !== "closed"
-        ? engine.peerConnection
-        : createEngineFreshPeerConnection();
-    attachEngineLocalTracks(connection, stream);
-    engine.remotePeerId = incomingCallerId;
+      // Connection guarantee: if the caller's SDP offer has not arrived within 1500ms
+      // (due to channel subscription delay or network packet jitter), re-announce once so caller connects.
+      setTimeout(() => {
+        if (
+          engine.state.isConnecting &&
+          !engine.state.isConnected &&
+          engine.channel &&
+          engine.remotePeerId === incomingCallerId &&
+          (!engine.peerConnection || engine.peerConnection.signalingState === "stable")
+        ) {
+          logWebRTC("[WebRTC] Re-announcing call-accepted to ensure caller connects");
+          void engine.channel.send({
+            type: "broadcast",
+            event: "call-accepted",
+            payload: {
+              senderId: String(userId || ""),
+              targetId: incomingCallerId,
+            },
+          });
+        }
+      }, 1500);
 
-    await engine.channel.send({
-      type: "broadcast",
-      event: "call-accepted",
-      payload: {
-        senderId: String(userId || ""),
-        targetId: incomingCallerId,
-      },
-    });
-    return true;
-  }, [sessionId, userId]);
+      return true;
+    },
+    [sessionId, userId]
+  );
 
   const rejectIncomingCall = useCallback(async () => {
     const incomingCallerId = engine.state.incomingCallerId;
