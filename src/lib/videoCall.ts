@@ -261,7 +261,10 @@ export const getVideoCallWindowStatus = (
     (safeDurationMinutes + VIDEO_CALL_LIMITS.joinLateGraceMinutes) * 60 * 1_000;
 
   if (isEmergency && callClosesAtMs <= nowMs) {
-    callClosesAtMs = nowMs + (safeDurationMinutes + VIDEO_CALL_LIMITS.joinLateGraceMinutes) * 60 * 1_000;
+    const elapsedSinceScheduledMs = nowMs - scheduledAtMs;
+    if (elapsedSinceScheduledMs < 6 * 60 * 60 * 1_000) {
+      callClosesAtMs = nowMs + (safeDurationMinutes + VIDEO_CALL_LIMITS.joinLateGraceMinutes) * 60 * 1_000;
+    }
   }
 
   if (nowMs < callOpensAtMs) {

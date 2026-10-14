@@ -1192,7 +1192,7 @@ const CounselorVideo = () => {
                   </Alert>
                 )}
 
-                {isDisconnected && (
+                {isDisconnected && !isConnected && !isConnecting && !localStream && !isStartingActiveSession && (
                   <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground">
                     <WifiOff className="h-4 w-4 text-amber-500" />
                     <AlertTitle>Connection lost</AlertTitle>
@@ -1650,9 +1650,12 @@ const CounselorVideo = () => {
                       const isBusyWithOtherCall = Boolean(
                         localStream && activeSessionId && activeSessionId !== sessionId
                       );
+                      const isHostingThisSession = Boolean(
+                        isActive && (localStream || isConnected || isConnecting || isStartingActiveSession)
+                      );
                       const isStarting =
                         pendingSessionStartId === sessionId ||
-                        (isActive && isConnecting);
+                        (isActive && (isConnecting || isStartingActiveSession));
 
                       return (
                         <div
@@ -1710,6 +1713,7 @@ const CounselorVideo = () => {
                               onClick={() => handleStartSession(sessionId, "video")}
                               disabled={
                                 isBusyWithOtherCall ||
+                                isHostingThisSession ||
                                 isStarting ||
                                 !callWindow.canStart ||
                                 !isOnline ||
@@ -1725,6 +1729,11 @@ const CounselorVideo = () => {
                                 <>
                                   <Video className="h-3.5 w-3.5 text-emerald-400" />
                                   Live in Call
+                                </>
+                              ) : isHostingThisSession ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                                  In Room (Waiting for Student)
                                 </>
                               ) : (
                                 <>

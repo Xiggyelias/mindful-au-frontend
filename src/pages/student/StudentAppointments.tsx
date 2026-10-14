@@ -2186,11 +2186,22 @@ const StudentAppointments = () => {
           setShowPreSessionModal(false);
           setSelectedCheckInAppointment(null);
         }}
-        appointmentId={selectedCheckInAppointment?.id}
-        counselorName={selectedCheckInAppointment?.counselor?.profile?.full_name || undefined}
+        appointmentId={
+          selectedCheckInAppointment?.id ||
+          appointments.find((a) => a.status === "scheduled" || a.status === "confirmed")?.id
+        }
+        counselorName={
+          selectedCheckInAppointment?.counselor?.profile?.full_name ||
+          appointments.find((a) => a.status === "scheduled" || a.status === "confirmed")?.counselor?.profile?.full_name ||
+          undefined
+        }
         onSuccess={(checkInData) => {
           setShowPreSessionModal(false);
-          const checkedId = Number(selectedCheckInAppointment?.id || checkInData?.check_in?.appointment_id);
+          const checkedId = Number(
+            selectedCheckInAppointment?.id ||
+            checkInData?.check_in?.appointment_id ||
+            appointments.find((a) => a.status === "scheduled" || a.status === "confirmed")?.id
+          );
           if (checkedId) {
             setCheckedInAptIds((prev) => {
               const next = new Set(prev).add(checkedId);
@@ -2201,7 +2212,7 @@ const StudentAppointments = () => {
             });
             setAppointments((prev) =>
               prev.map((a) =>
-                a.id === checkedId
+                Number(a.id) === Number(checkedId)
                   ? {
                       ...a,
                       has_pre_session_check_in: true,
@@ -2212,6 +2223,7 @@ const StudentAppointments = () => {
             );
           }
           setSelectedCheckInAppointment(null);
+          void loadAppointments(false, { force: true });
         }}
       />
     </div>

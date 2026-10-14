@@ -34,7 +34,7 @@ export function deriveCallStatus(signals: CallEngineSignals): CallStatus {
   if (signals.isConnected) {
     return "connected";
   }
-  if (signals.isDisconnected) {
+  if (signals.isDisconnected && !signals.localStream) {
     return "reconnecting";
   }
   if (signals.isIncomingCall) {
@@ -42,6 +42,9 @@ export function deriveCallStatus(signals: CallEngineSignals): CallStatus {
   }
   if (signals.isConnecting || signals.localStream) {
     return "calling";
+  }
+  if (signals.isDisconnected) {
+    return "reconnecting";
   }
   return "idle";
 }

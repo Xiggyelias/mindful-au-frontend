@@ -1157,7 +1157,7 @@ const StudentVideoCall = () => {
                   </Alert>
                 )}
 
-                {isDisconnected && (
+                {isDisconnected && !isConnected && !isConnecting && !localStream && !isStartingMode && (
                   <Alert className="border-amber-500/40 bg-amber-500/5 text-foreground">
                     <WifiOff className="h-4 w-4 text-amber-500" />
                     <AlertTitle>Connection lost</AlertTitle>
@@ -1612,7 +1612,7 @@ const StudentVideoCall = () => {
             });
             setUpcomingAppointments((prev) =>
               prev.map((a) =>
-                a.id === checkedId
+                Number(a.id) === Number(checkedId)
                   ? {
                       ...a,
                       has_pre_session_check_in: true,

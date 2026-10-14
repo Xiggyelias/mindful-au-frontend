@@ -688,6 +688,8 @@ const createEnginePeerConnection = () => {
         isConnected: true,
         isConnecting: false,
         isReconnecting: false,
+        isDisconnected: false,
+        rejoinDeadline: null,
         error: null,
         notice: null,
       }));
@@ -751,8 +753,20 @@ const createEnginePeerConnection = () => {
       return;
     }
 
-    if (connection.connectionState === "disconnected" || connection.connectionState === "failed") {
-      logWebRTC("[WebRTC] Connection lost:", connection.connectionState);
+    if (connection.connectionState === "disconnected") {
+      logWebRTC("[WebRTC] Transient connection drop:", connection.connectionState);
+      // "disconnected" is transient in WebRTC — browser automatically attempts ICE reconnect
+      setEngineState((prev) => ({
+        ...prev,
+        isReconnecting: true,
+        notice: "Connection unstable, reconnecting...",
+        error: null,
+      }));
+      return;
+    }
+
+    if (connection.connectionState === "failed") {
+      logWebRTC("[WebRTC] Connection failed:", connection.connectionState);
       clearEngineConnectionTimeout();
       const deadline = Date.now() + RECONNECT_WINDOW_MS;
       engine.reconnectDeadlineMs = deadline;
@@ -1679,7 +1693,15 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         return false;
       }
 
-      setEngineState((prev) => ({ ...prev, isConnecting: true, error: null, notice: null }));
+      clearPersistedActiveCall();
+      setEngineState((prev) => ({
+        ...prev,
+        isConnecting: true,
+        isDisconnected: false,
+        rejoinDeadline: null,
+        error: null,
+        notice: null,
+      }));
 
       try {
         engine.pendingCallRequest = { audioOnly: Boolean(options.audioOnly) };
@@ -1719,12 +1741,17 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return false;
     }
 
+    clearPersistedActiveCall();
     setEngineState((prev) => ({
       ...prev,
       isIncomingCall: false,
       incomingCallerId: null,
       incomingAudioOnly: false,
       isConnecting: true,
+      isDisconnected: false,
+      rejoinDeadline: null,
+      error: null,
+      notice: null,
     }));
 
     const stream = await initializeEngineMedia(incomingAudioOnly);
@@ -2066,7 +2093,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       return;
     }
 
-    if (engine.state.isConnected || engine.state.isConnecting) {
+    if (engine.state.isConnected || engine.state.isConnecting || engine.localStream) {
       return;
     }
 
