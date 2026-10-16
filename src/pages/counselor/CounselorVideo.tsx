@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { useWebRTC } from "@/hooks/useWebRTC";
+import { useLiveKit } from "@/hooks/useLiveKit";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { deriveCallStatus } from "@/lib/callState";
 import {
@@ -160,7 +160,7 @@ const CounselorVideo = () => {
     flipCamera,
     acceptIncomingCall,
     rejectIncomingCall,
-  } = useWebRTC(activeSessionId || "", String(user?.id || ""));
+  } = useLiveKit(Number(activeSessionId || 0), String(user?.id || ""));
 
   useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
@@ -950,7 +950,7 @@ const CounselorVideo = () => {
     // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
     if (isAcceptedAction || isIncomingCall) {
       autoStartedRef.current = true;
-      void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
+      void acceptIncomingCall();
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("autostart");
       nextParams.delete("action");

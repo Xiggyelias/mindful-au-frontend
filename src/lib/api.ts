@@ -1873,6 +1873,14 @@ class ApiClient {
     }
   }
 
+  /** Mint a LiveKit room join token (server decides auth; token is signed server-side). */
+  async getLiveKitToken(appointmentId: number | string) {
+    const response = await this.client.post("/video-calls/livekit-token", {
+      appointment_id: appointmentId,
+    });
+    return response.data as { url: string; token: string; room: string };
+  }
+
   async getCounselorIncomingCalls() {
     const response = await this.client.get("/counselor/incoming-calls", {
       timeout: 5_000,
