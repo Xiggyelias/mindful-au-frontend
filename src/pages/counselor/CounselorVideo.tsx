@@ -52,6 +52,7 @@ import {
   effectiveWebRtcCallMode,
   normalizeVideoCallDuration,
   getAppointmentWhereLabel,
+  VIDEO_CALL_LIMITS,
 } from "@/lib/videoCall";
 import { toast } from "sonner";
 import { format } from "date-fns";

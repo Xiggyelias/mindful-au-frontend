@@ -46,6 +46,7 @@ import {
   effectiveWebRtcCallMode,
   normalizeVideoCallDuration,
   getAppointmentWhereLabel,
+  VIDEO_CALL_LIMITS,
 } from "@/lib/videoCall";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import {
