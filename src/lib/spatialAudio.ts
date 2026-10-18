@@ -18,7 +18,8 @@ export class SpatialAudioManager {
   private audioCtx: AudioContext | null = null;
   private trackNodes: Map<string, SpatialAudioTrackNode> = new Map();
   private maxDistance: number = 650; // Distance beyond which audio plays at minimum whisper floor
-  private ambientOscillator: OscillatorNode | null = null;
+  private ambientAudioElement: HTMLAudioElement | null = null;
+  private ambientSourceNode: MediaElementAudioSourceNode | null = null;
   private ambientGain: GainNode | null = null;
   private ambientPanner: StereoPannerNode | null = null;
   private isAmbientPlaying: boolean = false;
@@ -337,53 +338,87 @@ export class SpatialAudioManager {
   }
 
   /**
-   * Start tranquil ambient nature soundscape for the meadow speaker
+   * Initialize or retrieve the Zen Meadow stock beat audio element and Web Audio nodes.
+   * Plays a cozy, relaxing royalty-free lofi chill beat instead of synthetic oscillators.
+   */
+  private ensureAmbientNodes(): void {
+    if (this.ambientAudioElement && this.ambientGain && this.ambientPanner) {
+      return;
+    }
+
+    const ctx = this.ensureContext();
+
+    if (!this.ambientAudioElement) {
+      const audio = document.createElement("audio");
+      audio.id = "spatial-zen-radio-stock-beat";
+      audio.src = "/assets/sounds/zen-lofi-beat.mp3";
+      audio.loop = true;
+      audio.preload = "auto";
+      audio.crossOrigin = "anonymous";
+      audio.volume = 0.35;
+
+      // Fallback to secondary chill beat if primary format/file fails
+      audio.onerror = () => {
+        console.warn("[SpatialAudio] Primary beat failed, falling back to alternate beat");
+        if (audio.src !== "/assets/sounds/zen-lofi-beat-2.mp3") {
+          audio.src = "/assets/sounds/zen-lofi-beat-2.mp3";
+          if (this.isAmbientPlaying) {
+            void audio.play().catch(() => {});
+          }
+        }
+      };
+
+      document.body.appendChild(audio);
+      this.ambientAudioElement = audio;
+    }
+
+    if (!this.ambientSourceNode) {
+      try {
+        const source = ctx.createMediaElementSource(this.ambientAudioElement);
+        const panner = ctx.createStereoPanner();
+        const gain = ctx.createGain();
+
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        source.connect(panner);
+        panner.connect(gain);
+        gain.connect(ctx.destination);
+
+        this.ambientSourceNode = source;
+        this.ambientPanner = panner;
+        this.ambientGain = gain;
+      } catch (err) {
+        console.warn("[SpatialAudio] Web Audio media element source error:", err);
+      }
+    }
+  }
+
+  /**
+   * Start tranquil ambient stock beat for the meadow speaker.
+   * ONLY plays when explicitly called (turned on by user).
    */
   public startAmbientSpeaker(myX: number, myY: number, speakerPos?: { x: number; y: number }): void {
-    if (this.isAmbientPlaying) return;
     if (speakerPos) {
       this.speakerPos = speakerPos;
     }
 
-    const ctx = this.ensureContext();
     try {
-      const osc = ctx.createOscillator();
-      const panner = ctx.createStereoPanner();
-      const gain = ctx.createGain();
-
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(220, ctx.currentTime); // Soft A3 meditative drone
-
-      // Sub-harmonic depth
-      const lfo = ctx.createOscillator();
-      lfo.frequency.setValueAtTime(0.2, ctx.currentTime);
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.setValueAtTime(4, ctx.currentTime);
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-      lfo.start();
-
-      osc.connect(panner);
-      panner.connect(gain);
-      gain.connect(ctx.destination);
-
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
-      osc.start();
-
-      this.ambientOscillator = osc;
-      this.ambientPanner = panner;
-      this.ambientGain = gain;
+      this.ensureAmbientNodes();
       this.isAmbientPlaying = true;
+
+      if (this.ambientAudioElement) {
+        this.ambientAudioElement.currentTime = this.ambientAudioElement.currentTime || 0;
+        void this.ambientAudioElement.play().catch((err) => {
+          console.warn("[SpatialAudio] Zen radio playback error:", err);
+        });
+      }
 
       this.updateAmbientPosition(myX, myY);
     } catch (err) {
-      console.warn("[SpatialAudio] Ambient generator failed:", err);
+      console.warn("[SpatialAudio] Zen radio start failed:", err);
     }
   }
 
   public updateAmbientPosition(myX: number, myY: number): void {
-    if (!this.ambientGain || !this.ambientPanner || !this.audioCtx) return;
-
     const dx = this.speakerPos.x - myX;
     const dy = this.speakerPos.y - myY;
     const distance = Math.hypot(dx, dy);
@@ -391,30 +426,42 @@ export class SpatialAudioManager {
     let targetGain = 0;
     let targetPan = 0;
 
-    if (distance <= this.maxDistance * 1.2) {
-      const fraction = Math.max(0, 1 - distance / (this.maxDistance * 1.2));
-      targetGain = Math.pow(fraction, 1.8) * 0.16; // Gentle background volume
+    // Smooth spatial attenuation: loudest when close to the gramophone (up to 0.32 max),
+    // smoothly tapering off as you walk around the meadow.
+    if (distance <= this.maxDistance * 1.3) {
+      const fraction = Math.max(0, 1 - distance / (this.maxDistance * 1.3));
+      targetGain = Math.pow(fraction, 1.5) * 0.32; // Gentle, relaxing background level
       targetPan = Math.max(-1, Math.min(1, dx / (this.maxDistance * 0.8)));
     }
 
-    const now = this.audioCtx.currentTime;
-    this.ambientGain.gain.setTargetAtTime(targetGain, now, 0.05);
-    this.ambientPanner.pan.setTargetAtTime(targetPan, now, 0.05);
+    if (this.ambientGain && this.audioCtx && this.audioCtx.state === "running") {
+      const now = this.audioCtx.currentTime;
+      this.ambientGain.gain.setTargetAtTime(targetGain, now, 0.08);
+      if (this.ambientPanner) {
+        this.ambientPanner.pan.setTargetAtTime(targetPan, now, 0.08);
+      }
+    } else if (this.ambientAudioElement) {
+      // Fallback volume on direct audio element if Web Audio context is suspended
+      this.ambientAudioElement.volume = Math.max(0, Math.min(0.35, targetGain));
+    }
   }
 
   public stopAmbientSpeaker(): void {
-    if (!this.isAmbientPlaying) return;
-    try {
-      this.ambientOscillator?.stop();
-      this.ambientGain?.disconnect();
-      this.ambientPanner?.disconnect();
-    } catch {
-      // Ignored
-    }
-    this.ambientOscillator = null;
-    this.ambientGain = null;
-    this.ambientPanner = null;
     this.isAmbientPlaying = false;
+    if (this.ambientGain && this.audioCtx) {
+      try {
+        this.ambientGain.gain.setTargetAtTime(0, this.audioCtx.currentTime, 0.05);
+      } catch {
+        // Ignored
+      }
+    }
+    if (this.ambientAudioElement) {
+      try {
+        this.ambientAudioElement.pause();
+      } catch {
+        // Ignored
+      }
+    }
   }
 
   public toggleAmbientSpeaker(myX: number, myY: number): boolean {
@@ -433,6 +480,18 @@ export class SpatialAudioManager {
 
   public cleanup(): void {
     this.stopAmbientSpeaker();
+    if (this.ambientAudioElement) {
+      try {
+        this.ambientAudioElement.pause();
+        this.ambientAudioElement.remove();
+      } catch {
+        // Ignored
+      }
+      this.ambientAudioElement = null;
+      this.ambientSourceNode = null;
+      this.ambientGain = null;
+      this.ambientPanner = null;
+    }
     this.disableSidetone();
     for (const [id] of this.trackNodes) {
       this.detachTrack(id);

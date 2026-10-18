@@ -60,7 +60,7 @@ export const PeerSpatialLounge = () => {
   const [isMicActive, setIsMicActive] = useState(false);
   const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>("default");
-  const [isAmbientPlaying, setIsAmbientPlaying] = useState(true);
+  const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
   const [livekitConnected, setLivekitConnected] = useState(false);
 
   // Real-time microphone audio level & sidetone test
@@ -229,14 +229,7 @@ export const PeerSpatialLounge = () => {
         .catch((err) => console.warn("Failed to enumerate devices:", err));
     }
 
-    // Auto-start ambient radio on initial position
-    const ambientTimer = setTimeout(() => {
-      manager.startAmbientSpeaker(localParticipant.x, localParticipant.y);
-      setIsAmbientPlaying(manager.isAmbientActive());
-    }, 600);
-
     return () => {
-      clearTimeout(ambientTimer);
       window.removeEventListener("click", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
       manager.cleanup();
