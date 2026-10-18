@@ -39,6 +39,7 @@ import {
 import { Appointment } from "@/hooks/useChatSession";
 import { AnonymousModeIndicator } from "@/components/privacy/AnonymousModeIndicator";
 import { CounselorPreSessionCard } from "@/components/assessment/CounselorPreSessionCard";
+import { PostSessionDebriefModal } from "@/components/counselor/PostSessionDebriefModal";
 import {
   isAnonymousIdentityMaskedFromViewer,
   resolveCounselorStudentDisplayName,
@@ -124,6 +125,9 @@ const CounselorVideo = () => {
   const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [postDebriefOpen, setPostDebriefOpen] = useState<boolean>(false);
+  const [lastEndedStudentName, setLastEndedStudentName] = useState<string>("");
+  const [lastEndedSessionId, setLastEndedSessionId] = useState<string>("");
   const { user } = useAuth();
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const requestedAppointmentId = useMemo(() => {
@@ -669,10 +673,17 @@ const CounselorVideo = () => {
     }
 
     const sessionStillOpen = await finalizeEndedSession(sessionIdToEnd);
+    if (!sessionStillOpen) {
+      setLastEndedStudentName(
+        activeRow?.student?.name || (activeRow as any)?.student_name || "the student"
+      );
+      setLastEndedSessionId(sessionIdToEnd);
+      setPostDebriefOpen(true);
+    }
     toast.info(
       sessionStillOpen
         ? "Call ended. The session is still booked — you can start the room again."
-        : "Session ended"
+        : "Session ended. Starting clinical reflection..."
     );
   };
 
@@ -1028,6 +1039,11 @@ const CounselorVideo = () => {
 
         if (sessionIdToEnd) {
           void finalizeEndedSession(sessionIdToEnd);
+          setLastEndedStudentName(
+            activeSession?.student?.name || (activeSession as any)?.student_name || "the student"
+          );
+          setLastEndedSessionId(sessionIdToEnd);
+          setPostDebriefOpen(true);
         }
 
         toast.warning(
@@ -1811,6 +1827,13 @@ const CounselorVideo = () => {
           </div>
         </main>
       </div>
+
+      <PostSessionDebriefModal
+        open={postDebriefOpen}
+        onOpenChange={setPostDebriefOpen}
+        studentName={lastEndedStudentName}
+        sessionId={lastEndedSessionId}
+      />
     </div>
   );
 };

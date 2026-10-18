@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   RefreshCcw,
@@ -463,12 +463,12 @@ const AdminAnalytics = () => {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Brain className="h-5 w-5 text-primary" />
-                  ML Forecast Distribution
+                  Forecasted Support Distribution
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {mlRiskDistribution.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No ML forecast data available.</p>
+                  <p className="text-sm text-muted-foreground">No forecast data available.</p>
                 ) : (
                   mlRiskDistribution.map((item) => (
                     <div key={item.label}>
@@ -556,12 +556,12 @@ const AdminAnalytics = () => {
 
           <Card variant="glass">
             <CardHeader>
-              <CardTitle className="text-lg">ML Priority Actions</CardTitle>
+              <CardTitle className="text-lg">Priority Action Items</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3">
                 {(data?.ml_intelligence?.top_actions || []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No ML action items available.</p>
+                  <p className="text-sm text-muted-foreground">No priority action items available.</p>
                 ) : (
                   (data?.ml_intelligence?.top_actions || []).map((action, index) => (
                     <div key={`${action}-${index}`} className="rounded-xl bg-secondary/30 p-4 text-sm text-foreground">

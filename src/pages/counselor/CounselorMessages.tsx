@@ -2158,7 +2158,7 @@ const CounselorMessages = () => {
                         )}
                         {briefData.aiRecommendation && (
                           <p className="flex-1 text-xs text-muted-foreground leading-relaxed min-w-0">
-                            <span className="font-semibold text-foreground">AI rec: </span>
+                            <span className="font-semibold text-foreground">Clinical note: </span>
                             {briefData.aiRecommendation.length > 160
                               ? briefData.aiRecommendation.slice(0, 160) + "…"
                               : briefData.aiRecommendation}

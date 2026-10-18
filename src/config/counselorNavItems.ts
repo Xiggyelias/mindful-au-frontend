@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  Brain,
   Calendar,
   FileText,
   Heart,
@@ -18,7 +17,6 @@ export const counselorNavItems = [
   { label: "Messages", icon: MessageSquare, path: "/counselor/messages" },
   { label: "Appointments", icon: Calendar, path: "/counselor/appointments" },
   { label: "Students", icon: Users, path: "/counselor/students" },
-  { label: "AI Insights", icon: Brain, path: "/counselor/ai-insights" },
   { label: "Video Sessions", icon: Video, path: "/counselor/video" },
   { label: "Session Notes", icon: FileText, path: "/counselor/notes" },
   { label: "Wellness", icon: Heart, path: "/counselor/wellness" },

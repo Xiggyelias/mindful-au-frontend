@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   Calendar,
-  Bot,
   Video,
   History,
   Heart,
@@ -404,20 +403,6 @@ const StudentDashboard = () => {
               </CardContent>
             </Card>
 
-            <Card
-              className="group cursor-pointer border-none bg-gradient-to-br from-info/5 to-transparent hover:from-info/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
-              onClick={() => navigate("/student/ai-support")}
-            >
-              <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-info/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
-                  <Bot className="h-8 w-8 text-info" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg mb-1">AI Assistant</h3>
-                  <p className="text-sm text-muted-foreground">24/7 support for coping strategies and tips</p>
-                </div>
-              </CardContent>
-            </Card>
 
             <Card
               className="group cursor-pointer border-none bg-gradient-to-br from-success/5 to-transparent hover:from-success/10 glide-card tap-spring transition-all duration-300 rounded-3xl"
@@ -561,11 +546,11 @@ const StudentDashboard = () => {
               icon={Calendar}
             />
             <StatsCard
-              title="AI Chats"
+              title="Support Sessions"
               value={stats.chats}
-              change="Total sessions"
+              change="Total consultations"
               trend="neutral"
-              icon={Bot}
+              icon={MessageSquare}
             />
           </div>
 

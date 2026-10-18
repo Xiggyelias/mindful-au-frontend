@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Brain,
+  Activity,
   Coffee,
   Heart,
   Sun,
   Loader2,
   CheckCircle2,
+  Moon,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -17,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
+import { CounselorClockOutModal } from "@/components/counselor/CounselorClockOutModal";
 
 const scaleOptions = [
   { value: 0, label: "Never" },
@@ -93,6 +95,7 @@ const CounselorWellness = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRunningCheck, setIsRunningCheck] = useState(false);
   const [isSubmittingCheckIn, setIsSubmittingCheckIn] = useState(false);
+  const [clockOutModalOpen, setClockOutModalOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [checkInAnswers, setCheckInAnswers] = useState<CheckInAnswers>(createEmptyAnswers());
   const [showOverrideCheckIn, setShowOverrideCheckIn] = useState(false);
@@ -380,6 +383,33 @@ const CounselorWellness = () => {
             </Card>
           </div>
 
+          {/* Daily Shift Assessment & Clock-Out Banner */}
+          <div className="rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 backdrop-blur-md shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/20 text-primary shadow-inner">
+                  <Moon className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground text-sm sm:text-base">
+                    Daily Shift Evaluation & Boundary Clock-Out
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Assess cognitive load, emotional boundaries, and secondary trauma before officially clocking out for the day.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setClockOutModalOpen(true)}
+                className="rounded-xl gap-2 text-xs font-semibold shadow-md bg-primary text-primary-foreground shadow-primary/20 shrink-0"
+              >
+                <Moon className="h-4 w-4" />
+                Begin Shift Assessment
+              </Button>
+            </div>
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-2">
             <Card variant="glass">
               <CardHeader>
@@ -394,8 +424,8 @@ const CounselorWellness = () => {
                     </>
                   ) : (
                     <>
-                      <Brain className="mr-2 h-4 w-4" />
-                      Run Live Health Check
+                      <Activity className="mr-2 h-4 w-4" />
+                      Run Workload Health Check
                     </>
                   )}
                 </Button>
@@ -608,7 +638,7 @@ const CounselorWellness = () => {
                       log.check_in_version === "v1"
                         ? "Self check-in"
                         : log.check_in_version === "ai-v1"
-                        ? "AI health check"
+                        ? "Workload health check"
                         : log.check_in_version === "auto-v2" || log.check_in_version === "auto-v3"
                         ? "Live health check"
                         : "Manual entry";
@@ -640,6 +670,12 @@ const CounselorWellness = () => {
           </Card>
         </main>
       </div>
+
+      <CounselorClockOutModal
+        open={clockOutModalOpen}
+        onOpenChange={setClockOutModalOpen}
+        onClockedOut={() => void loadWellnessData()}
+      />
     </div>
   );
 };

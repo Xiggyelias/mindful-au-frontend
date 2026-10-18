@@ -5,17 +5,21 @@ import {
   MessageSquare,
   Calendar,
   Users,
-  Brain,
   Heart,
   Bell,
   TrendingUp,
   AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Moon,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { StatsCard } from "@/components/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CounselorClockOutModal } from "@/components/counselor/CounselorClockOutModal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
@@ -131,6 +135,33 @@ const CounselorDashboard = () => {
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Counselor";
   const [sessionReminderBannerActive, setSessionReminderBannerActive] = useState(false);
   const isApprovedCounselor = user?.roles?.some((r: { role: string; approved: boolean }) => r.role === "counselor" && r.approved);
+
+  const [clockOutModalOpen, setClockOutModalOpen] = useState(false);
+  const [clockedOutToday, setClockedOutToday] = useState(false);
+  const [clockOutVitality, setClockOutVitality] = useState<number | null>(null);
+
+  useEffect(() => {
+    const checkClockStatus = () => {
+      try {
+        const todayKey = new Date().toISOString().split("T")[0];
+        const raw = localStorage.getItem(`counselor_shift_clockout_${todayKey}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setClockedOutToday(true);
+          setClockOutVitality(parsed.vitalityScore ?? null);
+        } else {
+          setClockedOutToday(false);
+          setClockOutVitality(null);
+        }
+      } catch {
+        setClockedOutToday(false);
+        setClockOutVitality(null);
+      }
+    };
+    checkClockStatus();
+    window.addEventListener("counselor_clock_status_changed", checkClockStatus);
+    return () => window.removeEventListener("counselor_clock_status_changed", checkClockStatus);
+  }, []);
 
   const loadDashboardData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
@@ -314,11 +345,11 @@ const CounselorDashboard = () => {
       icon: MessageSquare,
     },
     {
-      title: "AI Alerts",
+      title: "Priority Alerts",
       value: aiAlertsCount,
       change: "",
       trend: "neutral" as const,
-      icon: Brain,
+      icon: AlertTriangle,
     },
   ];
 
@@ -403,10 +434,64 @@ const CounselorDashboard = () => {
                   Here are your latest sessions and students.
                 </p>
               </div>
-              <Button variant="hero" className="gap-2" onClick={handleViewAlerts}>
-                <Bell className="h-4 w-4" />
-                View Alerts
-              </Button>
+            </div>
+          </div>
+
+          {/* Shift Assessment & Status Banner */}
+          <div className="rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 backdrop-blur-md shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div
+                  className={cn(
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner",
+                    clockedOutToday
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : "bg-primary/20 text-primary"
+                  )}
+                >
+                  {clockedOutToday ? <CheckCircle2 className="h-6 w-6" /> : <Clock className="h-6 w-6" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-foreground text-sm sm:text-base">
+                      {clockedOutToday ? "Daily Shift Completed" : "Active Daily Shift"}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-bold uppercase tracking-wider",
+                        clockedOutToday
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "border-primary/30 bg-primary/10 text-primary"
+                      )}
+                    >
+                      {clockedOutToday ? "Off Duty" : "On Duty"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {clockedOutToday
+                      ? `Shift evaluated & clocked out for today (${
+                          clockOutVitality != null ? `Vitality: ${clockOutVitality}%` : "Shift complete"
+                        }). Rest well!`
+                      : "Evaluate your cognitive vitality and complete your mindful decompression before clocking out."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setClockOutModalOpen(true)}
+                  className={cn(
+                    "rounded-xl gap-2 text-xs font-semibold shadow-md",
+                    clockedOutToday
+                      ? "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+                      : "bg-primary text-primary-foreground shadow-primary/20"
+                  )}
+                >
+                  <Moon className="h-4 w-4" />
+                  {clockedOutToday ? "View Shift Debrief" : "Assess & Clock Out"}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -620,6 +705,11 @@ const CounselorDashboard = () => {
           </Card>
         </main>
       </div>
+
+      <CounselorClockOutModal
+        open={clockOutModalOpen}
+        onOpenChange={setClockOutModalOpen}
+      />
     </div>
   );
 };

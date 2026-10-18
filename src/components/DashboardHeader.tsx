@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, Loader2, Menu, ShieldX, Volume2, X } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Menu, Moon, ShieldX, Volume2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -15,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { SessionManagerDialog } from "./SessionManagerDialog";
 import { NotificationSoundSettingsPanel } from "./settings/NotificationSoundSettingsPanel";
 import { primeNotificationAudioFromUserGesture } from "@/lib/sounds/notificationSoundManager";
+import { CounselorClockOutModal } from "@/components/counselor/CounselorClockOutModal";
 
 interface DashboardHeaderProps {
   title: string;
@@ -34,6 +36,24 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
     markAllAsRead,
     deleteNotification,
   } = useNotifications();
+
+  const [clockOutModalOpen, setClockOutModalOpen] = useState(false);
+  const [clockedOutToday, setClockedOutToday] = useState(false);
+
+  useEffect(() => {
+    const checkClockStatus = () => {
+      try {
+        const todayKey = new Date().toISOString().split("T")[0];
+        const record = localStorage.getItem(`counselor_shift_clockout_${todayKey}`);
+        setClockedOutToday(Boolean(record));
+      } catch {
+        setClockedOutToday(false);
+      }
+    };
+    checkClockStatus();
+    window.addEventListener("counselor_clock_status_changed", checkClockStatus);
+    return () => window.removeEventListener("counselor_clock_status_changed", checkClockStatus);
+  }, []);
 
   const formatTimestamp = (dateString?: string) => {
     if (!dateString) return "";
@@ -216,6 +236,28 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:gap-3">
+          {role === "counselor" && (
+            <>
+              <Button
+                variant={clockedOutToday ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setClockOutModalOpen(true)}
+                className="hidden sm:inline-flex rounded-xl border-primary/30 hover:border-primary/60 bg-primary/5 text-primary text-xs font-semibold gap-1.5 shadow-sm"
+              >
+                <Moon className="h-4 w-4" />
+                <span>{clockedOutToday ? "Shift Complete" : "Clock Out"}</span>
+              </Button>
+              <Button
+                variant={clockedOutToday ? "secondary" : "outline"}
+                size="icon"
+                onClick={() => setClockOutModalOpen(true)}
+                className="h-9 w-9 sm:hidden rounded-xl border-primary/30 text-primary"
+                title={clockedOutToday ? "Shift Complete" : "Clock Out"}
+              >
+                <Moon className="h-4 w-4" />
+              </Button>
+            </>
+          )}
           <Button
             variant="destructive"
             size="sm"
@@ -351,6 +393,14 @@ export const DashboardHeader = ({ title, onMenuClick }: DashboardHeaderProps) =>
           </DropdownMenu>
         </div>
       </header>
+
+      {role === "counselor" && (
+        <CounselorClockOutModal
+          open={clockOutModalOpen}
+          onOpenChange={setClockOutModalOpen}
+          onClockedOut={() => setClockedOutToday(true)}
+        />
+      )}
     </div>
   );
 };

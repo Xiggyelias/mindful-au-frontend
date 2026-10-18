@@ -1380,19 +1380,7 @@ const CounselorStudents = () => {
                 <FileText className="h-4 w-4" />
                 View Session Notes
               </Button>
-              <Button
-                className="w-full justify-start gap-3"
-                variant="outline"
-                onClick={() => {
-                  if (selectedStudentForProfile) {
-                    navigate(`/counselor/ai-insights?student=${selectedStudentForProfile.id}`);
-                    setSelectedStudentForProfile(null);
-                  }
-                }}
-              >
-                <Brain className="h-4 w-4" />
-                View AI Insights
-              </Button>
+
             </TabsContent>
           </Tabs>
         </DialogContent>
