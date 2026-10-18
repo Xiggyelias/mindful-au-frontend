@@ -357,15 +357,8 @@ export class SpatialAudioManager {
       audio.crossOrigin = "anonymous";
       audio.volume = 0.35;
 
-      // Fallback to secondary chill beat if primary format/file fails
-      audio.onerror = () => {
-        console.warn("[SpatialAudio] Primary beat failed, falling back to alternate beat");
-        if (audio.src !== "/assets/sounds/zen-lofi-beat-2.mp3") {
-          audio.src = "/assets/sounds/zen-lofi-beat-2.mp3";
-          if (this.isAmbientPlaying) {
-            void audio.play().catch(() => {});
-          }
-        }
+      audio.onerror = (e) => {
+        console.warn("[SpatialAudio] Zen radio beat loading error:", e);
       };
 
       document.body.appendChild(audio);
