@@ -1350,18 +1350,36 @@ export const PeerSpatialLounge = () => {
 
             {/* In-meadow floating stats bar */}
             <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
-              <div className="bg-slate-950/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-xs text-slate-200 flex items-center gap-2 shadow-lg">
+              <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
+                <span className="relative flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
+                </span>
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
+                <span className="font-medium text-slate-100">
                   {partnerInfo ? (
-                    <b>{participants.length > 0 ? "Partner in Meadow" : "Waiting for partner to enter..."}</b>
+                    participants.length > 0 ? (
+                      <span>Partner in Meadow</span>
+                    ) : (
+                      <span className="text-amber-300">Waiting for partner...</span>
+                    )
                   ) : (
-                    <b>Private Session</b>
+                    <span>Private Session</span>
                   )}
                 </span>
                 <span className="text-slate-600">|</span>
-                <span className="text-emerald-300">
-                  <b>{nearbyPeers.length > 0 ? "Within Hearing Aura 🔊" : "Walk Closer to Hear 🎧"}</b>
+                <span className={`font-semibold flex items-center gap-1.5 ${nearbyPeers.length > 0 ? "text-emerald-300" : "text-slate-300"}`}>
+                  {nearbyPeers.length > 0 ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Within Hearing Aura</span>
+                    </>
+                  ) : (
+                    <>
+                      <Headphones className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Walk Closer to Hear</span>
+                    </>
+                  )}
                 </span>
               </div>
             </div>
