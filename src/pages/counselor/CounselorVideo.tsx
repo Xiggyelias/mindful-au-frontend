@@ -1127,7 +1127,7 @@ const CounselorVideo = () => {
       ? `${remoteParticipantName} is connected in audio mode or has camera sharing turned off. Audio is still live.`
       : statusMessage;
   const counselorVisibilityLabel = !localStream
-    ? isStarting || isConnecting
+    ? isStartingActiveSession || isConnecting
       ? "Opening camera..."
       : isConnected
       ? "Camera unavailable"
