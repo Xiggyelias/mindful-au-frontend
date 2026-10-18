@@ -1,7 +1,7 @@
 /**
  * Spatial Audio Manager using Web Audio API
  * Provides 2D stereo panning and distance-based volume attenuation
- * for proximity voice in the Peer Counselor Spatial Lounge.
+ * for proximity voice in the Peer Counselor & Student Spatial Lounge.
  */
 
 export interface SpatialAudioTrackNode {
@@ -9,6 +9,7 @@ export interface SpatialAudioTrackNode {
   pannerNode: StereoPannerNode;
   gainNode: GainNode;
   stream: MediaStream;
+  audioElement?: HTMLAudioElement;
   x: number;
   y: number;
 }
@@ -16,14 +17,15 @@ export interface SpatialAudioTrackNode {
 export class SpatialAudioManager {
   private audioCtx: AudioContext | null = null;
   private trackNodes: Map<string, SpatialAudioTrackNode> = new Map();
-  private maxDistance: number = 260; // Distance beyond which audio is silent
+  private maxDistance: number = 650; // Distance beyond which audio plays at minimum whisper floor
   private ambientOscillator: OscillatorNode | null = null;
   private ambientGain: GainNode | null = null;
   private ambientPanner: StereoPannerNode | null = null;
   private isAmbientPlaying: boolean = false;
   private speakerPos: { x: number; y: number } = { x: 340, y: 220 };
+  private sidetoneNode: { source: MediaStreamAudioSourceNode; gain: GainNode } | null = null;
 
-  constructor(maxDistance: number = 260) {
+  constructor(maxDistance: number = 650) {
     this.maxDistance = maxDistance;
   }
 
@@ -32,11 +34,15 @@ export class SpatialAudioManager {
    */
   public ensureContext(): AudioContext {
     if (!this.audioCtx) {
-      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtxClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.audioCtx = new AudioCtxClass();
     }
-    if (this.audioCtx.state === 'suspended') {
-      void this.audioCtx.resume();
+    if (this.audioCtx.state === "suspended") {
+      void this.audioCtx.resume().catch((err) => {
+        console.warn("[SpatialAudio] AudioContext resume failed:", err);
+      });
     }
     return this.audioCtx;
   }
@@ -46,7 +52,9 @@ export class SpatialAudioManager {
   }
 
   /**
-   * Attach a remote audio stream for a specific participant
+   * Attach a remote audio stream for a specific participant.
+   * Handles both WebRTC MediaStreamTrack and LiveKit RemoteAudioTrack,
+   * binding an HTMLAudioElement to satisfy browser WebRTC decoding.
    */
   public attachTrack(
     id: string,
@@ -54,13 +62,36 @@ export class SpatialAudioManager {
     targetX: number,
     targetY: number,
     myX: number,
-    myY: number
+    myY: number,
+    livekitRemoteTrack?: { attach?: (el: HTMLMediaElement) => HTMLMediaElement }
   ): void {
     const ctx = this.ensureContext();
     this.detachTrack(id);
 
     try {
       const stream = new MediaStream([mediaStreamTrack]);
+
+      // Hidden HTMLAudioElement ensures browser WebRTC decoder pipeline pushes audio
+      const audioElement = document.createElement("audio");
+      audioElement.id = `spatial-remote-audio-${id}`;
+      audioElement.autoplay = true;
+      // Keep muted = false and volume tiny (0.0001) so Chromium's WebRTC decoder actively decodes
+      // remote audio frames without silencing AudioContext.createMediaStreamSource(stream).
+      audioElement.muted = false;
+      audioElement.volume = 0.0001;
+      audioElement.style.display = "none";
+
+      if (livekitRemoteTrack && typeof livekitRemoteTrack.attach === "function") {
+        livekitRemoteTrack.attach(audioElement);
+      } else {
+        audioElement.srcObject = stream;
+      }
+
+      document.body.appendChild(audioElement);
+      void audioElement.play().catch(() => {
+        // Element play will unblock on user gesture if autoplay policy triggered
+      });
+
       const sourceNode = ctx.createMediaStreamSource(stream);
       const pannerNode = ctx.createStereoPanner();
       const gainNode = ctx.createGain();
@@ -74,18 +105,20 @@ export class SpatialAudioManager {
         pannerNode,
         gainNode,
         stream,
+        audioElement,
         x: targetX,
         y: targetY,
       });
 
       this.updateParticipantPosition(id, targetX, targetY, myX, myY);
     } catch (err) {
-      console.warn('[SpatialAudio] Could not attach audio track:', err);
+      console.warn("[SpatialAudio] Could not attach audio track:", err);
     }
   }
 
   /**
    * Update relative 2D positions and smoothly recalculate volume & stereo pan
+   * Includes a minimum volume floor so partners never go dead silent across the meadow.
    */
   public updateParticipantPosition(
     id: string,
@@ -107,17 +140,23 @@ export class SpatialAudioManager {
     node.x = targetX;
     node.y = targetY;
 
-    let targetGain = 0;
+    // Minimum volume floor (0.22) guarantees you can ALWAYS hear your partner talking,
+    // and as you walk closer, volume increases smoothly up to 1.0 with stereo panning.
+    let targetGain = 0.22;
     let targetPan = 0;
 
-    if (inRange) {
-      // Smooth quadratic distance attenuation: 1 at d=0 down to 0 at maxDistance
+    if (distance <= this.maxDistance) {
       const fraction = Math.max(0, 1 - distance / this.maxDistance);
-      targetGain = Math.pow(fraction, 1.4);
+      // Smooth interpolation: from 0.22 at max distance to 1.0 at distance 0
+      targetGain = 0.22 + 0.78 * Math.pow(fraction, 1.2);
 
       // Stereo pan: -1 (far left) to +1 (far right) based on horizontal offset
-      const panRatio = Math.max(-1, Math.min(1, dx / (this.maxDistance * 0.8)));
+      const panRatio = Math.max(-1, Math.min(1, dx / (this.maxDistance * 0.7)));
       targetPan = panRatio;
+    } else {
+      // Gentle distant whisper (0.15) outside hearing radius
+      targetGain = 0.15;
+      targetPan = Math.sign(dx) * 0.9;
     }
 
     const now = this.audioCtx.currentTime;
@@ -128,7 +167,7 @@ export class SpatialAudioManager {
   }
 
   /**
-   * Remove and clean up nodes for a participant who disconnected
+   * Remove and clean up nodes and audio element for a participant
    */
   public detachTrack(id: string): void {
     const node = this.trackNodes.get(id);
@@ -138,6 +177,11 @@ export class SpatialAudioManager {
       node.gainNode.disconnect();
       node.pannerNode.disconnect();
       node.sourceNode.disconnect();
+      if (node.audioElement) {
+        node.audioElement.pause();
+        node.audioElement.srcObject = null;
+        node.audioElement.remove();
+      }
     } catch {
       // Ignore cleanup error if already disconnected
     }
@@ -145,7 +189,69 @@ export class SpatialAudioManager {
   }
 
   /**
-   * Start tranquil ambient nature soundscape for the meadow speaker ("Neil's Speaker")
+   * Enable local microphone sidetone so user can test their mic and hear themselves
+   */
+  public enableSidetone(stream: MediaStream, volume: number = 0.6): void {
+    this.disableSidetone();
+    const ctx = this.ensureContext();
+    try {
+      const source = ctx.createMediaStreamSource(stream);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(volume, ctx.currentTime);
+      source.connect(gain);
+      gain.connect(ctx.destination);
+      this.sidetoneNode = { source, gain };
+    } catch (err) {
+      console.warn("[SpatialAudio] Sidetone activation failed:", err);
+    }
+  }
+
+  public disableSidetone(): void {
+    if (this.sidetoneNode) {
+      try {
+        this.sidetoneNode.gain.disconnect();
+        this.sidetoneNode.source.disconnect();
+      } catch {
+        // Ignored
+      }
+      this.sidetoneNode = null;
+    }
+  }
+
+  public isSidetoneActive(): boolean {
+    return this.sidetoneNode !== null;
+  }
+
+  /**
+   * Create a real-time microphone volume analyser for voice activity detection
+   */
+  public createMicLevelAnalyser(stream: MediaStream): {
+    analyser: AnalyserNode;
+    getVolume: () => number;
+  } {
+    const ctx = this.ensureContext();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.4;
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const getVolume = () => {
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const avg = sum / dataArray.length;
+      return Math.min(1, avg / 128); // Returns normalized 0 to 1
+    };
+
+    return { analyser, getVolume };
+  }
+
+  /**
+   * Start tranquil ambient nature soundscape for the meadow speaker
    */
   public startAmbientSpeaker(myX: number, myY: number, speakerPos?: { x: number; y: number }): void {
     if (this.isAmbientPlaying) return;
@@ -155,12 +261,11 @@ export class SpatialAudioManager {
 
     const ctx = this.ensureContext();
     try {
-      // Synthesize soothing warm chord for the lounge radio
       const osc = ctx.createOscillator();
       const panner = ctx.createStereoPanner();
       const gain = ctx.createGain();
 
-      osc.type = 'sine';
+      osc.type = "sine";
       osc.frequency.setValueAtTime(220, ctx.currentTime); // Soft A3 meditative drone
 
       // Sub-harmonic depth
@@ -176,7 +281,7 @@ export class SpatialAudioManager {
       panner.connect(gain);
       gain.connect(ctx.destination);
 
-      gain.gain.setValueAtTime(0.01, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
       osc.start();
 
       this.ambientOscillator = osc;
@@ -186,7 +291,7 @@ export class SpatialAudioManager {
 
       this.updateAmbientPosition(myX, myY);
     } catch (err) {
-      console.warn('[SpatialAudio] Ambient generator failed:', err);
+      console.warn("[SpatialAudio] Ambient generator failed:", err);
     }
   }
 
@@ -202,7 +307,7 @@ export class SpatialAudioManager {
 
     if (distance <= this.maxDistance * 1.2) {
       const fraction = Math.max(0, 1 - distance / (this.maxDistance * 1.2));
-      targetGain = Math.pow(fraction, 1.8) * 0.12; // Gentle background volume
+      targetGain = Math.pow(fraction, 1.8) * 0.16; // Gentle background volume
       targetPan = Math.max(-1, Math.min(1, dx / (this.maxDistance * 0.8)));
     }
 
@@ -242,10 +347,11 @@ export class SpatialAudioManager {
 
   public cleanup(): void {
     this.stopAmbientSpeaker();
+    this.disableSidetone();
     for (const [id] of this.trackNodes) {
       this.detachTrack(id);
     }
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+    if (this.audioCtx && this.audioCtx.state !== "closed") {
       void this.audioCtx.close();
       this.audioCtx = null;
     }

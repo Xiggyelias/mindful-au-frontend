@@ -9,6 +9,7 @@ import {
   VolumeX,
   UserCheck,
   Settings2,
+  Headphones,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,9 @@ interface SpatialAudioControlsProps {
   onOpenProfileSettings: () => void;
   nearbyCount: number;
   totalParticipants: number;
+  micLevel?: number;
+  isSidetoneActive?: boolean;
+  onToggleSidetone?: () => void;
 }
 
 export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
@@ -41,6 +45,9 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
   onOpenProfileSettings,
   nearbyCount,
   totalParticipants,
+  micLevel = 0,
+  isSidetoneActive = false,
+  onToggleSidetone,
 }) => {
   const [chatText, setChatText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -112,9 +119,9 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
 
       {/* Bottom row: Audio Device Selector + Main "Request Audio to Talk" Button + Ambiance */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        {/* Left: Audio Device Selector (matches screenshot bottom-left) */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs text-slate-300 max-w-[260px] truncate">
+        {/* Left: Audio Device Selector & Mic Test */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs text-slate-300 max-w-[240px] truncate">
             <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <select
               value={selectedAudioDeviceId}
@@ -132,34 +139,71 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               )}
             </select>
           </div>
+
+          {/* Sidetone / Mic Test Toggle */}
+          {isMicActive && onToggleSidetone && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onToggleSidetone}
+              className={`h-8 px-2.5 text-[11px] rounded-xl border transition-all ${
+                isSidetoneActive
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 font-semibold shadow-sm"
+                  : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"
+              }`}
+              title="Hear your own microphone live to verify audio input and headphones"
+            >
+              <Headphones className="w-3.5 h-3.5 mr-1" />
+              <span>{isSidetoneActive ? "Testing Mic (Active)" : "Hear Myself"}</span>
+            </Button>
+          )}
         </div>
 
-        {/* Center: Main "Request Audio to Talk" / Mic Pill */}
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={onToggleMic}
-            size="lg"
-            className={`h-11 px-6 rounded-full font-semibold transition-all shadow-lg flex items-center gap-2 text-sm ${
-              isMicActive
-                ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 animate-pulse"
-                : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
-            }`}
-          >
-            {isMicActive ? (
-              <>
-                <Mic className="w-4 h-4 animate-bounce text-slate-950" />
-                <span>Microphone Active (Speaking)</span>
-              </>
-            ) : (
-              <>
-                <MicOff className="w-4 h-4 text-white/80" />
-                <span>Request Audio to Talk</span>
-              </>
-            )}
-          </Button>
-          <span className="text-[11px] text-slate-400 hidden md:inline">
-            (or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Space</kbd>)
-          </span>
+        {/* Center: Main "Request Audio to Talk" / Mic Pill + Visualizer */}
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={onToggleMic}
+              size="lg"
+              className={`h-11 px-6 rounded-full font-semibold transition-all shadow-lg flex items-center gap-2 text-sm ${
+                isMicActive
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 animate-pulse"
+                  : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+              }`}
+            >
+              {isMicActive ? (
+                <>
+                  <Mic className="w-4 h-4 animate-bounce text-slate-950" />
+                  <span>Microphone Active (Speaking)</span>
+                </>
+              ) : (
+                <>
+                  <MicOff className="w-4 h-4 text-white/80" />
+                  <span>Request Audio to Talk</span>
+                </>
+              )}
+            </Button>
+            <span className="text-[11px] text-slate-400 hidden md:inline">
+              (or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Space</kbd>)
+            </span>
+          </div>
+
+          {/* Live Mic Level Audio Activity Bar */}
+          {isMicActive && (
+            <div className="flex items-center gap-2 text-[10px] text-slate-400 animate-in fade-in">
+              <span>Input:</span>
+              <div className="w-24 h-1.5 rounded-full bg-slate-800 border border-slate-700/80 overflow-hidden flex items-center">
+                <div
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-75"
+                  style={{ width: `${Math.min(100, Math.max(6, micLevel * 100))}%` }}
+                />
+              </div>
+              <span className={micLevel > 0.04 ? "text-emerald-400 font-bold" : "text-slate-400"}>
+                {micLevel > 0.04 ? "Sound Detected" : "Speak into mic..."}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right: Ambient Radio Toggle & Profile Settings */}

@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Sparkles,
   UserCheck,
+  Headphones,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -32,6 +33,8 @@ import { PeerStudentLinkerModal, AssignedStudentItem } from "@/components/peer/P
 import { SpatialAudioManager } from "@/lib/spatialAudio";
 import { AvatarStyle, FloatingReaction, LoungeChatMessage, LoungeParticipant } from "@/types/spatialLounge";
 import { Room, RoomEvent, RemoteTrack, Track } from "livekit-client";
+import { supabase } from "@/integrations/supabase/client";
+import { getWebRtcIceServers } from "@/lib/videoCall";
 
 export const PeerSpatialLounge = () => {
   const navigate = useNavigate();
@@ -59,6 +62,16 @@ export const PeerSpatialLounge = () => {
   const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>("default");
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(true);
   const [livekitConnected, setLivekitConnected] = useState(false);
+
+  // Real-time microphone audio level & sidetone test
+  const [micLevel, setMicLevel] = useState<number>(0);
+  const [isSidetoneActive, setIsSidetoneActive] = useState<boolean>(false);
+  const micAnalyserAnimationRef = useRef<number | null>(null);
+
+  // WebRTC direct peer connection fallback ref
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const supabaseChannelRef = useRef<any>(null);
+  const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
 
   const audioManagerRef = useRef<SpatialAudioManager | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
@@ -179,8 +192,15 @@ export const PeerSpatialLounge = () => {
 
   // Initialize Spatial Audio Manager & enumerate devices
   useEffect(() => {
-    const manager = new SpatialAudioManager(240);
+    const manager = new SpatialAudioManager(650);
     audioManagerRef.current = manager;
+
+    // Unlock browser audio context on any user interaction
+    const unlockAudio = () => {
+      manager.ensureContext();
+    };
+    window.addEventListener("click", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
 
     // Enumerate microphones
     if (navigator.mediaDevices?.enumerateDevices) {
@@ -204,15 +224,43 @@ export const PeerSpatialLounge = () => {
 
     return () => {
       clearTimeout(ambientTimer);
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
       manager.cleanup();
+      if (micAnalyserAnimationRef.current) {
+        cancelAnimationFrame(micAnalyserAnimationRef.current);
+        micAnalyserAnimationRef.current = null;
+      }
       if (livekitRoomRef.current) {
         livekitRoomRef.current.disconnect();
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
   }, []);
+
+  // Toggle local mic sidetone test (Hear Myself)
+  const handleToggleSidetone = useCallback(() => {
+    if (!audioManagerRef.current) return;
+    if (isSidetoneActive) {
+      audioManagerRef.current.disableSidetone();
+      setIsSidetoneActive(false);
+      toast.info("Mic test turned off.");
+    } else {
+      if (!localStreamRef.current) {
+        toast.error("Turn on your microphone first (click Request Audio to Talk).");
+        return;
+      }
+      audioManagerRef.current.enableSidetone(localStreamRef.current, 0.7);
+      setIsSidetoneActive(true);
+      toast.success("Mic test active! Speak to hear your own voice through your speakers.");
+    }
+  }, [isSidetoneActive]);
 
   // Connect to LiveKit / Session Spatial Lounge Token
   useEffect(() => {
@@ -390,12 +438,12 @@ export const PeerSpatialLounge = () => {
 
           await room.connect(res.url, res.token);
         } else {
-          // Simulated proximity lounge mode active
-          toast.info("Heart-to-Heart Meadow ready in simulated proximity mode.");
+          // Direct WebRTC proximity lounge mode active
+          toast.info("Heart-to-Heart Meadow ready (Direct WebRTC audio mode).");
         }
       } catch (err: unknown) {
         console.warn("LiveKit lounge connection fallback:", err);
-        toast.error("Could not initialize live audio room. Offline proximity active.");
+        toast.info("Heart-to-Heart Meadow ready (Direct WebRTC audio mode).");
       } finally {
         if (!isCancelled) {
           setIsLoadingSession(false);
@@ -410,7 +458,336 @@ export const PeerSpatialLounge = () => {
     };
   }, [sessionId, isPeerCounselor]);
 
-  // Broadcast local movements to LiveKit and update audio manager
+  // -------------------------------------------------------------------------
+  // Direct WebRTC Peer-to-Peer Audio Transport (guaranteed fallback)
+  // -------------------------------------------------------------------------
+  const getOrCreatePeerConnection = useCallback(() => {
+    if (
+      peerConnectionRef.current &&
+      peerConnectionRef.current.signalingState !== "closed"
+    ) {
+      return peerConnectionRef.current;
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: getWebRtcIceServers(),
+      iceCandidatePoolSize: 4,
+    });
+    peerConnectionRef.current = pc;
+
+    // Attach local audio track if already active
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && supabaseChannelRef.current) {
+        void supabaseChannelRef.current.send({
+          type: "broadcast",
+          event: "spatial-ice",
+          payload: {
+            candidate: event.candidate.toJSON(),
+            senderId: localParticipant.id,
+          },
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      const audioTrack = event.track;
+      if (audioTrack && audioTrack.kind === "audio" && audioManagerRef.current) {
+        const remoteId = partnerInfo ? String(partnerInfo.id) : (participants[0]?.id || "partner");
+        const targetX = participants[0]?.x ?? (isPeerCounselor ? 600 : 400);
+        const targetY = participants[0]?.y ?? 320;
+
+        audioManagerRef.current.attachTrack(
+          remoteId,
+          audioTrack,
+          targetX,
+          targetY,
+          localParticipant.x,
+          localParticipant.y
+        );
+        toast.success("🌿 Partner audio connected in 3D! Move closer to hear more loudly.");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") {
+        setLivekitConnected(true);
+      }
+    };
+
+    return pc;
+  }, [localParticipant.id, localParticipant.x, localParticipant.y, partnerInfo, participants, isPeerCounselor]);
+
+  const initiateOffer = useCallback(async () => {
+    try {
+      const pc = getOrCreatePeerConnection();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+      });
+      await pc.setLocalDescription(offer);
+
+      if (supabaseChannelRef.current) {
+        void supabaseChannelRef.current.send({
+          type: "broadcast",
+          event: "spatial-offer",
+          payload: {
+            sdp: offer,
+            senderId: localParticipant.id,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("[SpatialRTC] Failed to create offer:", err);
+    }
+  }, [getOrCreatePeerConnection, localParticipant.id]);
+
+  const handleRemoteOffer = useCallback(
+    async (payload: any) => {
+      if (payload.senderId === localParticipant.id) return;
+      try {
+        const pc = getOrCreatePeerConnection();
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+
+        while (iceCandidateQueueRef.current.length > 0) {
+          const cand = iceCandidateQueueRef.current.shift();
+          if (cand) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
+        }
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        if (supabaseChannelRef.current) {
+          void supabaseChannelRef.current.send({
+            type: "broadcast",
+            event: "spatial-answer",
+            payload: {
+              sdp: answer,
+              senderId: localParticipant.id,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn("[SpatialRTC] Remote offer error:", err);
+      }
+    },
+    [getOrCreatePeerConnection, localParticipant.id]
+  );
+
+  const handleRemoteAnswer = useCallback(
+    async (payload: any) => {
+      if (payload.senderId === localParticipant.id) return;
+      try {
+        const pc = getOrCreatePeerConnection();
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+
+        while (iceCandidateQueueRef.current.length > 0) {
+          const cand = iceCandidateQueueRef.current.shift();
+          if (cand) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn("[SpatialRTC] Remote answer error:", err);
+      }
+    },
+    [getOrCreatePeerConnection, localParticipant.id]
+  );
+
+  const handleRemoteIce = useCallback(
+    async (payload: any) => {
+      if (payload.senderId === localParticipant.id) return;
+      try {
+        const pc = peerConnectionRef.current;
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+        } else {
+          iceCandidateQueueRef.current.push(payload.candidate);
+        }
+      } catch (err) {
+        console.warn("[SpatialRTC] ICE candidate error:", err);
+      }
+    },
+    [localParticipant.id]
+  );
+
+  // Chat receive handler
+  const handleReceiveChatMessage = useCallback((senderId: string, senderName: string, text: string) => {
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}-${Math.random()}`,
+        senderId,
+        senderName,
+        avatar: "dino-green",
+        text,
+        timestamp: "Just now",
+      },
+    ]);
+
+    setParticipants((prev) =>
+      prev.map((p) => (p.id === senderId ? { ...p, speechText: text } : p))
+    );
+
+    setTimeout(() => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === senderId && p.speechText === text ? { ...p, speechText: undefined } : p))
+      );
+    }, 6000);
+  }, []);
+
+  // Reaction receive handler
+  const handleReceiveReaction = useCallback((senderId: string, emoji: string) => {
+    setParticipants((prev) => {
+      const sender = prev.find((p) => p.id === senderId);
+      const rxX = sender?.x ?? 500;
+      const rxY = sender?.y ?? 300;
+
+      const newReaction: FloatingReaction = {
+        id: `rx-${Date.now()}-${Math.random()}`,
+        emoji,
+        x: rxX,
+        y: rxY - 30,
+        createdAt: Date.now(),
+      };
+
+      setFloatingReactions((curr) => [...curr, newReaction]);
+      setTimeout(() => {
+        setFloatingReactions((curr) => curr.filter((r) => r.id !== newReaction.id));
+      }, 2500);
+
+      return prev;
+    });
+  }, []);
+
+  // Supabase Realtime broadcast channel subscription
+  useEffect(() => {
+    const channelKey = sessionId ? `spatial-lounge-${sessionId}` : `spatial-lounge-public`;
+    const channel = supabase.channel(channelKey, {
+      config: { broadcast: { self: false } },
+    });
+    supabaseChannelRef.current = channel;
+
+    channel
+      .on("broadcast", { event: "spatial-join" }, ({ payload }) => {
+        if (!payload || payload.id === localParticipant.id) return;
+        setParticipants((prev) => {
+          const idx = prev.findIndex((p) => p.id === payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...payload, isLocal: false };
+            return next;
+          }
+          return [...prev, { ...payload, isLocal: false }];
+        });
+        toast.success(`🌿 ${payload.name || "Partner"} entered the Meadow!`);
+
+        // Reply back with our current position so newcomer sees us immediately
+        void channel.send({
+          type: "broadcast",
+          event: "spatial-move",
+          payload: {
+            id: localParticipant.id,
+            x: localParticipant.x,
+            y: localParticipant.y,
+            name: localParticipant.name,
+            role: localParticipant.role,
+            avatar: localParticipant.avatar,
+            isTalking: isMicActive,
+          },
+        });
+
+        // Peer counselor initiates offer
+        if (isPeerCounselor) {
+          setTimeout(() => {
+            void initiateOffer();
+          }, 350);
+        }
+      })
+      .on("broadcast", { event: "spatial-move" }, ({ payload }) => {
+        if (!payload || payload.id === localParticipant.id) return;
+        setParticipants((prev) => {
+          const idx = prev.findIndex((p) => p.id === payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...payload, isLocal: false };
+            return next;
+          }
+          return [...prev, { ...payload, isLocal: false }];
+        });
+
+        audioManagerRef.current?.updateParticipantPosition(
+          payload.id,
+          payload.x,
+          payload.y,
+          localParticipant.x,
+          localParticipant.y
+        );
+      })
+      .on("broadcast", { event: "spatial-offer" }, ({ payload }) => {
+        void handleRemoteOffer(payload);
+      })
+      .on("broadcast", { event: "spatial-answer" }, ({ payload }) => {
+        void handleRemoteAnswer(payload);
+      })
+      .on("broadcast", { event: "spatial-ice" }, ({ payload }) => {
+        void handleRemoteIce(payload);
+      })
+      .on("broadcast", { event: "spatial-chat" }, ({ payload }) => {
+        if (payload?.senderId === localParticipant.id) return;
+        handleReceiveChatMessage(payload.senderId, payload.senderName, payload.text);
+      })
+      .on("broadcast", { event: "spatial-reaction" }, ({ payload }) => {
+        if (payload?.senderId === localParticipant.id) return;
+        handleReceiveReaction(payload.senderId, payload.emoji);
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          void channel.send({
+            type: "broadcast",
+            event: "spatial-join",
+            payload: {
+              id: localParticipant.id,
+              name: localParticipant.name,
+              role: localParticipant.role,
+              avatar: localParticipant.avatar,
+              x: localParticipant.x,
+              y: localParticipant.y,
+              isTalking: isMicActive,
+            },
+          });
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+      supabaseChannelRef.current = null;
+    };
+  }, [
+    sessionId,
+    localParticipant.id,
+    localParticipant.name,
+    localParticipant.role,
+    localParticipant.avatar,
+    localParticipant.x,
+    localParticipant.y,
+    isMicActive,
+    isPeerCounselor,
+    handleRemoteOffer,
+    handleRemoteAnswer,
+    handleRemoteIce,
+    handleReceiveChatMessage,
+    handleReceiveReaction,
+    initiateOffer,
+  ]);
+
+  // Broadcast local movements to Supabase and LiveKit
   const handleLocalMove = useCallback(
     (newX: number, newY: number) => {
       setLocalParticipant((prev) => ({ ...prev, x: newX, y: newY }));
@@ -429,16 +806,30 @@ export const PeerSpatialLounge = () => {
         });
       }
 
-      // Publish move data to LiveKit room
+      const movePayload = {
+        id: localParticipant.id,
+        x: newX,
+        y: newY,
+        name: localParticipant.name,
+        role: localParticipant.role,
+        avatar: localParticipant.avatar,
+        isTalking: isMicActive,
+      };
+
+      if (supabaseChannelRef.current) {
+        void supabaseChannelRef.current.send({
+          type: "broadcast",
+          event: "spatial-move",
+          payload: movePayload,
+        });
+      }
+
+      // Publish move data to LiveKit room if active
       if (livekitRoomRef.current?.state === "connected") {
         try {
           const payload = JSON.stringify({
             type: "move",
-            x: newX,
-            y: newY,
-            name: localParticipant.name,
-            role: localParticipant.role,
-            avatar: localParticipant.avatar,
+            ...movePayload,
             talking: isMicActive,
           });
           void livekitRoomRef.current.localParticipant.publishData(
@@ -450,7 +841,7 @@ export const PeerSpatialLounge = () => {
         }
       }
     },
-    [participants, localParticipant.name, localParticipant.role, localParticipant.avatar, isMicActive]
+    [participants, localParticipant.id, localParticipant.name, localParticipant.role, localParticipant.avatar, isMicActive]
   );
 
   // Toggle Microphone / Request Audio to Talk
@@ -461,34 +852,133 @@ export const PeerSpatialLounge = () => {
       if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach((track) => (track.enabled = false));
       }
+      if (micAnalyserAnimationRef.current) {
+        cancelAnimationFrame(micAnalyserAnimationRef.current);
+        micAnalyserAnimationRef.current = null;
+      }
+      setMicLevel(0);
       setIsMicActive(false);
-      setLocalParticipant((prev) => ({ ...prev, isTalking: false, isMuted: true }));
+      setLocalParticipant((prev) => {
+        const next = { ...prev, isTalking: false, isMuted: true };
+        if (supabaseChannelRef.current) {
+          void supabaseChannelRef.current.send({
+            type: "broadcast",
+            event: "spatial-move",
+            payload: next,
+          });
+        }
+        return next;
+      });
       toast.info("Microphone muted.");
     } else {
       try {
-        if (!localStreamRef.current) {
+        let stream = localStreamRef.current;
+        if (!stream || stream.getAudioTracks().length === 0 || stream.getAudioTracks()[0].readyState === "ended") {
           const constraints: MediaStreamConstraints = {
             audio: selectedAudioDeviceId === "default" ? true : { deviceId: { exact: selectedAudioDeviceId } },
             video: false,
           };
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
           localStreamRef.current = stream;
-
-          if (livekitRoomRef.current?.state === "connected") {
-            const audioTrack = stream.getAudioTracks()[0];
-            if (audioTrack) {
-              await livekitRoomRef.current.localParticipant.publishTrack(audioTrack);
-            }
-          }
         } else {
-          localStreamRef.current.getAudioTracks().forEach((track) => (track.enabled = true));
+          stream.getAudioTracks().forEach((track) => (track.enabled = true));
+        }
+
+        const audioTrack = stream.getAudioTracks()[0];
+
+        // 1. Hook up to direct WebRTC peer connection
+        const pc = getOrCreatePeerConnection();
+        const senders = pc.getSenders();
+        const audioSender = senders.find((s) => s.track?.kind === "audio");
+        if (audioSender && audioTrack) {
+          await audioSender.replaceTrack(audioTrack);
+        } else if (audioTrack) {
+          pc.addTrack(audioTrack, stream);
+          void initiateOffer();
+        }
+
+        // 2. Hook up to LiveKit if connected
+        if (livekitRoomRef.current?.state === "connected" && audioTrack) {
+          await livekitRoomRef.current.localParticipant.publishTrack(audioTrack);
+        }
+
+        // 3. Real-time microphone audio level meter & voice activity animation
+        if (audioManagerRef.current) {
+          const { getVolume } = audioManagerRef.current.createMicLevelAnalyser(stream);
+          const volumeLoop = () => {
+            const vol = getVolume();
+            setMicLevel(vol);
+            const isSpeaking = vol > 0.05;
+            setLocalParticipant((prev) => {
+              if (prev.isTalking !== isSpeaking) {
+                if (supabaseChannelRef.current) {
+                  void supabaseChannelRef.current.send({
+                    type: "broadcast",
+                    event: "spatial-move",
+                    payload: { ...prev, isTalking: isSpeaking },
+                  });
+                }
+                return { ...prev, isTalking: isSpeaking, isMuted: false };
+              }
+              return prev;
+            });
+            micAnalyserAnimationRef.current = requestAnimationFrame(volumeLoop);
+          };
+          micAnalyserAnimationRef.current = requestAnimationFrame(volumeLoop);
         }
 
         setIsMicActive(true);
-        setLocalParticipant((prev) => ({ ...prev, isTalking: true, isMuted: false }));
+        setLocalParticipant((prev) => {
+          const next = { ...prev, isTalking: true, isMuted: false };
+          if (supabaseChannelRef.current) {
+            void supabaseChannelRef.current.send({
+              type: "broadcast",
+              event: "spatial-move",
+              payload: next,
+            });
+          }
+          return next;
+        });
+
         toast.success("Audio active! Walk near your partner in the meadow to hear each other in 3D.");
       } catch (err: unknown) {
         toast.error("Microphone permission needed to speak in the lounge.");
+      }
+    }
+  };
+
+  // Switch microphone input device
+  const handleSelectAudioDevice = async (deviceId: string) => {
+    setSelectedAudioDeviceId(deviceId);
+    if (isMicActive) {
+      try {
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach((t) => t.stop());
+        }
+        const constraints: MediaStreamConstraints = {
+          audio: deviceId === "default" ? true : { deviceId: { exact: deviceId } },
+          video: false,
+        };
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStreamRef.current = newStream;
+        const newTrack = newStream.getAudioTracks()[0];
+
+        if (peerConnectionRef.current && newTrack) {
+          const senders = peerConnectionRef.current.getSenders();
+          const audioSender = senders.find((s) => s.track?.kind === "audio");
+          if (audioSender) {
+            await audioSender.replaceTrack(newTrack);
+          }
+        }
+        if (livekitRoomRef.current?.state === "connected" && newTrack) {
+          await livekitRoomRef.current.localParticipant.publishTrack(newTrack);
+        }
+        if (isSidetoneActive && audioManagerRef.current) {
+          audioManagerRef.current.enableSidetone(newStream, 0.7);
+        }
+        toast.success("Microphone updated!");
+      } catch (err) {
+        console.warn("Failed to switch audio input device:", err);
       }
     }
   };
@@ -525,6 +1015,18 @@ export const PeerSpatialLounge = () => {
       setLocalParticipant((prev) => (prev.speechText === text ? { ...prev, speechText: undefined } : prev));
     }, 6000);
 
+    if (supabaseChannelRef.current) {
+      void supabaseChannelRef.current.send({
+        type: "broadcast",
+        event: "spatial-chat",
+        payload: {
+          senderId: localParticipant.id,
+          senderName: localParticipant.name,
+          text,
+        },
+      });
+    }
+
     if (livekitRoomRef.current?.state === "connected") {
       try {
         const payload = JSON.stringify({
@@ -542,32 +1044,6 @@ export const PeerSpatialLounge = () => {
     }
   };
 
-  const handleReceiveChatMessage = (senderId: string, senderName: string, text: string) => {
-    const senderAvatar = participants.find((p) => p.id === senderId)?.avatar || "dino-green";
-
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-${Date.now()}-${Math.random()}`,
-        senderId,
-        senderName,
-        avatar: senderAvatar,
-        text,
-        timestamp: "Just now",
-      },
-    ]);
-
-    setParticipants((prev) =>
-      prev.map((p) => (p.id === senderId ? { ...p, speechText: text } : p))
-    );
-
-    setTimeout(() => {
-      setParticipants((prev) =>
-        prev.map((p) => (p.id === senderId && p.speechText === text ? { ...p, speechText: undefined } : p))
-      );
-    }, 6000);
-  };
-
   // Send Floating Reaction
   const handleSendReaction = (emoji: string) => {
     const newReaction: FloatingReaction = {
@@ -582,6 +1058,17 @@ export const PeerSpatialLounge = () => {
     setTimeout(() => {
       setFloatingReactions((prev) => prev.filter((r) => r.id !== newReaction.id));
     }, 2500);
+
+    if (supabaseChannelRef.current) {
+      void supabaseChannelRef.current.send({
+        type: "broadcast",
+        event: "spatial-reaction",
+        payload: {
+          senderId: localParticipant.id,
+          emoji,
+        },
+      });
+    }
 
     if (livekitRoomRef.current?.state === "connected") {
       try {
@@ -599,24 +1086,6 @@ export const PeerSpatialLounge = () => {
     }
   };
 
-  const handleReceiveReaction = (senderId: string, emoji: string) => {
-    const sender = participants.find((p) => p.id === senderId);
-    if (!sender) return;
-
-    const newReaction: FloatingReaction = {
-      id: `rx-${Date.now()}-${Math.random()}`,
-      emoji,
-      x: sender.x,
-      y: sender.y - 30,
-      createdAt: Date.now(),
-    };
-
-    setFloatingReactions((prev) => [...prev, newReaction]);
-    setTimeout(() => {
-      setFloatingReactions((prev) => prev.filter((r) => r.id !== newReaction.id));
-    }, 2500);
-  };
-
   // Profile alias & avatar customization
   const handleSaveProfile = (newName: string, newAvatar: AvatarStyle) => {
     setLocalParticipant((prev) => ({
@@ -630,7 +1099,7 @@ export const PeerSpatialLounge = () => {
   // Calculate nearby participants within hearing circle
   const nearbyPeers = participants.filter((p) => {
     const d = Math.hypot(p.x - localParticipant.x, p.y - localParticipant.y);
-    return d <= 240;
+    return d <= 450;
   });
 
   return (
@@ -849,7 +1318,7 @@ export const PeerSpatialLounge = () => {
               participants={participants}
               localParticipant={localParticipant}
               onMove={handleLocalMove}
-              maxHearableDistance={240}
+              maxHearableDistance={450}
               isSpeakerPlaying={isAmbientPlaying}
               onToggleSpeaker={handleToggleAmbient}
               floatingReactions={floatingReactions}
@@ -880,7 +1349,7 @@ export const PeerSpatialLounge = () => {
             onToggleMic={handleToggleMic}
             audioInputDevices={audioInputDevices}
             selectedAudioDeviceId={selectedAudioDeviceId}
-            onSelectAudioDevice={setSelectedAudioDeviceId}
+            onSelectAudioDevice={handleSelectAudioDevice}
             isAmbientPlaying={isAmbientPlaying}
             onToggleAmbient={handleToggleAmbient}
             onSendChatMessage={handleSendChatMessage}
@@ -888,6 +1357,9 @@ export const PeerSpatialLounge = () => {
             onOpenProfileSettings={() => setShowProfileModal(true)}
             nearbyCount={nearbyPeers.length}
             totalParticipants={participants.length + 1}
+            micLevel={micLevel}
+            isSidetoneActive={isSidetoneActive}
+            onToggleSidetone={handleToggleSidetone}
           />
 
           {/* Chat History Drawer */}
