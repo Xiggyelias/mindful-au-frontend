@@ -1667,6 +1667,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getSpatialLoungeToken(payload?: { room?: string; name?: string; avatar?: string }) {
+    const response = await this.client.post('/peer/spatial-lounge/token', payload ?? {});
+    return response.data;
+  }
+
   // Analytics (Admin only)
   async getAdminDashboardOverview(params?: { timeout_ms?: number }) {
     const timeoutMs =

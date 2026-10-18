@@ -84,6 +84,7 @@ const PeerDashboard = lazyWithRetry(() => import("./pages/peer/PeerDashboard"));
 const PeerEscalatedCases = lazyWithRetry(() => import("./pages/peer/PeerEscalatedCases"));
 const PeerEthics = lazyWithRetry(() => import("./pages/peer/PeerEthics"));
 const PeerProfile = lazyWithRetry(() => import("./pages/peer/PeerProfile"));
+const PeerSpatialLounge = lazyWithRetry(() => import("./pages/peer/PeerSpatialLounge"));
 
 const AdminLogin = lazyWithRetry(() => import("./pages/admin/AdminLogin"));
 const AdminRegister = lazyWithRetry(() => import("./pages/admin/AdminRegister"));
@@ -249,6 +250,14 @@ const App = () => {
                   element={
                     <ProtectedRoute allowedRoles={["peer_counselor"]} redirectTo="/peer/login">
                       <PeerDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/peer/spatial-lounge"
+                  element={
+                    <ProtectedRoute allowedRoles={["peer_counselor", "counselor"]} redirectTo="/peer/login">
+                      <PeerSpatialLounge />
                     </ProtectedRoute>
                   }
                 />

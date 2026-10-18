@@ -5,6 +5,7 @@ import {
   Bell,
   Clock3,
   MessageSquare,
+  Radio,
   Shield,
   UserCheck2,
 } from "lucide-react";
@@ -153,6 +154,50 @@ const PeerDashboard = () => {
                   aria-label="Toggle availability status"
                   className="flex-shrink-0"
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Heart-to-Heart Spatial Lounge Hero Card */}
+          <Card className="border-emerald-500/30 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-teal-950/40 relative overflow-hidden shadow-xl">
+            <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-15 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.4)_0,transparent_70%)]" />
+            <CardContent className="pt-6 flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    Proximity Voice & Heart-to-Heart
+                  </span>
+                </div>
+                <h3 className="text-xl font-display font-bold text-foreground">
+                  Peer Spatial Meadow & Voice Lounge
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-xl">
+                  Step into the 2D audio meadow. Walk your avatar near fellow peer counselors to talk naturally with distance-based stereo sound, zen ambient music, and heart-to-heart chat.
+                </p>
+                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
+                  <span className="flex items-center gap-1.5 text-foreground font-medium">
+                    🎧 3D Spatial Audio
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1.5 text-foreground font-medium">
+                    🎙️ Request Audio to Talk
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1.5 text-foreground font-medium">
+                    🦖 Custom Avatars & Emojis
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                <Button
+                  onClick={() => navigate("/peer/spatial-lounge")}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 h-11 rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
+                >
+                  <Radio className="w-4 h-4 animate-pulse" />
+                  <span>Enter Spatial Lounge</span>
+                </Button>
               </div>
             </CardContent>
           </Card>

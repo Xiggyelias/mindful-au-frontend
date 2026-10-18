@@ -5,6 +5,7 @@ import {
   Heart,
   LayoutDashboard,
   MessageSquare,
+  Radio,
   ShieldCheck,
   UserCircle2,
   Users,
@@ -25,6 +26,7 @@ export const counselorNavItems = [
 
 export const peerCounselorNavItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/peer/dashboard" },
+  { label: "Spatial Lounge", icon: Radio, path: "/peer/spatial-lounge" },
   { label: "Active Chats", icon: MessageSquare, path: "/peer/chats" },
   { label: "Escalated Cases", icon: AlertTriangle, path: "/peer/escalations" },
   { label: "Ethics Guidelines", icon: ShieldCheck, path: "/peer/ethics" },
