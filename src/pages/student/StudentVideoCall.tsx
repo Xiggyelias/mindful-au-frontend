@@ -215,9 +215,8 @@ const StudentVideoCall = () => {
 
     incomingRingVibratedRef.current = false;
 
-    // `localStream` stays null for the caller until the callee accepts (media is acquired
-    // only then), so isConnecting && !localStream precisely brackets "still ringing out".
-    const isRingingOut = isConnecting && !localStream;
+    // The caller is ringing out while an outgoing call is placed and the peer has not joined yet.
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
     if (isRingingOut) {
       startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video", "call-page");
       return () => {
@@ -226,7 +225,7 @@ const StudentVideoCall = () => {
     }
 
     stopCallRingtone("call-page");
-  }, [isIncomingCall, incomingAudioOnly, isConnecting, localStream, outgoingCallMode]);
+  }, [isIncomingCall, incomingAudioOnly, isConnected, outgoingCallMode]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -878,7 +877,7 @@ const StudentVideoCall = () => {
         return;
       }
 
-      if (!isConnecting || localStream) {
+      if (isConnected) {
         return;
       }
 
@@ -894,7 +893,7 @@ const StudentVideoCall = () => {
           : "The call was not answered."
       );
     },
-    [activeAppointmentId, endCall, isConnecting, localStream]
+    [activeAppointmentId, endCall, isConnected]
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
@@ -907,7 +906,7 @@ const StudentVideoCall = () => {
    */
   const ringingOutAppointmentRef = useRef<string | null>(null);
   useEffect(() => {
-    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
 
     if (isRingingOut) {
       ringingOutAppointmentRef.current = activeAppointmentId;
@@ -918,12 +917,12 @@ const StudentVideoCall = () => {
     ringingOutAppointmentRef.current = null;
 
     // Connecting through to media is a success, not an abandoned ring.
-    if (!abandoned || localStream || isConnected) {
+    if (!abandoned || isConnected) {
       return;
     }
 
     void cancelOutgoingCall(abandoned);
-  }, [activeAppointmentId, cancelOutgoingCall, isConnected, isConnecting, localStream, outgoingCallMode]);
+  }, [activeAppointmentId, cancelOutgoingCall, isConnected, outgoingCallMode]);
 
   /**
    * WhatsApp-style call ring duration cutoff: an outgoing call rings for up to 35 seconds.
@@ -931,7 +930,7 @@ const StudentVideoCall = () => {
    * the participant so they can dial again without overlap or busy errors.
    */
   useEffect(() => {
-    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
     if (!isRingingOut || !activeAppointmentId) {
       return;
     }
@@ -945,7 +944,7 @@ const StudentVideoCall = () => {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeAppointmentId, cancelOutgoingCall, isConnecting, localStream, outgoingCallMode]);
+  }, [activeAppointmentId, cancelOutgoingCall, isConnected, outgoingCallMode]);
 
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
@@ -992,7 +991,7 @@ const StudentVideoCall = () => {
     // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
     if (isAcceptedAction || isIncomingCall) {
       autoStartedRef.current = true;
-      void acceptIncomingCall();
+      void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("autostart");
       nextParams.delete("action");

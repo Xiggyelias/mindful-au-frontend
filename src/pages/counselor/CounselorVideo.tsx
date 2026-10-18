@@ -196,9 +196,8 @@ const CounselorVideo = () => {
 
     incomingRingVibratedRef.current = false;
 
-    // `localStream` stays null for the caller until the callee accepts (media is acquired
-    // only then), so isConnecting && !localStream precisely brackets "still ringing out".
-    const isRingingOut = isConnecting && !localStream;
+    // The caller is ringing out while an outgoing call is placed and the peer has not joined yet.
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
     if (isRingingOut) {
       startCallRingtone(outgoingCallMode === "audio" ? "audio" : "video", "call-page");
       return () => {
@@ -207,7 +206,7 @@ const CounselorVideo = () => {
     }
 
     stopCallRingtone("call-page");
-  }, [isIncomingCall, incomingAudioOnly, isConnecting, localStream, outgoingCallMode]);
+  }, [isIncomingCall, incomingAudioOnly, isConnected, outgoingCallMode]);
 
   useEffect(() => {
     const syncNetworkStatus = () => {
@@ -709,7 +708,7 @@ const CounselorVideo = () => {
 
       // Only tear down while we are still ringing out — an ENDED signal that arrives
       // after the media session is up belongs to the previous ring, not this call.
-      if (!isConnecting || localStream) {
+      if (isConnected) {
         return;
       }
 
@@ -724,7 +723,7 @@ const CounselorVideo = () => {
         payload.status === "declined" ? "The student declined the call." : "The call was not answered."
       );
     },
-    [activeSessionId, endCall, isConnecting, loadSessions, localStream]
+    [activeSessionId, endCall, isConnected, loadSessions]
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
@@ -736,7 +735,7 @@ const CounselorVideo = () => {
    */
   const ringingOutSessionRef = useRef<string | null>(null);
   useEffect(() => {
-    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
 
     if (isRingingOut) {
       ringingOutSessionRef.current = activeSessionId;
@@ -746,12 +745,12 @@ const CounselorVideo = () => {
     const abandoned = ringingOutSessionRef.current;
     ringingOutSessionRef.current = null;
 
-    if (!abandoned || localStream || isConnected) {
+    if (!abandoned || isConnected) {
       return;
     }
 
     void cancelOutgoingCall(abandoned);
-  }, [activeSessionId, cancelOutgoingCall, isConnected, isConnecting, localStream, outgoingCallMode]);
+  }, [activeSessionId, cancelOutgoingCall, isConnected, outgoingCallMode]);
 
   /**
    * WhatsApp-style call ring duration cutoff: an outgoing call rings for up to 35 seconds.
@@ -759,7 +758,7 @@ const CounselorVideo = () => {
    * the counselor and student so they can dial again without overlap or busy errors.
    */
   useEffect(() => {
-    const isRingingOut = Boolean(outgoingCallMode) && isConnecting && !localStream;
+    const isRingingOut = Boolean(outgoingCallMode) && !isConnected;
     if (!isRingingOut || !activeSessionId) {
       return;
     }
@@ -773,7 +772,7 @@ const CounselorVideo = () => {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeSessionId, cancelOutgoingCall, isConnecting, localStream, outgoingCallMode]);
+  }, [activeSessionId, cancelOutgoingCall, isConnected, outgoingCallMode]);
 
   useEffect(() => {
     if (!isDisconnected || !rejoinDeadline) {
@@ -950,7 +949,7 @@ const CounselorVideo = () => {
     // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
     if (isAcceptedAction || isIncomingCall) {
       autoStartedRef.current = true;
-      void acceptIncomingCall();
+      void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("autostart");
       nextParams.delete("action");

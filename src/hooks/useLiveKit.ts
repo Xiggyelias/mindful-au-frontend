@@ -145,7 +145,9 @@ const bindRemoteStreams = () => {
     remoteHasVideo: hasVideo,
     remoteSpeaking: room.remoteParticipants.size > 0,
     isConnected: room.remoteParticipants.size > 0,
-    isConnecting: false,
+    // Leave isConnecting alone here: during connect the room reaches Connected before
+    // local tracks publish, and clearing isConnecting here is what killed the call.
+    // It is cleared in bindLocalStream once media is actually acquired.
     isReconnecting: false,
     notice: null,
   }));
@@ -159,7 +161,18 @@ const bindRemoteStreams = () => {
 };
 
 const bindLocalStream = (stream: MediaStream | null) => {
-  setState((prev) => ({ ...prev, localStream: stream }));
+  // Local media is bound only after connect() + track publishing complete — this is the
+  // single point where the connect transaction is allowed to clear isConnecting. Clearing
+  // it earlier (e.g. on the room's Connected event) breaks the `isConnecting &&
+  // !localStream` "still ringing out" bracket the call pages rely on: with LiveKit the
+  // signaling room connects before the tracks are published, so the abandoned-ring
+  // cleanup on the call pages fired mid-connect and tore the fresh room down
+  // (CLIENT_REQUEST_LEAVE 22ms after join -> PublishTrackError on every start).
+  setState((prev) => ({
+    ...prev,
+    localStream: stream,
+    isConnecting: false,
+  }));
   if (stream) {
     for (const element of engine.localVideoElements) {
       element.srcObject = stream;
@@ -233,7 +246,9 @@ const createRoom = (appointmentId: number): Room => {
     } else if (state === ConnectionState.Connected) {
       // Fires both for the initial connection and after a LiveKit-managed reconnect;
       // clearing isReconnecting here covers the reconnect case the old enum had a
-      // dedicated value for.
+      // dedicated value for. isConnecting is intentionally NOT cleared here — the room
+      // reaches Connected before local tracks are published, and the call pages' cleanup
+      // effects key off isConnecting. It is cleared in bindLocalStream instead.
       setState((prev) => ({ ...prev, isReconnecting: false, notice: null, isConnected: room.remoteParticipants.size > 0 }));
       bindRemoteStreams();
     } else if (state === ConnectionState.Disconnected) {
@@ -257,6 +272,16 @@ const tearRoomDown = () => {
   engine.room = null;
   engine.appointmentId = null;
   engine.identity = "";
+
+  if (engine.state.localStream) {
+    for (const track of engine.state.localStream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        /* best effort */
+      }
+    }
+  }
 
   if (room) {
     try {
@@ -361,6 +386,7 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
         ...prev,
         isConnecting: true,
         isAudioOnly: mode === "audio",
+        isLocalVideoEnabled: mode === "video",
         error: null,
         notice: null,
       }));
@@ -382,7 +408,14 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
         engine.appointmentId = appointmentId;
         engine.identity = `${userId}`;
 
-        await room.connect(authorization.url, authorization.token, { autoSubscribe: true });
+        let livekitUrl = authorization.url.trim();
+        if (livekitUrl.startsWith("http://")) {
+          livekitUrl = "ws://" + livekitUrl.slice(7);
+        } else if (livekitUrl.startsWith("https://")) {
+          livekitUrl = "wss://" + livekitUrl.slice(8);
+        }
+
+        await room.connect(livekitUrl, authorization.token, { autoSubscribe: true });
 
         await room.localParticipant.setMicrophoneEnabled(true);
         if (mode === "video") {
@@ -491,14 +524,16 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
   // isIncomingCall / acceptIncomingCall / rejectIncomingCall out of this hook is
   // deliberate: their logic ties to call rows and server state, not to WebRTC, and is
   // already exercised end-to-end by the incoming-call banners.
-  const acceptIncomingCall = useCallback(async () => {
-    // Media is negotiated by the LiveKit room; the accepted ring is confirmed by the
-    // incoming-calls PATCH endpoint on the banner side before this is reached.
-    return connectRoom("video");
-  }, [connectRoom]);
+  const acceptIncomingCall = useCallback(
+    async (explicitCallerId?: string, audioOnlyOverride?: boolean) => {
+      void explicitCallerId;
+      const mode = audioOnlyOverride ? "audio" : "video";
+      return connectRoom(mode);
+    },
+    [connectRoom]
+  );
 
   const rejectIncomingCall = useCallback(async () => {
-    // Nothing media-side to reject; declining happens on the incoming-controllers side.
     return true;
   }, []);
 
@@ -516,6 +551,77 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
     currentFacingMode: engine.facingMode,
     acceptIncomingCall,
     rejectIncomingCall,
+  };
+};
+
+/**
+ * Active call dock hook for LiveKit, allowing FloatingCallDock to attach to ongoing calls.
+ */
+export const useLiveKitActiveCallDock = () => {
+  const [state, setStateLocal] = useState<LiveKitState>(() => engine.state);
+  const [sessionId, setSessionId] = useState<string>(() => (engine.appointmentId ? String(engine.appointmentId) : ""));
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const listener = (nextState: LiveKitState) => {
+      setStateLocal(nextState);
+      setSessionId(engine.appointmentId ? String(engine.appointmentId) : "");
+    };
+    engine.listeners.add(listener);
+    setStateLocal(engine.state);
+    setSessionId(engine.appointmentId ? String(engine.appointmentId) : "");
+    return () => {
+      engine.listeners.delete(listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = localVideoRef.current;
+    if (el && state.localStream) {
+      engine.localVideoElements.add(el);
+      el.srcObject = state.localStream;
+      playMediaElement(el, true);
+    }
+    return () => {
+      if (el) engine.localVideoElements.delete(el);
+    };
+  }, [state.localStream]);
+
+  useEffect(() => {
+    const el = remoteVideoRef.current;
+    if (el && state.remoteStream) {
+      engine.remoteVideoElements.add(el);
+      el.srcObject = state.remoteStream;
+      playMediaElement(el, false);
+    }
+    return () => {
+      if (el) engine.remoteVideoElements.delete(el);
+    };
+  }, [state.remoteStream, state.remoteMediaEpoch]);
+
+  const endCall = useCallback(() => {
+    tearRoomDown();
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const room = engine.room;
+    if (!room) return;
+    void room.localParticipant.setMicrophoneEnabled(
+      !room.localParticipant.isMicrophoneEnabled
+    );
+  }, []);
+
+  const isMuted = !engine.room?.localParticipant?.isMicrophoneEnabled;
+
+  return {
+    ...state,
+    sessionId,
+    isMuted,
+    localVideoRef,
+    remoteVideoRef,
+    endCall,
+    toggleMute,
   };
 };
 

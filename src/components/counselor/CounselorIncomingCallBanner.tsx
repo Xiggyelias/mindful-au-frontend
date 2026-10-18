@@ -14,6 +14,7 @@ import type { IncomingCallOverlayCall } from "@/components/call/IncomingCallOver
 import { useAuth } from "@/hooks/useAuth";
 import { useIncomingCalls, useIncomingCallWakeSubscription } from "@/hooks/useIncomingCalls";
 import { useEngineRingingSessionId } from "@/hooks/useWebRTC";
+import { useLiveKitActiveCallDock } from "@/hooks/useLiveKit";
 import {
   isAcceptedCallSignal,
   isTerminalCallSignal,
@@ -143,14 +144,18 @@ export function CounselorIncomingCallBanner({
     }
   };
 
-  // The call page for this appointment is already ringing over its own signaling
-  // channel and its overlay answers there — don't stack a second identical overlay
-  // on top of it. Also never show an incoming call banner for the appointment currently open in video.
+  const livekitDock = useLiveKitActiveCallDock();
+
+  // Only suppress if the counselor is already actively connected to a call for this appointment
   const visibleCalls = calls.filter((c) => {
     if (engineRingingSessionId && String(c.appointment_id) === String(engineRingingSessionId)) {
       return false;
     }
-    if (currentUrlAppointmentId && String(c.appointment_id) === String(currentUrlAppointmentId)) {
+    if (
+      livekitDock.isConnected &&
+      livekitDock.sessionId &&
+      String(c.appointment_id) === String(livekitDock.sessionId)
+    ) {
       return false;
     }
     return true;
