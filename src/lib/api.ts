@@ -1723,6 +1723,34 @@ class ApiClient {
     };
   }
 
+  // Peer counselor: get all assigned students with spatial lounge status
+  async getPeerAssignedStudents() {
+    const response = await this.client.get('/peer/assigned-students');
+    return response.data as Array<{
+      session_id: number;
+      student_id: number;
+      student_name: string;
+      is_anonymous: boolean;
+      status: string;
+      spatial_lounge_active: boolean;
+      requested_at?: string | null;
+      updated_at?: string | null;
+      last_seen_at?: string | null;
+    }>;
+  }
+
+  // Student: check if any assigned peer counselor opened spatial lounge
+  async getStudentActiveSpatialLounge() {
+    const response = await this.client.get('/student/active-spatial-lounge');
+    return response.data as {
+      active: boolean;
+      session_id: number | null;
+      peer_name: string | null;
+      peer_avatar?: string;
+      requested_at?: string | null;
+    };
+  }
+
   // Analytics (Admin only)
   async getAdminDashboardOverview(params?: { timeout_ms?: number }) {
     const timeoutMs =

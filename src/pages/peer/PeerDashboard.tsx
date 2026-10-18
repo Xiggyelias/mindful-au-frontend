@@ -241,30 +241,55 @@ const PeerDashboard = () => {
                   </div>
                 ) : (
                   data.recent_sessions.map((row) => (
-                    <button
+                    <div
                       key={row.id}
-                      onClick={() => navigate(`/peer/chats?session=${row.id}`)}
-                      className="w-full text-left rounded-xl border border-border/60 bg-secondary/20 p-4 hover:bg-secondary/40 glide-hover tap-spring transition-all duration-200"
+                      className="w-full flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-secondary/20 p-4 hover:bg-secondary/40 transition-all duration-200"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-foreground truncate">{row.student_label}</p>
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full capitalize font-medium ${
-                          row.status === "active"
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                            : row.status === "pending"
-                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
-                          {row.status}
-                        </span>
+                      <button
+                        onClick={() => navigate(`/peer/chats?session=${row.id}`)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-foreground truncate">{row.student_label}</p>
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full capitalize font-medium ${
+                            row.status === "active"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                              : row.status === "pending"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                              : "bg-muted text-muted-foreground"
+                          }`}>
+                            {row.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Last activity:{" "}
+                          {row.updated_at
+                            ? formatDistanceToNow(new Date(row.updated_at), { addSuffix: true })
+                            : "--"}
+                        </p>
+                      </button>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/peer/spatial-lounge?session_id=${row.id}`)}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs h-8 px-3 rounded-xl font-medium gap-1.5"
+                          title="Open 2D Proximity Audio Meadow with this student"
+                        >
+                          <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
+                          <span className="hidden sm:inline">Spatial Meadow</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(`/peer/chats?session=${row.id}`)}
+                          className="text-xs h-8 px-2.5 text-muted-foreground hover:text-foreground"
+                        >
+                          Chat
+                        </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Last activity:{" "}
-                        {row.updated_at
-                          ? formatDistanceToNow(new Date(row.updated_at), { addSuffix: true })
-                          : "--"}
-                      </p>
-                    </button>
+                    </div>
                   ))
                 )}
               </CardContent>

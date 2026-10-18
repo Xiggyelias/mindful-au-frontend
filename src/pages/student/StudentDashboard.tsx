@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Phone,
   Clock,
+  Radio,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -96,6 +97,13 @@ const StudentDashboard = () => {
     label: string | null;
   }>({ trend: null, label: null });
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [activeSpatialLounge, setActiveSpatialLounge] = useState<{
+    active: boolean;
+    session_id: number | null;
+    peer_name: string | null;
+    peer_avatar?: string;
+    requested_at?: string | null;
+  } | null>(null);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -137,14 +145,19 @@ const StudentDashboard = () => {
       try {
         setStatsError(null);
         
-        const [sessions, appointments, summary, moodResponse] = await Promise.all([
+        const [sessions, appointments, summary, moodResponse, spatialLounge] = await Promise.all([
           api.getSessions({ lightweight: true }),
           api.getAppointments(),
           api.getStudentWellnessSummary().catch(() => null),
           api.getStudentMoodToday().catch(() => null),
+          api.getStudentActiveSpatialLounge().catch(() => null),
         ]);
 
         if (!isMounted) return;
+
+        if (spatialLounge) {
+          setActiveSpatialLounge(spatialLounge);
+        }
 
         const sessionItems = Array.isArray(sessions)
           ? sessions
@@ -199,6 +212,22 @@ const StudentDashboard = () => {
     return () => {
       isMounted = false;
     };
+  }, [user]);
+
+  // Periodic poll for active spatial lounge invitation from peer counselor
+  useEffect(() => {
+    if (!user) return;
+    const pollSpatial = async () => {
+      try {
+        const lounge = await api.getStudentActiveSpatialLounge();
+        setActiveSpatialLounge(lounge);
+      } catch {
+        // Silently catch background poll error
+      }
+    };
+
+    const interval = setInterval(pollSpatial, 15000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const handlePanicButton = async () => {
@@ -296,6 +325,46 @@ const StudentDashboard = () => {
         />
 
         <main className="p-4 lg:p-6 space-y-6">
+          {/* Spatial Lounge Active Invitation Banner */}
+          {activeSpatialLounge?.active && activeSpatialLounge?.session_id && (
+            <div className="rounded-3xl bg-gradient-to-r from-emerald-950/70 via-teal-950/50 to-slate-950 border border-emerald-500/40 p-6 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-top-3">
+              <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-15 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.5)_0,transparent_70%)]" />
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
+                <div className="flex items-start sm:items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Radio className="w-6 h-6 animate-pulse text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        Heart-to-Heart Voice Meadow
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-display font-bold text-foreground mt-1">
+                      {activeSpatialLounge.peer_name || "Your Peer Counselor"} is waiting for you in the Meadow! 🌿
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+                      Step into the private 2D audio meadow. Walk close to your peer counselor to hear each other with spatial 3D audio, zen ambient sounds, and relaxing heart-to-heart voice conversation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <Button
+                    onClick={() =>
+                      navigate(`/student/spatial-lounge?session_id=${activeSpatialLounge.session_id}`)
+                    }
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 h-11 rounded-2xl shadow-lg shadow-emerald-950/60 flex items-center gap-2"
+                  >
+                    <Radio className="w-4 h-4 animate-pulse" />
+                    <span>Join Voice Meadow</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Welcome Section */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-background p-8 border border-primary/10">
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">

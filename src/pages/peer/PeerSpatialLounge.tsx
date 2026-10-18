@@ -11,6 +11,10 @@ import {
   Heart,
   Shield,
   Loader2,
+  Send,
+  RefreshCw,
+  Sparkles,
+  UserCheck,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -24,6 +28,7 @@ import { studentNavItems } from "@/config/studentNavItems";
 import { SpatialMeadow } from "@/components/peer/SpatialMeadow";
 import { SpatialAudioControls } from "@/components/peer/SpatialAudioControls";
 import { PeerProfileAliasModal } from "@/components/peer/PeerProfileAliasModal";
+import { PeerStudentLinkerModal, AssignedStudentItem } from "@/components/peer/PeerStudentLinkerModal";
 import { SpatialAudioManager } from "@/lib/spatialAudio";
 import { AvatarStyle, FloatingReaction, LoungeChatMessage, LoungeParticipant } from "@/types/spatialLounge";
 import { Room, RoomEvent, RemoteTrack, Track } from "livekit-client";
@@ -41,6 +46,12 @@ export const PeerSpatialLounge = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(Boolean(sessionId));
+
+  // Assigned students linking state (Peer Counselor)
+  const [assignedStudents, setAssignedStudents] = useState<AssignedStudentItem[]>([]);
+  const [isLoadingAssigned, setIsLoadingAssigned] = useState(false);
+  const [showLinkerModal, setShowLinkerModal] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   // Audio & LiveKit State
   const [isMicActive, setIsMicActive] = useState(false);
@@ -102,6 +113,70 @@ export const PeerSpatialLounge = () => {
     }
   }, [isPeerCounselor, navigate, sessionId]);
 
+  // Fetch assigned students for the peer counselor
+  const fetchAssignedStudents = useCallback(
+    async (autoLinkIfSingle = false) => {
+      if (!isPeerCounselor) return;
+      try {
+        setIsLoadingAssigned(true);
+        const students = await api.getPeerAssignedStudents();
+        setAssignedStudents(students);
+
+        // Auto-link if exactly 1 assigned student and no sessionId currently selected
+        if (autoLinkIfSingle && !sessionId && students.length === 1) {
+          const single = students[0];
+          toast.success(`Auto-linked with assigned student ${single.student_name} 🌿`);
+          void api.requestSessionSpatialLounge(single.session_id).catch(() => {});
+          navigate(`/peer/spatial-lounge?session_id=${single.session_id}`, { replace: true });
+        } else if (autoLinkIfSingle && !sessionId && students.length > 1) {
+          // If multiple students and none selected, open linker modal for choice
+          setShowLinkerModal(true);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch assigned students:", err);
+      } finally {
+        setIsLoadingAssigned(false);
+      }
+    },
+    [isPeerCounselor, sessionId, navigate]
+  );
+
+  // Link / Switch to an assigned student
+  const handleSelectStudent = async (student: AssignedStudentItem) => {
+    try {
+      toast.loading(`Linking with ${student.student_name}...`, { id: "link-student" });
+      await api.requestSessionSpatialLounge(student.session_id);
+      toast.success(`Linked with ${student.student_name}! Meadow invitation sent.`, { id: "link-student" });
+      navigate(`/peer/spatial-lounge?session_id=${student.session_id}`);
+      void fetchAssignedStudents(false);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to link with student"), { id: "link-student" });
+    }
+  };
+
+  // Resend meadow invitation ping to student
+  const handleResendInvite = async () => {
+    if (!sessionId) return;
+    try {
+      setIsSendingInvite(true);
+      await api.requestSessionSpatialLounge(sessionId);
+      toast.success(
+        `🌿 Invitation ping re-sent to ${partnerInfo?.name || "student"}! They'll see it on their dashboard.`
+      );
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to send invitation ping"));
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  // Load assigned students on mount for peer counselor
+  useEffect(() => {
+    if (isPeerCounselor) {
+      void fetchAssignedStudents(true);
+    }
+  }, [isPeerCounselor]);
+
   // Initialize Spatial Audio Manager & enumerate devices
   useEffect(() => {
     const manager = new SpatialAudioManager(240);
@@ -146,6 +221,12 @@ export const PeerSpatialLounge = () => {
     const connectSessionLounge = async () => {
       try {
         setIsLoadingSession(true);
+
+        // Disconnect previous livekit room when switching sessions
+        if (livekitRoomRef.current) {
+          livekitRoomRef.current.disconnect();
+          livekitRoomRef.current = null;
+        }
 
         let res: any = null;
 
@@ -204,6 +285,7 @@ export const PeerSpatialLounge = () => {
           ]);
         } else if (!sessionId) {
           // If standalone and no partner, start clean (no fake bots)
+          setPartnerInfo(null);
           setParticipants([]);
         }
 
@@ -222,6 +304,14 @@ export const PeerSpatialLounge = () => {
 
           room.on(RoomEvent.Disconnected, () => {
             setLivekitConnected(false);
+          });
+
+          room.on(RoomEvent.ParticipantConnected, (p) => {
+            toast.success(`🌿 ${p.name || "Your partner"} entered the Meadow!`);
+          });
+
+          room.on(RoomEvent.ParticipantDisconnected, (p) => {
+            toast.info(`${p.name || "Partner"} left the Meadow.`);
           });
 
           // Handle incoming audio tracks
@@ -589,6 +679,22 @@ export const PeerSpatialLounge = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              {isPeerCounselor && (
+                <Button
+                  onClick={() => setShowLinkerModal(true)}
+                  variant="outline"
+                  size="sm"
+                  className="bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:text-white hover:bg-emerald-900/60 text-xs gap-1.5 rounded-xl font-medium"
+                >
+                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">
+                    {partnerInfo ? `Linked: ${partnerInfo.name}` : "Link Student"}
+                  </span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                    Switch
+                  </span>
+                </Button>
+              )}
               <Button
                 onClick={() => setShowChatHistory(!showChatHistory)}
                 variant="outline"
@@ -617,14 +723,14 @@ export const PeerSpatialLounge = () => {
           {!isFullscreen && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/20 rounded-2xl p-4 shadow-lg">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
                   <Radio className="w-5 h-5 animate-pulse" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-base font-bold text-white">
                       {partnerInfo ? (
-                        <>Paired with <span className="text-emerald-400">{partnerInfo.name}</span></>
+                        <>Paired with <span className="text-emerald-400 font-extrabold">{partnerInfo.name}</span></>
                       ) : (
                         "Heart-to-Heart Meadow"
                       )}
@@ -635,17 +741,33 @@ export const PeerSpatialLounge = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Walk your avatar closer using <b>WASD</b> or <b>Arrow Keys</b> to hear your partner in spatial 3D.
+                    {partnerInfo
+                      ? "Walk your avatar closer using WASD or Arrow Keys to hear each other in spatial 3D audio."
+                      : "Private proximity audio space. Link an assigned student to invite them into the meadow."}
                   </p>
                 </div>
               </div>
 
-              {isLoadingSession && (
-                <div className="flex items-center gap-2 text-xs text-emerald-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Connecting private lounge...</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {isLoadingSession && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-400 mr-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Connecting private lounge...</span>
+                  </div>
+                )}
+
+                {isPeerCounselor && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowLinkerModal(true)}
+                    className="bg-emerald-950/50 border-emerald-500/30 text-emerald-300 hover:text-white hover:bg-emerald-900/50 text-xs rounded-xl gap-1.5"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{partnerInfo ? "Switch Student" : "Link Assigned Student"}</span>
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 
@@ -675,6 +797,54 @@ export const PeerSpatialLounge = () => {
 
           {/* Main Spatial Audio Meadow Canvas */}
           <div className="relative">
+            {/* Waiting for partner prompt overlay */}
+            {sessionId && partnerInfo && participants.length === 0 && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4 pointer-events-auto">
+                <div className="bg-slate-950/95 backdrop-blur-md border border-emerald-500/50 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3 text-slate-100 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">
+                        Waiting for <span className="text-emerald-400 font-bold">{partnerInfo.name}</span> to enter...
+                      </p>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        An invite is active. You can re-ping them anytime.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isPeerCounselor && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResendInvite}
+                        disabled={isSendingInvite}
+                        className="h-7 text-[11px] px-2.5 bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white rounded-lg font-medium gap-1"
+                      >
+                        {isSendingInvite ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Send className="w-3 h-3" />
+                        )}
+                        <span>Ping Student</span>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowLinkerModal(true)}
+                      className="h-7 text-[11px] px-2 text-slate-400 hover:text-white"
+                    >
+                      Switch
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <SpatialMeadow
               participants={participants}
               localParticipant={localParticipant}
@@ -773,6 +943,19 @@ export const PeerSpatialLounge = () => {
         currentAvatar={localParticipant.avatar}
         onSave={handleSaveProfile}
       />
+
+      {/* Assigned Student Linker Modal for Peer Counselor */}
+      {isPeerCounselor && (
+        <PeerStudentLinkerModal
+          isOpen={showLinkerModal}
+          onClose={() => setShowLinkerModal(false)}
+          assignedStudents={assignedStudents}
+          currentSessionId={sessionId}
+          isLoading={isLoadingAssigned}
+          onSelectStudent={handleSelectStudent}
+          onRefresh={() => void fetchAssignedStudents(false)}
+        />
+      )}
     </div>
   );
 };
