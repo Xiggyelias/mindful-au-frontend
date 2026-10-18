@@ -16,6 +16,7 @@ import {
   Sparkles,
   UserCheck,
   Headphones,
+  X,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -117,16 +118,8 @@ export const PeerSpatialLounge = () => {
 
   const [participants, setParticipants] = useState<LoungeParticipant[]>([]);
 
-  const [chatMessages, setChatMessages] = useState<LoungeChatMessage[]>([
-    {
-      id: "msg-init",
-      senderId: "system",
-      senderName: "Heart-to-Heart Meadow",
-      avatar: "dino-green",
-      text: "Welcome to the private Heart-to-Heart Spatial Meadow. Proximity 3D audio is enabled.",
-      timestamp: "Just now",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<LoungeChatMessage[]>([]);
+  const conversationMessages = chatMessages.filter((m) => m.senderId !== "system");
 
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
 
@@ -163,6 +156,39 @@ export const PeerSpatialLounge = () => {
       navigate(sessionId ? `/student/chat?session_id=${sessionId}` : "/student/chat");
     }
   }, [isPeerCounselor, navigate, sessionId]);
+
+  // Native Fullscreen toggle with fallback
+  const handleToggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+        setIsFullscreen(true);
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn("Fullscreen toggle fallback:", err);
+      setIsFullscreen((prev) => !prev);
+    }
+  }, []);
+
+  // Sync state if user exits via ESC key or browser F11
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   // Fetch assigned students for the peer counselor
   const fetchAssignedStudents = useCallback(
@@ -1251,75 +1277,100 @@ export const PeerSpatialLounge = () => {
 
       {/* Main Content Area */}
       <div className={isFullscreen || !isPeerCounselor ? "w-full" : "lg:pl-72 pl-0"}>
-        {!isFullscreen && (
-          <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/90 px-4 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBackToChat}
-                className="text-slate-300 hover:text-white hover:bg-slate-900 gap-1.5 text-xs font-semibold"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Chat</span>
-              </Button>
-              <div className="h-4 w-px bg-slate-800" />
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Heart className="w-4 h-4 fill-emerald-500/30" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-white flex items-center gap-2">
-                    Heart-to-Heart Meadow
-                    {sessionId && (
-                      <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.2 rounded-full">
-                        Private 1-on-1
-                      </span>
-                    )}
-                  </h1>
-                </div>
+        <header className="sticky top-0 z-40 flex h-14 sm:h-16 shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/90 px-3 sm:px-4 backdrop-blur-md">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBackToChat}
+              className="text-slate-300 hover:text-white hover:bg-slate-900 gap-1.5 text-xs font-semibold"
+            >
+              <ArrowLeft className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline">Back to Chat</span>
+            </Button>
+            <div className="h-4 w-px bg-slate-800 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Heart className="w-4 h-4 fill-emerald-500/30" />
+              </div>
+              <div>
+                <h1 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>Heart-to-Heart Meadow</span>
+                  {sessionId && (
+                    <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full hidden md:inline">
+                      Private 1-on-1
+                    </span>
+                  )}
+                </h1>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              {isPeerCounselor && (
-                <Button
-                  onClick={() => setShowLinkerModal(true)}
-                  variant="outline"
-                  size="sm"
-                  className="bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:text-white hover:bg-emerald-900/60 text-xs gap-1.5 rounded-xl font-medium"
-                >
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="hidden sm:inline">
-                    {partnerInfo ? `Linked: ${partnerInfo.name}` : "Link Student"}
-                  </span>
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                    Switch
-                  </span>
-                </Button>
+          <div className="flex items-center gap-2">
+            {isPeerCounselor && (
+              <Button
+                onClick={() => setShowLinkerModal(true)}
+                variant="outline"
+                size="sm"
+                className="bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:text-white hover:bg-emerald-900/60 text-xs gap-1.5 rounded-xl font-medium"
+              >
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">
+                  {partnerInfo ? `Linked: ${partnerInfo.name}` : "Link Student"}
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                  Switch
+                </span>
+              </Button>
+            )}
+
+            {/* Meadow Chat Button */}
+            <Button
+              onClick={() => setShowChatHistory(!showChatHistory)}
+              variant="outline"
+              size="sm"
+              className={`transition-all rounded-xl text-xs gap-1.5 font-medium shadow-sm ${
+                showChatHistory
+                  ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-semibold shadow-[0_0_12px_rgba(52,211,153,0.25)]"
+                  : "bg-slate-900/90 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
+              }`}
+              title="Toggle Meadow Chat conversation history"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Meadow Chat</span>
+              {conversationMessages.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-bold border border-emerald-500/40">
+                  {conversationMessages.length}
+                </span>
               )}
-              <Button
-                onClick={() => setShowChatHistory(!showChatHistory)}
-                variant="outline"
-                size="sm"
-                className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Meadow Chat</span>
-                <span>({chatMessages.length})</span>
-              </Button>
-              <Button
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                variant="outline"
-                size="sm"
-                className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Full Screen</span>
-              </Button>
-            </div>
-          </header>
-        )}
+            </Button>
+
+            {/* Full Screen Toggle Button */}
+            <Button
+              onClick={handleToggleFullscreen}
+              variant="outline"
+              size="sm"
+              className={`transition-all rounded-xl text-xs gap-1.5 font-medium shadow-sm ${
+                isFullscreen
+                  ? "bg-emerald-950/60 border-emerald-500/50 text-emerald-300 font-semibold"
+                  : "bg-slate-900/90 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
+              }`}
+              title={isFullscreen ? "Exit Fullscreen (or press Esc)" : "Enter Fullscreen"}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Exit Fullscreen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Full Screen</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </header>
 
         <main className={`p-3 lg:p-5 space-y-4 max-w-7xl mx-auto ${isFullscreen ? "h-screen flex flex-col justify-between" : ""}`}>
           {/* Top Session Partner Banner */}
@@ -1374,29 +1425,7 @@ export const PeerSpatialLounge = () => {
             </div>
           )}
 
-          {/* Fullscreen top exit pill */}
-          {isFullscreen && (
-            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              <Button
-                onClick={handleBackToChat}
-                size="sm"
-                variant="secondary"
-                className="bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 shadow-xl gap-1 text-xs backdrop-blur-md"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Return to Chat</span>
-              </Button>
-              <Button
-                onClick={() => setIsFullscreen(false)}
-                size="sm"
-                variant="secondary"
-                className="bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 shadow-xl gap-1 text-xs backdrop-blur-md"
-              >
-                <Minimize2 className="w-3.5 h-3.5" />
-                <span>Exit Fullscreen</span>
-              </Button>
-            </div>
-          )}
+
 
           {/* Main Spatial Audio Meadow Canvas */}
           <div className="relative">
@@ -1515,47 +1544,91 @@ export const PeerSpatialLounge = () => {
             onTestSound={handleTestSound}
           />
 
-          {/* Chat History Drawer */}
+          {/* Floating Glassmorphic Meadow Chat Drawer */}
           {showChatHistory && (
-            <Card className="bg-slate-900/90 border-slate-800 text-white shadow-xl">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <h3 className="text-sm font-bold flex items-center gap-2 text-emerald-400">
-                    <MessageSquare className="w-4 h-4" />
-                    Heart-to-Heart Conversation Logs
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowChatHistory(false)}
-                    className="text-xs text-slate-400 hover:text-white"
-                  >
-                    Close
-                  </Button>
-                </div>
-                <div className="max-h-48 overflow-y-auto space-y-2 pr-2 text-xs">
-                  {chatMessages.map((msg) => (
+            <div className="fixed top-18 right-4 sm:right-6 z-50 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-slate-950/95 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-right-4 duration-200">
+              <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+                <h3 className="text-sm font-bold flex items-center gap-2 text-white">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <span>Meadow Chat Logs</span>
+                  {conversationMessages.length > 0 && (
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+                      {conversationMessages.length}
+                    </span>
+                  )}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowChatHistory(false)}
+                  className="h-7 w-7 p-0 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                  title="Close Chat Logs"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Chat message history list */}
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 text-xs">
+                {chatMessages.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    No conversation messages yet. Type in the bar below to talk!
+                  </div>
+                ) : (
+                  chatMessages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`p-2 rounded-xl flex items-start gap-2 ${
-                        msg.isLocal ? "bg-emerald-950/50 border border-emerald-800/40 ml-4" : "bg-slate-800/60 mr-4"
+                      className={`p-2.5 rounded-xl flex items-start gap-2.5 ${
+                        msg.senderId === "system"
+                          ? "bg-slate-900/60 border border-slate-800 text-slate-400 text-[11px]"
+                          : msg.isLocal
+                          ? "bg-emerald-950/70 border border-emerald-500/40 text-emerald-100 ml-4 shadow-sm"
+                          : "bg-slate-900/90 border border-slate-800 text-slate-200 mr-4 shadow-sm"
                       }`}
                     >
-                      <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center font-bold text-[10px] shrink-0">
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[11px] shrink-0 text-emerald-300">
                         {msg.senderName.charAt(0)}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-200">{msg.senderName}</span>
-                          <span className="text-[10px] text-slate-500">{msg.timestamp}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-white truncate text-[11px]">{msg.senderName}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{msg.timestamp}</span>
                         </div>
-                        <p className="text-slate-300 mt-0.5">{msg.text}</p>
+                        <p className="mt-0.5 text-xs break-words">{msg.text}</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  ))
+                )}
+              </div>
+
+              {/* Quick thought chat input inside drawer */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formEl = e.currentTarget;
+                  const inputEl = formEl.elements.namedItem("drawerChatInput") as HTMLInputElement;
+                  if (inputEl?.value.trim()) {
+                    handleSendChatMessage(inputEl.value.trim());
+                    inputEl.value = "";
+                  }
+                }}
+                className="flex items-center gap-2 pt-2 border-t border-emerald-500/20"
+              >
+                <input
+                  name="drawerChatInput"
+                  placeholder="Type a thought..."
+                  className="flex-1 bg-slate-900/90 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-400 outline-none"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs gap-1 font-semibold"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>Send</span>
+                </Button>
+              </form>
+            </div>
           )}
         </main>
       </div>
