@@ -85,6 +85,8 @@ type BubbleRenderProps = {
   /** Upload progress 0-100 for the current upload. */
   currentUploadProgress?: number;
   senderFallbackName?: string;
+  conversationKey?: string;
+  currentUserRole?: string;
 };
 
 const MessageBubble = React.memo(
@@ -102,6 +104,8 @@ const MessageBubble = React.memo(
     uploadingTempId,
     currentUploadProgress,
     senderFallbackName,
+    conversationKey,
+    currentUserRole,
   }: BubbleRenderProps) {
     const content = msg.decryptedContent ?? msg.content;
     const isDeletedMessage = content === "This message was deleted.";
@@ -147,22 +151,25 @@ const MessageBubble = React.memo(
         );
       }
       if (typeof content === 'string' && content.includes('Heart-to-Heart Spatial Lounge')) {
-        const isPeer = user?.role === 'peer_counselor';
+        const isPeer = currentUserRole === 'peer_counselor';
+        const sId = conversationKey || (msg.case_id ? String(msg.case_id) : '');
         const loungeUrl = isPeer
-          ? `/peer/spatial-lounge?session_id=${conversationKey}`
-          : `/student/spatial-lounge?session_id=${conversationKey}`;
+          ? `/peer/spatial-lounge?session_id=${sId}`
+          : `/student/spatial-lounge?session_id=${sId}`;
         return (
           <div className="space-y-2 py-0.5">
             <p className="whitespace-pre-wrap break-words">{content}</p>
-            <div className="pt-1">
-              <a
-                href={loungeUrl}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-1.5 shadow-sm transition-all"
-              >
-                <Radio className="w-3.5 h-3.5 animate-pulse" />
-                <span>Join Spatial Lounge</span>
-              </a>
-            </div>
+            {sId && (
+              <div className="pt-1">
+                <a
+                  href={loungeUrl}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-1.5 shadow-sm transition-all"
+                >
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Join Spatial Lounge</span>
+                </a>
+              </div>
+            )}
           </div>
         );
       }
@@ -342,7 +349,7 @@ interface MessageListProps {
   hasOlderMessages: boolean;
   isAtBottom: boolean;
   showScrollToBottom: boolean;
-  user: { id?: string | number | null } | null;
+  user: { id?: string | number | null; role?: string } | null;
   activeSession: Session | null;
   isPeerTyping: boolean;
   deletingMessageIds: Set<number>;
@@ -658,6 +665,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                   uploadingTempId={uploadingTempId}
                   currentUploadProgress={currentUploadProgress}
                   senderFallbackName={supportFallbackName}
+                  conversationKey={conversationKey}
+                  currentUserRole={user?.role}
                 />
               </div>
             );
@@ -779,6 +788,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                 uploadingTempId={uploadingTempId}
                 currentUploadProgress={currentUploadProgress}
                 senderFallbackName={supportFallbackName}
+                conversationKey={conversationKey}
+                currentUserRole={user?.role}
               />
             </div>
           );

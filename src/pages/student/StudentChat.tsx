@@ -28,6 +28,7 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { getEmergencyLocation } from "@/lib/emergencyLocation";
 import { dispatchChatAnonymitySync } from "@/lib/chatRealtimeEvents";
 import { MessageList } from "@/components/chat/MessageList";
+import { ChatMessageErrorBoundary } from "@/components/chat/ChatMessageErrorBoundary";
 import { ChatInput } from "@/components/chat/ChatInput";
 import type { ChatMessage } from "@/hooks/useEncryptedChat";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -1161,34 +1162,36 @@ const StudentChat = () => {
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Message List */}
                     <div className="min-h-0 flex-1 overflow-hidden">
-                      <MessageList
-                        conversationKey={String(sessionId ?? "")}
-                        messages={messages}
-                        isLoading={messagesLoading}
-                        isLoadingOlderMessages={isLoadingOlderMessages}
-                        hasOlderMessages={hasOlderMessages}
-                        isAtBottom={isAtBottom}
-                        showScrollToBottom={showScrollToBottom}
-                        user={user}
-                        activeSession={activeSession}
-                        isPeerTyping={isPeerTyping}
-                        deletingMessageIds={deletingMessageIds}
-                        error={chatError}
-                        onAtBottomChange={handleAtBottomChange}
-                        onLoadOlder={async () => { await loadOlderMessages(); }}
-                        onDeleteMessage={async (id) => {
-                          handleDeleteMessageWrapper(id);
-                        }}
-                        onStarterPrompt={setMessage}
-                        scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                        messageScrollAreaRef={messageScrollAreaRef}
-                        scrollRef={scrollRef}
-                        onRetryLoad={refreshMessages}
-                        onRetryUpload={handleRetryVoiceUpload}
-                        onDeleteOptimistic={handleDeleteOptimistic}
-                        uploadingTempId={currentUploadTempIdRef.current ?? undefined}
-                        currentUploadProgress={uploadProgress}
-                      />
+                      <ChatMessageErrorBoundary>
+                        <MessageList
+                          conversationKey={String(sessionId ?? "")}
+                          messages={messages}
+                          isLoading={messagesLoading}
+                          isLoadingOlderMessages={isLoadingOlderMessages}
+                          hasOlderMessages={hasOlderMessages}
+                          isAtBottom={isAtBottom}
+                          showScrollToBottom={showScrollToBottom}
+                          user={user}
+                          activeSession={activeSession}
+                          isPeerTyping={isPeerTyping}
+                          deletingMessageIds={deletingMessageIds}
+                          error={chatError}
+                          onAtBottomChange={handleAtBottomChange}
+                          onLoadOlder={async () => { await loadOlderMessages(); }}
+                          onDeleteMessage={async (id) => {
+                            handleDeleteMessageWrapper(id);
+                          }}
+                          onStarterPrompt={setMessage}
+                          scrollToBottom={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                          messageScrollAreaRef={messageScrollAreaRef}
+                          scrollRef={scrollRef}
+                          onRetryLoad={refreshMessages}
+                          onRetryUpload={handleRetryVoiceUpload}
+                          onDeleteOptimistic={handleDeleteOptimistic}
+                          uploadingTempId={currentUploadTempIdRef.current ?? undefined}
+                          currentUploadProgress={uploadProgress}
+                        />
+                      </ChatMessageErrorBoundary>
                     </div>
                   </div>
 
