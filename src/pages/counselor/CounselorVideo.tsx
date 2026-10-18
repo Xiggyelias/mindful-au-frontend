@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { useLiveKit } from "@/hooks/useLiveKit";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { deriveCallStatus } from "@/lib/callState";
 import {
@@ -160,7 +160,7 @@ const CounselorVideo = () => {
     flipCamera,
     acceptIncomingCall,
     rejectIncomingCall,
-  } = useLiveKit(Number(activeSessionId || 0), String(user?.id || ""));
+  } = useWebRTC(activeSessionId || "", String(user?.id || ""));
 
   useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
@@ -1127,7 +1127,11 @@ const CounselorVideo = () => {
       ? `${remoteParticipantName} is connected in audio mode or has camera sharing turned off. Audio is still live.`
       : statusMessage;
   const counselorVisibilityLabel = !localStream
-    ? "Camera preview unavailable"
+    ? isStarting || isConnecting
+      ? "Opening camera..."
+      : isConnected
+      ? "Camera unavailable"
+      : "Camera inactive"
     : isAudioOnly
     ? "Audio only"
     : isVideoOff
@@ -1222,21 +1226,12 @@ const CounselorVideo = () => {
                         <div className="flex flex-wrap items-center gap-2 pt-1.5">
                           <Button
                             size="sm"
-                            variant="secondary"
-                            className="h-7 text-xs font-semibold shadow-xs"
-                            onClick={() => handleStartSession(activeSessionId, "audio")}
-                          >
-                            <Phone className="mr-1.5 h-3.5 w-3.5" />
-                            Start Audio Call Instead
-                          </Button>
-                          <Button
-                            size="sm"
                             variant="outline"
                             className="h-7 text-xs font-semibold"
                             onClick={() => handleStartSession(activeSessionId, "video")}
                           >
                             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                            Retry Video
+                            Retry Call
                           </Button>
                         </div>
                       )}
@@ -1692,7 +1687,6 @@ const CounselorVideo = () => {
                     upcomingSessions.map((session) => {
                       const sessionId = String(session.id);
                       const isActive = activeSessionId === sessionId;
-                      const sessionAudioOnly = isAppointmentAudioOnly(session);
                       const callWindow = getVideoCallWindowStatus(
                         session.scheduled_at,
                         session.duration_minutes,
@@ -1758,7 +1752,7 @@ const CounselorVideo = () => {
                             {callWindow.message}
                           </p>
 
-                          <div className="mt-3 flex flex-col gap-1.5">
+                          <div className="mt-3">
                             <Button
                               size="sm"
                               className="w-full gap-1.5 h-8.5 text-xs font-semibold shadow-sm"
@@ -1794,24 +1788,6 @@ const CounselorVideo = () => {
                                 </>
                               )}
                             </Button>
-                            {!isHostingThisSession && !isConnected && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full gap-1.5 h-7 text-[11px] font-medium"
-                                onClick={() => handleStartSession(sessionId, "audio")}
-                                disabled={
-                                  isBusyWithOtherCall ||
-                                  isStarting ||
-                                  !callWindow.canStart ||
-                                  !isOnline ||
-                                  isIncomingCall
-                                }
-                              >
-                                <Phone className="h-3 w-3" />
-                                Start Audio Only
-                              </Button>
-                            )}
                           </div>
                         </div>
                       );

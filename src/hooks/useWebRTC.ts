@@ -54,8 +54,8 @@ const RTC_CONFIGURATION: RTCConfiguration = {
 
 const MEDIA_CONSTRAINTS: MediaStreamConstraints = {
   video: {
-    width: { ideal: 1280, max: 1280 },
-    height: { ideal: 720, max: 720 },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
     frameRate: { ideal: 24, max: 30 },
     facingMode: "user",
   },
@@ -68,8 +68,8 @@ const MEDIA_CONSTRAINTS: MediaStreamConstraints = {
 
 const LOW_BANDWIDTH_MEDIA_CONSTRAINTS: MediaStreamConstraints = {
   video: {
-    width: { ideal: 640, max: 854 },
-    height: { ideal: 360, max: 480 },
+    width: { ideal: 640 },
+    height: { ideal: 360 },
     frameRate: { ideal: 15, max: 20 },
     facingMode: "user",
   },
@@ -293,6 +293,10 @@ const getMediaErrorMessage = (error: unknown, audioOnlyRequested: boolean): stri
 
   if (errorName === "NotReadableError" || errorName === "TrackStartError") {
     return "Your camera or microphone is busy in another app. Close the other app and try again.";
+  }
+
+  if (errorName === "OverconstrainedError" || errorName === "ConstraintNotSatisfiedError") {
+    return "Camera constraints could not be satisfied. Retrying with default resolution.";
   }
 
   return "Could not access camera or microphone. Check device permissions and try again.";
@@ -908,8 +912,23 @@ const initializeEngineMedia = async (audioOnlyRequested = false) => {
     try {
       return await tryGetMedia(engine.lowBandwidthMode ? LOW_BANDWIDTH_MEDIA_CONSTRAINTS : MEDIA_CONSTRAINTS);
     } catch (videoError) {
-      console.warn("Falling back to audio-only media:", videoError);
-      return await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+      console.warn("High-res video acquisition failed, retrying with flexible constraints:", videoError);
+      try {
+        return await tryGetMedia({
+          video: { facingMode: "user" },
+          audio: MEDIA_CONSTRAINTS.audio,
+        });
+      } catch (flexibleVideoError) {
+        console.warn("Video acquisition failed, falling back to audio-only media:", flexibleVideoError);
+        const stream = await tryGetMedia(AUDIO_ONLY_CONSTRAINTS);
+        if (stream) {
+          setEngineState((prev) => ({
+            ...prev,
+            notice: "Camera unavailable. Call connected with audio.",
+          }));
+        }
+        return stream;
+      }
     }
   } catch (error) {
     console.error("Error accessing media devices:", error);

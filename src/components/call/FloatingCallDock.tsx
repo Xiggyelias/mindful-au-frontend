@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveCallDock } from "@/hooks/useWebRTC";
-import { useLiveKitActiveCallDock } from "@/hooks/useLiveKit";
 import { formatCallDuration } from "@/lib/videoCall";
 import { deriveCallStatus } from "@/lib/callState";
 
@@ -93,14 +92,7 @@ export function FloatingCallDock() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, role } = useAuth();
-
-  const livekitDock = useLiveKitActiveCallDock();
-  const webrtcDock = useActiveCallDock();
-
-  const activeDock =
-    livekitDock.isConnected || livekitDock.localStream || livekitDock.isConnecting
-      ? livekitDock
-      : webrtcDock;
+  const activeDock = useActiveCallDock();
 
   const {
     localStream,

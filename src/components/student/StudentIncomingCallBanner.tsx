@@ -12,8 +12,7 @@ import { IncomingCallOverlay } from "@/components/call/IncomingCallOverlay";
 import type { IncomingCallOverlayCall } from "@/components/call/IncomingCallOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import { useIncomingCalls, useIncomingCallWakeSubscription } from "@/hooks/useIncomingCalls";
-import { useEngineRingingSessionId } from "@/hooks/useWebRTC";
-import { useLiveKitActiveCallDock } from "@/hooks/useLiveKit";
+import { useEngineRingingSessionId, useActiveCallDock } from "@/hooks/useWebRTC";
 import {
   isAcceptedCallSignal,
   isTerminalCallSignal,
@@ -144,18 +143,22 @@ export function StudentIncomingCallBanner({
     }
   };
 
-  const livekitDock = useLiveKitActiveCallDock();
+  const activeDock = useActiveCallDock();
 
   // Only suppress if the student is already actively connected to a call for this appointment
+  // or is currently on the call page for this appointment.
   const visibleCalls = calls.filter((c) => {
     if (engineRingingSessionId && String(c.appointment_id) === String(engineRingingSessionId)) {
       return false;
     }
     if (
-      livekitDock.isConnected &&
-      livekitDock.sessionId &&
-      String(c.appointment_id) === String(livekitDock.sessionId)
+      activeDock.isConnected &&
+      activeDock.sessionId &&
+      String(c.appointment_id) === String(activeDock.sessionId)
     ) {
+      return false;
+    }
+    if (currentUrlAppointmentId && String(c.appointment_id) === String(currentUrlAppointmentId)) {
       return false;
     }
     return true;

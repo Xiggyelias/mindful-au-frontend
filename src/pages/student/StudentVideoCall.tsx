@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PreSessionPulseModal } from "@/components/assessment/PreSessionPulseModal";
 import { useAuth } from "@/hooks/useAuth";
-import { useLiveKit } from "@/hooks/useLiveKit";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { deriveCallStatus } from "@/lib/callState";
 import type { Appointment } from "@/hooks/useChatSession";
@@ -110,7 +110,9 @@ const StudentVideoCall = () => {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) return new Set(arr.map(Number));
       }
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     return new Set<number>();
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -179,7 +181,7 @@ const StudentVideoCall = () => {
     flipCamera,
     acceptIncomingCall,
     rejectIncomingCall,
-  } = useLiveKit(Number(activeAppointmentId || 0), user?.id?.toString() || "");
+  } = useWebRTC(sessionId, user?.id?.toString() || "");
 
   useScreenWakeLock(Boolean(localStream) || isConnecting || isConnected);
 
@@ -286,7 +288,9 @@ const StudentVideoCall = () => {
         }
         try {
           sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
-        } catch {}
+        } catch {
+          /* ignore */
+        }
         return next;
       });
       if (availableNow.length === 0) {
@@ -1186,21 +1190,12 @@ const StudentVideoCall = () => {
                         <div className="flex flex-wrap items-center gap-2 pt-1.5">
                           <Button
                             size="sm"
-                            variant="secondary"
-                            className="h-7 text-xs font-semibold shadow-xs"
-                            onClick={() => void handleStartAudioCall()}
-                          >
-                            <Phone className="mr-1.5 h-3.5 w-3.5" />
-                            Start Audio Call Instead
-                          </Button>
-                          <Button
-                            size="sm"
                             variant="outline"
                             className="h-7 text-xs font-semibold"
                             onClick={() => void handleStartCall()}
                           >
                             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                            Retry Video
+                            Retry Call
                           </Button>
                         </div>
                       )}
@@ -1658,7 +1653,9 @@ const StudentVideoCall = () => {
               const next = new Set(prev).add(checkedId);
               try {
                 sessionStorage.setItem("pre_session_checked_in_apt_ids", JSON.stringify(Array.from(next)));
-              } catch {}
+              } catch {
+                /* ignore */
+              }
               return next;
             });
             setUpcomingAppointments((prev) =>
