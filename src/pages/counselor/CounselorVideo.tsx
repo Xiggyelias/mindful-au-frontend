@@ -1216,7 +1216,31 @@ const CounselorVideo = () => {
                     <AlertTitle className="font-bold">
                       {isRelayError ? "Session attention needed" : "Session issue"}
                     </AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription className="mt-1 space-y-2">
+                      <p className="text-xs leading-relaxed">{error}</p>
+                      {activeSessionId && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-xs font-semibold shadow-xs"
+                            onClick={() => handleStartSession(activeSessionId, "audio")}
+                          >
+                            <Phone className="mr-1.5 h-3.5 w-3.5" />
+                            Start Audio Call Instead
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs font-semibold"
+                            onClick={() => handleStartSession(activeSessionId, "video")}
+                          >
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                            Retry Video
+                          </Button>
+                        </div>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
 
@@ -1734,7 +1758,7 @@ const CounselorVideo = () => {
                             {callWindow.message}
                           </p>
 
-                          <div className="mt-3">
+                          <div className="mt-3 flex flex-col gap-1.5">
                             <Button
                               size="sm"
                               className="w-full gap-1.5 h-8.5 text-xs font-semibold shadow-sm"
@@ -1770,6 +1794,24 @@ const CounselorVideo = () => {
                                 </>
                               )}
                             </Button>
+                            {!isHostingThisSession && !isConnected && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full gap-1.5 h-7 text-[11px] font-medium"
+                                onClick={() => handleStartSession(sessionId, "audio")}
+                                disabled={
+                                  isBusyWithOtherCall ||
+                                  isStarting ||
+                                  !callWindow.canStart ||
+                                  !isOnline ||
+                                  isIncomingCall
+                                }
+                              >
+                                <Phone className="h-3 w-3" />
+                                Start Audio Only
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );

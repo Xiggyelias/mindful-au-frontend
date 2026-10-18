@@ -1180,7 +1180,31 @@ const StudentVideoCall = () => {
                     <AlertTitle className="font-bold">
                       {isRelayError ? "Call attention needed" : "Call issue"}
                     </AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription className="mt-1 space-y-2">
+                      <p className="text-xs leading-relaxed">{error}</p>
+                      {activeAppointmentId && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-xs font-semibold shadow-xs"
+                            onClick={() => void handleStartAudioCall()}
+                          >
+                            <Phone className="mr-1.5 h-3.5 w-3.5" />
+                            Start Audio Call Instead
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs font-semibold"
+                            onClick={() => void handleStartCall()}
+                          >
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                            Retry Video
+                          </Button>
+                        </div>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
 

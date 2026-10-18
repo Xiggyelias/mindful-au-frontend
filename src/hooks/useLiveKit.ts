@@ -182,22 +182,45 @@ const bindLocalStream = (stream: MediaStream | null) => {
 };
 
 const captureError = (error: unknown): string => {
-  const failure = error ? MediaDeviceFailure.getFailure(error as Error) : null;
+  if (!error) return "";
+  const err = error as Error & { name?: string };
+  const name = err.name || "";
+  const msg = (err.message || "").toLowerCase();
+
+  if (
+    name === "NotReadableError" ||
+    name === "TrackStartError" ||
+    msg.includes("could not start video source") ||
+    msg.includes("in use") ||
+    msg.includes("busy")
+  ) {
+    return "Your camera or microphone is in use by another tab or app (e.g. Zoom, Teams, or another test window). Close other apps or start in Audio Only mode.";
+  }
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+    return "Camera or microphone access was blocked. Even if allowed in the browser, check Windows Settings > Privacy & security > Camera to make sure desktop apps can access your camera.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "No camera or microphone was found on this device. You can join in audio-only mode.";
+  }
+  if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
+    return "Your camera does not support high definition. Please retry or join in audio mode.";
+  }
+
+  const failure = MediaDeviceFailure.getFailure(err);
   if (failure) {
     switch (failure) {
       case MediaDeviceFailure.PermissionDenied:
-        return "Camera or microphone permission is blocked. Allow access to start the call.";
+        return "Camera or microphone access was blocked. Check Windows Settings > Privacy & security > Camera.";
       case MediaDeviceFailure.NotFound:
         return "No camera or microphone was found on this device.";
       case MediaDeviceFailure.DeviceInUse:
-        return "Your camera or microphone is busy in another app. Close it and try again.";
+        return "Your camera or microphone is in use by another tab or app. Close it or join in Audio Only mode.";
       default:
-        return "Could not access camera or microphone. Check device permissions and try again.";
+        break;
     }
   }
-  // Non-device errors (token failure, room connect failure) fall through to a generic
-  // message; the caller adds network context for thrown Error instances.
-  return "";
+
+  return "Could not access camera or microphone. If testing with two tabs on one PC, close the other tab or start with Audio Only.";
 };
 
 const refreshCameraCapability = async () => {
@@ -212,7 +235,8 @@ const refreshCameraCapability = async () => {
 };
 
 const createRoom = (appointmentId: number): Room => {
-  const resolution = engine.lowBandwidthMode ? VideoPresets.h360 : VideoPresets.h720;
+  // Use h540 / h360 so webcams that do not support fixed 720p 30fps don't fail OverconstrainedError
+  const resolution = engine.lowBandwidthMode ? VideoPresets.h360 : VideoPresets.h540;
   const room = new Room({
     adaptiveStream: true,
     dynacast: true,
@@ -256,7 +280,20 @@ const createRoom = (appointmentId: number): Room => {
     }
   });
   room.on(RoomEvent.MediaDevicesError, (error: Error) => {
-    setState((prev) => ({ ...prev, error: captureError(error) }));
+    const errorText = captureError(error);
+    const hasAudioTrack = Boolean(engine.state.localStream?.getAudioTracks().length);
+    if (hasAudioTrack) {
+      // Audio is functioning, so this is just a camera warning, not a fatal session error
+      setState((prev) => ({
+        ...prev,
+        isAudioOnly: true,
+        isLocalVideoEnabled: false,
+        notice: errorText || "Camera unavailable. Call is connected with audio.",
+        error: null,
+      }));
+    } else {
+      setState((prev) => ({ ...prev, error: errorText }));
+    }
   });
   room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Array<{ identity: string }>) => {
     const remoteSpeaking = speakers.some((speaker) => speaker.identity !== engine.identity);
