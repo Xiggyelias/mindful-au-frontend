@@ -132,6 +132,31 @@ export const PeerSpatialLounge = () => {
 
   // Navigation back to chat
   const handleBackToChat = useCallback(() => {
+    // Notify peer immediately that we are leaving so our avatar vanishes on their screen
+    if (supabaseChannelRef.current) {
+      try {
+        void supabaseChannelRef.current.send({
+          type: "broadcast",
+          event: "spatial-leave",
+          payload: {
+            id: localParticipantRef.current.id,
+            name: localParticipantRef.current.name,
+          },
+        });
+        void supabaseChannelRef.current.untrack();
+      } catch (err) {
+        console.warn("Error sending spatial-leave:", err);
+      }
+    }
+
+    if (livekitRoomRef.current) {
+      try {
+        void livekitRoomRef.current.disconnect();
+      } catch (err) {
+        console.warn("LiveKit disconnect error:", err);
+      }
+    }
+
     if (isPeerCounselor) {
       navigate(sessionId ? `/peer/chats?session_id=${sessionId}` : "/peer/chats");
     } else {
@@ -336,17 +361,9 @@ export const PeerSpatialLounge = () => {
         if (res?.assigned_partner) {
           setPartnerInfo(res.assigned_partner);
           const partnerAvatar = (res.assigned_partner.avatar || (isPeerCounselor ? "dino-green" : "dino-blue")) as AvatarStyle;
-          const partnerParticipant: LoungeParticipant = {
-            id: String(res.assigned_partner.id),
-            name: res.assigned_partner.name,
-            role: res.assigned_partner.role,
-            avatar: partnerAvatar,
-            x: res.assigned_partner.initial_x ?? (isPeerCounselor ? 600 : 400),
-            y: res.assigned_partner.initial_y ?? 320,
-            isTalking: false,
-            isMuted: false,
-          };
-          setParticipants([partnerParticipant]);
+          // IMPORTANT: Remote participants list must start EMPTY!
+          // Avatars are only created dynamically when the participant is ACTUALLY online and enters the room.
+          setParticipants([]);
 
           setChatMessages((prev) => [
             ...prev,
@@ -355,12 +372,12 @@ export const PeerSpatialLounge = () => {
               senderId: "system",
               senderName: "Heart-to-Heart Meadow",
               avatar: partnerAvatar,
-              text: `Paired with ${res.assigned_partner.name}. Walk closer to talk via proximity voice!`,
+              text: `Paired with ${res.assigned_partner.name}. Waiting for them to enter the meadow...`,
               timestamp: "Just now",
             },
           ]);
         } else if (!sessionId) {
-          // If standalone and no partner, start clean (no fake bots)
+          // If standalone and no partner, start clean
           setPartnerInfo(null);
           setParticipants([]);
         }
@@ -383,10 +400,30 @@ export const PeerSpatialLounge = () => {
           });
 
           room.on(RoomEvent.ParticipantConnected, (p) => {
+            setParticipants((prev) => {
+              if (prev.some((part) => part.id === p.identity)) return prev;
+              return [
+                ...prev,
+                {
+                  id: p.identity,
+                  name: p.name || "Partner",
+                  role: isPeerCounselor ? "student" : "peer_counselor",
+                  avatar: (isPeerCounselor ? "dino-blue" : "dino-green") as AvatarStyle,
+                  x: isPeerCounselor ? 600 : 400,
+                  y: 320,
+                  isTalking: false,
+                  isMuted: false,
+                },
+              ];
+            });
             toast.success(`🌿 ${p.name || "Your partner"} entered the Meadow!`);
           });
 
           room.on(RoomEvent.ParticipantDisconnected, (p) => {
+            setParticipants((prev) => prev.filter((part) => part.id !== p.identity));
+            if (audioManagerRef.current) {
+              audioManagerRef.current.detachTrack(p.identity);
+            }
             toast.info(`${p.name || "Partner"} left the Meadow.`);
           });
 
@@ -710,13 +747,33 @@ export const PeerSpatialLounge = () => {
     });
   }, []);
 
-  // Supabase Realtime broadcast channel subscription - stable throughout the session
+  // Supabase Realtime broadcast & presence channel subscription - stable throughout the session
   useEffect(() => {
     const channelKey = sessionId ? `spatial-lounge-${sessionId}` : `spatial-lounge-public`;
     const channel = supabase.channel(channelKey, {
-      config: { broadcast: { self: false } },
+      config: {
+        broadcast: { self: false },
+        presence: { key: localParticipantRef.current.id },
+      },
     });
     supabaseChannelRef.current = channel;
+
+    // Broadcast departure so partner immediately sees avatar vanish
+    const broadcastLeave = () => {
+      try {
+        void channel.send({
+          type: "broadcast",
+          event: "spatial-leave",
+          payload: {
+            id: localParticipantRef.current.id,
+            name: localParticipantRef.current.name,
+          },
+        });
+        void channel.untrack();
+      } catch (err) {
+        console.warn("Error broadcasting leave:", err);
+      }
+    };
 
     channel
       .on("broadcast", { event: "spatial-join" }, ({ payload }) => {
@@ -747,6 +804,14 @@ export const PeerSpatialLounge = () => {
           },
         });
       })
+      .on("broadcast", { event: "spatial-leave" }, ({ payload }) => {
+        if (!payload || !payload.id || payload.id === localParticipantRef.current.id) return;
+        setParticipants((prev) => prev.filter((p) => p.id !== payload.id));
+        if (audioManagerRef.current) {
+          audioManagerRef.current.detachTrack(payload.id);
+        }
+        toast.info(`👋 ${payload.name || "Partner"} left the Meadow.`);
+      })
       .on("broadcast", { event: "spatial-move" }, ({ payload }) => {
         if (!payload || payload.id === localParticipantRef.current.id) return;
         setParticipants((prev) => {
@@ -767,6 +832,42 @@ export const PeerSpatialLounge = () => {
           localParticipantRef.current.y
         );
       })
+      .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+        const leftId = key || (leftPresences && leftPresences[0]?.id);
+        if (leftId && leftId !== localParticipantRef.current.id) {
+          setParticipants((prev) => prev.filter((p) => p.id !== leftId));
+          if (audioManagerRef.current) {
+            audioManagerRef.current.detachTrack(leftId);
+          }
+          toast.info("Partner is no longer in the Meadow.");
+        }
+      })
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const activeRemoteIds = new Set<string>();
+
+        Object.values(state).forEach((presences: any) => {
+          if (Array.isArray(presences)) {
+            presences.forEach((p: any) => {
+              const pid = String(p.id || p.key);
+              if (pid && pid !== localParticipantRef.current.id) {
+                activeRemoteIds.add(pid);
+              }
+            });
+          }
+        });
+
+        // Clean up any participant who is no longer present in room
+        setParticipants((prev) => {
+          const remaining = prev.filter((p) => activeRemoteIds.has(p.id));
+          prev.forEach((p) => {
+            if (!activeRemoteIds.has(p.id)) {
+              audioManagerRef.current?.detachTrack(p.id);
+            }
+          });
+          return remaining;
+        });
+      })
       .on("broadcast", { event: "spatial-offer" }, ({ payload }) => {
         void handleRemoteOffer(payload);
       })
@@ -786,6 +887,15 @@ export const PeerSpatialLounge = () => {
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          void channel.track({
+            id: localParticipantRef.current.id,
+            name: localParticipantRef.current.name,
+            role: localParticipantRef.current.role,
+            avatar: localParticipantRef.current.avatar,
+            x: localParticipantRef.current.x,
+            y: localParticipantRef.current.y,
+          });
+
           void channel.send({
             type: "broadcast",
             event: "spatial-join",
@@ -802,7 +912,14 @@ export const PeerSpatialLounge = () => {
         }
       });
 
+    // Window navigation & close handlers
+    window.addEventListener("beforeunload", broadcastLeave);
+    window.addEventListener("pagehide", broadcastLeave);
+
     return () => {
+      window.removeEventListener("beforeunload", broadcastLeave);
+      window.removeEventListener("pagehide", broadcastLeave);
+      broadcastLeave();
       void supabase.removeChannel(channel);
       supabaseChannelRef.current = null;
     };
