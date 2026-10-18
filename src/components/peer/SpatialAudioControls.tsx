@@ -30,6 +30,7 @@ interface SpatialAudioControlsProps {
   micLevel?: number;
   isSidetoneActive?: boolean;
   onToggleSidetone?: () => void;
+  onTestSound?: () => void;
 }
 
 export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
@@ -48,6 +49,7 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
   micLevel = 0,
   isSidetoneActive = false,
   onToggleSidetone,
+  onTestSound,
 }) => {
   const [chatText, setChatText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -140,8 +142,8 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
             </select>
           </div>
 
-          {/* Sidetone / Mic Test Toggle */}
-          {isMicActive && onToggleSidetone && (
+          {/* Sidetone / Mic Loopback Toggle */}
+          {onToggleSidetone && (
             <Button
               type="button"
               size="sm"
@@ -149,13 +151,28 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               onClick={onToggleSidetone}
               className={`h-8 px-2.5 text-[11px] rounded-xl border transition-all ${
                 isSidetoneActive
-                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 font-semibold shadow-sm"
-                  : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 font-semibold shadow-sm animate-pulse"
+                  : "border-slate-800 bg-slate-900 text-slate-300 hover:text-white hover:border-slate-700"
               }`}
-              title="Hear your own microphone live to verify audio input and headphones"
+              title="Hear your own microphone live in your speakers or headphones"
             >
               <Headphones className="w-3.5 h-3.5 mr-1" />
-              <span>{isSidetoneActive ? "Testing Mic (Active)" : "Hear Myself"}</span>
+              <span>{isSidetoneActive ? "🔊 Hearing Myself (Live)" : "Hear Myself"}</span>
+            </Button>
+          )}
+
+          {/* Test Speakers Sound Check */}
+          {onTestSound && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onTestSound}
+              className="h-8 px-2 text-[11px] rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white"
+              title="Play a test chime to verify your speakers/headphones"
+            >
+              <Volume2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+              <span>Test Speakers</span>
             </Button>
           )}
         </div>
@@ -189,8 +206,8 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
             </span>
           </div>
 
-          {/* Live Mic Level Audio Activity Bar */}
-          {isMicActive && (
+          {/* Live Mic Level Audio Activity Bar / Status */}
+          {isMicActive ? (
             <div className="flex items-center gap-2 text-[10px] text-slate-400 animate-in fade-in">
               <span>Input:</span>
               <div className="w-24 h-1.5 rounded-full bg-slate-800 border border-slate-700/80 overflow-hidden flex items-center">
@@ -202,7 +219,16 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               <span className={micLevel > 0.04 ? "text-emerald-400 font-bold" : "text-slate-400"}>
                 {micLevel > 0.04 ? "Sound Detected" : "Speak into mic..."}
               </span>
+              {isSidetoneActive && (
+                <span className="ml-1 text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-1.5 py-0.5 rounded-full font-semibold">
+                  🔊 Loopback On
+                </span>
+              )}
             </div>
+          ) : (
+            <span className="text-[10px] text-slate-400">
+              Click &quot;Hear Myself&quot; or &quot;Request Audio&quot; to test your mic
+            </span>
           )}
         </div>
 

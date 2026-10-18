@@ -24,6 +24,7 @@ export class SpatialAudioManager {
   private isAmbientPlaying: boolean = false;
   private speakerPos: { x: number; y: number } = { x: 340, y: 220 };
   private sidetoneNode: { source: MediaStreamAudioSourceNode; gain: GainNode } | null = null;
+  private sidetoneAudioElement: HTMLAudioElement | null = null;
 
   constructor(maxDistance: number = 650) {
     this.maxDistance = maxDistance;
@@ -163,6 +164,16 @@ export class SpatialAudioManager {
     node.gainNode.gain.setTargetAtTime(targetGain, now, 0.04);
     node.pannerNode.pan.setTargetAtTime(targetPan, now, 0.04);
 
+    // Fail-safe direct audio playback: if Web Audio is suspended or throttled,
+    // ensure HTMLAudioElement outputs the spatial volume directly so audio is never silent.
+    if (node.audioElement) {
+      if (this.audioCtx.state === "running") {
+        node.audioElement.volume = 0.0001;
+      } else {
+        node.audioElement.volume = Math.max(0.1, Math.min(1.0, targetGain));
+      }
+    }
+
     return { distance, inRange, volume: targetGain };
   }
 
@@ -189,11 +200,13 @@ export class SpatialAudioManager {
   }
 
   /**
-   * Enable local microphone sidetone so user can test their mic and hear themselves
+   * Enable local microphone sidetone / loopback so user hears their own voice back live
    */
-  public enableSidetone(stream: MediaStream, volume: number = 0.6): void {
+  public enableSidetone(stream: MediaStream, volume: number = 0.8): void {
     this.disableSidetone();
     const ctx = this.ensureContext();
+
+    // 1. Web Audio graph loopback
     try {
       const source = ctx.createMediaStreamSource(stream);
       const gain = ctx.createGain();
@@ -202,7 +215,28 @@ export class SpatialAudioManager {
       gain.connect(ctx.destination);
       this.sidetoneNode = { source, gain };
     } catch (err) {
-      console.warn("[SpatialAudio] Sidetone activation failed:", err);
+      console.warn("[SpatialAudio] Web Audio sidetone failed:", err);
+    }
+
+    // 2. Direct hardware HTMLAudioElement loopback (bypasses browser AEC ducking so voice is 100% audible)
+    try {
+      let loopback = document.getElementById("spatial-mic-loopback") as HTMLAudioElement | null;
+      if (!loopback) {
+        loopback = document.createElement("audio");
+        loopback.id = "spatial-mic-loopback";
+        loopback.autoplay = true;
+        loopback.playsInline = true;
+        document.body.appendChild(loopback);
+      }
+      loopback.srcObject = stream;
+      loopback.volume = Math.max(0.1, Math.min(1.0, volume));
+      loopback.muted = false;
+      void loopback.play().catch((err) => {
+        console.warn("[SpatialAudio] Direct loopback play error:", err);
+      });
+      this.sidetoneAudioElement = loopback;
+    } catch (err) {
+      console.warn("[SpatialAudio] HTMLAudioElement loopback failed:", err);
     }
   }
 
@@ -216,10 +250,62 @@ export class SpatialAudioManager {
       }
       this.sidetoneNode = null;
     }
+    if (this.sidetoneAudioElement) {
+      try {
+        this.sidetoneAudioElement.pause();
+        this.sidetoneAudioElement.srcObject = null;
+        this.sidetoneAudioElement.remove();
+      } catch {
+        // Ignored
+      }
+      this.sidetoneAudioElement = null;
+    }
   }
 
   public isSidetoneActive(): boolean {
-    return this.sidetoneNode !== null;
+    return this.sidetoneNode !== null || this.sidetoneAudioElement !== null;
+  }
+
+  /**
+   * Play an audible acoustic confirmation chime (mic on, mic off, test tone)
+   */
+  public playChime(type: "mic-on" | "mic-off" | "test"): void {
+    const ctx = this.ensureContext();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    if (type === "mic-on") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.08);
+      osc.frequency.setValueAtTime(783.99, now + 0.16);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.36);
+    } else if (type === "mic-off") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(783.99, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.08);
+      osc.frequency.setValueAtTime(523.25, now + 0.16);
+      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.31);
+    } else {
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(554.37, now + 0.12);
+      osc.frequency.setValueAtTime(659.25, now + 0.24);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc.start(now);
+      osc.stop(now + 0.56);
+    }
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
   }
 
   /**
