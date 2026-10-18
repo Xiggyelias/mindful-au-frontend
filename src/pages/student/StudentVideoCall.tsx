@@ -102,7 +102,9 @@ const StudentVideoCall = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
-  const [activeAppointmentId, setActiveAppointmentId] = useState<string | null>(null);
+  const [activeAppointmentId, setActiveAppointmentId] = useState<string | null>(
+    () => searchParams.get("appointment_id") || null
+  );
   const [checkedInCalls, setCheckedInCalls] = useState<Set<number>>(() => {
     try {
       const raw = sessionStorage.getItem("pre_session_checked_in_apt_ids");
@@ -265,9 +267,15 @@ const StudentVideoCall = () => {
             return false;
           }
 
+          if (requestedAppointmentId !== null && Number(appointment.id) === requestedAppointmentId) {
+            return true;
+          }
+
           const callWindow = getVideoCallWindowStatus(
             appointment.scheduled_at,
-            appointment.duration_minutes
+            appointment.duration_minutes,
+            undefined,
+            Boolean(appointment.is_emergency)
           );
 
           return !callWindow.isExpired;
@@ -294,7 +302,9 @@ const StudentVideoCall = () => {
         return next;
       });
       if (availableNow.length === 0) {
-        setActiveAppointmentId(null);
+        if (requestedAppointmentId === null) {
+          setActiveAppointmentId(null);
+        }
         return;
       }
 
@@ -872,6 +882,8 @@ const StudentVideoCall = () => {
 
       if (isAcceptedCallSignal(payload)) {
         logCallSignal("student: outgoing call accepted -> CONNECTED", payload);
+        stopCallRingtone();
+        setOutgoingCallMode(null);
         toast.success("Your counselor accepted. Connecting…");
         return;
       }
@@ -880,7 +892,7 @@ const StudentVideoCall = () => {
         return;
       }
 
-      if (isConnected) {
+      if (isConnected || isConnecting || localStream) {
         return;
       }
 
@@ -896,7 +908,7 @@ const StudentVideoCall = () => {
           : "The call was not answered."
       );
     },
-    [activeAppointmentId, endCall, isConnected]
+    [activeAppointmentId, endCall, isConnected, isConnecting, localStream]
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
@@ -982,17 +994,18 @@ const StudentVideoCall = () => {
     }
 
     if (autoStartedRef.current) return;
-    if (!activeAppointment || !activeAppointmentId) return;
+    if (!activeAppointmentId) return;
     if (localStream || isConnecting || isStartingMode) return;
     if (!isSignalingReady || !isOnline) return;
 
     const isAcceptedAction = searchParams.get("action") === "accept";
     const explicitCallerId =
-      searchParams.get("caller_id") || String(activeAppointment.counselor_id || "");
+      searchParams.get("caller_id") || String(activeAppointment?.counselor_id || "");
 
     // If navigated here via Accept (action=accept or isIncomingCall), accept the counselor's incoming call directly.
     // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
     if (isAcceptedAction || isIncomingCall) {
+      stopCallRingtone();
       autoStartedRef.current = true;
       void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
       const nextParams = new URLSearchParams(searchParams);
@@ -1002,6 +1015,8 @@ const StudentVideoCall = () => {
       setSearchParams(nextParams, { replace: true });
       return;
     }
+
+    if (!activeAppointment) return;
 
     const callWindow = getVideoCallWindowStatus(
       activeAppointment.scheduled_at,

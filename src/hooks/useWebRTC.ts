@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBandwidthMode } from "@/hooks/useBandwidthMode";
 import {
@@ -107,6 +107,9 @@ type WebRTCEngine = {
   state: WebRTCState;
   peerConnection: RTCPeerConnection | null;
   channel: ReturnType<typeof supabase.channel> | null;
+  channelSubscribedPromise: Promise<void> | null;
+  channelSubscribedResolver: (() => void) | null;
+  remotePeerName: string | null;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   pendingIceCandidates: RTCIceCandidateInit[];
@@ -171,6 +174,9 @@ const engine: WebRTCEngine = {
   state: { ...DEFAULT_ENGINE_STATE },
   peerConnection: null,
   channel: null,
+  channelSubscribedPromise: null,
+  channelSubscribedResolver: null,
+  remotePeerName: null,
   localStream: null,
   remoteStream: null,
   pendingIceCandidates: [],
@@ -248,6 +254,71 @@ const clearPersistedActiveCall = () => {
     localStorage.removeItem(ACTIVE_CALL_STORAGE_KEY);
   } catch {
     // Ignore storage failures.
+  }
+};
+
+export type VideoElementRef = {
+  (node: HTMLVideoElement | null): void;
+  current: HTMLVideoElement | null;
+};
+
+const createVideoRefCallback = (type: "local" | "remote"): VideoElementRef => {
+  const isLocal = type === "local";
+  const fn: VideoElementRef = (el: HTMLVideoElement | null) => {
+    const set = isLocal ? engine.localVideoElements : engine.remoteVideoElements;
+    const old = fn.current;
+    if (old && old !== el) {
+      set.delete(old);
+    }
+    fn.current = el;
+    if (el) {
+      set.add(el);
+      const stream = isLocal ? engine.localStream : engine.remoteStream;
+      if (stream) {
+        if (el.srcObject !== stream) {
+          el.srcObject = stream;
+        }
+        playMediaElement(el, isLocal);
+      }
+    }
+  };
+  fn.current = null;
+  return fn;
+};
+
+/**
+ * Robust broadcast sender that waits for active channel subscription before sending,
+ * preventing lost offers, answers, or call acceptance signals on page navigation.
+ */
+const sendEngineBroadcast = async (event: string, payload: Record<string, unknown>): Promise<boolean> => {
+  if (!engine.channel) {
+    logWebRTC(`[WebRTC] Cannot broadcast ${event}: channel is null`);
+    return false;
+  }
+
+  // If the channel is actively subscribing, await subscription status before sending
+  if (engine.channelSubscribedPromise) {
+    try {
+      await Promise.race([
+        engine.channelSubscribedPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Channel subscribe timeout")), 3500)),
+      ]);
+    } catch {
+      logWebRTC(`[WebRTC] Broadcast ${event} proceeding after subscription wait`);
+    }
+  }
+
+  try {
+    const res = await engine.channel.send({
+      type: "broadcast",
+      event,
+      payload,
+    });
+    logWebRTC(`[WebRTC] Broadcast sent: ${event}`, { status: res });
+    return res === "ok";
+  } catch (err) {
+    console.error(`[WebRTC] Failed to send broadcast ${event}:`, err);
+    return false;
   }
 };
 
@@ -583,14 +654,10 @@ const sendEngineOffer = async (connection: RTCPeerConnection, options?: { iceRes
 
     logWebRTC("[WebRTC] Sending offer, signaling state:", connection.signalingState);
 
-    await engine.channel.send({
-      type: "broadcast",
-      event: "offer",
-      payload: {
-        offer,
-        senderId: String(engine.userId || ""),
-        audioOnly: stream.getVideoTracks().length === 0,
-      },
+    await sendEngineBroadcast("offer", {
+      offer,
+      senderId: String(engine.userId || ""),
+      audioOnly: stream.getVideoTracks().length === 0,
     });
 
     return true;
@@ -620,13 +687,9 @@ const createEnginePeerConnection = () => {
 
   connection.onicecandidate = async (event) => {
     if (event.candidate && engine.channel) {
-      await engine.channel.send({
-        type: "broadcast",
-        event: "ice-candidate",
-        payload: {
-          candidate: event.candidate,
-          senderId: String(engine.userId || ""),
-        },
+      await sendEngineBroadcast("ice-candidate", {
+        candidate: event.candidate,
+        senderId: String(engine.userId || ""),
       });
     }
   };
@@ -686,6 +749,7 @@ const createEnginePeerConnection = () => {
       engine.reconnectAttempts = 0;
       clearEngineConnectionTimeout();
       clearEngineReconnectLoop();
+      stopCallRingtone();
       if (engine.sessionId && engine.userId) {
         persistActiveCall(engine.sessionId, engine.userId, Date.now() + RECONNECT_WINDOW_MS, engine.state.isAudioOnly);
       }
@@ -1017,12 +1081,12 @@ const cleanupEngineCall = (broadcastEnd = true, clearMedia = true) => {
   }
 
   if (broadcastEnd && engine.channel) {
-    void engine.channel.send({
-      type: "broadcast",
-      event: "call-ended",
-      payload: { senderId: String(engine.userId || "") },
-    });
+    void sendEngineBroadcast("call-ended", { senderId: String(engine.userId || "") });
   }
+
+  engine.channelSubscribedResolver?.();
+  engine.channelSubscribedResolver = null;
+  engine.channelSubscribedPromise = null;
 
   clearPersistedActiveCall();
 
@@ -1074,6 +1138,12 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
 
   engine.sessionId = sessionId;
   engine.userId = normalizedUserId;
+
+  let resolver: (() => void) | null = null;
+  engine.channelSubscribedPromise = new Promise((resolve) => {
+    resolver = resolve;
+  });
+  engine.channelSubscribedResolver = resolver;
 
   const channel = supabase.channel(`video-call-${sessionId}`);
   engine.channel = channel;
@@ -1198,14 +1268,14 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
     })
     .on("broadcast", { event: "call-accepted" }, ({ payload }) => {
       const normalizedSenderId = String(payload?.senderId || "");
-      const normalizedTargetId = String(payload?.targetId || "");
       if (
         !normalizedSenderId ||
-        normalizedSenderId === normalizedUserId ||
-        (normalizedTargetId && normalizedTargetId !== normalizedUserId)
+        normalizedSenderId === normalizedUserId
       ) {
         return;
       }
+
+      stopCallRingtone();
 
       const pendingRequest = engine.pendingCallRequest;
       if (!pendingRequest && !engine.localStream) {
@@ -1347,17 +1417,6 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
               "[WebRTC] Ignoring incoming offer during glare negotiation (impolite peer defers)."
             );
             engine.ignoreOffer = false;
-            if (needsAttach) {
-              closeEnginePeerConnection(connection);
-              if (engine.peerConnection === connection) {
-                engine.peerConnection = null;
-              }
-              engine.pendingIceCandidates = [];
-            }
-            if (engine.remotePeerId === senderId) {
-              engine.remotePeerId = null;
-            }
-            setEngineState((prev) => ({ ...prev, isConnecting: false }));
             return;
           }
 
@@ -1391,13 +1450,9 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
 
           logWebRTC("[WebRTC] Sending answer, signaling state:", connection.signalingState);
 
-          await engine.channel?.send({
-            type: "broadcast",
-            event: "answer",
-            payload: {
-              answer,
-              senderId: normalizedUserId,
-            },
+          await sendEngineBroadcast("answer", {
+            answer,
+            senderId: normalizedUserId,
           });
 
           // Now that the answer has been sent, it's safe to clear the ignore flag
@@ -1510,13 +1565,22 @@ const ensureEngineChannel = (sessionId: string, userId: string) => {
       if (status === "SUBSCRIBED") {
         logWebRTC(`[WebRTC] Successfully subscribed to channel: video-call-${sessionId}`);
         setEngineState((prev) => ({ ...prev, isSignalingReady: true, error: null, notice: null }));
+        engine.channelSubscribedResolver?.();
+        engine.channelSubscribedResolver = null;
+        engine.channelSubscribedPromise = null;
       } else if (status === "CHANNEL_ERROR") {
         console.error(`[WebRTC] Channel error for session: ${sessionId}`);
         setEngineState((prev) => ({ ...prev, isSignalingReady: false }));
         setEngineConnectionError("Call signaling channel unavailable.");
+        engine.channelSubscribedResolver?.();
+        engine.channelSubscribedResolver = null;
+        engine.channelSubscribedPromise = null;
       } else if (status === "TIMED_OUT" || status === "CLOSED") {
         setEngineState((prev) => ({ ...prev, isSignalingReady: false }));
         setEngineConnectionError("Call signaling channel timed out or closed.");
+        engine.channelSubscribedResolver?.();
+        engine.channelSubscribedResolver = null;
+        engine.channelSubscribedPromise = null;
       }
     });
 };
@@ -1621,8 +1685,8 @@ export const useEngineRingingSessionId = (): string | null => {
 
 export const useWebRTC = (sessionId: string, userId: string) => {
   const { lowBandwidthMode } = useBandwidthMode();
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localVideoRef = useMemo(() => createVideoRefCallback("local"), []);
+  const remoteVideoRef = useMemo(() => createVideoRefCallback("remote"), []);
   const [state, setState] = useState<WebRTCState>(() => engine.state);
 
   useEffect(() => {
@@ -1750,13 +1814,9 @@ export const useWebRTC = (sessionId: string, userId: string) => {
         engine.callRequestResentTo = null;
         engine.ignoreOffer = false;
         engine.reconnectAttempts = 0;
-        await engine.channel.send({
-          type: "broadcast",
-          event: "call-request",
-          payload: {
-            senderId: String(userId || ""),
-            audioOnly: Boolean(options.audioOnly),
-          },
+        await sendEngineBroadcast("call-request", {
+          senderId: String(userId || ""),
+          audioOnly: Boolean(options.audioOnly),
         });
 
         startEnginePendingCallTimeout();
@@ -1777,6 +1837,7 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 
   const acceptIncomingCall = useCallback(
     async (explicitCallerId?: string, audioOnlyOverride?: boolean) => {
+      stopCallRingtone();
       const incomingCallerId = explicitCallerId || engine.state.incomingCallerId;
       const incomingAudioOnly = audioOnlyOverride ?? Boolean(engine.state.incomingAudioOnly);
       ensureEngineChannel(sessionId, userId);
@@ -1806,14 +1867,10 @@ export const useWebRTC = (sessionId: string, userId: string) => {
           incomingCallerId: null,
           incomingAudioOnly: false,
         }));
-        await engine.channel.send({
-          type: "broadcast",
-          event: "call-rejected",
-          payload: {
-            senderId: String(userId || ""),
-            targetId: incomingCallerId,
-            reason: "media-unavailable",
-          },
+        await sendEngineBroadcast("call-rejected", {
+          senderId: String(userId || ""),
+          targetId: incomingCallerId,
+          reason: "media-unavailable",
         });
         return false;
       }
@@ -1827,36 +1884,32 @@ export const useWebRTC = (sessionId: string, userId: string) => {
       attachEngineLocalTracks(connection, stream);
       engine.remotePeerId = incomingCallerId;
 
-      await engine.channel.send({
-        type: "broadcast",
-        event: "call-accepted",
-        payload: {
-          senderId: String(userId || ""),
-          targetId: incomingCallerId,
-        },
+      await sendEngineBroadcast("call-accepted", {
+        senderId: String(userId || ""),
+        targetId: incomingCallerId,
       });
 
-      // Connection guarantee: if the caller's SDP offer has not arrived within 1500ms
-      // (due to channel subscription delay or network packet jitter), re-announce once so caller connects.
-      setTimeout(() => {
-        if (
-          engine.state.isConnecting &&
-          !engine.state.isConnected &&
-          engine.channel &&
-          engine.remotePeerId === incomingCallerId &&
-          (!engine.peerConnection || engine.peerConnection.signalingState === "stable")
-        ) {
-          logWebRTC("[WebRTC] Re-announcing call-accepted to ensure caller connects");
-          void engine.channel.send({
-            type: "broadcast",
-            event: "call-accepted",
-            payload: {
+      // Connection guarantee: if the caller's SDP offer has not arrived within 800ms / 1800ms
+      // (due to channel subscription delay or network packet jitter), re-announce so caller connects.
+      const retryAccepted = (delay: number) => {
+        setTimeout(() => {
+          if (
+            engine.state.isConnecting &&
+            !engine.state.isConnected &&
+            engine.channel &&
+            engine.remotePeerId === incomingCallerId &&
+            (!engine.peerConnection || engine.peerConnection.signalingState === "stable")
+          ) {
+            logWebRTC("[WebRTC] Re-announcing call-accepted to ensure caller connects");
+            void sendEngineBroadcast("call-accepted", {
               senderId: String(userId || ""),
               targetId: incomingCallerId,
-            },
-          });
-        }
-      }, 1500);
+            });
+          }
+        }, delay);
+      };
+      retryAccepted(800);
+      retryAccepted(1800);
 
       return true;
     },
@@ -2410,8 +2463,8 @@ export const useWebRTC = (sessionId: string, userId: string) => {
 export const useActiveCallDock = () => {
   const [state, setState] = useState<WebRTCState>(() => engine.state);
   const [sessionId, setSessionId] = useState<string>(() => engine.sessionId);
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localVideoRef = useMemo(() => createVideoRefCallback("local"), []);
+  const remoteVideoRef = useMemo(() => createVideoRefCallback("remote"), []);
 
   useEffect(() => {
     const listener: WebRTCEngineListener = (nextState) => {
@@ -2429,29 +2482,21 @@ export const useActiveCallDock = () => {
   useEffect(() => {
     const el = localVideoRef.current;
     if (el && state.localStream) {
-      engine.localVideoElements.add(el);
-      el.srcObject = state.localStream;
+      if (el.srcObject !== state.localStream) {
+        el.srcObject = state.localStream;
+      }
       playMediaElement(el, true);
     }
-    return () => {
-      if (el) {
-        engine.localVideoElements.delete(el);
-      }
-    };
   }, [state.localStream, state.isAudioOnly, state.isLocalVideoEnabled]);
 
   useEffect(() => {
     const el = remoteVideoRef.current;
     if (el && state.remoteStream) {
-      engine.remoteVideoElements.add(el);
-      el.srcObject = state.remoteStream;
+      if (el.srcObject !== state.remoteStream) {
+        el.srcObject = state.remoteStream;
+      }
       playMediaElement(el, false);
     }
-    return () => {
-      if (el) {
-        engine.remoteVideoElements.delete(el);
-      }
-    };
   }, [state.remoteStream, state.remoteHasVideo, state.remoteMediaEpoch]);
 
   const endCall = useCallback(() => {
@@ -2474,6 +2519,7 @@ export const useActiveCallDock = () => {
     isMuted,
     localVideoRef,
     remoteVideoRef,
+    remotePeerName: engine.remotePeerName,
     endCall,
     toggleMute,
   };

@@ -101,7 +101,9 @@ const CounselorVideo = () => {
   const beganSessionStartRef = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    () => searchParams.get("appointment_id") || null
+  );
   const [pendingSessionStartId, setPendingSessionStartId] = useState<string | null>(null);
   const [pendingCallMode, setPendingCallMode] = useState<"video" | "audio">("video");
   const [outgoingCallMode, setOutgoingCallMode] = useState<"video" | "audio" | null>(null);
@@ -242,6 +244,9 @@ const CounselorVideo = () => {
           if (!isVideoEnabledAppointment(apt.notes)) return false;
           const st = String(apt.status || "").toLowerCase();
           if (!(st === "scheduled" || st === "confirmed")) return false;
+          if (requestedAppointmentId !== null && Number(apt.id) === requestedAppointmentId) {
+            return true;
+          }
           const callWindow = getVideoCallWindowStatus(
             apt.scheduled_at,
             apt.duration_minutes,
@@ -259,7 +264,9 @@ const CounselorVideo = () => {
       setUpcomingSessions(videoAppointments);
 
       if (videoAppointments.length === 0) {
-        setActiveSessionId(null);
+        if (requestedAppointmentId === null) {
+          setActiveSessionId(null);
+        }
         return;
       }
 
@@ -700,6 +707,8 @@ const CounselorVideo = () => {
 
       if (isAcceptedCallSignal(payload)) {
         logCallSignal("counselor: outgoing call accepted -> CONNECTED", payload);
+        stopCallRingtone();
+        setOutgoingCallMode(null);
         toast.success("Student accepted. Connecting…");
         return;
       }
@@ -709,8 +718,8 @@ const CounselorVideo = () => {
       }
 
       // Only tear down while we are still ringing out — an ENDED signal that arrives
-      // after the media session is up belongs to the previous ring, not this call.
-      if (isConnected) {
+      // after the media session is up (or connecting) belongs to the previous ring, not this call.
+      if (isConnected || isConnecting || localStream) {
         return;
       }
 
@@ -725,7 +734,7 @@ const CounselorVideo = () => {
         payload.status === "declined" ? "The student declined the call." : "The call was not answered."
       );
     },
-    [activeSessionId, endCall, isConnected, loadSessions]
+    [activeSessionId, endCall, isConnected, isConnecting, localStream, loadSessions]
   );
 
   useIncomingCallWakeSubscription(user?.id, Boolean(user?.id), handleOutgoingCallSignal);
@@ -937,17 +946,18 @@ const CounselorVideo = () => {
     }
 
     if (autoStartedRef.current) return;
-    if (!activeSession || !activeSessionId) return;
+    if (!activeSessionId) return;
     if (localStream || isConnecting || isStartingActiveSession) return;
     if (!isSignalingReady || !isOnline) return;
 
     const isAcceptedAction = searchParams.get("action") === "accept";
     const explicitCallerId =
-      searchParams.get("caller_id") || String(activeSession.student_id || "");
+      searchParams.get("caller_id") || String(activeSession?.student_id || "");
 
     // If navigated here via Accept (action=accept or isIncomingCall), accept the student's incoming call directly.
     // NEVER dial back or place a conflicting outgoing call, which scrambles signaling (caller-receiver-caller bug).
     if (isAcceptedAction || isIncomingCall) {
+      stopCallRingtone();
       autoStartedRef.current = true;
       void acceptIncomingCall(explicitCallerId, requestedMode === "audio");
       const nextParams = new URLSearchParams(searchParams);
@@ -957,6 +967,8 @@ const CounselorVideo = () => {
       setSearchParams(nextParams, { replace: true });
       return;
     }
+
+    if (!activeSession) return;
 
     const callWindow = getVideoCallWindowStatus(
       activeSession.scheduled_at,

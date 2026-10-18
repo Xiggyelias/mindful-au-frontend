@@ -444,8 +444,45 @@ const clearRingWatchdog = () => {
 };
 
 /**
+ * Unconditionally and immediately silence all call ringtones, clear all owners, and reset audio elements.
+ */
+export function forceStopCallRingtone() {
+  ringOwners.clear();
+  clearRingWatchdog();
+  stopFallbackRing();
+  clearRingStopTimer();
+  clearHtml5RingRamp();
+
+  try {
+    audioCallPlayer.pause();
+    audioCallPlayer.currentTime = 0;
+    videoCallPlayer.pause();
+    videoCallPlayer.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+
+  const ctx = getAudioContext();
+  if (ctx) {
+    const t = ctx.currentTime;
+    const gAudio = ringGainByEl.get(audioCallPlayer);
+    if (gAudio) {
+      gAudio.gain.cancelScheduledValues(t);
+      gAudio.gain.setValueAtTime(0, t);
+    }
+    const gVideo = ringGainByEl.get(videoCallPlayer);
+    if (gVideo) {
+      gVideo.gain.cancelScheduledValues(t);
+      gVideo.gain.setValueAtTime(0, t);
+    }
+  }
+
+  activeRingKind = null;
+}
+
+/**
  * Stop the ring for one owner. The sound only actually stops once no owner wants it.
- * Called without an owner it force-stops for everyone (teardown / global mute paths).
+ * Called without an owner it force-stops for everyone (teardown / answer / global mute paths).
  */
 export function stopCallRingtone(owner?: CallRingtoneOwner) {
   if (owner) {
@@ -453,45 +490,8 @@ export function stopCallRingtone(owner?: CallRingtoneOwner) {
     if (ringOwners.size > 0) {
       return;
     }
-  } else {
-    ringOwners.clear();
   }
-
-  clearRingWatchdog();
-  stopFallbackRing();
-  clearRingStopTimer();
-  clearHtml5RingRamp();
-
-  // If force stopping for all owners, pause and reset IMMEDIATELY without lingering fade
-  if (!owner) {
-    try {
-      audioCallPlayer.pause();
-      audioCallPlayer.currentTime = 0;
-      videoCallPlayer.pause();
-      videoCallPlayer.currentTime = 0;
-    } catch {
-      /* ignore */
-    }
-  } else {
-    fadeOutRingElement(audioCallPlayer);
-    fadeOutRingElement(videoCallPlayer);
-  }
-
-  const ctx = getAudioContext();
-  const needsTimer = Boolean(
-    owner && ctx && (ringGainByEl.get(audioCallPlayer) || ringGainByEl.get(videoCallPlayer))
-  );
-  if (needsTimer) {
-    ringStopTimer = window.setTimeout(() => {
-      audioCallPlayer.pause();
-      audioCallPlayer.currentTime = 0;
-      videoCallPlayer.pause();
-      videoCallPlayer.currentTime = 0;
-      ringStopTimer = null;
-    }, RING_FADE_OUT_SEC * 1000 + 40);
-  }
-
-  activeRingKind = null;
+  forceStopCallRingtone();
 }
 
 function ringEffectiveVolume(kind: "audio" | "video"): number {

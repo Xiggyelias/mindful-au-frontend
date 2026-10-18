@@ -98,6 +98,7 @@ export function FloatingCallDock() {
     localStream,
     remoteStream,
     remoteHasVideo,
+    isLocalVideoEnabled,
     isConnected,
     isConnecting,
     isAudioOnly,
@@ -105,7 +106,9 @@ export function FloatingCallDock() {
     isMuted,
     isIncomingCall,
     sessionId,
+    localVideoRef,
     remoteVideoRef,
+    remotePeerName,
     endCall,
     toggleMute,
   } = activeDock;
@@ -254,7 +257,9 @@ export function FloatingCallDock() {
   }, [callStatus, elapsedSeconds]);
 
   const showRemoteVideo = Boolean(remoteStream && remoteHasVideo && !isAudioOnly);
-  const peerInitial = (user?.profile?.full_name?.[0] ?? "•").toUpperCase();
+  const showLocalVideo = Boolean(localStream && isLocalVideoEnabled && !isAudioOnly);
+  const displayPeerName = remotePeerName || (role === "student" ? "Counselor" : "Student");
+  const peerInitial = (displayPeerName?.[0] ?? "•").toUpperCase();
 
   const goToCall = () => {
     if (suppressClickRef.current || hasDraggedRef.current) return;
@@ -327,30 +332,61 @@ export function FloatingCallDock() {
           className="group relative block h-32 w-full overflow-hidden bg-black text-left cursor-pointer"
           aria-label="Return to call"
         >
-          {/* Remote video element */}
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className={cn(
-              "absolute inset-0 h-full w-full object-cover pointer-events-none",
-              showRemoteVideo ? "opacity-100" : "opacity-0"
-            )}
-          />
-          {!showRemoteVideo && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.25),transparent_45%),linear-gradient(180deg,#0b141a,#111b21)]">
+          {showRemoteVideo ? (
+            <>
+              {/* Remote video element */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+              />
+              {/* Local video PiP in corner */}
+              {showLocalVideo && (
+                <div className="absolute bottom-2 right-2 h-10 w-14 overflow-hidden rounded-md border border-white/25 bg-black/60 shadow-md">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover"
+                    style={{ transform: "scaleX(-1)" }}
+                  />
+                </div>
+              )}
+            </>
+          ) : showLocalVideo ? (
+            <>
+              {/* Local video full when remote hasn't arrived yet */}
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                style={{ transform: "scaleX(-1)" }}
+              />
+              <div className="absolute bottom-2 inset-x-2 rounded bg-black/65 px-2 py-0.5 text-center text-[10px] text-white/90 backdrop-blur-sm">
+                {isConnected ? "Waiting for peer video…" : "Connecting…"}
+              </div>
+            </>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.25),transparent_45%),linear-gradient(180deg,#0b141a,#111b21)]">
               <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/10 text-xl font-semibold">
                 {peerInitial}
               </div>
+              <span className="text-[11px] font-medium text-white/70">
+                {displayPeerName}
+              </span>
             </div>
           )}
 
-          <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent px-3 py-2">
+          <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent px-3 py-2 z-10">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white/90">
-              {isAudioOnly || !showRemoteVideo ? (
-                <Mic className="h-3.5 w-3.5" aria-hidden />
+              {isAudioOnly ? (
+                <Mic className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
               ) : (
-                <Video className="h-3.5 w-3.5" aria-hidden />
+                <Video className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
               )}
               <span className={cn("tabular-nums", isConnecting && "animate-pulse")}>
                 {statusLabel}
@@ -374,7 +410,7 @@ export function FloatingCallDock() {
               {peerInitial}
             </div>
             <span className="text-[11px] font-medium tabular-nums text-white/90">
-              {statusLabel}
+              {displayPeerName} · {statusLabel}
             </span>
           </div>
           <span className="text-[11px] text-white/60 hover:text-white flex items-center gap-1">

@@ -18,6 +18,7 @@ import {
   isTerminalCallSignal,
   logCallSignal,
 } from "@/lib/incomingCallRealtime";
+import { stopCallRingtone } from "@/lib/sounds/notificationSoundManager";
 
 export type StudentIncomingCallItem = {
   id: number;
@@ -40,7 +41,13 @@ export function StudentIncomingCallBanner({
   onActiveChange?: (active: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const activeDock = useActiveCallDock();
+
+  const currentUrlAppointmentId = location.pathname.includes("/video")
+    ? new URLSearchParams(location.search).get("appointment_id")
+    : null;
 
   const fetchCalls = useCallback(async () => {
     const res = await api.getStudentIncomingCalls();
@@ -69,6 +76,14 @@ export function StudentIncomingCallBanner({
     // The overlay timing out is a missed call, not a rejection — reporting it as
     // "declined" told the counselor the student had turned them away.
     onAutoDismissCall: async (call) => {
+      // Do not mark as missed if the student is currently on the video call page for this appointment
+      // or already in an active call session
+      if (
+        (currentUrlAppointmentId && String(call.appointment_id) === String(currentUrlAppointmentId)) ||
+        activeDock.isConnected
+      ) {
+        return;
+      }
       try {
         await api.updateStudentIncomingCall(call.id, "missed");
       } catch {
@@ -96,14 +111,10 @@ export function StudentIncomingCallBanner({
 
   const engineRingingSessionId = useEngineRingingSessionId();
 
-  const location = useLocation();
-  const currentUrlAppointmentId = location.pathname.includes("/video")
-    ? new URLSearchParams(location.search).get("appointment_id")
-    : null;
-
   const handleAccept = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
     try {
+      stopCallRingtone();
       logCallSignal("student: call accepted", { call_id: call.id, appointment_id: call.appointment_id });
       await api.updateStudentIncomingCall(call.id, "accepted");
       removeCallLocal(call.id);
@@ -129,6 +140,7 @@ export function StudentIncomingCallBanner({
   const handleDecline = async (call: StudentIncomingCallItem) => {
     setBusyId(call.id);
     try {
+      stopCallRingtone();
       logCallSignal("student: call declined", {
         call_id: call.id,
         appointment_id: call.appointment_id,
@@ -143,10 +155,8 @@ export function StudentIncomingCallBanner({
     }
   };
 
-  const activeDock = useActiveCallDock();
-
   // Only suppress if the student is already actively connected to a call for this appointment
-  // or is currently on the call page for this appointment.
+  // or the call page's WebRTC engine is already showing its own ring prompt.
   const visibleCalls = calls.filter((c) => {
     if (engineRingingSessionId && String(c.appointment_id) === String(engineRingingSessionId)) {
       return false;
@@ -156,9 +166,6 @@ export function StudentIncomingCallBanner({
       activeDock.sessionId &&
       String(c.appointment_id) === String(activeDock.sessionId)
     ) {
-      return false;
-    }
-    if (currentUrlAppointmentId && String(c.appointment_id) === String(currentUrlAppointmentId)) {
       return false;
     }
     return true;
