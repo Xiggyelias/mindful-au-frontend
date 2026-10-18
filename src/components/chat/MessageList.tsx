@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck, Lock } from "lucide-react";
+import { Shield, Loader2, Trash2, MessageSquare, ArrowDown, AlertTriangle, RefreshCw, Check, CheckCheck, Lock, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { formatInDisplayZone } from "@/lib/displayTimezone";
@@ -144,6 +144,26 @@ const MessageBubble = React.memo(
           <p className="text-xs italic text-muted-foreground/80 flex items-center gap-1.5 select-none py-0.5">
             <span className="text-[12px] opacity-75">🚫</span> This message was deleted.
           </p>
+        );
+      }
+      if (typeof content === 'string' && content.includes('Heart-to-Heart Spatial Lounge')) {
+        const isPeer = user?.role === 'peer_counselor';
+        const loungeUrl = isPeer
+          ? `/peer/spatial-lounge?session_id=${conversationKey}`
+          : `/student/spatial-lounge?session_id=${conversationKey}`;
+        return (
+          <div className="space-y-2 py-0.5">
+            <p className="whitespace-pre-wrap break-words">{content}</p>
+            <div className="pt-1">
+              <a
+                href={loungeUrl}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-1.5 shadow-sm transition-all"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                <span>Join Spatial Lounge</span>
+              </a>
+            </div>
+          </div>
         );
       }
       return <p className="whitespace-pre-wrap break-words">{content}</p>;

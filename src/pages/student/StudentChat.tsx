@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Menu,
   Lock,
+  Radio,
 } from "lucide-react";
 import { studentNavItems } from "@/config/studentNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -350,6 +351,43 @@ const StudentChat = () => {
   useEffect(() => {
     setAnonymousStartMode(profileAnonymousMode);
   }, [profileAnonymousMode]);
+
+  const [spatialLoungeActive, setSpatialLoungeActive] = useState(false);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setSpatialLoungeActive(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const checkLoungeStatus = async () => {
+      try {
+        const res = await api.getSessionSpatialLoungeStatus(sessionId);
+        if (!isCancelled && res) {
+          setSpatialLoungeActive(Boolean(res.active));
+        }
+      } catch {
+        // Silently ignore status errors
+      }
+    };
+
+    void checkLoungeStatus();
+    const interval = setInterval(checkLoungeStatus, 10000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [sessionId]);
+
+  const hasSpatialLoungeInviteMessage = useMemo(() => {
+    return messages.some((m) =>
+      typeof m.content === "string" && m.content.includes("Heart-to-Heart Spatial Lounge")
+    );
+  }, [messages]);
+
+  const showSpatialLoungeBanner = spatialLoungeActive || hasSpatialLoungeInviteMessage;
 
   const handleSidebarAnonymousToggle = useCallback(
     async (checked: boolean) => {
@@ -1074,6 +1112,18 @@ const StudentChat = () => {
                         <Shield className="h-3 w-3" />
                         <span>Active</span>
                       </div>
+                      {showSpatialLoungeBanner && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-400 animate-pulse"
+                          onClick={() => navigate(`/student/spatial-lounge?session_id=${sessionId}`)}
+                          title="Join Spatial Lounge"
+                          aria-label="Join Spatial Lounge"
+                        >
+                          <Radio className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/5 hover:text-primary" onClick={handleStartVideoCall} disabled={isPreparingCall} aria-label="Start video call">
                         {isPreparingCall ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
                       </Button>
@@ -1082,6 +1132,31 @@ const StudentChat = () => {
                       </Button>
                     </div>
                   </div>
+
+                  {showSpatialLoungeBanner && (
+                    <div className="shrink-0 flex items-center justify-between gap-3 border-b border-emerald-500/30 bg-emerald-950/15 dark:bg-emerald-950/30 px-3 sm:px-4 py-2.5 text-xs animate-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-300 min-w-0">
+                        <Radio className="h-4 w-4 animate-pulse text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">
+                            {activePeerParticipant?.name ? `${activePeerParticipant.name} invited you to the ` : "Your peer counselor invited you to the "}
+                            Heart-to-Heart Meadow!
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate hidden sm:block">
+                            Talk in our private 2D meadow with spatial 3D proximity voice and ambient radio.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="h-8 shrink-0 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm gap-1.5 font-semibold px-3"
+                        onClick={() => navigate(`/student/spatial-lounge?session_id=${sessionId}`)}
+                      >
+                        <Radio className="h-3.5 w-3.5" />
+                        <span>Join Lounge</span>
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Message List */}

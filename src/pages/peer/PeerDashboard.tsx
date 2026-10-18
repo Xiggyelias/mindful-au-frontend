@@ -173,7 +173,7 @@ const PeerDashboard = () => {
                   Peer Spatial Meadow & Voice Lounge
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-xl">
-                  Step into the 2D audio meadow. Walk your avatar near fellow peer counselors to talk naturally with distance-based stereo sound, zen ambient music, and heart-to-heart chat.
+                  Step into the 2D audio meadow. Connect 1-on-1 with your assigned student to talk naturally with distance-based stereo sound, zen ambient music, and heart-to-heart voice chat.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
                   <span className="flex items-center gap-1.5 text-foreground font-medium">

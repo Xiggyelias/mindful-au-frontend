@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Radio,
   Users,
   MessageSquare,
-  Sparkles,
   Maximize2,
   Minimize2,
-  Info,
   ArrowLeft,
   Volume2,
+  Heart,
+  Shield,
+  Loader2,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -19,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { toast } from "sonner";
 import { peerCounselorNavItems } from "@/config/counselorNavItems";
+import { studentNavItems } from "@/config/studentNavItems";
 import { SpatialMeadow } from "@/components/peer/SpatialMeadow";
 import { SpatialAudioControls } from "@/components/peer/SpatialAudioControls";
 import { PeerProfileAliasModal } from "@/components/peer/PeerProfileAliasModal";
@@ -28,12 +30,17 @@ import { Room, RoomEvent, RemoteTrack, Track } from "livekit-client";
 
 export const PeerSpatialLounge = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get("session_id");
   const { user } = useAuth();
+
+  const isPeerCounselor = user?.role === "peer_counselor";
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(Boolean(sessionId));
 
   // Audio & LiveKit State
   const [isMicActive, setIsMicActive] = useState(false);
@@ -47,67 +54,53 @@ export const PeerSpatialLounge = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
 
   // Local user state
-  const defaultName = user?.profile?.full_name || user?.email?.split("@")[0] || "Peer Counselor";
+  const defaultName =
+    user?.profile?.full_name ||
+    (user?.email ? user.email.split("@")[0] : isPeerCounselor ? "Peer Counselor" : "Student");
+
   const [localParticipant, setLocalParticipant] = useState<LoungeParticipant>({
-    id: `local-${user?.id ?? "guest"}`,
+    id: `user-${user?.id ?? "guest"}`,
     name: defaultName,
-    role: "peer_counselor",
-    avatar: "dino-blue",
-    x: 480,
+    role: isPeerCounselor ? "peer_counselor" : "student",
+    avatar: isPeerCounselor ? "dino-blue" : "dino-green",
+    x: isPeerCounselor ? 400 : 600,
     y: 320,
     isTalking: false,
     isMuted: true,
     isLocal: true,
   });
 
-  // Remote participants on the meadow (initially seeded with friendly peer counselors like the LiveKit example)
-  const [participants, setParticipants] = useState<LoungeParticipant[]>([
-    {
-      id: "peer-don",
-      name: "Don",
-      role: "peer_counselor",
-      avatar: "dino-green",
-      x: 380,
-      y: 280,
-      isTalking: false,
-      isMuted: false,
-      speechText: "Welcome to the meadow!",
-    },
-    {
-      id: "peer-noah",
-      name: "Noah",
-      role: "peer_counselor",
-      avatar: "dino-red",
-      x: 410,
-      y: 370,
-      isTalking: false,
-      isMuted: false,
-    },
-    {
-      id: "peer-elena",
-      name: "Elena",
-      role: "peer_counselor",
-      avatar: "owl-violet",
-      x: 640,
-      y: 240,
-      isTalking: false,
-      isMuted: false,
-      speechText: "Here for heart-to-heart chat 💖",
-    },
-  ]);
+  // Assigned Partner State - strictly 1-on-1, NO dummy mock bots
+  const [partnerInfo, setPartnerInfo] = useState<{
+    id: number;
+    name: string;
+    role: string;
+    avatar: string;
+  } | null>(null);
+
+  const [participants, setParticipants] = useState<LoungeParticipant[]>([]);
 
   const [chatMessages, setChatMessages] = useState<LoungeChatMessage[]>([
     {
-      id: "msg-1",
-      senderId: "peer-don",
-      senderName: "Don",
+      id: "msg-init",
+      senderId: "system",
+      senderName: "Heart-to-Heart Meadow",
       avatar: "dino-green",
-      text: "Welcome to the meadow! Walk closer to talk via proximity voice.",
+      text: "Welcome to the private Heart-to-Heart Spatial Meadow. Proximity 3D audio is enabled.",
       timestamp: "Just now",
     },
   ]);
 
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+
+  // Navigation back to chat
+  const handleBackToChat = useCallback(() => {
+    if (isPeerCounselor) {
+      navigate(sessionId ? `/peer/chats?session_id=${sessionId}` : "/peer/chats");
+    } else {
+      navigate(sessionId ? `/student/chat?session_id=${sessionId}` : "/student/chat");
+    }
+  }, [isPeerCounselor, navigate, sessionId]);
 
   // Initialize Spatial Audio Manager & enumerate devices
   useEffect(() => {
@@ -116,22 +109,26 @@ export const PeerSpatialLounge = () => {
 
     // Enumerate microphones
     if (navigator.mediaDevices?.enumerateDevices) {
-      navigator.mediaDevices.enumerateDevices().then((devices) => {
-        const audioInputs = devices.filter((d) => d.kind === "audioinput");
-        setAudioInputDevices(audioInputs);
-        if (audioInputs[0]?.deviceId) {
-          setSelectedAudioDeviceId(audioInputs[0].deviceId);
-        }
-      }).catch((err) => console.warn("Failed to enumerate devices:", err));
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const audioInputs = devices.filter((d) => d.kind === "audioinput");
+          setAudioInputDevices(audioInputs);
+          if (audioInputs[0]?.deviceId) {
+            setSelectedAudioDeviceId(audioInputs[0].deviceId);
+          }
+        })
+        .catch((err) => console.warn("Failed to enumerate devices:", err));
     }
 
     // Auto-start ambient radio on initial position
-    setTimeout(() => {
+    const ambientTimer = setTimeout(() => {
       manager.startAmbientSpeaker(localParticipant.x, localParticipant.y);
       setIsAmbientPlaying(manager.isAmbientActive());
     }, 600);
 
     return () => {
+      clearTimeout(ambientTimer);
       manager.cleanup();
       if (livekitRoomRef.current) {
         livekitRoomRef.current.disconnect();
@@ -142,18 +139,73 @@ export const PeerSpatialLounge = () => {
     };
   }, []);
 
-  // Connect to LiveKit if backend token is available
+  // Connect to LiveKit / Session Spatial Lounge Token
   useEffect(() => {
     let isCancelled = false;
 
-    const connectLiveKit = async () => {
+    const connectSessionLounge = async () => {
       try {
-        const res = await api.getSpatialLoungeToken({
-          name: localParticipant.name,
-          avatar: localParticipant.avatar,
-        });
+        setIsLoadingSession(true);
+
+        let res: any = null;
+
+        if (sessionId) {
+          // Session-bound 1-on-1 private lounge
+          res = await api.getSessionSpatialLoungeToken(sessionId, {
+            avatar: localParticipant.avatar,
+          });
+        } else if (isPeerCounselor) {
+          // Generic lounge for peer counselor if no session specified
+          res = await api.getSpatialLoungeToken({
+            name: localParticipant.name,
+            avatar: localParticipant.avatar,
+          });
+        }
 
         if (isCancelled) return;
+
+        if (res?.user) {
+          setLocalParticipant((prev) => ({
+            ...prev,
+            id: String(res.user.id),
+            name: res.user.name || prev.name,
+            role: res.user.role || prev.role,
+            avatar: (res.user.avatar as AvatarStyle) || prev.avatar,
+            x: res.user.initial_x ?? prev.x,
+            y: res.user.initial_y ?? prev.y,
+          }));
+        }
+
+        if (res?.assigned_partner) {
+          setPartnerInfo(res.assigned_partner);
+          const partnerAvatar = (res.assigned_partner.avatar || (isPeerCounselor ? "dino-green" : "dino-blue")) as AvatarStyle;
+          const partnerParticipant: LoungeParticipant = {
+            id: String(res.assigned_partner.id),
+            name: res.assigned_partner.name,
+            role: res.assigned_partner.role,
+            avatar: partnerAvatar,
+            x: res.assigned_partner.initial_x ?? (isPeerCounselor ? 600 : 400),
+            y: res.assigned_partner.initial_y ?? 320,
+            isTalking: false,
+            isMuted: false,
+          };
+          setParticipants([partnerParticipant]);
+
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-partner-${Date.now()}`,
+              senderId: "system",
+              senderName: "Heart-to-Heart Meadow",
+              avatar: partnerAvatar,
+              text: `Paired with ${res.assigned_partner.name}. Walk closer to talk via proximity voice!`,
+              timestamp: "Just now",
+            },
+          ]);
+        } else if (!sessionId) {
+          // If standalone and no partner, start clean (no fake bots)
+          setParticipants([]);
+        }
 
         if (res?.mode === "livekit" && res?.token && res?.url) {
           const room = new Room({
@@ -165,7 +217,7 @@ export const PeerSpatialLounge = () => {
 
           room.on(RoomEvent.Connected, () => {
             setLivekitConnected(true);
-            toast.success("Connected to LiveKit Spatial Audio room!");
+            toast.success("Connected to Heart-to-Heart Spatial Audio Meadow!");
           });
 
           room.on(RoomEvent.Disconnected, () => {
@@ -177,10 +229,9 @@ export const PeerSpatialLounge = () => {
             if (track.kind === Track.Kind.Audio) {
               const mediaStreamTrack = track.mediaStreamTrack;
               if (mediaStreamTrack && audioManagerRef.current) {
-                // Find or create participant entry
                 const found = participants.find((p) => p.id === participant.identity);
-                const targetX = found?.x ?? 500;
-                const targetY = found?.y ?? 300;
+                const targetX = found?.x ?? 550;
+                const targetY = found?.y ?? 320;
 
                 audioManagerRef.current.attachTrack(
                   participant.identity,
@@ -218,9 +269,9 @@ export const PeerSpatialLounge = () => {
                       ...prev,
                       {
                         id: participant.identity,
-                        name: data.name || participant.name || "Peer",
-                        role: "peer_counselor",
-                        avatar: data.avatar || "dino-green",
+                        name: data.name || participant.name || "Partner",
+                        role: data.role || (isPeerCounselor ? "student" : "peer_counselor"),
+                        avatar: data.avatar || (isPeerCounselor ? "dino-green" : "dino-blue"),
                         x: data.x,
                         y: data.y,
                         isTalking: Boolean(data.talking),
@@ -230,7 +281,6 @@ export const PeerSpatialLounge = () => {
                   }
                 });
 
-                // Update audio spatial node
                 audioManagerRef.current?.updateParticipantPosition(
                   participant.identity,
                   data.x,
@@ -251,19 +301,24 @@ export const PeerSpatialLounge = () => {
           await room.connect(res.url, res.token);
         } else {
           // Simulated proximity lounge mode active
-          toast.info("Meadow ready in offline proximity mode.");
+          toast.info("Heart-to-Heart Meadow ready in simulated proximity mode.");
         }
       } catch (err: unknown) {
-        console.warn("LiveKit lounge token connection fallback:", err);
+        console.warn("LiveKit lounge connection fallback:", err);
+        toast.error("Could not initialize live audio room. Offline proximity active.");
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingSession(false);
+        }
       }
     };
 
-    void connectLiveKit();
+    void connectSessionLounge();
 
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [sessionId, isPeerCounselor]);
 
   // Broadcast local movements to LiveKit and update audio manager
   const handleLocalMove = useCallback(
@@ -292,6 +347,7 @@ export const PeerSpatialLounge = () => {
             x: newX,
             y: newY,
             name: localParticipant.name,
+            role: localParticipant.role,
             avatar: localParticipant.avatar,
             talking: isMicActive,
           });
@@ -304,7 +360,7 @@ export const PeerSpatialLounge = () => {
         }
       }
     },
-    [participants, localParticipant.name, localParticipant.avatar, isMicActive]
+    [participants, localParticipant.name, localParticipant.role, localParticipant.avatar, isMicActive]
   );
 
   // Toggle Microphone / Request Audio to Talk
@@ -312,7 +368,6 @@ export const PeerSpatialLounge = () => {
     audioManagerRef.current?.ensureContext();
 
     if (isMicActive) {
-      // Mute
       if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach((track) => (track.enabled = false));
       }
@@ -320,7 +375,6 @@ export const PeerSpatialLounge = () => {
       setLocalParticipant((prev) => ({ ...prev, isTalking: false, isMuted: true }));
       toast.info("Microphone muted.");
     } else {
-      // Unmute / Request Audio to Talk
       try {
         if (!localStreamRef.current) {
           const constraints: MediaStreamConstraints = {
@@ -330,7 +384,6 @@ export const PeerSpatialLounge = () => {
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
           localStreamRef.current = stream;
 
-          // If LiveKit room is active, publish audio track
           if (livekitRoomRef.current?.state === "connected") {
             const audioTrack = stream.getAudioTracks()[0];
             if (audioTrack) {
@@ -343,7 +396,7 @@ export const PeerSpatialLounge = () => {
 
         setIsMicActive(true);
         setLocalParticipant((prev) => ({ ...prev, isTalking: true, isMuted: false }));
-        toast.success("Audio active! People nearby in the meadow can hear you in 3D.");
+        toast.success("Audio active! Walk near your partner in the meadow to hear each other in 3D.");
       } catch (err: unknown) {
         toast.error("Microphone permission needed to speak in the lounge.");
       }
@@ -382,7 +435,6 @@ export const PeerSpatialLounge = () => {
       setLocalParticipant((prev) => (prev.speechText === text ? { ...prev, speechText: undefined } : prev));
     }, 6000);
 
-    // Broadcast via LiveKit DataChannel
     if (livekitRoomRef.current?.state === "connected") {
       try {
         const payload = JSON.stringify({
@@ -401,13 +453,15 @@ export const PeerSpatialLounge = () => {
   };
 
   const handleReceiveChatMessage = (senderId: string, senderName: string, text: string) => {
+    const senderAvatar = participants.find((p) => p.id === senderId)?.avatar || "dino-green";
+
     setChatMessages((prev) => [
       ...prev,
       {
         id: `msg-${Date.now()}-${Math.random()}`,
         senderId,
         senderName,
-        avatar: "dino-green",
+        avatar: senderAvatar,
         text,
         timestamp: "Just now",
       },
@@ -480,7 +534,7 @@ export const PeerSpatialLounge = () => {
       name: newName,
       avatar: newAvatar,
     }));
-    toast.success(`Profile updated as ${newName}!`);
+    toast.success(`Appearance updated as ${newName}!`);
   };
 
   // Calculate nearby participants within hearing circle
@@ -491,7 +545,8 @@ export const PeerSpatialLounge = () => {
 
   return (
     <div className={`min-h-screen bg-slate-950 text-slate-100 ${isFullscreen ? "p-0" : ""}`}>
-      {!isFullscreen && (
+      {/* Sidebar rendered only for peer counselor when not fullscreen */}
+      {!isFullscreen && isPeerCounselor && (
         <DashboardSidebar
           items={peerCounselorNavItems}
           userType="peer"
@@ -501,16 +556,64 @@ export const PeerSpatialLounge = () => {
         />
       )}
 
-      <div className={isFullscreen ? "w-full" : "lg:pl-72 pl-0"}>
+      {/* Main Content Area */}
+      <div className={isFullscreen || !isPeerCounselor ? "w-full" : "lg:pl-72 pl-0"}>
         {!isFullscreen && (
-          <DashboardHeader
-            title="Heart-to-Heart Spatial Lounge"
-            onMenuClick={() => setSidebarOpen(true)}
-          />
+          <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/90 px-4 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBackToChat}
+                className="text-slate-300 hover:text-white hover:bg-slate-900 gap-1.5 text-xs font-semibold"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Chat</span>
+              </Button>
+              <div className="h-4 w-px bg-slate-800" />
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Heart className="w-4 h-4 fill-emerald-500/30" />
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-white flex items-center gap-2">
+                    Heart-to-Heart Meadow
+                    {sessionId && (
+                      <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.2 rounded-full">
+                        Private 1-on-1
+                      </span>
+                    )}
+                  </h1>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowChatHistory(!showChatHistory)}
+                variant="outline"
+                size="sm"
+                className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Meadow Chat</span>
+                <span>({chatMessages.length})</span>
+              </Button>
+              <Button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                variant="outline"
+                size="sm"
+                className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Full Screen</span>
+              </Button>
+            </div>
+          </header>
         )}
 
         <main className={`p-3 lg:p-5 space-y-4 max-w-7xl mx-auto ${isFullscreen ? "h-screen flex flex-col justify-between" : ""}`}>
-          {/* Top Info Banner */}
+          {/* Top Session Partner Banner */}
           {!isFullscreen && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/20 rounded-2xl p-4 shadow-lg">
               <div className="flex items-center gap-3">
@@ -518,44 +621,46 @@ export const PeerSpatialLounge = () => {
                   <Radio className="w-5 h-5 animate-pulse" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                    Peer Heart-to-Heart Meadow
-                    <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
-                      Spatial 3D Audio Active
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white">
+                      {partnerInfo ? (
+                        <>Paired with <span className="text-emerald-400">{partnerInfo.name}</span></>
+                      ) : (
+                        "Heart-to-Heart Meadow"
+                      )}
+                    </h2>
+                    <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Shield className="w-2.5 h-2.5" />
+                      Strictly Confidential 1-on-1
                     </span>
-                  </h1>
-                  <p className="text-xs text-slate-400">
-                    Walk near colleagues to talk naturally. Distance reduces volume; left/right stereo pans based on position.
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Walk your avatar closer using <b>WASD</b> or <b>Arrow Keys</b> to hear your partner in spatial 3D.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => setShowChatHistory(!showChatHistory)}
-                  variant="outline"
-                  size="sm"
-                  className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Chat Logs ({chatMessages.length})</span>
-                </Button>
-                <Button
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  variant="outline"
-                  size="sm"
-                  className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs gap-1.5"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                  <span>Full Screen</span>
-                </Button>
-              </div>
+              {isLoadingSession && (
+                <div className="flex items-center gap-2 text-xs text-emerald-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Connecting private lounge...</span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Fullscreen top exit pill */}
           {isFullscreen && (
             <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+              <Button
+                onClick={handleBackToChat}
+                size="sm"
+                variant="secondary"
+                className="bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 shadow-xl gap-1 text-xs backdrop-blur-md"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Chat</span>
+              </Button>
               <Button
                 onClick={() => setIsFullscreen(false)}
                 size="sm"
@@ -585,11 +690,15 @@ export const PeerSpatialLounge = () => {
               <div className="bg-slate-950/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-xs text-slate-200 flex items-center gap-2 shadow-lg">
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
                 <span>
-                  <b>{participants.length + 1}</b> Peers in Lounge
+                  {partnerInfo ? (
+                    <b>{participants.length > 0 ? "Partner in Meadow" : "Waiting for partner to enter..."}</b>
+                  ) : (
+                    <b>Private Session</b>
+                  )}
                 </span>
                 <span className="text-slate-600">|</span>
                 <span className="text-emerald-300">
-                  <b>{nearbyPeers.length}</b> In Audible Reach
+                  <b>{nearbyPeers.length > 0 ? "Within Hearing Aura 🔊" : "Walk Closer to Hear 🎧"}</b>
                 </span>
               </div>
             </div>

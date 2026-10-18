@@ -16,6 +16,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowRight,
+  Radio,
 } from "lucide-react";
 import { counselorNavItems, peerCounselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -312,6 +313,8 @@ const CounselorMessages = () => {
   const [isTriggeringEmergency, setIsTriggeringEmergency] = useState(false);
   const [isRevealingIdentity, setIsRevealingIdentity] = useState(false);
   const [isSwitchingChat, setIsSwitchingChat] = useState(false);
+  const [spatialLoungeActive, setSpatialLoungeActive] = useState(false);
+  const [isRequestingLounge, setIsRequestingLounge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -532,6 +535,33 @@ const CounselorMessages = () => {
     activeSessionIdRef.current = null;
     navigate(isPeerCounselor ? "/peer/chats" : "/counselor/messages", { replace: true });
   }, [isPeerCounselor, navigate]);
+
+  useEffect(() => {
+    if (!isPeerCounselor || !selectedSessionId) {
+      setSpatialLoungeActive(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const checkLoungeStatus = async () => {
+      try {
+        const res = await api.getSessionSpatialLoungeStatus(selectedSessionId);
+        if (!isCancelled && res) {
+          setSpatialLoungeActive(Boolean(res.active));
+        }
+      } catch {
+        // Silently ignore status errors
+      }
+    };
+
+    void checkLoungeStatus();
+    const interval = setInterval(checkLoungeStatus, 10000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [isPeerCounselor, selectedSessionId]);
 
   const currentUserId = useMemo(() => {
     const authId = Number(user?.id || 0);
@@ -1409,6 +1439,27 @@ const CounselorMessages = () => {
     }
   };
 
+  const handleSpatialLoungeAction = async () => {
+    if (!selectedSessionId || !isPeerCounselor || isRequestingLounge) return;
+
+    if (spatialLoungeActive) {
+      navigate(`/peer/spatial-lounge?session_id=${selectedSessionId}`);
+      return;
+    }
+
+    try {
+      setIsRequestingLounge(true);
+      await api.requestSessionSpatialLounge(selectedSessionId);
+      setSpatialLoungeActive(true);
+      toast.success("🌿 Heart-to-Heart Spatial Lounge opened! Entering meadow...");
+      navigate(`/peer/spatial-lounge?session_id=${selectedSessionId}`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to request spatial lounge"));
+    } finally {
+      setIsRequestingLounge(false);
+    }
+  };
+
   const handleEmergencyEscalation = async () => {
     if (!selectedSessionId || isTriggeringEmergency) return;
 
@@ -1809,8 +1860,26 @@ const CounselorMessages = () => {
     }
 
     const content = msg.decryptedContent || msg.content || "";
+    if (typeof content === "string" && content.includes("Heart-to-Heart Spatial Lounge")) {
+      return (
+        <div className="space-y-2 py-0.5">
+          <p className="whitespace-pre-wrap break-words">{content}</p>
+          <div className="pt-1">
+            <Button
+              type="button"
+              size="sm"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-1.5 shadow-sm transition-all"
+              onClick={() => navigate(`/peer/spatial-lounge?session_id=${selectedSessionId}`)}
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              <span>Enter Spatial Lounge</span>
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return <p>{content}</p>;
-  }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic, handleDeleteMessage, deletingMessageIds, canModerateChat]);
+  }, [uploadProgress, handleRetryVoiceUpload, handleDeleteOptimistic, handleDeleteMessage, deletingMessageIds, canModerateChat, navigate, selectedSessionId]);
 
   return (
     <div className="h-[100dvh] min-h-[100svh] overflow-hidden bg-gradient-to-br from-slate-100/60 via-background to-emerald-100/30">
@@ -2088,6 +2157,29 @@ const CounselorMessages = () => {
                           )}
                         </Button>
                       )}
+                      {isPeerCounselor && (
+                        <Button
+                          variant={spatialLoungeActive ? "default" : "outline"}
+                          size="sm"
+                          className={cn(
+                            "h-9 shrink-0 gap-1.5 rounded-xl px-3 transition-all",
+                            spatialLoungeActive
+                              ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm animate-pulse"
+                              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
+                          )}
+                          onClick={handleSpatialLoungeAction}
+                          disabled={isRequestingLounge}
+                        >
+                          <Radio className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                          <span className="text-xs font-semibold">
+                            {isRequestingLounge
+                              ? "Opening..."
+                              : spatialLoungeActive
+                              ? "Enter Spatial Lounge"
+                              : "Request Spatial Lounge"}
+                          </span>
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -2115,6 +2207,10 @@ const CounselorMessages = () => {
                             )}
                             {isPeerCounselor && (
                               <>
+                                <DropdownMenuItem onClick={() => void handleSpatialLoungeAction()} disabled={isRequestingLounge}>
+                                  <Radio className="mr-2 h-4 w-4 text-emerald-500" />
+                                  {spatialLoungeActive ? "Enter Spatial Lounge" : "Request Spatial Lounge"}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>
                                   <ArrowUpCircle className="mr-2 h-4 w-4" />
                                   {isEscalating ? "Escalating..." : "Escalate to counselor"}
@@ -2136,6 +2232,23 @@ const CounselorMessages = () => {
                   )}
                 </div>
               </CardHeader>
+
+              {/* Spatial Lounge Active Banner for Peer Counselor */}
+              {isPeerCounselor && spatialLoungeActive && (
+                <div className="flex items-center justify-between gap-3 border-b border-emerald-500/30 bg-emerald-950/20 px-4 py-2 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                    <Radio className="h-4 w-4 animate-pulse text-emerald-500" />
+                    <span>Heart-to-Heart Spatial Lounge is active for this session.</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 font-medium shadow-sm"
+                    onClick={() => navigate(`/peer/spatial-lounge?session_id=${selectedSessionId}`)}
+                  >
+                    Enter Meadow
+                  </Button>
+                </div>
+              )}
 
               {/* â”€â”€ Session Prep Briefing Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               {briefOpen && !isPeerCounselor && selectedChat?.studentId && (

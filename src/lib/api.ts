@@ -1672,6 +1672,57 @@ class ApiClient {
     return response.data;
   }
 
+  // Session-bound 1-on-1 Spatial Lounge (Peer Counselor & Assigned Student)
+  async requestSessionSpatialLounge(sessionId: number | string) {
+    const response = await this.client.post(`/sessions/${sessionId}/spatial-lounge/request`);
+    return response.data as {
+      success: boolean;
+      active: boolean;
+      session_id: number;
+      room: string;
+      message: string;
+    };
+  }
+
+  async getSessionSpatialLoungeStatus(sessionId: number | string) {
+    const response = await this.client.get(`/sessions/${sessionId}/spatial-lounge/status`);
+    return response.data as {
+      session_id: number;
+      active: boolean;
+      requested_at?: string | null;
+      is_peer_assigned: boolean;
+      can_request: boolean;
+    };
+  }
+
+  async getSessionSpatialLoungeToken(sessionId: number | string, payload?: { avatar?: string }) {
+    const response = await this.client.post(`/sessions/${sessionId}/spatial-lounge/token`, payload ?? {});
+    return response.data as {
+      success: boolean;
+      mode: 'livekit' | 'simulated';
+      url: string | null;
+      token: string | null;
+      room: string;
+      session_id: number;
+      user: {
+        id: number;
+        name: string;
+        role: 'peer_counselor' | 'student';
+        avatar: string;
+        initial_x: number;
+        initial_y: number;
+      };
+      assigned_partner: {
+        id: number;
+        name: string;
+        role: 'peer_counselor' | 'student';
+        avatar: string;
+        initial_x: number;
+        initial_y: number;
+      };
+    };
+  }
+
   // Analytics (Admin only)
   async getAdminDashboardOverview(params?: { timeout_ms?: number }) {
     const timeoutMs =

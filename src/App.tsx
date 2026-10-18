@@ -254,9 +254,17 @@ const App = () => {
                   }
                 />
                 <Route
+                  path="/student/spatial-lounge"
+                  element={
+                    <ProtectedRoute allowedRoles={["student", "peer_counselor"]} redirectTo="/student/login">
+                      <PeerSpatialLounge />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/peer/spatial-lounge"
                   element={
-                    <ProtectedRoute allowedRoles={["peer_counselor"]} redirectTo="/peer/login">
+                    <ProtectedRoute allowedRoles={["peer_counselor", "student"]} redirectTo="/peer/login">
                       <PeerSpatialLounge />
                     </ProtectedRoute>
                   }
