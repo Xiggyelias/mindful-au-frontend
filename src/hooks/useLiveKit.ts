@@ -379,7 +379,7 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
       // Idempotent: an in-flight or connected room for the same appointment is reused.
       if (engine.room && engine.appointmentId === appointmentId) {
         if (engine.room.state === ConnectionState.Connected) return true;
-        if (engine.room.state === ConnectionState.Connecting) return false;
+        if (engine.room.state === ConnectionState.Connecting) return true;
       }
 
       setState((prev) => ({
@@ -415,12 +415,48 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
           livekitUrl = "wss://" + livekitUrl.slice(8);
         }
 
+        // If the server configured localhost/127.0.0.1 but the user's browser is accessing
+        // from a remote device, rewrite the host to the current hostname/origin so it connects.
+        try {
+          const parsedUrl = new URL(livekitUrl);
+          const isLocalhostHost =
+            parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1";
+          if (
+            isLocalhostHost &&
+            typeof window !== "undefined" &&
+            window.location.hostname !== "localhost" &&
+            window.location.hostname !== "127.0.0.1"
+          ) {
+            parsedUrl.hostname = window.location.hostname;
+            livekitUrl = parsedUrl.toString();
+          }
+        } catch {
+          /* keep livekitUrl */
+        }
+
         await room.connect(livekitUrl, authorization.token, { autoSubscribe: true });
 
-        await room.localParticipant.setMicrophoneEnabled(true);
+        // Enable microphone with graceful degradation
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+        } catch (micErr) {
+          console.warn("[LiveKit] Microphone acquisition warning:", micErr);
+        }
+
+        // Enable camera if video mode, falling back to audio if camera is busy or unavailable
         if (mode === "video") {
-          await room.localParticipant.setCameraEnabled(true);
-          engine.facingMode = "user";
+          try {
+            await room.localParticipant.setCameraEnabled(true);
+            engine.facingMode = "user";
+          } catch (camErr) {
+            console.warn("[LiveKit] Camera acquisition warning:", camErr);
+            setState((prev) => ({
+              ...prev,
+              isAudioOnly: true,
+              isLocalVideoEnabled: false,
+              notice: "Camera preview unavailable. Audio is live.",
+            }));
+          }
         }
 
         const localTracks = [
@@ -430,7 +466,7 @@ export const useLiveKit = (appointmentId: number, userId: string) => {
           .map((publication) => publication.track?.mediaStreamTrack)
           .filter((track): track is MediaStreamTrack => Boolean(track));
 
-        const localStream = new MediaStream(localTracks);
+        const localStream = localTracks.length > 0 ? new MediaStream(localTracks) : null;
         bindLocalStream(localStream);
 
         void refreshCameraCapability();

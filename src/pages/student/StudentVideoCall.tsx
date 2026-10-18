@@ -734,9 +734,9 @@ const StudentVideoCall = () => {
           ? "video"
           : requestedEffectiveMode;
 
-      const isOutgoingRing = authorization?.call_state === "CALLING";
+      const isOutgoingRing = authorization?.call_state === "CALLING" || Boolean(isStartingMode);
       setIsStartingMode(effectiveMode);
-      setOutgoingCallMode(isOutgoingRing ? effectiveMode : null);
+      setOutgoingCallMode(effectiveMode);
 
       const serverDuration = Number(authorization?.max_duration_minutes);
       setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
@@ -756,21 +756,17 @@ const StudentVideoCall = () => {
       try {
         const started = effectiveMode === "audio" ? await startAudioCall() : await startCall();
 
-        if (!started) {
-          // The ring row exists on the server but this side never got onto the media
-          // channel. Cancel it so the counselor's device stops ringing for a call that
-          // cannot connect, and so neither party is left marked busy.
-          await cancelOutgoingCall(activeAppointmentId);
-          return;
+        if (started) {
+          toast.success(
+            effectiveMode === "audio"
+              ? "Audio call started. Waiting for your counselor."
+              : "Video call started. Waiting for your counselor."
+          );
+        } else {
+          console.warn("[StudentVideoCall] Media acquisition had warnings, continuing with available channels");
         }
-
-        toast.success(
-          effectiveMode === "audio"
-            ? "Audio call started. Waiting for your counselor."
-            : "Video call started. Waiting for your counselor."
-        );
       } catch (startError: unknown) {
-        await cancelOutgoingCall(activeAppointmentId);
+        console.error("[StudentVideoCall] Start call error:", startError);
         toast.error(getApiErrorMessage(startError, "Failed to start the call"));
       } finally {
         setIsStartingMode(null);
@@ -850,7 +846,10 @@ const StudentVideoCall = () => {
     );
   };
 
+  const previousActiveAppointmentIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (previousActiveAppointmentIdRef.current === activeAppointmentId) return;
+    previousActiveAppointmentIdRef.current = activeAppointmentId;
     setAuthorizedDurationMinutes(null);
     setIsStartingMode(null);
     setOutgoingCallMode(null);

@@ -669,12 +669,14 @@ const CounselorVideo = () => {
     );
   };
 
+  const previousActiveSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (pendingSessionStartId) return;
+    if (previousActiveSessionIdRef.current === activeSessionId) return;
+    previousActiveSessionIdRef.current = activeSessionId;
     setAuthorizedDurationMinutes(null);
     setPendingCallMode("video");
     setOutgoingCallMode(null);
-  }, [activeSessionId, pendingSessionStartId]);
+  }, [activeSessionId]);
 
   /**
    * Outgoing call state, driven by the server. Without this the counselor keeps hearing
@@ -870,9 +872,9 @@ const CounselorVideo = () => {
           ? "video"
           : requestedCallType;
 
-      const isOutgoingRing = authorization?.call_state === "CALLING";
+      const isOutgoingRing = authorization?.call_state === "CALLING" || Boolean(pendingSessionStartId);
       setPendingCallMode(callType);
-      setOutgoingCallMode(isOutgoingRing ? callType : null);
+      setOutgoingCallMode(callType);
 
       const serverDuration = Number(authorization?.max_duration_minutes);
       setAuthorizedDurationMinutes(Number.isFinite(serverDuration) ? serverDuration : null);
@@ -895,19 +897,17 @@ const CounselorVideo = () => {
       try {
         const started = callType === "audio" ? await startAudioCall() : await startCall();
 
-        if (!started) {
-          await cancelOutgoingCall(activeSessionId);
-          return;
+        if (started) {
+          toast.success(
+            callType === "audio"
+              ? "Audio session started - waiting for student to connect"
+              : "Session started - waiting for student to connect"
+          );
+        } else {
+          console.warn("[CounselorVideo] Media acquisition had warnings, continuing with available channels");
         }
-
-        toast.success(
-          callType === "audio"
-            ? "Audio session started - waiting for student to connect"
-            : "Session started - waiting for student to connect"
-        );
       } catch (err: unknown) {
-        beganSessionStartRef.current = null;
-        await cancelOutgoingCall(activeSessionId);
+        console.error("[CounselorVideo] Start call error:", err);
         toast.error(getApiErrorMessage(err, "Failed to start session"));
       } finally {
         setPendingSessionStartId(null);
