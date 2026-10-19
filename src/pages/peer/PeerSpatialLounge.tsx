@@ -385,23 +385,41 @@ export const PeerSpatialLounge = () => {
         if (isCancelled) return;
 
         if (res?.user) {
+          const verifiedUser = {
+            id: String(res.user.id),
+            name: res.user.name || localParticipantRef.current.name,
+            role: res.user.role || localParticipantRef.current.role,
+            avatar: (res.user.avatar as AvatarStyle) || localParticipantRef.current.avatar,
+            x: res.user.initial_x ?? localParticipantRef.current.x,
+            y: res.user.initial_y ?? localParticipantRef.current.y,
+          };
           setLocalParticipant((prev) => ({
             ...prev,
-            id: String(res.user.id),
-            name: res.user.name || prev.name,
-            role: res.user.role || prev.role,
-            avatar: (res.user.avatar as AvatarStyle) || prev.avatar,
-            x: res.user.initial_x ?? prev.x,
-            y: res.user.initial_y ?? prev.y,
+            ...verifiedUser,
           }));
+
+          // Re-track presence on Supabase channel with verified session ID
+          if (supabaseChannelRef.current) {
+            void supabaseChannelRef.current.track({
+              ...verifiedUser,
+              isTalking: isMicActiveRef.current,
+              isMuted: !isMicActiveRef.current,
+            });
+
+            void supabaseChannelRef.current.send({
+              type: "broadcast",
+              event: "spatial-join",
+              payload: {
+                ...verifiedUser,
+                isTalking: isMicActiveRef.current,
+              },
+            });
+          }
         }
 
         if (res?.assigned_partner) {
           setPartnerInfo(res.assigned_partner);
           const partnerAvatar = (res.assigned_partner.avatar || (isPeerCounselor ? "dino-green" : "dino-blue")) as AvatarStyle;
-          // IMPORTANT: Remote participants list must start EMPTY!
-          // Avatars are only created dynamically when the participant is ACTUALLY online and enters the room.
-          setParticipants([]);
 
           setChatMessages((prev) => [
             ...prev,
@@ -431,6 +449,28 @@ export const PeerSpatialLounge = () => {
           room.on(RoomEvent.Connected, () => {
             setLivekitConnected(true);
             toast.success("Connected to Heart-to-Heart Spatial Audio Meadow!");
+
+            // Populate any existing remote participants already in the room
+            if (room.remoteParticipants && room.remoteParticipants.size > 0) {
+              room.remoteParticipants.forEach((p) => {
+                setParticipants((prev) => {
+                  if (prev.some((part) => part.id === p.identity)) return prev;
+                  return [
+                    ...prev,
+                    {
+                      id: p.identity,
+                      name: p.name || partnerInfoRef.current?.name || "Partner",
+                      role: isPeerCounselor ? "student" : "peer_counselor",
+                      avatar: (isPeerCounselor ? "dino-green" : "dino-blue") as AvatarStyle,
+                      x: isPeerCounselor ? 600 : 400,
+                      y: 320,
+                      isTalking: false,
+                      isMuted: false,
+                    },
+                  ];
+                });
+              });
+            }
           });
 
           room.on(RoomEvent.Disconnected, () => {
@@ -913,6 +953,63 @@ export const PeerSpatialLounge = () => {
           localParticipantRef.current.y
         );
       })
+      .on("presence", { event: "join" }, ({ key, newPresences }) => {
+        if (!Array.isArray(newPresences)) return;
+        const myId = String(localParticipantRef.current.id);
+        const myName = localParticipantRef.current.name;
+
+        newPresences.forEach((p: any) => {
+          const pid = String(p.id || key || p.key);
+          if (!pid || pid === myId) return;
+          if (p.name && p.name === myName && p.role === localParticipantRef.current.role) return;
+
+          remoteSenderIdRef.current = pid;
+          setParticipants((prev) => {
+            const idx = prev.findIndex((item) => item.id === pid);
+            const participantData: LoungeParticipant = {
+              id: pid,
+              name: p.name || partnerInfoRef.current?.name || (isPeerCounselor ? "Student" : "Peer Counselor"),
+              role: p.role || (isPeerCounselor ? "student" : "peer_counselor"),
+              avatar: (p.avatar || (isPeerCounselor ? "dino-green" : "dino-blue")) as AvatarStyle,
+              x: typeof p.x === "number" ? p.x : (isPeerCounselor ? 600 : 400),
+              y: typeof p.y === "number" ? p.y : 320,
+              isTalking: Boolean(p.isTalking),
+              isMuted: Boolean(p.isMuted),
+              isLocal: false,
+            };
+
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...participantData };
+              return next;
+            }
+            return [...prev, participantData];
+          });
+
+          const now = Date.now();
+          if (now - (lastJoinToastTimeRef.current[pid] || 0) > 4000) {
+            lastJoinToastTimeRef.current[pid] = now;
+            toast.success(`🌿 ${p.name || partnerInfoRef.current?.name || "Partner"} entered the Meadow!`, {
+              id: `join-${pid}`,
+            });
+          }
+
+          // Reply back with our current position immediately so newcomer sees us
+          void channel.send({
+            type: "broadcast",
+            event: "spatial-move",
+            payload: {
+              id: localParticipantRef.current.id,
+              x: localParticipantRef.current.x,
+              y: localParticipantRef.current.y,
+              name: localParticipantRef.current.name,
+              role: localParticipantRef.current.role,
+              avatar: localParticipantRef.current.avatar,
+              isTalking: isMicActiveRef.current,
+            },
+          });
+        });
+      })
       .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
         const leftId = key || (leftPresences && leftPresences[0]?.id);
         if (leftId && leftId !== localParticipantRef.current.id) {
@@ -931,28 +1028,66 @@ export const PeerSpatialLounge = () => {
       })
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState();
+        const myId = String(localParticipantRef.current.id);
+        const myName = localParticipantRef.current.name;
+        const activeRemoteMap = new Map<string, any>();
         const activeRemoteIds = new Set<string>();
 
-        Object.values(state).forEach((presences: any) => {
-          if (Array.isArray(presences)) {
-            presences.forEach((p: any) => {
-              const pid = String(p.id || p.key);
-              if (pid && pid !== localParticipantRef.current.id) {
-                activeRemoteIds.add(pid);
-              }
-            });
-          }
+        Object.entries(state).forEach(([key, presences]: [string, any]) => {
+          if (!Array.isArray(presences)) return;
+          presences.forEach((p: any) => {
+            const pid = String(p.id || key);
+            // Ignore own presence
+            if (pid === myId) return;
+            if (p.name && p.name === myName && p.role === localParticipantRef.current.role) return;
+
+            activeRemoteIds.add(pid);
+            if (!activeRemoteMap.has(pid)) {
+              activeRemoteMap.set(pid, p);
+            }
+          });
         });
 
-        // Clean up any participant who is no longer present in room
         setParticipants((prev) => {
-          const remaining = prev.filter((p) => activeRemoteIds.has(p.id));
+          const map = new Map<string, LoungeParticipant>();
+
+          // Keep existing remote participants if still active
           prev.forEach((p) => {
-            if (!activeRemoteIds.has(p.id)) {
+            if (activeRemoteIds.has(p.id)) {
+              map.set(p.id, p);
+            } else {
               audioManagerRef.current?.detachTrack(p.id);
             }
           });
-          return remaining;
+
+          // Add newly discovered remote participants from presence state
+          activeRemoteMap.forEach((p, pid) => {
+            if (!map.has(pid)) {
+              remoteSenderIdRef.current = pid;
+              const newParticipant: LoungeParticipant = {
+                id: pid,
+                name: p.name || partnerInfoRef.current?.name || (isPeerCounselor ? "Student" : "Peer Counselor"),
+                role: p.role || (isPeerCounselor ? "student" : "peer_counselor"),
+                avatar: (p.avatar || (isPeerCounselor ? "dino-green" : "dino-blue")) as AvatarStyle,
+                x: typeof p.x === "number" ? p.x : (isPeerCounselor ? 600 : 400),
+                y: typeof p.y === "number" ? p.y : 320,
+                isTalking: Boolean(p.isTalking),
+                isMuted: Boolean(p.isMuted),
+                isLocal: false,
+              };
+              map.set(pid, newParticipant);
+
+              const now = Date.now();
+              if (now - (lastJoinToastTimeRef.current[pid] || 0) > 4000) {
+                lastJoinToastTimeRef.current[pid] = now;
+                toast.success(`🌿 ${newParticipant.name} entered the Meadow!`, {
+                  id: `join-${pid}`,
+                });
+              }
+            }
+          });
+
+          return Array.from(map.values());
         });
       })
       .on("broadcast", { event: "spatial-offer" }, ({ payload }) => {
