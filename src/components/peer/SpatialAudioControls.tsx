@@ -6,7 +6,6 @@ import {
   Volume2,
   VolumeX,
   Settings2,
-  Sparkles,
   MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -152,8 +151,8 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
           </div>
         </div>
 
-        {/* Center: Main "Request Audio to Talk" / Mic Pill + Live Visualizer */}
-        <div className="flex flex-col items-center gap-1 my-1 sm:my-0 shrink-0">
+        {/* Center: Main "Request to Talk" Button */}
+        <div className="flex flex-col items-center justify-center my-1 sm:my-0 shrink-0">
           <Button
             onClick={onToggleMic}
             size="lg"
@@ -166,24 +165,20 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
             {isMicActive ? (
               <>
                 <Mic className="w-4 h-4 text-slate-950" />
-                <span>Microphone Active (Speaking)</span>
+                <span>Microphone Active</span>
               </>
             ) : (
               <>
                 <MicOff className="w-4 h-4 text-emerald-200" />
-                <span>Request Audio to Talk</span>
-                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-400/30 text-emerald-200 font-mono text-[10px] ml-1">
-                  Space
-                </span>
+                <span>Request to Talk</span>
               </>
             )}
           </Button>
 
-          {/* Live Mic Level Audio Activity Bar / Status */}
-          {isMicActive ? (
-            <div className="flex items-center gap-2 text-[11px] text-slate-300 animate-in fade-in whitespace-nowrap">
+          {/* Live Mic Level Audio Activity Bar (only visible when mic is active) */}
+          {isMicActive && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-300 animate-in fade-in whitespace-nowrap mt-1.5">
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Mic Level:</span>
-              {/* 5-bar live LED visualizer */}
               <div className="flex items-center gap-1">
                 {[0, 1, 2, 3, 4].map((barIdx) => (
                   <div
@@ -202,11 +197,6 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
                 {micLevel > 0.04 ? "Sound Detected 🎙️" : "Speak to talk..."}
               </span>
             </div>
-          ) : (
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
-              <Sparkles className="w-3 h-3 text-emerald-400/70" />
-              <span>Click or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px]">Space</kbd> to talk</span>
-            </span>
           )}
         </div>
 
