@@ -38,6 +38,9 @@ import { Room, RoomEvent, RemoteTrack, Track } from "livekit-client";
 import { supabase } from "@/integrations/supabase/client";
 import { getWebRtcIceServers } from "@/lib/videoCall";
 
+// Calibrated natural spatial hearing radius (in virtual meadow coordinates 1000 x 650)
+export const SPATIAL_HEARING_RADIUS = 160;
+
 export const PeerSpatialLounge = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -308,7 +311,7 @@ export const PeerSpatialLounge = () => {
 
   // Initialize Spatial Audio Manager & enumerate devices
   useEffect(() => {
-    const manager = new SpatialAudioManager(650);
+    const manager = new SpatialAudioManager(SPATIAL_HEARING_RADIUS);
     audioManagerRef.current = manager;
 
     // Unlock browser audio context on any user interaction
@@ -1495,7 +1498,7 @@ export const PeerSpatialLounge = () => {
   const nearbyPeers = useMemo(() => {
     return participants.filter((p) => {
       const d = Math.hypot(p.x - localParticipant.x, p.y - localParticipant.y);
-      return d <= 450;
+      return d <= SPATIAL_HEARING_RADIUS;
     });
   }, [participants, localParticipant.x, localParticipant.y]);
   const renderChatDrawer = () => (
@@ -1716,7 +1719,7 @@ export const PeerSpatialLounge = () => {
             participants={participants}
             localParticipant={localParticipant}
             onMove={handleLocalMove}
-            maxHearableDistance={450}
+            maxHearableDistance={SPATIAL_HEARING_RADIUS}
             isSpeakerPlaying={isAmbientPlaying}
             onToggleSpeaker={handleToggleAmbient}
             floatingReactions={floatingReactions}
@@ -2041,7 +2044,7 @@ export const PeerSpatialLounge = () => {
               participants={participants}
               localParticipant={localParticipant}
               onMove={handleLocalMove}
-              maxHearableDistance={450}
+              maxHearableDistance={SPATIAL_HEARING_RADIUS}
               isSpeakerPlaying={isAmbientPlaying}
               onToggleSpeaker={handleToggleAmbient}
               floatingReactions={floatingReactions}

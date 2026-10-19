@@ -18,7 +18,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
   participants,
   localParticipant,
   onMove,
-  maxHearableDistance = 450,
+  maxHearableDistance = 160,
   speakerPos = { x: 340, y: 190 },
   isSpeakerPlaying = false,
   onToggleSpeaker,
@@ -653,19 +653,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
             className="transition-all duration-300 ease-out"
           />
 
-          {/* 2. Concentric Inner Whisper Circle (40% radius) */}
-          <circle
-            cx={localParticipant.x}
-            cy={localParticipant.y}
-            r={maxHearableDistance * 0.4}
-            fill="none"
-            stroke={isPartnerInRange ? "rgba(52, 211, 153, 0.45)" : "rgba(110, 231, 183, 0.25)"}
-            strokeWidth="1.5"
-            strokeDasharray="4 6"
-            className="transition-all duration-300 ease-out"
-          />
-
-          {/* 3. Outer Hearing Boundary Circle - 100% True Circle */}
+          {/* 2. Outer Hearing Boundary Circle - 100% True Circle */}
           <circle
             cx={localParticipant.x}
             cy={localParticipant.y}
