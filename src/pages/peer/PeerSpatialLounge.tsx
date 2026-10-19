@@ -1593,21 +1593,44 @@ export const PeerSpatialLounge = () => {
       <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-950 flex flex-col overflow-hidden select-none">
         {/* Floating Top HUD */}
         <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
-          {/* Left: Meadow Title & Partner Badge */}
-          <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs text-white shadow-xl">
-            <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-              <Heart className="w-3.5 h-3.5 fill-emerald-500/30" />
+          {/* Left: Meadow Title, Partner Badge & Hearing Aura Status */}
+          <div className="pointer-events-auto flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs text-white shadow-xl">
+              <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <Heart className="w-3.5 h-3.5 fill-emerald-500/30" />
+              </div>
+              <span className="font-bold">Heart-to-Heart Meadow</span>
+              {partnerInfo ? (
+                <span className="text-emerald-300 border-l border-slate-700 pl-2">
+                  Paired with <strong className="text-white">{partnerInfo.name}</strong>
+                </span>
+              ) : sessionId ? (
+                <span className="text-emerald-300/80 border-l border-slate-700 pl-2 text-[11px]">
+                  Private 1-on-1 Session
+                </span>
+              ) : null}
             </div>
-            <span className="font-bold">Heart-to-Heart Meadow</span>
-            {partnerInfo ? (
-              <span className="text-emerald-300 border-l border-slate-700 pl-2">
-                Paired with <strong className="text-white">{partnerInfo.name}</strong>
+
+            {/* Hearing Aura Proximity Badge */}
+            <div className="hidden sm:flex items-center gap-2 bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs text-white shadow-xl">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
               </span>
-            ) : sessionId ? (
-              <span className="text-emerald-300/80 border-l border-slate-700 pl-2 text-[11px]">
-                Private 1-on-1 Session
+              <span className={`font-semibold flex items-center gap-1.5 ${nearbyPeers.length > 0 ? "text-emerald-300" : "text-slate-300"}`}>
+                {nearbyPeers.length > 0 ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Within Hearing Aura</span>
+                  </>
+                ) : (
+                  <>
+                    <Headphones className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Walk Closer to Hear</span>
+                  </>
+                )}
               </span>
-            ) : null}
+            </div>
           </div>
 
           {/* Right: Quick Actions */}
@@ -1726,41 +1749,7 @@ export const PeerSpatialLounge = () => {
             isFullscreen={true}
           />
 
-          {/* In-meadow floating stats bar */}
-          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
-            <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
-              <span className="relative flex h-2 w-2">
-                <span className={`animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
-              </span>
-              <Users className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-medium text-slate-100">
-                {partnerInfo ? (
-                  participants.length > 0 ? (
-                    <span>Partner in Meadow</span>
-                  ) : (
-                    <span className="text-amber-300">Waiting for partner...</span>
-                  )
-                ) : (
-                  <span>Private Session</span>
-                )}
-              </span>
-              <span className="text-slate-600">|</span>
-              <span className={`font-semibold flex items-center gap-1.5 ${nearbyPeers.length > 0 ? "text-emerald-300" : "text-slate-300"}`}>
-                {nearbyPeers.length > 0 ? (
-                  <>
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Within Hearing Aura</span>
-                  </>
-                ) : (
-                  <>
-                    <Headphones className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Walk Closer to Hear</span>
-                  </>
-                )}
-              </span>
-            </div>
-          </div>
+
         </div>
 
         {/* Floating Bottom Audio Controls Dock */}
@@ -2052,7 +2041,7 @@ export const PeerSpatialLounge = () => {
             />
 
             {/* In-meadow floating stats bar */}
-            <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
               <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
                 <span className="relative flex h-2 w-2">
                   <span className={`animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />

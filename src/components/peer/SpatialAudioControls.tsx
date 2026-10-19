@@ -127,10 +127,10 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
       </div>
 
       {/* Bottom row: Audio Device Selector + Main "Request Audio to Talk" Button + Ambiance */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        {/* Left: Audio Device Selector & Mic Sound Checks */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-xl text-xs text-slate-300 max-w-[230px] truncate shadow-sm transition-colors">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+        {/* Left: Audio Device Selector */}
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-xl text-xs text-slate-300 max-w-[200px] lg:max-w-[220px] truncate shadow-sm transition-colors">
             <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <select
               value={selectedAudioDeviceId}
@@ -153,37 +153,35 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
         </div>
 
         {/* Center: Main "Request Audio to Talk" / Mic Pill + Live Visualizer */}
-        <div className="flex flex-col items-center gap-1.5 my-1 sm:my-0">
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={onToggleMic}
-              size="lg"
-              className={`h-11 px-6 rounded-full font-bold transition-all shadow-xl flex items-center gap-2.5 text-sm ${
-                isMicActive
-                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
-                  : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-              }`}
-            >
-              {isMicActive ? (
-                <>
-                  <Mic className="w-4 h-4 text-slate-950" />
-                  <span>Microphone Active (Speaking)</span>
-                </>
-              ) : (
-                <>
-                  <MicOff className="w-4 h-4 text-emerald-200" />
-                  <span>Request Audio to Talk</span>
-                </>
-              )}
-            </Button>
-            <span className="text-[11px] text-slate-400 hidden lg:inline">
-              (or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px]">Space</kbd>)
-            </span>
-          </div>
+        <div className="flex flex-col items-center gap-1 my-1 sm:my-0 shrink-0">
+          <Button
+            onClick={onToggleMic}
+            size="lg"
+            className={`h-11 px-6 rounded-full font-bold transition-all shadow-xl flex items-center gap-2 text-sm shrink-0 ${
+              isMicActive
+                ? "bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+            }`}
+          >
+            {isMicActive ? (
+              <>
+                <Mic className="w-4 h-4 text-slate-950" />
+                <span>Microphone Active (Speaking)</span>
+              </>
+            ) : (
+              <>
+                <MicOff className="w-4 h-4 text-emerald-200" />
+                <span>Request Audio to Talk</span>
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-400/30 text-emerald-200 font-mono text-[10px] ml-1">
+                  Space
+                </span>
+              </>
+            )}
+          </Button>
 
           {/* Live Mic Level Audio Activity Bar / Status */}
           {isMicActive ? (
-            <div className="flex items-center gap-2 text-[11px] text-slate-300 animate-in fade-in">
+            <div className="flex items-center gap-2 text-[11px] text-slate-300 animate-in fade-in whitespace-nowrap">
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Mic Level:</span>
               {/* 5-bar live LED visualizer */}
               <div className="flex items-center gap-1">
@@ -205,15 +203,15 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               </span>
             </div>
           ) : (
-            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
               <Sparkles className="w-3 h-3 text-emerald-400/70" />
-              <span>Click &quot;Request Audio to Talk&quot; or press Spacebar to begin</span>
+              <span>Click or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px]">Space</kbd> to talk</span>
             </span>
           )}
         </div>
 
         {/* Right: Ambient Radio Toggle & Profile Settings */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
           {/* Zen Radio Ambiance Button */}
           <Button
             onClick={onToggleAmbient}
@@ -248,12 +246,12 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
             title="Change your alias or character sprite"
           >
             <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Customize Avatar</span>
-            <span className="sm:hidden">Avatar</span>
+            <span className="hidden md:inline">Customize Avatar</span>
+            <span className="md:hidden">Avatar</span>
           </Button>
 
           {/* Nearby Count Badge */}
-          <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-[11px] text-slate-300 flex items-center gap-1.5 shadow-sm">
+          <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-[11px] text-slate-300 flex items-center gap-1.5 shadow-sm whitespace-nowrap">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-semibold text-emerald-300">{nearbyCount}</span>
             <span className="text-slate-400">in range</span>
