@@ -48,7 +48,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
       switch (e.key.toLowerCase()) {
         case "arrowup":
         case "w":
-          newY = Math.max(50, newY - step);
+          newY = Math.max(60, newY - step);
           moved = true;
           break;
         case "arrowdown":
@@ -58,12 +58,12 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
           break;
         case "arrowleft":
         case "a":
-          newX = Math.max(50, newX - step);
+          newX = Math.max(100, newX - step);
           moved = true;
           break;
         case "arrowright":
         case "d":
-          newX = Math.min(WORLD_WIDTH - 60, newX + step);
+          newX = Math.min(WORLD_WIDTH - 100, newX + step);
           moved = true;
           break;
       }
@@ -89,8 +89,8 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
       const scaleX = WORLD_WIDTH / rect.width;
       const scaleY = WORLD_HEIGHT / rect.height;
 
-      const targetX = Math.max(50, Math.min(WORLD_WIDTH - 60, clickX * scaleX));
-      const targetY = Math.max(50, Math.min(WORLD_HEIGHT - 60, clickY * scaleY));
+      const targetX = Math.max(100, Math.min(WORLD_WIDTH - 100, clickX * scaleX));
+      const targetY = Math.max(60, Math.min(WORLD_HEIGHT - 60, clickY * scaleY));
 
       setClickIndicator({ x: clickX, y: clickY });
       setTimeout(() => setClickIndicator(null), 800);
@@ -638,7 +638,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
                   left: `${(peer.x / WORLD_WIDTH) * 100}%`,
                   top: `${(peer.y / WORLD_HEIGHT) * 100}%`,
                 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none transition-all duration-300 ease-out z-20"
+                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none transition-[left,top] duration-200 ease-out z-20"
               >
                 {/* Speech Bubble */}
                 {peer.speechText && (
@@ -655,45 +655,50 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
                   </div>
                 )}
 
-                {/* Participant Name Tag Pill */}
+                {/* Participant Name Tag Pill with Glowing Speaking Indicator */}
                 <div
-                  className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full shadow-md mb-1 whitespace-nowrap flex items-center gap-1.5 border transition-all ${
-                    inRange
-                      ? "bg-slate-900/90 text-emerald-300 border-emerald-400/50 shadow-emerald-500/10"
-                      : "bg-slate-900/70 text-slate-400 border-slate-700/40"
+                  className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-200 ${
+                    peer.isTalking
+                      ? "bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_38px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300 animate-pulse scale-105"
+                      : inRange
+                      ? "bg-slate-900/90 text-emerald-300 border-emerald-400/50 shadow-emerald-500/10 shadow-md"
+                      : "bg-slate-900/70 text-slate-400 border-slate-700/40 shadow-sm"
                   }`}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      peer.isTalking ? "bg-slate-950" : "bg-emerald-400"
+                    }`}
+                  />
                   <span>{peer.name}</span>
-                  <span className="text-[9px] font-normal text-slate-400 uppercase tracking-wider">
+                  <span
+                    className={`text-[9px] font-normal uppercase tracking-wider ${
+                      peer.isTalking ? "text-slate-800 font-bold" : "text-slate-400"
+                    }`}
+                  >
                     {peer.role === "peer_counselor" ? "Counselor" : "Student"}
                   </span>
                   {peer.isTalking && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping ml-0.5" />
+                    <span className="flex items-center gap-0.5 ml-1 text-slate-950">
+                      <span className="w-1 h-2.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-1 h-3.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-1 h-2 bg-slate-950 rounded-full animate-bounce" />
+                    </span>
                   )}
                 </div>
 
-                {/* Voice waves animation above avatar when talking */}
-                {peer.isTalking && (
-                  <div className="absolute -top-4 text-emerald-400 font-bold text-xs flex items-center gap-0.5 animate-pulse">
-                    <span>(</span>
-                    <span className="text-sm">)</span>
-                    <span className="text-base">)</span>
+                {/* Avatar Sprite and Ground Shadow Container */}
+                <div className="relative mt-0.5">
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-11 h-3.5 bg-black/25 rounded-full blur-[1.5px] pointer-events-none" />
+                  <div
+                    className={`relative transition-transform duration-200 ${
+                      peer.isTalking
+                        ? "scale-110 drop-shadow-[0_0_16px_rgba(34,197,94,0.7)]"
+                        : "drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)]"
+                    } ${!inRange ? "opacity-85" : "opacity-100"}`}
+                  >
+                    {renderAvatarSprite(peer.avatar, peer.isTalking, false)}
                   </div>
-                )}
-
-                {/* Avatar Ground Shadow */}
-                <div className="w-11 h-3.5 bg-black/25 rounded-full blur-[1.5px] translate-y-11" />
-
-                {/* Avatar Sprite */}
-                <div
-                  className={`relative transition-all duration-200 ${
-                    peer.isTalking
-                      ? "scale-110 drop-shadow-[0_0_16px_rgba(34,197,94,0.7)]"
-                      : "drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)]"
-                  } ${!inRange ? "opacity-85" : "opacity-100"}`}
-                >
-                  {renderAvatarSprite(peer.avatar, peer.isTalking, false)}
                 </div>
               </div>
             );
@@ -707,7 +712,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
             left: `${(localParticipant.x / WORLD_WIDTH) * 100}%`,
             top: `${(localParticipant.y / WORLD_HEIGHT) * 100}%`,
           }}
-          className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none transition-all duration-75 ease-out z-30"
+          className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none transition-[left,top] duration-100 ease-out z-30"
         >
           {/* Local Speech Bubble */}
           {localParticipant.speechText && (
@@ -724,36 +729,41 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
             </div>
           )}
 
-          {/* Local Highlighted Name Tag (Vibrant emerald, matching screenshot) */}
-          <div className="text-[11px] font-extrabold px-3 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap bg-emerald-500 text-slate-950 border border-emerald-300 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
-            <span>{localParticipant.name} (You)</span>
+          {/* Local Highlighted Name Tag with Glowing Speaking Indicator */}
+          <div
+            className={`text-[11px] font-extrabold px-3.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-200 ${
+              localParticipant.isTalking
+                ? "bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-400 text-slate-950 border-white shadow-[0_0_22px_rgba(52,211,153,1),0_0_42px_rgba(34,197,94,0.75)] ring-2 ring-emerald-300 animate-pulse scale-105"
+                : "bg-emerald-500 text-slate-950 border-emerald-300 shadow-md"
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full transition-colors ${
+                localParticipant.isTalking ? "bg-slate-950" : "bg-slate-950/80"
+              }`}
+            />
+            <span className="tracking-wide">{localParticipant.name} (You)</span>
             {localParticipant.isTalking && (
-              <span className="w-2 h-2 rounded-full bg-white animate-ping ml-0.5" />
+              <span className="flex items-center gap-0.5 ml-1 text-slate-950">
+                <span className="w-1 h-2.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1 h-3.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1 h-2 bg-slate-950 rounded-full animate-bounce" />
+              </span>
             )}
           </div>
 
-          {/* Voice waves animation above avatar when talking */}
-          {localParticipant.isTalking && (
-            <div className="absolute -top-4 text-emerald-300 font-extrabold text-xs flex items-center gap-0.5 animate-pulse">
-              <span>(</span>
-              <span className="text-sm">)</span>
-              <span className="text-base">)</span>
+          {/* Local Avatar Sprite and Ground Shadow Container */}
+          <div className="relative mt-0.5">
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-3.5 bg-black/25 rounded-full blur-[1.5px] pointer-events-none" />
+            <div
+              className={`relative transition-transform duration-200 ${
+                localParticipant.isTalking
+                  ? "scale-115 drop-shadow-[0_0_20px_rgba(74,222,128,0.95)]"
+                  : "drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]"
+              }`}
+            >
+              {renderAvatarSprite(localParticipant.avatar, localParticipant.isTalking, true)}
             </div>
-          )}
-
-          {/* Local Avatar Ground Shadow */}
-          <div className="w-12 h-3.5 bg-black/25 rounded-full blur-[1.5px] translate-y-11" />
-
-          {/* Local Avatar Sprite */}
-          <div
-            className={`relative transition-all duration-150 ${
-              localParticipant.isTalking
-                ? "scale-115 drop-shadow-[0_0_20px_rgba(74,222,128,0.95)]"
-                : "drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]"
-            }`}
-          >
-            {renderAvatarSprite(localParticipant.avatar, localParticipant.isTalking, true)}
           </div>
         </div>
 

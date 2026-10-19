@@ -1271,17 +1271,40 @@ export const PeerSpatialLounge = () => {
         // 4. Real-time microphone audio level meter & voice activity animation
         if (audioManagerRef.current) {
           const { getVolume } = audioManagerRef.current.createMicLevelAnalyser(stream);
+          let speakingHoldUntil = 0;
+          let currentSpeakingState = false;
+          let lastMeterUpdateAt = 0;
+
           const volumeLoop = () => {
             const vol = getVolume();
-            setMicLevel(vol);
-            const isSpeaking = vol > 0.05;
-            setLocalParticipant((prev) => {
-              if (prev.isTalking !== isSpeaking) {
-                sendSignal("spatial-move", { ...prev, isTalking: isSpeaking });
-                return { ...prev, isTalking: isSpeaking };
-              }
-              return prev;
-            });
+            const now = Date.now();
+
+            // Throttle visual meter state updates to ~16fps (every 60ms) to prevent re-render thrashing
+            if (now - lastMeterUpdateAt > 60) {
+              setMicLevel(vol);
+              lastMeterUpdateAt = now;
+            }
+
+            // Hysteresis + Speech Hangover VAD:
+            // When voice volume crosses audible threshold, hold the active speaking state for 450ms
+            // to naturally bridge inter-syllable pauses and prevent jitter/glitching.
+            if (vol > 0.035) {
+              speakingHoldUntil = now + 450;
+            }
+
+            const isSpeaking = now < speakingHoldUntil;
+
+            if (isSpeaking !== currentSpeakingState) {
+              currentSpeakingState = isSpeaking;
+              setLocalParticipant((prev) => {
+                if (prev.isTalking !== isSpeaking) {
+                  sendSignal("spatial-move", { ...prev, isTalking: isSpeaking });
+                  return { ...prev, isTalking: isSpeaking };
+                }
+                return prev;
+              });
+            }
+
             micAnalyserAnimationRef.current = requestAnimationFrame(volumeLoop);
           };
           micAnalyserAnimationRef.current = requestAnimationFrame(volumeLoop);
@@ -1289,7 +1312,7 @@ export const PeerSpatialLounge = () => {
 
         setIsMicActive(true);
         setLocalParticipant((prev) => {
-          const next = { ...prev, isTalking: true, isMuted: false };
+          const next = { ...prev, isTalking: false, isMuted: false };
           sendSignal("spatial-move", next);
           return next;
         });
