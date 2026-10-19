@@ -319,9 +319,9 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
 
   return (
     <div
-      className={`relative w-full overflow-hidden select-none ${
+      className={`relative w-full overflow-hidden select-none flex items-center justify-center ${
         isFullscreen
-          ? "h-full rounded-none border-none shadow-none"
+          ? "h-full w-full rounded-none border-none shadow-none"
           : "rounded-3xl border-2 border-emerald-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
       }`}
     >
@@ -329,8 +329,14 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
       <div
         ref={containerRef}
         onClick={handleMeadowClick}
-        style={{ aspectRatio: isFullscreen ? undefined : `${WORLD_WIDTH} / ${WORLD_HEIGHT}` }}
-        className={`relative w-full cursor-crosshair overflow-hidden ${isFullscreen ? "h-full" : ""}`}
+        style={{
+          aspectRatio: `${WORLD_WIDTH} / ${WORLD_HEIGHT}`,
+          maxWidth: "100%",
+          maxHeight: "100%",
+        }}
+        className={`relative w-full cursor-crosshair overflow-hidden m-auto shadow-2xl ${
+          isFullscreen ? "rounded-2xl border border-emerald-500/30" : ""
+        }`}
       >
         {/* ======================================================== */}
         {/* Layer 1: Lush Painterly Ground Canvas with Rolling Hills */}
@@ -536,7 +542,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
               left: `${8 + (i * 13) % 84}%`,
               animationDelay: `${i * 0.7}s`,
             }}
-            className="absolute w-2 h-2 rounded-full bg-yellow-300/80 shadow-[0_0_8px_rgba(253,224,71,0.9)] pointer-events-none animate-ping"
+            className="absolute w-2 h-2 rounded-full bg-yellow-300/80 shadow-[0_0_8px_rgba(253,224,71,0.9)] pointer-events-none animate-pulse"
           />
         ))}
 
@@ -594,31 +600,177 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
         </div>
 
         {/* ======================================================== */}
-        {/* Layer 5: Luminous Spatial Proximity Hearing Aura         */}
+        {/* Layer 5: Precision Luminous Spatial Hearing Circle Aura  */}
         {/* ======================================================== */}
-        <div
-          style={{
-            left: `${(localParticipant.x / WORLD_WIDTH) * 100}%`,
-            top: `${(localParticipant.y / WORLD_HEIGHT) * 100}%`,
-            width: `${((maxHearableDistance * 2) / WORLD_WIDTH) * 100}%`,
-            height: `${((maxHearableDistance * 2) / WORLD_HEIGHT) * 100}%`,
-          }}
-          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-all duration-300 ease-out z-8 ${
-            isPartnerInRange
-              ? "border-2 border-emerald-400/70 shadow-[0_0_30px_rgba(52,211,153,0.35)]"
-              : "border-2 border-dashed border-emerald-300/40"
-          }`}
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none z-10"
+          viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`}
         >
-          {/* Radial Aura Fill */}
-          <div
-            className="w-full h-full rounded-full transition-opacity duration-300"
-            style={{
-              background: isPartnerInRange
-                ? "radial-gradient(circle, rgba(52,211,153,0.22) 0%, rgba(16,185,129,0.08) 60%, rgba(5,150,105,0.01) 85%, transparent 100%)"
-                : "radial-gradient(circle, rgba(52,211,153,0.12) 0%, rgba(16,185,129,0.04) 65%, transparent 100%)",
-            }}
+          <defs>
+            {/* Hearing Aura Soft Radial Gradient */}
+            <radialGradient
+              id="spatialHearingGrad"
+              cx={localParticipant.x}
+              cy={localParticipant.y}
+              r={maxHearableDistance}
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop
+                offset="0%"
+                stopColor={isPartnerInRange ? "#34d399" : "#6ee7b7"}
+                stopOpacity={isPartnerInRange ? "0.25" : "0.12"}
+              />
+              <stop
+                offset="40%"
+                stopColor={isPartnerInRange ? "#10b981" : "#34d399"}
+                stopOpacity={isPartnerInRange ? "0.14" : "0.06"}
+              />
+              <stop
+                offset="80%"
+                stopColor={isPartnerInRange ? "#059669" : "#10b981"}
+                stopOpacity={isPartnerInRange ? "0.04" : "0.015"}
+              />
+              <stop
+                offset="100%"
+                stopColor="#047857"
+                stopOpacity="0"
+              />
+            </radialGradient>
+
+            {/* Outer Border Glowing Filter */}
+            <filter id="auraGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          {/* 1. Luminous Filled Hearing Zone */}
+          <circle
+            cx={localParticipant.x}
+            cy={localParticipant.y}
+            r={maxHearableDistance}
+            fill="url(#spatialHearingGrad)"
+            className="transition-all duration-300 ease-out"
           />
-        </div>
+
+          {/* 2. Concentric Inner Whisper Circle (40% radius) */}
+          <circle
+            cx={localParticipant.x}
+            cy={localParticipant.y}
+            r={maxHearableDistance * 0.4}
+            fill="none"
+            stroke={isPartnerInRange ? "rgba(52, 211, 153, 0.45)" : "rgba(110, 231, 183, 0.25)"}
+            strokeWidth="1.5"
+            strokeDasharray="4 6"
+            className="transition-all duration-300 ease-out"
+          />
+
+          {/* 3. Outer Hearing Boundary Circle - 100% True Circle */}
+          <circle
+            cx={localParticipant.x}
+            cy={localParticipant.y}
+            r={maxHearableDistance}
+            fill="none"
+            stroke={isPartnerInRange ? "#34d399" : "rgba(110, 231, 183, 0.45)"}
+            strokeWidth={isPartnerInRange ? "2.5" : "2"}
+            strokeDasharray={isPartnerInRange ? "none" : "8 6"}
+            filter={isPartnerInRange ? "url(#auraGlow)" : undefined}
+            className="transition-all duration-300 ease-out"
+          />
+
+          {/* 4. Active Sound Waves Ripples (when speaking) */}
+          {localParticipant.isTalking && (
+            <>
+              <circle
+                cx={localParticipant.x}
+                cy={localParticipant.y}
+                r="55"
+                fill="none"
+                stroke="#34d399"
+                strokeWidth="2.5"
+                className="animate-ping origin-center opacity-70"
+                style={{ transformOrigin: `${localParticipant.x}px ${localParticipant.y}px` }}
+              />
+              <circle
+                cx={localParticipant.x}
+                cy={localParticipant.y}
+                r="95"
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="1.5"
+                className="animate-ping origin-center opacity-40"
+                style={{ animationDuration: "1.6s", transformOrigin: `${localParticipant.x}px ${localParticipant.y}px` }}
+              />
+            </>
+          )}
+
+          {/* 5. Luminous Proximity Tether to Partner when in range */}
+          {participants
+            .filter((p) => p.id !== localParticipant.id)
+            .map((peer) => {
+              const dx = peer.x - localParticipant.x;
+              const dy = peer.y - localParticipant.y;
+              const dist = Math.hypot(dx, dy);
+              const inRange = dist <= maxHearableDistance;
+
+              if (inRange) {
+                const midX = (localParticipant.x + peer.x) / 2;
+                const midY = (localParticipant.y + peer.y) / 2;
+                return (
+                  <g key={`tether-${peer.id}`} className="transition-opacity duration-300">
+                    {/* Soft Glow Tether Beam */}
+                    <line
+                      x1={localParticipant.x}
+                      y1={localParticipant.y}
+                      x2={peer.x}
+                      y2={peer.y}
+                      stroke="rgba(52, 211, 153, 0.45)"
+                      strokeWidth="5"
+                      strokeLinecap="round"
+                      filter="url(#auraGlow)"
+                    />
+                    {/* Animated Dotted Inner Beam */}
+                    <line
+                      x1={localParticipant.x}
+                      y1={localParticipant.y}
+                      x2={peer.x}
+                      y2={peer.y}
+                      stroke="#a7f3d0"
+                      strokeWidth="2"
+                      strokeDasharray="6 6"
+                      strokeLinecap="round"
+                      className="animate-pulse"
+                    />
+                    {/* Connection Pill at Midpoint */}
+                    <g transform={`translate(${midX}, ${midY})`}>
+                      <rect
+                        x="-54"
+                        y="-11"
+                        width="108"
+                        height="22"
+                        rx="11"
+                        fill="rgba(2, 44, 34, 0.92)"
+                        stroke="rgba(52, 211, 153, 0.7)"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x="0"
+                        y="4"
+                        textAnchor="middle"
+                        fill="#6ee7b7"
+                        fontSize="10"
+                        fontWeight="bold"
+                        fontFamily="sans-serif"
+                      >
+                        🌿 In Range (100%)
+                      </text>
+                    </g>
+                  </g>
+                );
+              }
+              return null;
+            })}
+        </svg>
 
         {/* Click indicator ripple animation */}
         {clickIndicator && (
@@ -665,9 +817,9 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
 
                 {/* Participant Name Tag Pill with Glowing Speaking Indicator */}
                 <div
-                  className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-[box-shadow,background-color,border-color] duration-300 ${
+                  className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-300 ${
                     peer.isTalking
-                      ? "bg-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_35px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300"
+                      ? "bg-emerald-400 text-slate-950 border-emerald-200 shadow-[0_0_16px_rgba(52,211,153,0.9)] ring-2 ring-emerald-300"
                       : inRange
                       ? "bg-slate-900/90 text-emerald-300 border-emerald-400/50 shadow-emerald-500/10 shadow-md"
                       : "bg-slate-900/70 text-slate-400 border-slate-700/40 shadow-sm"
@@ -675,7 +827,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
                 >
                   <span className="relative flex h-2 w-2">
                     {peer.isTalking && (
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
+                      <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
                     )}
                     <span
                       className={`relative inline-flex rounded-full h-2 w-2 ${
@@ -737,15 +889,15 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
 
           {/* Local Highlighted Name Tag with Glowing Speaking Indicator */}
           <div
-            className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-[box-shadow,background-color,border-color] duration-300 ${
+            className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-300 ${
               localParticipant.isTalking
-                ? "bg-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_35px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300"
+                ? "bg-emerald-400 text-slate-950 border-emerald-200 shadow-[0_0_16px_rgba(52,211,153,0.9)] ring-2 ring-emerald-300"
                 : "bg-emerald-500 text-slate-950 border-emerald-300 shadow-md"
             }`}
           >
             <span className="relative flex h-2 w-2">
               {localParticipant.isTalking && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
               )}
               <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-950" />
             </span>

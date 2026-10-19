@@ -224,6 +224,24 @@ export const PeerSpatialLounge = () => {
     };
   }, []);
 
+  // Keyboard shortcut: Press 'F' to toggle fullscreen when not typing
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        void handleToggleFullscreen();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleToggleFullscreen]);
+
   // Fetch assigned students for the peer counselor
   const fetchAssignedStudents = useCallback(
     async (autoLinkIfSingle = false) => {
@@ -1636,7 +1654,7 @@ export const PeerSpatialLounge = () => {
         </div>
 
         {/* Fullscreen Meadow Viewport */}
-        <div className="relative w-full h-full flex-1 overflow-hidden">
+        <div className="relative w-full h-full flex-1 min-h-0 flex items-center justify-center overflow-hidden pb-36 pt-14 px-3 sm:px-6">
           {/* Waiting for partner prompt overlay */}
           {sessionId && partnerInfo && participants.length === 0 && (
             <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4 pointer-events-auto">
@@ -1706,10 +1724,10 @@ export const PeerSpatialLounge = () => {
           />
 
           {/* In-meadow floating stats bar */}
-          <div className="absolute bottom-28 left-4 z-20 flex items-center gap-2 pointer-events-none">
+          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
             <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
               <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span className={`animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
               </span>
               <Users className="w-3.5 h-3.5 text-emerald-400" />
@@ -2034,7 +2052,7 @@ export const PeerSpatialLounge = () => {
             <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
               <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
                 <span className="relative flex h-2 w-2">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                  <span className={`animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
                   <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
                 </span>
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
