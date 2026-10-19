@@ -1684,6 +1684,26 @@ class ApiClient {
     };
   }
 
+  async cancelSessionSpatialLounge(sessionId: number | string) {
+    const response = await this.client.post(`/sessions/${sessionId}/spatial-lounge/cancel`);
+    return response.data as {
+      success: boolean;
+      active: boolean;
+      session_id: number;
+      message?: string;
+    };
+  }
+
+  async cancelAllPeerSpatialLounges() {
+    const response = await this.client.post('/peer/spatial-lounge/cancel-all');
+    return response.data as {
+      success: boolean;
+      active: boolean;
+      cleared_count: number;
+      message?: string;
+    };
+  }
+
   async getSessionSpatialLoungeStatus(sessionId: number | string) {
     const response = await this.client.get(`/sessions/${sessionId}/spatial-lounge/status`);
     return response.data as {

@@ -17,6 +17,7 @@ import {
   ArchiveRestore,
   ArrowRight,
   Radio,
+  XCircle,
 } from "lucide-react";
 import { counselorNavItems, peerCounselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -315,6 +316,7 @@ const CounselorMessages = () => {
   const [isSwitchingChat, setIsSwitchingChat] = useState(false);
   const [spatialLoungeActive, setSpatialLoungeActive] = useState(false);
   const [isRequestingLounge, setIsRequestingLounge] = useState(false);
+  const [isCancellingLounge, setIsCancellingLounge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1460,6 +1462,20 @@ const CounselorMessages = () => {
     }
   };
 
+  const handleCancelSpatialLounge = async () => {
+    if (!selectedSessionId || !isPeerCounselor || isCancellingLounge) return;
+    try {
+      setIsCancellingLounge(true);
+      await api.cancelSessionSpatialLounge(selectedSessionId);
+      setSpatialLoungeActive(false);
+      toast.success("🌿 Spatial Lounge invitation cancelled. It has been removed from the student's dashboard.");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to cancel spatial lounge"));
+    } finally {
+      setIsCancellingLounge(false);
+    }
+  };
+
   const handleEmergencyEscalation = async () => {
     if (!selectedSessionId || isTriggeringEmergency) return;
 
@@ -2211,6 +2227,16 @@ const CounselorMessages = () => {
                                   <Radio className="mr-2 h-4 w-4 text-emerald-500" />
                                   {spatialLoungeActive ? "Enter Spatial Lounge" : "Request Spatial Lounge"}
                                 </DropdownMenuItem>
+                                {spatialLoungeActive && (
+                                  <DropdownMenuItem
+                                    className="text-rose-600 focus:text-rose-700 dark:text-rose-400"
+                                    onClick={() => void handleCancelSpatialLounge()}
+                                    disabled={isCancellingLounge}
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    <span>Cancel Lounge Invite</span>
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => void handleEscalateToCounselor()} disabled={isEscalating}>
                                   <ArrowUpCircle className="mr-2 h-4 w-4" />
                                   {isEscalating ? "Escalating..." : "Escalate to counselor"}

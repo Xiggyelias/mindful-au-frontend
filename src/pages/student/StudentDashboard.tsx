@@ -11,6 +11,7 @@ import {
   Phone,
   Clock,
   Radio,
+  X,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -104,6 +105,7 @@ const StudentDashboard = () => {
     peer_avatar?: string;
     requested_at?: string | null;
   } | null>(null);
+  const [dismissedLoungeId, setDismissedLoungeId] = useState<number | null>(null);
   const { user } = useAuth();
   const {
     tip: dailyTip,
@@ -113,6 +115,19 @@ const StudentDashboard = () => {
     toggleFavorite,
     isSavingFavorite,
   } = useDailyTip();
+
+  const handleDismissLoungeBanner = async () => {
+    if (!activeSpatialLounge?.session_id) return;
+    const sId = activeSpatialLounge.session_id;
+    setDismissedLoungeId(sId);
+    try {
+      await api.cancelSessionSpatialLounge(sId);
+    } catch {
+      // Silently catch dismiss error
+    }
+    setActiveSpatialLounge(null);
+    toast.success("Meadow invitation dismissed");
+  };
 
   const userName = user?.profile?.full_name || user?.email?.split('@')[0] || "Student";
 
@@ -227,7 +242,13 @@ const StudentDashboard = () => {
     };
 
     const interval = setInterval(pollSpatial, 15000);
-    return () => clearInterval(interval);
+    const handleFocus = () => void pollSpatial();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [user]);
 
   const handlePanicButton = async () => {
@@ -326,7 +347,9 @@ const StudentDashboard = () => {
 
         <main className="p-4 lg:p-6 space-y-6">
           {/* Spatial Lounge Active Invitation Banner */}
-          {activeSpatialLounge?.active && activeSpatialLounge?.session_id && (
+          {activeSpatialLounge?.active &&
+            activeSpatialLounge?.session_id &&
+            dismissedLoungeId !== activeSpatialLounge.session_id && (
             <div className="rounded-3xl bg-gradient-to-r from-emerald-950/70 via-teal-950/50 to-slate-950 border border-emerald-500/40 p-6 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-top-3">
               <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-15 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.5)_0,transparent_70%)]" />
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
@@ -350,7 +373,7 @@ const StudentDashboard = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2.5 shrink-0">
                   <Button
                     onClick={() =>
                       navigate(`/student/spatial-lounge?session_id=${activeSpatialLounge.session_id}`)
@@ -359,6 +382,16 @@ const StudentDashboard = () => {
                   >
                     <Radio className="w-4 h-4 animate-pulse" />
                     <span>Join Voice Meadow</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleDismissLoungeBanner}
+                    className="text-emerald-300 hover:text-white hover:bg-white/10 rounded-2xl w-11 h-11 shrink-0 border border-emerald-500/30"
+                    title="Dismiss invitation"
+                    aria-label="Dismiss invitation"
+                  >
+                    <X className="w-5 h-5" />
                   </Button>
                 </div>
               </div>

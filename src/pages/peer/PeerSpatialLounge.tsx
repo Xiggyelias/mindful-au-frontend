@@ -17,6 +17,7 @@ import {
   UserCheck,
   Headphones,
   X,
+  XCircle,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -56,6 +57,7 @@ export const PeerSpatialLounge = () => {
   const [isLoadingAssigned, setIsLoadingAssigned] = useState(false);
   const [showLinkerModal, setShowLinkerModal] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [isCancellingInvite, setIsCancellingInvite] = useState(false);
 
   // Audio & LiveKit State
   const [isMicActive, setIsMicActive] = useState(false);
@@ -135,6 +137,23 @@ export const PeerSpatialLounge = () => {
 
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
 
+  // Cancel active meadow invitation so it disappears from student dashboard
+  const handleCancelInvite = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      setIsCancellingInvite(true);
+      await api.cancelSessionSpatialLounge(sessionId);
+      toast.success(
+        `🌿 Meadow invitation cancelled for ${partnerInfo?.name || "student"}. The banner has been removed from their dashboard.`
+      );
+      navigate("/peer/dashboard");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Failed to cancel invitation"));
+    } finally {
+      setIsCancellingInvite(false);
+    }
+  }, [sessionId, partnerInfo?.name, navigate]);
+
   // Navigation back to chat
   const handleBackToChat = useCallback(() => {
     // Notify peer immediately that we are leaving so our avatar vanishes on their screen
@@ -160,6 +179,10 @@ export const PeerSpatialLounge = () => {
       } catch (err) {
         console.warn("LiveKit disconnect error:", err);
       }
+    }
+
+    if (isPeerCounselor && sessionId) {
+      void api.cancelSessionSpatialLounge(sessionId).catch(() => {});
     }
 
     if (isPeerCounselor) {
@@ -864,7 +887,7 @@ export const PeerSpatialLounge = () => {
     });
     supabaseChannelRef.current = channel;
 
-    // Broadcast departure so partner immediately sees avatar vanish
+    // Broadcast departure so partner immediately sees avatar vanish and clear lingering invite
     const broadcastLeave = () => {
       try {
         void channel.send({
@@ -878,6 +901,22 @@ export const PeerSpatialLounge = () => {
         void channel.untrack();
       } catch (err) {
         console.warn("Error broadcasting leave:", err);
+      }
+
+      if (isPeerCounselor && sessionId) {
+        try {
+          const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
+          fetch(`/api/sessions/${sessionId}/spatial-lounge/cancel`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            keepalive: true,
+          }).catch(() => {});
+        } catch {
+          // ignore
+        }
       }
     };
 
@@ -1145,6 +1184,9 @@ export const PeerSpatialLounge = () => {
       window.removeEventListener("beforeunload", broadcastLeave);
       window.removeEventListener("pagehide", broadcastLeave);
       broadcastLeave();
+      if (isPeerCounselor && sessionId) {
+        void api.cancelSessionSpatialLounge(sessionId).catch(() => {});
+      }
       void supabase.removeChannel(channel);
       supabaseChannelRef.current = null;
     };
@@ -1670,20 +1712,37 @@ export const PeerSpatialLounge = () => {
 
                   <div className="flex items-center gap-2 shrink-0">
                     {isPeerCounselor && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleResendInvite}
-                        disabled={isSendingInvite}
-                        className="h-7 text-[11px] px-2.5 bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white rounded-lg font-medium gap-1"
-                      >
-                        {isSendingInvite ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Send className="w-3 h-3" />
-                        )}
-                        <span>Ping Student</span>
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleResendInvite}
+                          disabled={isSendingInvite}
+                          className="h-7 text-[11px] px-2.5 bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white rounded-lg font-medium gap-1"
+                        >
+                          {isSendingInvite ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Send className="w-3 h-3" />
+                          )}
+                          <span>Ping Student</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelInvite}
+                          disabled={isCancellingInvite}
+                          className="h-7 text-[11px] px-2.5 bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/60 hover:text-white rounded-lg font-medium gap-1"
+                          title="Cancel this invitation so it does not appear on the student's dashboard"
+                        >
+                          {isCancellingInvite ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <XCircle className="w-3 h-3 text-rose-400" />
+                          )}
+                          <span>Cancel Wait</span>
+                        </Button>
+                      </>
                     )}
                     <Button
                       size="sm"

@@ -8,6 +8,7 @@ import {
   Radio,
   Shield,
   UserCheck2,
+  XCircle,
 } from "lucide-react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -36,8 +37,14 @@ type PeerDashboardResponse = {
     student_label: string;
     status: string;
     session_type: string;
+    spatial_lounge_active?: boolean;
     updated_at: string;
   }>;
+  active_spatial_lounge?: {
+    session_id: number;
+    student_name: string;
+    requested_at?: string | null;
+  } | null;
 };
 
 const PeerDashboard = () => {
@@ -49,6 +56,7 @@ const PeerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [savingAvailability, setSavingAvailability] = useState(false);
   const [data, setData] = useState<PeerDashboardResponse | null>(null);
+  const [cancellingLoungeId, setCancellingLoungeId] = useState<number | null>(null);
   const {
     tip: dailyTip,
     isLoading: tipLoading,
@@ -59,6 +67,24 @@ const PeerDashboard = () => {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const loadDashboard = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const next = await api.getPeerDashboard();
+      if (!abortRef.current?.signal.aborted) {
+        setData(next);
+      }
+    } catch (error: unknown) {
+      if (!abortRef.current?.signal.aborted && !silent) {
+        toast.error(getApiErrorMessage(error, "Failed to load peer dashboard"));
+      }
+    } finally {
+      if (!abortRef.current?.signal.aborted && !silent) {
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!user?.id) return;
 
@@ -66,23 +92,47 @@ const PeerDashboard = () => {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const load = async () => {
-      try {
-        setLoading(true);
-        const next = await api.getPeerDashboard();
-        if (!controller.signal.aborted) setData(next);
-      } catch (error: unknown) {
-        if (!controller.signal.aborted) {
-          toast.error(getApiErrorMessage(error, "Failed to load peer dashboard"));
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    };
+    void loadDashboard(false);
 
-    void load();
-    return () => controller.abort();
+    // Poll periodically to keep spatial lounge & active session status accurate
+    const pollInterval = setInterval(() => {
+      void loadDashboard(true);
+    }, 15000);
+
+    const handleFocus = () => {
+      void loadDashboard(true);
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      controller.abort();
+      clearInterval(pollInterval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [user?.id]);
+
+  const handleCancelLounge = async (sessionId: number) => {
+    try {
+      setCancellingLoungeId(sessionId);
+      await api.cancelSessionSpatialLounge(sessionId);
+      toast.success("Meadow invitation cancelled. It has been removed from the student's dashboard.");
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          active_spatial_lounge:
+            prev.active_spatial_lounge?.session_id === sessionId ? null : prev.active_spatial_lounge,
+          recent_sessions: prev.recent_sessions.map((s) =>
+            s.id === sessionId ? { ...s, spatial_lounge_active: false } : s
+          ),
+        };
+      });
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Failed to cancel spatial lounge invitation"));
+    } finally {
+      setCancellingLoungeId(null);
+    }
+  };
 
   const handleAvailabilityToggle = async (available: boolean) => {
     try {
@@ -163,17 +213,29 @@ const PeerDashboard = () => {
             <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-15 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.4)_0,transparent_70%)]" />
             <CardContent className="pt-6 flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
                     Proximity Voice & Heart-to-Heart
                   </span>
+                  {data?.active_spatial_lounge && (
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1.5 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      Active Wait: {data.active_spatial_lounge.student_name}
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-xl font-display font-bold text-foreground">
                   Peer Spatial Meadow & Voice Lounge
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-xl">
-                  Step into the 2D audio meadow. Connect 1-on-1 with your assigned student to talk naturally with distance-based stereo sound, zen ambient music, and heart-to-heart voice chat.
+                  {data?.active_spatial_lounge ? (
+                    <span>
+                      An invitation is currently open for <strong className="text-emerald-400 font-semibold">{data.active_spatial_lounge.student_name}</strong>. They will see the invitation on their dashboard until you cancel it or join.
+                    </span>
+                  ) : (
+                    "Step into the 2D audio meadow. Connect 1-on-1 with your assigned student to talk naturally with distance-based stereo sound, zen ambient music, and heart-to-heart voice chat."
+                  )}
                 </p>
                 <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
                   <span className="flex items-center gap-1.5 text-foreground font-medium">
@@ -191,12 +253,30 @@ const PeerDashboard = () => {
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                {data?.active_spatial_lounge && (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleCancelLounge(data.active_spatial_lounge!.session_id)}
+                    disabled={cancellingLoungeId === data.active_spatial_lounge.session_id}
+                    className="border-rose-500/40 text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 font-semibold px-4 h-11 rounded-xl flex items-center justify-center gap-2"
+                    title="Cancel this invitation so it doesn't appear on the student's dashboard"
+                  >
+                    <XCircle className="w-4 h-4 text-rose-400" />
+                    <span>{cancellingLoungeId === data.active_spatial_lounge.session_id ? "Cancelling..." : "Cancel Invitation"}</span>
+                  </Button>
+                )}
                 <Button
-                  onClick={() => navigate("/peer/spatial-lounge")}
+                  onClick={() =>
+                    navigate(
+                      data?.active_spatial_lounge
+                        ? `/peer/spatial-lounge?session_id=${data.active_spatial_lounge.session_id}`
+                        : "/peer/spatial-lounge"
+                    )
+                  }
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 h-11 rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
                 >
                   <Radio className="w-4 h-4 animate-pulse" />
-                  <span>Enter Spatial Lounge</span>
+                  <span>{data?.active_spatial_lounge ? "Resume Lounge" : "Enter Spatial Lounge"}</span>
                 </Button>
               </div>
             </CardContent>
@@ -270,15 +350,34 @@ const PeerDashboard = () => {
                       </button>
 
                       <div className="flex items-center gap-2 shrink-0">
+                        {row.spatial_lounge_active && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleCancelLounge(row.id)}
+                            disabled={cancellingLoungeId === row.id}
+                            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 text-xs h-8 px-2.5 rounded-xl font-medium gap-1"
+                            title="Cancel invitation so it does not appear on student dashboard"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>{cancellingLoungeId === row.id ? "..." : "Cancel Invite"}</span>
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => navigate(`/peer/spatial-lounge?session_id=${row.id}`)}
-                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs h-8 px-3 rounded-xl font-medium gap-1.5"
+                          className={`text-xs h-8 px-3 rounded-xl font-medium gap-1.5 ${
+                            row.spatial_lounge_active
+                              ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-400/50 shadow-sm"
+                              : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          }`}
                           title="Open 2D Proximity Audio Meadow with this student"
                         >
                           <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
-                          <span className="hidden sm:inline">Spatial Meadow</span>
+                          <span className="hidden sm:inline">
+                            {row.spatial_lounge_active ? "Waiting in Meadow" : "Spatial Meadow"}
+                          </span>
                         </Button>
                         <Button
                           size="sm"
