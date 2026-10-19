@@ -7,6 +7,8 @@ import {
   Loader2,
   CheckCircle2,
   Moon,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { counselorNavItems } from "@/config/counselorNavItems";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
@@ -29,14 +31,14 @@ const scaleOptions = [
 ] as const;
 
 const checkInQuestions = [
-  { key: "emotional_drain", label: "I felt emotionally drained by counseling work today." },
-  { key: "disconnect_difficulty", label: "I found it hard to disconnect from work after sessions." },
-  { key: "calm_control", label: "I felt calm and in control during difficult moments." },
-  { key: "energy_level", label: "I had enough energy to support students effectively." },
-  { key: "break_quality", label: "I took meaningful breaks between sessions." },
-  { key: "support_level", label: "I felt supported by peers or supervisors today." },
-  { key: "sleep_quality", label: "My sleep quality in the last 24 hours was good." },
-  { key: "burnout_worry", label: "I worry I may burn out if this pace continues." },
+  { key: "emotional_drain", label: "I felt emotionally drained by counseling work today.", category: "Compassion Fatigue" },
+  { key: "disconnect_difficulty", label: "I found it hard to disconnect from work after sessions.", category: "Boundary Separation" },
+  { key: "calm_control", label: "I felt calm and in control during difficult moments.", category: "Clinical Presence" },
+  { key: "energy_level", label: "I had enough energy to support students effectively.", category: "Energy & Vitality" },
+  { key: "break_quality", label: "I took meaningful breaks between sessions.", category: "Restorative Pacing" },
+  { key: "support_level", label: "I felt supported by peers or supervisors today.", category: "Support Network" },
+  { key: "sleep_quality", label: "My sleep quality in the last 24 hours was restorative.", category: "Somatic Recovery" },
+  { key: "burnout_worry", label: "I worry I may burn out if this pace continues.", category: "Burnout Resiliency" },
 ] as const;
 
 type CheckInKey = (typeof checkInQuestions)[number]["key"];
@@ -104,13 +106,14 @@ const CounselorWellness = () => {
 
   const todayCheckInLog = useMemo(() => {
     return wellnessLogs.find((log) => {
-      if (log.check_in_version !== "v1") return false;
+      // Matches any check-in that contains validated self answers or check_in_version
+      if (!log.check_in_answers && log.check_in_version !== "v1" && log.check_in_version !== "v2") return false;
       const logDate = new Date(log.created_at);
       const today = new Date();
       return (
-        logDate.getDate() === today.getDate() &&
+        logDate.getFullYear() === today.getFullYear() &&
         logDate.getMonth() === today.getMonth() &&
-        logDate.getFullYear() === today.getFullYear()
+        logDate.getDate() === today.getDate()
       );
     });
   }, [wellnessLogs]);
@@ -452,53 +455,84 @@ const CounselorWellness = () => {
             </Card>
 
             <Card variant="glass">
-              <CardHeader>
-                <CardTitle className="text-lg">Validated Self Check-In (2 mins)</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                    <CardTitle className="text-lg">Validated Self-Care Assessment</CardTitle>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Standardized daily clinical resiliency, compassion fatigue & boundaries self-check
+                  </p>
+                </div>
+                {hasCheckedInToday && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                    <CheckCircle2 className="h-3 w-3" /> Validated Today
+                  </span>
+                )}
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-2">
               {hasCheckedInToday && !showOverrideCheckIn ? (
-                <div className="space-y-6 flex flex-col items-center justify-center py-6 text-center">
+                <div className="space-y-5 flex flex-col items-center justify-center py-4 text-center">
                   <div className="relative flex items-center justify-center h-16 w-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="h-10 w-10 animate-bounce" />
+                    <ShieldCheck className="h-9 w-9 text-emerald-600 dark:text-emerald-400" />
                     <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20 animate-ping" />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <h3 className="text-xl font-bold tracking-tight text-foreground">
-                      Check-In Recorded
+                      Self-Validation Active
                     </h3>
-                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                      Thank you! Your daily counselor wellness self check-in has been successfully logged.
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                      Your clinical wellness self-check for today is officially logged and factored into your live readiness index.
                     </p>
                   </div>
 
                   <div className="w-full border-t border-border/60 pt-4 space-y-3 text-left">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Today's Scores
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Today's Validated Metrics
+                      </h4>
+                      <span className="text-[11px] text-muted-foreground">
+                        {todayCheckInLog?.created_at ? new Date(todayCheckInLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                      </span>
+                    </div>
+
                     <div className="grid grid-cols-3 gap-2">
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
-                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Mood</span>
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Mood & Vitality</span>
                         <span className={`text-lg font-bold ${getWellnessStatus(todayCheckInLog?.mood_score ?? null).color}`}>
                           {todayCheckInLog?.mood_score != null ? `${todayCheckInLog.mood_score}%` : "—"}
                         </span>
                       </div>
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
-                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Stress</span>
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Perceived Stress</span>
                         <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.stress_level, 40, 70)}`}>
                           {todayCheckInLog?.stress_level != null ? `${todayCheckInLog.stress_level}%` : "—"}
                         </span>
                       </div>
                       <div className="p-3 rounded-lg bg-secondary/30 border border-border/50 text-center">
-                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Burnout</span>
+                        <span className="block text-[10px] text-muted-foreground font-medium uppercase mb-1">Burnout Resiliency</span>
                         <span className={`text-lg font-bold ${scoreColor(todayCheckInLog?.burnout_index, 30, 60)}`}>
                           {todayCheckInLog?.burnout_index != null ? `${todayCheckInLog.burnout_index}%` : "—"}
                         </span>
                       </div>
                     </div>
 
+                    {(todayCheckInLog?.recommendations || (wellnessSummary?.recommendations && wellnessSummary.recommendations.length > 0)) && (
+                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-foreground flex items-start gap-2">
+                        <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                        <div className="space-y-1">
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-300">Clinical Recommendation:</span>
+                          <p className="text-muted-foreground">
+                            {todayCheckInLog?.recommendations || wellnessSummary?.recommendations?.[0] || "Maintain regular hydration and scheduled inter-session pacing."}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {todayCheckInLog?.notes && (
-                      <div className="p-3 rounded-lg bg-secondary/15 border border-border/40 text-xs italic text-muted-foreground mt-2">
+                      <div className="p-3 rounded-lg bg-secondary/15 border border-border/40 text-xs italic text-muted-foreground">
                         “{todayCheckInLog.notes}”
                       </div>
                     )}
@@ -519,11 +553,8 @@ const CounselorWellness = () => {
                       }}
                       className="w-full text-xs font-medium"
                     >
-                      Re-submit Check-In
+                      Update Self-Validation Assessment
                     </Button>
-                    <p className="text-[10px] text-muted-foreground text-center">
-                      {todayCheckInLog?.created_at ? `Submitted at ${new Date(todayCheckInLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ""}
-                    </p>
                   </div>
                 </div>
               ) : (
@@ -538,17 +569,22 @@ const CounselorWellness = () => {
                     <Progress value={checkInProgress} className="h-2" />
                   </div>
 
-                  <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                     {checkInQuestions.map((question) => (
-                      <div key={question.key} className="p-3 rounded-lg border bg-card space-y-3">
-                        <p className="text-sm font-medium">{question.label}</p>
-                        <div className="flex flex-wrap gap-2">
+                      <div key={question.key} className="p-3 rounded-lg border bg-card space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{question.label}</p>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground shrink-0">
+                            {question.category}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
                           {scaleOptions.map((option) => (
                             <Button
                               key={option.value}
                               size="sm"
                               variant={checkInAnswers[question.key] === option.value ? "default" : "outline"}
-                              className="text-xs"
+                              className="text-xs h-8 px-2.5"
                               onClick={() => handleSelectAnswer(question.key, option.value)}
                             >
                               {option.label}
