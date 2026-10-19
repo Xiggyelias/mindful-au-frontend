@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Radio,
@@ -115,8 +115,20 @@ export const PeerSpatialLounge = () => {
     role: string;
     avatar: string;
   } | null>(null);
+  const partnerInfoRef = useRef(partnerInfo);
+  useEffect(() => {
+    partnerInfoRef.current = partnerInfo;
+  }, [partnerInfo]);
 
   const [participants, setParticipants] = useState<LoungeParticipant[]>([]);
+  const participantsRef = useRef(participants);
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
+
+  const remoteSenderIdRef = useRef<string | null>(null);
+  const lastLeaveToastTimeRef = useRef<Record<string, number>>({});
+  const lastJoinToastTimeRef = useRef<Record<string, number>>({});
 
   const [chatMessages, setChatMessages] = useState<LoungeChatMessage[]>([]);
   const conversationMessages = chatMessages.filter((m) => m.senderId !== "system");
@@ -597,9 +609,14 @@ export const PeerSpatialLounge = () => {
     pc.ontrack = (event) => {
       const audioTrack = event.track;
       if (audioTrack && audioTrack.kind === "audio" && audioManagerRef.current) {
-        const remoteId = partnerInfo ? String(partnerInfo.id) : (participants[0]?.id || "partner");
-        const targetX = participants[0]?.x ?? (isPeerCounselor ? 600 : 400);
-        const targetY = participants[0]?.y ?? 320;
+        const currentPartner = partnerInfoRef.current;
+        const currentParticipants = participantsRef.current;
+        const remoteId =
+          remoteSenderIdRef.current ||
+          (currentPartner ? String(currentPartner.id) : currentParticipants[0]?.id || "partner");
+        const found = currentParticipants.find((p) => p.id === remoteId) || currentParticipants[0];
+        const targetX = found?.x ?? (isPeerCounselor ? 600 : 400);
+        const targetY = found?.y ?? 320;
 
         audioManagerRef.current.attachTrack(
           remoteId,
@@ -610,7 +627,9 @@ export const PeerSpatialLounge = () => {
           localParticipantRef.current.y
         );
         audioManagerRef.current.playChime("join");
-        toast.success("🌿 Partner audio connected in 3D! Move closer to hear more loudly.");
+        toast.success("🌿 Partner audio connected in 3D! Move closer to hear more loudly.", {
+          id: "partner-audio-connected",
+        });
       }
     };
 
@@ -639,11 +658,12 @@ export const PeerSpatialLounge = () => {
     };
 
     return pc;
-  }, [partnerInfo, participants, isPeerCounselor, sendSignal]);
+  }, [isPeerCounselor, sendSignal]);
 
   const handleRemoteOffer = useCallback(
     async (payload: any) => {
       if (!payload?.sdp || payload.senderId === localParticipantRef.current.id) return;
+      if (payload.senderId) remoteSenderIdRef.current = payload.senderId;
       try {
         const pc = getOrCreatePeerConnection();
         const readyForOffer =
@@ -687,6 +707,7 @@ export const PeerSpatialLounge = () => {
   const handleRemoteAnswer = useCallback(
     async (payload: any) => {
       if (!payload?.sdp || payload.senderId === localParticipantRef.current.id) return;
+      if (payload.senderId) remoteSenderIdRef.current = payload.senderId;
       try {
         const pc = getOrCreatePeerConnection();
         isSettingRemoteAnswerPendingRef.current = true;
@@ -710,6 +731,7 @@ export const PeerSpatialLounge = () => {
   const handleRemoteIce = useCallback(
     async (payload: any) => {
       if (!payload?.candidate || payload.senderId === localParticipantRef.current.id) return;
+      if (payload.senderId) remoteSenderIdRef.current = payload.senderId;
       try {
         const pc = peerConnectionRef.current;
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
@@ -773,6 +795,24 @@ export const PeerSpatialLounge = () => {
     });
   }, []);
 
+  // Stable handlers ref so the Supabase Realtime channel never re-subscribes or drops
+  const handlersRef = useRef({
+    handleRemoteOffer,
+    handleRemoteAnswer,
+    handleRemoteIce,
+    handleReceiveChatMessage,
+    handleReceiveReaction,
+  });
+  useEffect(() => {
+    handlersRef.current = {
+      handleRemoteOffer,
+      handleRemoteAnswer,
+      handleRemoteIce,
+      handleReceiveChatMessage,
+      handleReceiveReaction,
+    };
+  });
+
   // Supabase Realtime broadcast & presence channel subscription - stable throughout the session
   useEffect(() => {
     const channelKey = sessionId ? `spatial-lounge-${sessionId}` : `spatial-lounge-public`;
@@ -804,6 +844,7 @@ export const PeerSpatialLounge = () => {
     channel
       .on("broadcast", { event: "spatial-join" }, ({ payload }) => {
         if (!payload || payload.id === localParticipantRef.current.id) return;
+        remoteSenderIdRef.current = payload.id;
         setParticipants((prev) => {
           const idx = prev.findIndex((p) => p.id === payload.id);
           if (idx >= 0) {
@@ -813,7 +854,14 @@ export const PeerSpatialLounge = () => {
           }
           return [...prev, { ...payload, isLocal: false }];
         });
-        toast.success(`🌿 ${payload.name || "Partner"} entered the Meadow!`);
+
+        const now = Date.now();
+        if (now - (lastJoinToastTimeRef.current[payload.id] || 0) > 4000) {
+          lastJoinToastTimeRef.current[payload.id] = now;
+          toast.success(`🌿 ${payload.name || "Partner"} entered the Meadow!`, {
+            id: `join-${payload.id}`,
+          });
+        }
 
         // Reply back with our current position so newcomer sees us immediately
         void channel.send({
@@ -836,10 +884,17 @@ export const PeerSpatialLounge = () => {
         if (audioManagerRef.current) {
           audioManagerRef.current.detachTrack(payload.id);
         }
-        toast.info(`👋 ${payload.name || "Partner"} left the Meadow.`);
+        const now = Date.now();
+        if (now - (lastLeaveToastTimeRef.current[payload.id] || 0) > 4000) {
+          lastLeaveToastTimeRef.current[payload.id] = now;
+          toast.info(`👋 ${payload.name || "Partner"} left the Meadow.`, {
+            id: `leave-${payload.id}`,
+          });
+        }
       })
       .on("broadcast", { event: "spatial-move" }, ({ payload }) => {
         if (!payload || payload.id === localParticipantRef.current.id) return;
+        remoteSenderIdRef.current = payload.id;
         setParticipants((prev) => {
           const idx = prev.findIndex((p) => p.id === payload.id);
           if (idx >= 0) {
@@ -865,7 +920,13 @@ export const PeerSpatialLounge = () => {
           if (audioManagerRef.current) {
             audioManagerRef.current.detachTrack(leftId);
           }
-          toast.info("Partner is no longer in the Meadow.");
+          const now = Date.now();
+          if (now - (lastLeaveToastTimeRef.current[leftId] || 0) > 4000) {
+            lastLeaveToastTimeRef.current[leftId] = now;
+            toast.info("Partner is no longer in the Meadow.", {
+              id: `leave-${leftId}`,
+            });
+          }
         }
       })
       .on("presence", { event: "sync" }, () => {
@@ -895,21 +956,24 @@ export const PeerSpatialLounge = () => {
         });
       })
       .on("broadcast", { event: "spatial-offer" }, ({ payload }) => {
-        void handleRemoteOffer(payload);
+        if (payload?.senderId) remoteSenderIdRef.current = payload.senderId;
+        void handlersRef.current.handleRemoteOffer(payload);
       })
       .on("broadcast", { event: "spatial-answer" }, ({ payload }) => {
-        void handleRemoteAnswer(payload);
+        if (payload?.senderId) remoteSenderIdRef.current = payload.senderId;
+        void handlersRef.current.handleRemoteAnswer(payload);
       })
       .on("broadcast", { event: "spatial-ice" }, ({ payload }) => {
-        void handleRemoteIce(payload);
+        if (payload?.senderId) remoteSenderIdRef.current = payload.senderId;
+        void handlersRef.current.handleRemoteIce(payload);
       })
       .on("broadcast", { event: "spatial-chat" }, ({ payload }) => {
         if (payload?.senderId === localParticipantRef.current.id) return;
-        handleReceiveChatMessage(payload.senderId, payload.senderName, payload.text);
+        handlersRef.current.handleReceiveChatMessage(payload.senderId, payload.senderName, payload.text);
       })
       .on("broadcast", { event: "spatial-reaction" }, ({ payload }) => {
         if (payload?.senderId === localParticipantRef.current.id) return;
-        handleReceiveReaction(payload.senderId, payload.emoji);
+        handlersRef.current.handleReceiveReaction(payload.senderId, payload.emoji);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -949,14 +1013,7 @@ export const PeerSpatialLounge = () => {
       void supabase.removeChannel(channel);
       supabaseChannelRef.current = null;
     };
-  }, [
-    sessionId,
-    handleRemoteOffer,
-    handleRemoteAnswer,
-    handleRemoteIce,
-    handleReceiveChatMessage,
-    handleReceiveReaction,
-  ]);
+  }, [sessionId]);
 
   // Broadcast local movements to Supabase and LiveKit
   const handleLocalMove = useCallback(
@@ -966,7 +1023,7 @@ export const PeerSpatialLounge = () => {
       // Update spatial audio nodes for all remote participants
       if (audioManagerRef.current) {
         audioManagerRef.current.updateAmbientPosition(newX, newY);
-        participants.forEach((peer) => {
+        participantsRef.current.forEach((peer) => {
           audioManagerRef.current?.updateParticipantPosition(
             peer.id,
             peer.x,
@@ -977,14 +1034,16 @@ export const PeerSpatialLounge = () => {
         });
       }
 
+      const currentLocal = localParticipantRef.current;
+      const currentTalking = isMicActiveRef.current;
       const movePayload = {
-        id: localParticipant.id,
+        id: currentLocal.id,
         x: newX,
         y: newY,
-        name: localParticipant.name,
-        role: localParticipant.role,
-        avatar: localParticipant.avatar,
-        isTalking: isMicActive,
+        name: currentLocal.name,
+        role: currentLocal.role,
+        avatar: currentLocal.avatar,
+        isTalking: currentTalking,
       };
 
       if (supabaseChannelRef.current) {
@@ -1001,7 +1060,7 @@ export const PeerSpatialLounge = () => {
           const payload = JSON.stringify({
             type: "move",
             ...movePayload,
-            talking: isMicActive,
+            talking: currentTalking,
           });
           void livekitRoomRef.current.localParticipant.publishData(
             new TextEncoder().encode(payload),
@@ -1012,7 +1071,7 @@ export const PeerSpatialLounge = () => {
         }
       }
     },
-    [participants, localParticipant.id, localParticipant.name, localParticipant.role, localParticipant.avatar, isMicActive]
+    []
   );
 
   // Toggle Microphone / Request Audio to Talk
@@ -1153,12 +1212,13 @@ export const PeerSpatialLounge = () => {
   };
 
   // Send Chat message
-  const handleSendChatMessage = (text: string) => {
+  const handleSendChatMessage = useCallback((text: string) => {
+    const currentLocal = localParticipantRef.current;
     const newMessage: LoungeChatMessage = {
       id: `msg-${Date.now()}`,
-      senderId: localParticipant.id,
-      senderName: localParticipant.name,
-      avatar: localParticipant.avatar,
+      senderId: currentLocal.id,
+      senderName: currentLocal.name,
+      avatar: currentLocal.avatar,
       text,
       timestamp: "Just now",
       isLocal: true,
@@ -1180,8 +1240,8 @@ export const PeerSpatialLounge = () => {
         type: "broadcast",
         event: "spatial-chat",
         payload: {
-          senderId: localParticipant.id,
-          senderName: localParticipant.name,
+          senderId: currentLocal.id,
+          senderName: currentLocal.name,
           text,
         },
       });
@@ -1192,7 +1252,7 @@ export const PeerSpatialLounge = () => {
         const payload = JSON.stringify({
           type: "chat",
           text,
-          name: localParticipant.name,
+          name: currentLocal.name,
         });
         void livekitRoomRef.current.localParticipant.publishData(
           new TextEncoder().encode(payload),
@@ -1202,15 +1262,16 @@ export const PeerSpatialLounge = () => {
         console.warn("Publish chat error:", err);
       }
     }
-  };
+  }, []);
 
   // Send Floating Reaction
-  const handleSendReaction = (emoji: string) => {
+  const handleSendReaction = useCallback((emoji: string) => {
+    const currentLocal = localParticipantRef.current;
     const newReaction: FloatingReaction = {
       id: `rx-${Date.now()}-${Math.random()}`,
       emoji,
-      x: localParticipant.x + (Math.random() * 40 - 20),
-      y: localParticipant.y - 30,
+      x: currentLocal.x + (Math.random() * 40 - 20),
+      y: currentLocal.y - 30,
       createdAt: Date.now(),
     };
 
@@ -1224,7 +1285,7 @@ export const PeerSpatialLounge = () => {
         type: "broadcast",
         event: "spatial-reaction",
         payload: {
-          senderId: localParticipant.id,
+          senderId: currentLocal.id,
           emoji,
         },
       });
@@ -1244,7 +1305,7 @@ export const PeerSpatialLounge = () => {
         console.warn("Publish reaction error:", err);
       }
     }
-  };
+  }, []);
 
   // Profile alias & avatar customization
   const handleSaveProfile = (newName: string, newAvatar: AvatarStyle) => {
@@ -1257,10 +1318,12 @@ export const PeerSpatialLounge = () => {
   };
 
   // Calculate nearby participants within hearing circle
-  const nearbyPeers = participants.filter((p) => {
-    const d = Math.hypot(p.x - localParticipant.x, p.y - localParticipant.y);
-    return d <= 450;
-  });
+  const nearbyPeers = useMemo(() => {
+    return participants.filter((p) => {
+      const d = Math.hypot(p.x - localParticipant.x, p.y - localParticipant.y);
+      return d <= 450;
+    });
+  }, [participants, localParticipant.x, localParticipant.y]);
 
   return (
     <div className={`min-h-screen bg-slate-950 text-slate-100 ${isFullscreen ? "p-0" : ""}`}>
