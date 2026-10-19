@@ -170,9 +170,7 @@ const StudentDashboard = () => {
 
         if (!isMounted) return;
 
-        if (spatialLounge) {
-          setActiveSpatialLounge(spatialLounge);
-        }
+        setActiveSpatialLounge(spatialLounge || null);
 
         const sessionItems = Array.isArray(sessions)
           ? sessions
