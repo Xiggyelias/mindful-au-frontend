@@ -66,9 +66,8 @@ export const PeerSpatialLounge = () => {
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
   const [livekitConnected, setLivekitConnected] = useState(false);
 
-  // Real-time microphone audio level & sidetone test
+  // Real-time microphone audio level
   const [micLevel, setMicLevel] = useState<number>(0);
-  const [isSidetoneActive, setIsSidetoneActive] = useState<boolean>(false);
   const micAnalyserAnimationRef = useRef<number | null>(null);
 
   // WebRTC direct peer connection fallback ref
@@ -336,45 +335,7 @@ export const PeerSpatialLounge = () => {
     };
   }, []);
 
-  // Toggle local mic loopback / monitor (Hear Myself)
-  const handleToggleSidetone = useCallback(async () => {
-    if (!audioManagerRef.current) return;
-    if (isSidetoneActive) {
-      audioManagerRef.current.disableSidetone();
-      setIsSidetoneActive(false);
-      toast.info("Mic loopback turned off.");
-    } else {
-      let stream = localStreamRef.current;
-      if (!stream || stream.getAudioTracks().length === 0 || !isMicActive) {
-        try {
-          const constraints: MediaStreamConstraints = {
-            audio: selectedAudioDeviceId === "default" ? true : { deviceId: { exact: selectedAudioDeviceId } },
-            video: false,
-          };
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          localStreamRef.current = stream;
-          setIsMicActive(true);
-          setLocalParticipant((prev) => ({ ...prev, isTalking: true, isMuted: false }));
-        } catch (err) {
-          toast.error("Microphone permission needed to hear your voice.");
-          return;
-        }
-      }
-      audioManagerRef.current.enableSidetone(stream, 0.9);
-      setIsSidetoneActive(true);
-      audioManagerRef.current.playChime("test");
-      toast.success("🔊 Voice loopback active! Speak into your mic to hear yourself through your speakers.");
-    }
-  }, [isSidetoneActive, isMicActive, selectedAudioDeviceId]);
 
-  // Sound check: plays a musical chime so the user can verify speakers/headphones
-  const handleTestSound = useCallback(() => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.ensureContext();
-      audioManagerRef.current.playChime("test");
-      toast.success("🎵 Sound test chime played! If you heard it, your speakers/headphones are working.");
-    }
-  }, []);
 
   // Connect to LiveKit / Session Spatial Lounge Token
   useEffect(() => {
@@ -1263,10 +1224,7 @@ export const PeerSpatialLounge = () => {
         cancelAnimationFrame(micAnalyserAnimationRef.current);
         micAnalyserAnimationRef.current = null;
       }
-      if (isSidetoneActive && audioManagerRef.current) {
-        audioManagerRef.current.disableSidetone();
-        setIsSidetoneActive(false);
-      }
+
       setMicLevel(0);
       setIsMicActive(false);
       audioManagerRef.current?.playChime("mic-off");
@@ -1392,9 +1350,7 @@ export const PeerSpatialLounge = () => {
         if (livekitRoomRef.current?.state === "connected" && newTrack) {
           await livekitRoomRef.current.localParticipant.publishTrack(newTrack);
         }
-        if (isSidetoneActive && audioManagerRef.current) {
-          audioManagerRef.current.enableSidetone(newStream, 0.7);
-        }
+
         toast.success("Microphone updated!");
       } catch (err) {
         console.warn("Failed to switch audio input device:", err);
@@ -1524,6 +1480,312 @@ export const PeerSpatialLounge = () => {
       return d <= 450;
     });
   }, [participants, localParticipant.x, localParticipant.y]);
+  const renderChatDrawer = () => (
+    <div className="fixed top-18 right-4 sm:right-6 z-50 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-slate-950/95 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-right-4 duration-200">
+      <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+        <h3 className="text-sm font-bold flex items-center gap-2 text-white">
+          <MessageSquare className="w-4 h-4 text-emerald-400" />
+          <span>Meadow Chat Logs</span>
+          {conversationMessages.length > 0 && (
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+              {conversationMessages.length}
+            </span>
+          )}
+        </h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowChatHistory(false)}
+          className="h-7 w-7 p-0 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+          title="Close Chat Logs"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {/* Chat message history list */}
+      <div className="max-h-72 overflow-y-auto space-y-2 pr-1 text-xs">
+        {chatMessages.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 text-xs">
+            No conversation messages yet. Type in the bar below to talk!
+          </div>
+        ) : (
+          chatMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`p-2.5 rounded-xl flex items-start gap-2.5 ${
+                msg.senderId === "system"
+                  ? "bg-slate-900/60 border border-slate-800 text-slate-400 text-[11px]"
+                  : msg.isLocal
+                  ? "bg-emerald-950/70 border border-emerald-500/40 text-emerald-100 ml-4 shadow-sm"
+                  : "bg-slate-900/90 border border-slate-800 text-slate-200 mr-4 shadow-sm"
+              }`}
+            >
+              <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[11px] shrink-0 text-emerald-300">
+                {msg.senderName.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-semibold text-white truncate text-[11px]">{msg.senderName}</span>
+                  <span className="text-[10px] text-slate-400 shrink-0">{msg.timestamp}</span>
+                </div>
+                <p className="mt-0.5 text-xs break-words">{msg.text}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Quick thought chat input inside drawer */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const formEl = e.currentTarget;
+          const inputEl = formEl.elements.namedItem("drawerChatInput") as HTMLInputElement;
+          if (inputEl?.value.trim()) {
+            handleSendChatMessage(inputEl.value.trim());
+            inputEl.value = "";
+          }
+        }}
+        className="flex items-center gap-2 pt-2 border-t border-emerald-500/20"
+      >
+        <input
+          name="drawerChatInput"
+          placeholder="Type a thought..."
+          className="flex-1 bg-slate-900/90 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-400 outline-none"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs gap-1 font-semibold"
+        >
+          <Send className="w-3 h-3" />
+          <span>Send</span>
+        </Button>
+      </form>
+    </div>
+  );
+
+  // Dedicated Fullscreen Layout: 100vw x 100vh Edge-to-Edge Gaming / Lounge Experience
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-950 flex flex-col overflow-hidden select-none">
+        {/* Floating Top HUD */}
+        <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
+          {/* Left: Meadow Title & Partner Badge */}
+          <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs text-white shadow-xl">
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+              <Heart className="w-3.5 h-3.5 fill-emerald-500/30" />
+            </div>
+            <span className="font-bold">Heart-to-Heart Meadow</span>
+            {partnerInfo ? (
+              <span className="text-emerald-300 border-l border-slate-700 pl-2">
+                Paired with <strong className="text-white">{partnerInfo.name}</strong>
+              </span>
+            ) : sessionId ? (
+              <span className="text-emerald-300/80 border-l border-slate-700 pl-2 text-[11px]">
+                Private 1-on-1 Session
+              </span>
+            ) : null}
+          </div>
+
+          {/* Right: Quick Actions */}
+          <div className="pointer-events-auto flex items-center gap-2">
+            {isPeerCounselor && (
+              <Button
+                onClick={() => setShowLinkerModal(true)}
+                variant="outline"
+                size="sm"
+                className="bg-slate-950/85 backdrop-blur-xl border-emerald-500/30 text-emerald-300 hover:text-white hover:bg-emerald-900/60 text-xs gap-1.5 rounded-full font-medium h-8 px-3 shadow-xl"
+              >
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{partnerInfo ? `Switch (${partnerInfo.name})` : "Link Student"}</span>
+              </Button>
+            )}
+
+            <Button
+              onClick={() => setShowChatHistory(!showChatHistory)}
+              variant="outline"
+              size="sm"
+              className={`backdrop-blur-xl rounded-full text-xs gap-1.5 font-medium shadow-xl h-8 px-3 transition-all ${
+                showChatHistory
+                  ? "bg-emerald-500/25 border-emerald-500 text-emerald-300"
+                  : "bg-slate-950/85 border-slate-800 text-slate-300 hover:text-white"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Chat</span>
+              {conversationMessages.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+                  {conversationMessages.length}
+                </span>
+              )}
+            </Button>
+
+            <Button
+              onClick={handleToggleFullscreen}
+              variant="outline"
+              size="sm"
+              className="bg-emerald-950/90 backdrop-blur-xl border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 hover:text-white text-xs gap-1.5 rounded-full font-semibold h-8 px-3 shadow-xl"
+              title="Exit Fullscreen (Esc)"
+            >
+              <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Exit Fullscreen</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Fullscreen Meadow Viewport */}
+        <div className="relative w-full h-full flex-1 overflow-hidden">
+          {/* Waiting for partner prompt overlay */}
+          {sessionId && partnerInfo && participants.length === 0 && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4 pointer-events-auto">
+              <div className="bg-slate-950/95 backdrop-blur-md border border-emerald-500/50 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3 text-slate-100">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">
+                      Waiting for <span className="text-emerald-400 font-bold">{partnerInfo.name}</span> to enter...
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      An invite is active. You can re-ping them anytime.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {isPeerCounselor && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResendInvite}
+                        disabled={isSendingInvite}
+                        className="h-7 text-[11px] px-2.5 bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-white rounded-lg font-medium gap-1"
+                      >
+                        {isSendingInvite ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Send className="w-3 h-3" />
+                        )}
+                        <span>Ping Student</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelInvite}
+                        disabled={isCancellingInvite}
+                        className="h-7 text-[11px] px-2.5 bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/60 hover:text-white rounded-lg font-medium gap-1"
+                        title="Cancel this invitation so it does not appear on the student's dashboard"
+                      >
+                        {isCancellingInvite ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <XCircle className="w-3 h-3 text-rose-400" />
+                        )}
+                        <span>Cancel Wait</span>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <SpatialMeadow
+            participants={participants}
+            localParticipant={localParticipant}
+            onMove={handleLocalMove}
+            maxHearableDistance={450}
+            isSpeakerPlaying={isAmbientPlaying}
+            onToggleSpeaker={handleToggleAmbient}
+            floatingReactions={floatingReactions}
+            isFullscreen={true}
+          />
+
+          {/* In-meadow floating stats bar */}
+          <div className="absolute bottom-28 left-4 z-20 flex items-center gap-2 pointer-events-none">
+            <div className="bg-slate-950/85 backdrop-blur-xl border border-emerald-500/30 px-3.5 py-1.5 rounded-2xl text-xs text-slate-200 flex items-center gap-2.5 shadow-2xl">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${nearbyPeers.length > 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${nearbyPeers.length > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
+              </span>
+              <Users className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-medium text-slate-100">
+                {partnerInfo ? (
+                  participants.length > 0 ? (
+                    <span>Partner in Meadow</span>
+                  ) : (
+                    <span className="text-amber-300">Waiting for partner...</span>
+                  )
+                ) : (
+                  <span>Private Session</span>
+                )}
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className={`font-semibold flex items-center gap-1.5 ${nearbyPeers.length > 0 ? "text-emerald-300" : "text-slate-300"}`}>
+                {nearbyPeers.length > 0 ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Within Hearing Aura</span>
+                  </>
+                ) : (
+                  <>
+                    <Headphones className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Walk Closer to Hear</span>
+                  </>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Bottom Audio Controls Dock */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-4xl z-30 pointer-events-auto">
+          <SpatialAudioControls
+            isMicActive={isMicActive}
+            onToggleMic={handleToggleMic}
+            audioInputDevices={audioInputDevices}
+            selectedAudioDeviceId={selectedAudioDeviceId}
+            onSelectAudioDevice={handleSelectAudioDevice}
+            isAmbientPlaying={isAmbientPlaying}
+            onToggleAmbient={handleToggleAmbient}
+            onSendChatMessage={handleSendChatMessage}
+            onSendReaction={handleSendReaction}
+            onOpenProfileSettings={() => setShowProfileModal(true)}
+            nearbyCount={nearbyPeers.length}
+            totalParticipants={participants.length + 1}
+            micLevel={micLevel}
+          />
+        </div>
+
+        {/* Floating Glassmorphic Meadow Chat Drawer */}
+        {showChatHistory && renderChatDrawer()}
+
+        {/* Modals */}
+        <PeerProfileAliasModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          currentName={localParticipant.name}
+          currentAvatar={localParticipant.avatar}
+          onSave={handleSaveProfile}
+        />
+        {isPeerCounselor && (
+          <PeerStudentLinkerModal
+            isOpen={showLinkerModal}
+            onClose={() => setShowLinkerModal(false)}
+            assignedStudents={assignedStudents}
+            currentSessionId={sessionId}
+            isLoading={isLoadingAssigned}
+            onSelectStudent={handleSelectStudent}
+            onRefresh={() => void fetchAssignedStudents(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-slate-950 text-slate-100 ${isFullscreen ? "p-0" : ""}`}>
@@ -1765,6 +2027,7 @@ export const PeerSpatialLounge = () => {
               isSpeakerPlaying={isAmbientPlaying}
               onToggleSpeaker={handleToggleAmbient}
               floatingReactions={floatingReactions}
+              isFullscreen={false}
             />
 
             {/* In-meadow floating stats bar */}
@@ -1819,97 +2082,10 @@ export const PeerSpatialLounge = () => {
             nearbyCount={nearbyPeers.length}
             totalParticipants={participants.length + 1}
             micLevel={micLevel}
-            isSidetoneActive={isSidetoneActive}
-            onToggleSidetone={handleToggleSidetone}
-            onTestSound={handleTestSound}
           />
 
           {/* Floating Glassmorphic Meadow Chat Drawer */}
-          {showChatHistory && (
-            <div className="fixed top-18 right-4 sm:right-6 z-50 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-slate-950/95 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-right-4 duration-200">
-              <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
-                <h3 className="text-sm font-bold flex items-center gap-2 text-white">
-                  <MessageSquare className="w-4 h-4 text-emerald-400" />
-                  <span>Meadow Chat Logs</span>
-                  {conversationMessages.length > 0 && (
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
-                      {conversationMessages.length}
-                    </span>
-                  )}
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowChatHistory(false)}
-                  className="h-7 w-7 p-0 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
-                  title="Close Chat Logs"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* Chat message history list */}
-              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 text-xs">
-                {chatMessages.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 text-xs">
-                    No conversation messages yet. Type in the bar below to talk!
-                  </div>
-                ) : (
-                  chatMessages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`p-2.5 rounded-xl flex items-start gap-2.5 ${
-                        msg.senderId === "system"
-                          ? "bg-slate-900/60 border border-slate-800 text-slate-400 text-[11px]"
-                          : msg.isLocal
-                          ? "bg-emerald-950/70 border border-emerald-500/40 text-emerald-100 ml-4 shadow-sm"
-                          : "bg-slate-900/90 border border-slate-800 text-slate-200 mr-4 shadow-sm"
-                      }`}
-                    >
-                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[11px] shrink-0 text-emerald-300">
-                        {msg.senderName.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-semibold text-white truncate text-[11px]">{msg.senderName}</span>
-                          <span className="text-[10px] text-slate-400 shrink-0">{msg.timestamp}</span>
-                        </div>
-                        <p className="mt-0.5 text-xs break-words">{msg.text}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Quick thought chat input inside drawer */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const formEl = e.currentTarget;
-                  const inputEl = formEl.elements.namedItem("drawerChatInput") as HTMLInputElement;
-                  if (inputEl?.value.trim()) {
-                    handleSendChatMessage(inputEl.value.trim());
-                    inputEl.value = "";
-                  }
-                }}
-                className="flex items-center gap-2 pt-2 border-t border-emerald-500/20"
-              >
-                <input
-                  name="drawerChatInput"
-                  placeholder="Type a thought..."
-                  className="flex-1 bg-slate-900/90 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-400 outline-none"
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs gap-1 font-semibold"
-                >
-                  <Send className="w-3 h-3" />
-                  <span>Send</span>
-                </Button>
-              </form>
-            </div>
-          )}
+          {showChatHistory && renderChatDrawer()}
         </main>
       </div>
 

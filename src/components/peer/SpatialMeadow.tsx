@@ -11,6 +11,7 @@ interface SpatialMeadowProps {
   isSpeakerPlaying?: boolean;
   onToggleSpeaker?: () => void;
   floatingReactions?: FloatingReaction[];
+  isFullscreen?: boolean;
 }
 
 export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
@@ -22,6 +23,7 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
   isSpeakerPlaying = false,
   onToggleSpeaker,
   floatingReactions = [],
+  isFullscreen = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
@@ -316,13 +318,19 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
   };
 
   return (
-    <div className="relative w-full overflow-hidden rounded-3xl border-2 border-emerald-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none">
+    <div
+      className={`relative w-full overflow-hidden select-none ${
+        isFullscreen
+          ? "h-full rounded-none border-none shadow-none"
+          : "rounded-3xl border-2 border-emerald-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+      }`}
+    >
       {/* 2D Meadow Canvas Viewport */}
       <div
         ref={containerRef}
         onClick={handleMeadowClick}
-        style={{ aspectRatio: `${WORLD_WIDTH} / ${WORLD_HEIGHT}` }}
-        className="relative w-full cursor-crosshair overflow-hidden"
+        style={{ aspectRatio: isFullscreen ? undefined : `${WORLD_WIDTH} / ${WORLD_HEIGHT}` }}
+        className={`relative w-full cursor-crosshair overflow-hidden ${isFullscreen ? "h-full" : ""}`}
       >
         {/* ======================================================== */}
         {/* Layer 1: Lush Painterly Ground Canvas with Rolling Hills */}
@@ -657,19 +665,24 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
 
                 {/* Participant Name Tag Pill with Glowing Speaking Indicator */}
                 <div
-                  className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-200 ${
+                  className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-[box-shadow,background-color,border-color] duration-300 ${
                     peer.isTalking
-                      ? "bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_38px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300 animate-pulse scale-105"
+                      ? "bg-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_35px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300"
                       : inRange
                       ? "bg-slate-900/90 text-emerald-300 border-emerald-400/50 shadow-emerald-500/10 shadow-md"
                       : "bg-slate-900/70 text-slate-400 border-slate-700/40 shadow-sm"
                   }`}
                 >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      peer.isTalking ? "bg-slate-950" : "bg-emerald-400"
-                    }`}
-                  />
+                  <span className="relative flex h-2 w-2">
+                    {peer.isTalking && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
+                    )}
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        peer.isTalking ? "bg-slate-950" : "bg-emerald-400"
+                      }`}
+                    />
+                  </span>
                   <span>{peer.name}</span>
                   <span
                     className={`text-[9px] font-normal uppercase tracking-wider ${
@@ -678,22 +691,15 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
                   >
                     {peer.role === "peer_counselor" ? "Counselor" : "Student"}
                   </span>
-                  {peer.isTalking && (
-                    <span className="flex items-center gap-0.5 ml-1 text-slate-950">
-                      <span className="w-1 h-2.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <span className="w-1 h-3.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <span className="w-1 h-2 bg-slate-950 rounded-full animate-bounce" />
-                    </span>
-                  )}
                 </div>
 
                 {/* Avatar Sprite and Ground Shadow Container */}
                 <div className="relative mt-0.5">
                   <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-11 h-3.5 bg-black/25 rounded-full blur-[1.5px] pointer-events-none" />
                   <div
-                    className={`relative transition-transform duration-200 ${
+                    className={`relative transition-[filter] duration-300 ${
                       peer.isTalking
-                        ? "scale-110 drop-shadow-[0_0_16px_rgba(34,197,94,0.7)]"
+                        ? "drop-shadow-[0_0_16px_rgba(34,197,94,0.8)]"
                         : "drop-shadow-[0_4px_10px_rgba(0,0,0,0.3)]"
                     } ${!inRange ? "opacity-85" : "opacity-100"}`}
                   >
@@ -731,34 +737,28 @@ export const SpatialMeadow: React.FC<SpatialMeadowProps> = ({
 
           {/* Local Highlighted Name Tag with Glowing Speaking Indicator */}
           <div
-            className={`text-[11px] font-extrabold px-3.5 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-all duration-200 ${
+            className={`text-[11px] font-extrabold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1.5 border select-none transition-[box-shadow,background-color,border-color] duration-300 ${
               localParticipant.isTalking
-                ? "bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-400 text-slate-950 border-white shadow-[0_0_22px_rgba(52,211,153,1),0_0_42px_rgba(34,197,94,0.75)] ring-2 ring-emerald-300 animate-pulse scale-105"
+                ? "bg-emerald-400 text-slate-950 border-white shadow-[0_0_20px_rgba(52,211,153,1),0_0_35px_rgba(34,197,94,0.7)] ring-2 ring-emerald-300"
                 : "bg-emerald-500 text-slate-950 border-emerald-300 shadow-md"
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full transition-colors ${
-                localParticipant.isTalking ? "bg-slate-950" : "bg-slate-950/80"
-              }`}
-            />
+            <span className="relative flex h-2 w-2">
+              {localParticipant.isTalking && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-900 opacity-75" />
+              )}
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-950" />
+            </span>
             <span className="tracking-wide">{localParticipant.name} (You)</span>
-            {localParticipant.isTalking && (
-              <span className="flex items-center gap-0.5 ml-1 text-slate-950">
-                <span className="w-1 h-2.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1 h-3.5 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1 h-2 bg-slate-950 rounded-full animate-bounce" />
-              </span>
-            )}
           </div>
 
           {/* Local Avatar Sprite and Ground Shadow Container */}
           <div className="relative mt-0.5">
             <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-3.5 bg-black/25 rounded-full blur-[1.5px] pointer-events-none" />
             <div
-              className={`relative transition-transform duration-200 ${
+              className={`relative transition-[filter] duration-300 ${
                 localParticipant.isTalking
-                  ? "scale-115 drop-shadow-[0_0_20px_rgba(74,222,128,0.95)]"
+                  ? "drop-shadow-[0_0_18px_rgba(74,222,128,0.95)]"
                   : "drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]"
               }`}
             >

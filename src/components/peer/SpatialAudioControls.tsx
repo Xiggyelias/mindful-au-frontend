@@ -2,17 +2,12 @@ import React, { useState, useEffect } from "react";
 import {
   Mic,
   MicOff,
-  Radio,
-  Smile,
   Send,
   Volume2,
   VolumeX,
-  UserCheck,
   Settings2,
-  Headphones,
   Sparkles,
   MessageCircle,
-  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +26,6 @@ interface SpatialAudioControlsProps {
   nearbyCount: number;
   totalParticipants: number;
   micLevel?: number;
-  isSidetoneActive?: boolean;
-  onToggleSidetone?: () => void;
-  onTestSound?: () => void;
 }
 
 export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
@@ -50,9 +42,6 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
   nearbyCount,
   totalParticipants,
   micLevel = 0,
-  isSidetoneActive = false,
-  onToggleSidetone,
-  onTestSound,
 }) => {
   const [chatText, setChatText] = useState("");
 
@@ -161,40 +150,6 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               )}
             </select>
           </div>
-
-          {/* Sidetone / Instant Mic Loopback Toggle */}
-          {onToggleSidetone && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onToggleSidetone}
-              className={`h-8 px-2.5 text-[11px] rounded-xl border transition-all ${
-                isSidetoneActive
-                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 font-semibold shadow-[0_0_12px_rgba(52,211,153,0.3)] animate-pulse"
-                  : "border-slate-800 bg-slate-900/90 text-slate-300 hover:text-white hover:border-slate-700"
-              }`}
-              title="Hear your own microphone live in your speakers or headphones"
-            >
-              <Headphones className="w-3.5 h-3.5 mr-1 text-emerald-400" />
-              <span>{isSidetoneActive ? "🔊 Hearing Myself (Live)" : "Hear Myself"}</span>
-            </Button>
-          )}
-
-          {/* Test Speakers Sound Check */}
-          {onTestSound && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onTestSound}
-              className="h-8 px-2.5 text-[11px] rounded-xl border border-slate-800 bg-slate-900/90 text-slate-300 hover:text-white hover:border-slate-700"
-              title="Play a test chime to verify your speakers/headphones"
-            >
-              <Volume2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
-              <span>Test Speakers</span>
-            </Button>
-          )}
         </div>
 
         {/* Center: Main "Request Audio to Talk" / Mic Pill + Live Visualizer */}
@@ -205,13 +160,13 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               size="lg"
               className={`h-11 px-6 rounded-full font-bold transition-all shadow-xl flex items-center gap-2.5 text-sm ${
                 isMicActive
-                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.4)] animate-pulse"
+                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-slate-950 ring-4 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                   : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)]"
               }`}
             >
               {isMicActive ? (
                 <>
-                  <Mic className="w-4 h-4 animate-bounce text-slate-950" />
+                  <Mic className="w-4 h-4 text-slate-950" />
                   <span>Microphone Active (Speaking)</span>
                 </>
               ) : (
@@ -248,16 +203,11 @@ export const SpatialAudioControls: React.FC<SpatialAudioControlsProps> = ({
               <span className={micLevel > 0.04 ? "text-emerald-400 font-semibold" : "text-slate-400 font-normal"}>
                 {micLevel > 0.04 ? "Sound Detected 🎙️" : "Speak to talk..."}
               </span>
-              {isSidetoneActive && (
-                <span className="ml-1 text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full font-semibold">
-                  Loopback On
-                </span>
-              )}
             </div>
           ) : (
             <span className="text-[11px] text-slate-400 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-emerald-400/70" />
-              <span>Click &quot;Hear Myself&quot; or &quot;Request Audio&quot; to begin talking</span>
+              <span>Click &quot;Request Audio to Talk&quot; or press Spacebar to begin</span>
             </span>
           )}
         </div>
